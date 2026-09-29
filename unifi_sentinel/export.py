@@ -130,7 +130,7 @@ def build_inventory(
             port = str(uplink["uplink_remote_port"])
         if not switch:
             # Integration API uplink (no port number, but works without legacy data).
-            switch = names_by_id.get((device_details.get(d.get("id")) or {}).get("uplink", {}).get("deviceId"), "")
+            switch = names_by_id.get(((device_details.get(d.get("id")) or {}).get("uplink") or {}).get("deviceId"), "")
         legacy_type = (legacy_device_by_mac.get(mac) or {}).get("type", "")
         friendly = device_type_label(d, legacy_type)
         rows.append({

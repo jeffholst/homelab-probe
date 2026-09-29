@@ -8,14 +8,26 @@ from typing import List, Optional
 from . import __version__
 from .client import UniFiAPIError, UniFiClient
 from .config import ConfigError, load_config
-from .diagnose import diagnose, format_findings, stream_supports_emoji
+from .diagnose import (CRITICAL, INFO, WARNING, diagnose, exit_code, format_findings,
+                       stream_supports_emoji)
 from .export import run_export
 from .query import query_rows, render
 from .snapshot import collect_snapshot
 
 
+EXIT_ERROR = 3  # config or connection failure; 1 and 2 are reserved for diagnose findings
+EXIT_USAGE = 64
+
+
+class _Parser(argparse.ArgumentParser):
+    def error(self, message):
+        # argparse defaults to exit code 2, which would look like a critical finding.
+        self.print_usage(sys.stderr)
+        self.exit(EXIT_USAGE, f"{self.prog}: error: {message}\n")
+
+
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    parser = _Parser(
         prog="unifi-sentinel",
         description="Query, troubleshoot and inventory a UniFi Network controller.",
     )
@@ -37,6 +49,9 @@ def build_parser() -> argparse.ArgumentParser:
     query.add_argument("--json", action="store_true", help="Output JSON instead of a table")
 
     diag = sub.add_parser("diagnose", help="Run read-only health checks (offline devices, port errors, ...)")
+    diag.add_argument("--fail-on", choices=[INFO, WARNING, CRITICAL], default=WARNING,
+                      help="Lowest severity that gives a non-zero exit code (default: warning); "
+                           "critical always exits 2")
     diag.add_argument("--no-emoji", action="store_true",
                       help="Use text severity labels (automatic when output is not a UTF-8 terminal)")
 
@@ -65,9 +80,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             findings = diagnose(collect_snapshot(client, config.site))
             emoji = not args.no_emoji and stream_supports_emoji(sys.stdout)
             print(format_findings(findings, emoji))
+            return exit_code(findings, args.fail_on)
     except (ConfigError, UniFiAPIError) as e:
         print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+        return EXIT_ERROR
     return 0
 
 

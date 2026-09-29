@@ -68,7 +68,7 @@ def test_cli_end_to_end(fake_client, monkeypatch, capsys, tmp_path):
 
     assert cli.main(["info"]) == 0
     assert "Site: Default" in capsys.readouterr().out
-    assert cli.main(["diagnose"]) == 0
+    assert cli.main(["diagnose"]) == 1  # the fixture has warnings
     assert "Garage AP" in capsys.readouterr().out
     assert cli.main(["export", "-o", str(tmp_path)]) == 0
     assert (tmp_path / "unifi_clients.csv").exists()
@@ -78,7 +78,7 @@ def test_cli_reports_missing_config(monkeypatch, capsys):
     monkeypatch.delenv("CONTROLLER_URL", raising=False)
     monkeypatch.delenv("API_KEY", raising=False)
     monkeypatch.setattr("unifi_sentinel.config.load_dotenv", lambda: None)
-    assert cli.main(["info"]) == 1
+    assert cli.main(["info"]) == cli.EXIT_ERROR
     assert "CONTROLLER_URL" in capsys.readouterr().err
 
 

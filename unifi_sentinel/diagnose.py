@@ -10,6 +10,9 @@ CRITICAL, WARNING, INFO = "critical", "warning", "info"
 SEVERITY_ORDER = {CRITICAL: 0, WARNING: 1, INFO: 2}
 EMOJI = {CRITICAL: "\U0001F6D1", WARNING: "\u26A0\uFE0F", INFO: "\u2139\uFE0F"}
 
+# Process exit codes for `diagnose` (see exit_code). Tool errors use cli.EXIT_ERROR.
+EXIT_OK, EXIT_WARNING, EXIT_CRITICAL = 0, 1, 2
+
 RESOURCE_WARN_PCT = 90
 RESOURCE_CRITICAL_PCT = 98
 GATEWAY_TYPES = {"Gateway", "Dream Machine"}
@@ -91,6 +94,20 @@ def diagnose(snap: Snapshot) -> List[Finding]:
                     INFO, label, f"negotiated at {port['speed']} Mbps"))
 
     return sorted(findings, key=lambda f: (SEVERITY_ORDER[f.severity], f.subject))
+
+
+def exit_code(findings: List[Finding], fail_on: str = WARNING) -> int:
+    """Exit code for a set of findings.
+
+    Critical findings always give EXIT_CRITICAL. Warnings (and info) give
+    EXIT_WARNING only when ``fail_on`` is at or below their severity; otherwise 0.
+    """
+    if not findings:
+        return EXIT_OK
+    worst = min(SEVERITY_ORDER[f.severity] for f in findings)
+    if worst == SEVERITY_ORDER[CRITICAL]:
+        return EXIT_CRITICAL
+    return EXIT_WARNING if worst <= SEVERITY_ORDER[fail_on] else EXIT_OK
 
 
 def format_findings(findings: List[Finding], emoji: bool = True) -> str:
