@@ -4,20 +4,20 @@ Fork of [ericfitz/unifi-clients-export](https://github.com/ericfitz/unifi-client
 
 ## Layout
 
-- `unifi-sentinel.py`: thin launcher (PEP 723 metadata); all logic lives in `unifi_sentinel/`.
+- `unifi-sentinel.py`: thin launcher; all logic lives in `unifi_sentinel/`.
 - `unifi_sentinel/config.py`: env/`.env` loading. `client.py`: `UniFiClient`, the only place that makes HTTP calls. `snapshot.py`: `collect_snapshot`, the one read of the controller. `export.py`, `query.py`, `diagnose.py`: pure functions over a `Snapshot`. `cli.py`: argparse subcommands.
 - New features are new subcommands in `cli.py` backed by modules that take a `Snapshot`; keep fetching (snapshot), analysis and output separate.
 
 ## Commands
 
 - Run: `uv run unifi-sentinel.py <export|info>`
-- Tests: `uv run --with pytest pytest` (tests live in `tests/`)
+- Tests: `uv run pytest`
 
 ## Conventions
 
 - Stdlib `csv`, not pandas. Match the surrounding style; type-hint public functions.
 - Raise `UniFiAPIError`/`ConfigError`; only `cli.main` turns them into messages and exit codes.
-- Dependencies are declared in `pyproject.toml`, `requirements.txt` and the launcher's PEP 723 block; update all three together.
+- Dependencies are declared only in `pyproject.toml`; run `uv lock` after changing them and commit `uv.lock`.
 
 ## UniFi API notes
 
@@ -33,7 +33,7 @@ Fork of [ericfitz/unifi-clients-export](https://github.com/ericfitz/unifi-client
 
 ## Testing
 
-- Test against recorded/sanitized fixtures, never the live controller. Add tests for new features.
+- Tests use the synthetic fixture `tests/fixtures/controller.json` served by `FakeSession` in `tests/conftest.py`; never hit the live controller from tests. Add tests for new features and extend the fixture rather than pasting real data (redact MACs, IPs, names).
 
 ## Git and GitHub
 

@@ -1,12 +1,8 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.8"
-# dependencies = [
-#   "requests",
-#   "python-dotenv",
-# ]
-# ///
-"""UniFi Sentinel launcher. Run with: uv run unifi-sentinel.py <command>"""
+"""UniFi Sentinel launcher. Run from the project root with: uv run unifi-sentinel.py <command>
+
+Dependencies are declared once, in pyproject.toml.
+"""
 
 import sys
 

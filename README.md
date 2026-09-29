@@ -29,7 +29,7 @@ Planned: richer inventory and troubleshooting reports.
 
 ## Requirements
 
-- Python 3.8 or higher
+- Python 3.9 or higher
 - A UniFi Network Application recent enough to support the Integration API and API keys (9.5.21+ recommended)
 - An API key from your controller (read-only access is sufficient, and recommended)
 
@@ -81,8 +81,10 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 ```bash
 python3 -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements.txt
+pip install .
 ```
+
+This installs a `unifi-sentinel` command.
 
 ## Usage
 
@@ -96,7 +98,7 @@ uv run unifi-sentinel.py query clients -s printer --json   # filter, JSON output
 uv run unifi-sentinel.py diagnose                    # health checks
 ```
 
-Without uv, activate the virtual environment and use `python3 unifi-sentinel.py ...`. Run `--help` on the tool or any command for options.
+Run these from the project root (uv uses `pyproject.toml`). After `pip install .` use `unifi-sentinel <command>` instead. Run `--help` on the tool or any command for options.
 
 ### Output files
 
@@ -149,7 +151,7 @@ unifi_sentinel/
   cli.py                 argparse subcommands
 ```
 
-New features are new subcommands in `cli.py` backed by modules that take a `UniFiClient`. Dependencies are declared in `pyproject.toml`, `requirements.txt` and the launcher's PEP 723 block, and the uv lockfile is `uv.lock`; keep them in sync. See [CLAUDE.md](CLAUDE.md) for contributor and AI-assistant guidelines.
+New features are new subcommands in `cli.py` backed by modules that take a `UniFiClient`. Dependencies are declared once, in `pyproject.toml` (lockfile: `uv.lock`; regenerate with `uv lock`). Run the tests with `uv run pytest`; they use a synthetic fixture in `tests/fixtures/` and never contact a controller. See [CLAUDE.md](CLAUDE.md) for contributor and AI-assistant guidelines.
 
 ## License
 

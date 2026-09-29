@@ -1,0 +1,319 @@
+{
+  "info": {
+    "applicationVersion": "10.0.0"
+  },
+  "sites": [
+    {
+      "id": "site-1",
+      "internalReference": "default",
+      "name": "Default"
+    }
+  ],
+  "devices": [
+    {
+      "id": "gw1",
+      "macAddress": "aa:00:00:00:00:01",
+      "ipAddress": "10.0.0.1",
+      "name": "Gateway",
+      "model": "UCG Max",
+      "supported": true,
+      "state": "ONLINE",
+      "firmwareVersion": "5.0.0",
+      "features": [
+        "switching"
+      ],
+      "interfaces": [
+        "ports"
+      ]
+    },
+    {
+      "id": "sw1",
+      "macAddress": "aa:00:00:00:00:02",
+      "ipAddress": "10.0.0.2",
+      "name": "Office Switch",
+      "model": "USW-Lite-8-PoE",
+      "supported": true,
+      "state": "ONLINE",
+      "firmwareVersion": "7.0.0",
+      "features": [
+        "switching"
+      ],
+      "interfaces": [
+        "ports"
+      ]
+    },
+    {
+      "id": "ap1",
+      "macAddress": "aa:00:00:00:00:03",
+      "ipAddress": "10.0.0.3",
+      "name": "Office AP",
+      "model": "U7 Pro",
+      "supported": true,
+      "state": "ONLINE",
+      "firmwareVersion": "8.0.0",
+      "features": [
+        "accessPoint"
+      ],
+      "interfaces": [
+        "radios"
+      ]
+    },
+    {
+      "id": "ap2",
+      "macAddress": "aa:00:00:00:00:04",
+      "ipAddress": "10.0.0.4",
+      "name": "Garage AP",
+      "model": "U6 Pro",
+      "supported": true,
+      "state": "OFFLINE",
+      "firmwareVersion": "8.0.0",
+      "features": [
+        "accessPoint"
+      ],
+      "interfaces": [
+        "radios"
+      ]
+    }
+  ],
+  "device_detail": {
+    "gw1": {
+      "id": "gw1",
+      "macAddress": "aa:00:00:00:00:01",
+      "ipAddress": "10.0.0.1",
+      "name": "Gateway",
+      "model": "UCG Max",
+      "supported": true,
+      "state": "ONLINE",
+      "firmwareVersion": "5.0.0",
+      "features": [
+        "switching"
+      ],
+      "interfaces": [
+        "ports"
+      ]
+    },
+    "sw1": {
+      "id": "sw1",
+      "macAddress": "aa:00:00:00:00:02",
+      "ipAddress": "10.0.0.2",
+      "name": "Office Switch",
+      "model": "USW-Lite-8-PoE",
+      "supported": true,
+      "state": "ONLINE",
+      "firmwareVersion": "7.0.0",
+      "features": [
+        "switching"
+      ],
+      "interfaces": [
+        "ports"
+      ],
+      "uplink": {
+        "deviceId": "gw1"
+      }
+    },
+    "ap1": {
+      "id": "ap1",
+      "macAddress": "aa:00:00:00:00:03",
+      "ipAddress": "10.0.0.3",
+      "name": "Office AP",
+      "model": "U7 Pro",
+      "supported": true,
+      "state": "ONLINE",
+      "firmwareVersion": "8.0.0",
+      "features": [
+        "accessPoint"
+      ],
+      "interfaces": [
+        "radios"
+      ],
+      "uplink": {
+        "deviceId": "sw1"
+      }
+    },
+    "ap2": {
+      "id": "ap2",
+      "macAddress": "aa:00:00:00:00:04",
+      "ipAddress": "10.0.0.4",
+      "name": "Garage AP",
+      "model": "U6 Pro",
+      "supported": true,
+      "state": "OFFLINE",
+      "firmwareVersion": "8.0.0",
+      "features": [
+        "accessPoint"
+      ],
+      "interfaces": [
+        "radios"
+      ],
+      "uplink": {
+        "deviceId": "sw1"
+      }
+    }
+  },
+  "device_stats": {
+    "gw1": {
+      "uptimeSec": 1000,
+      "lastHeartbeatAt": "2026-01-01T10:00:00Z",
+      "cpuUtilizationPct": 5.0,
+      "memoryUtilizationPct": 40.0
+    },
+    "sw1": {
+      "uptimeSec": 1000,
+      "lastHeartbeatAt": "2026-01-01T10:00:00Z",
+      "cpuUtilizationPct": 95.0,
+      "memoryUtilizationPct": 50.0
+    },
+    "ap1": {
+      "uptimeSec": 1000,
+      "lastHeartbeatAt": "2026-01-01T10:00:00Z",
+      "cpuUtilizationPct": 10.0,
+      "memoryUtilizationPct": 30.0
+    }
+  },
+  "clients": [
+    {
+      "id": "c1",
+      "name": "desktop",
+      "type": "WIRED",
+      "macAddress": "bb:00:00:00:00:01",
+      "ipAddress": "10.0.0.10",
+      "connectedAt": "2026-01-01T09:00:00Z",
+      "uplinkDeviceId": "sw1"
+    },
+    {
+      "id": "c2",
+      "name": "phone",
+      "type": "WIRELESS",
+      "macAddress": "bb:00:00:00:00:02",
+      "ipAddress": "10.0.0.11",
+      "connectedAt": "2026-01-01T09:30:00Z",
+      "uplinkDeviceId": "ap1"
+    }
+  ],
+  "legacy": {
+    "device": [
+      {
+        "mac": "aa:00:00:00:00:01",
+        "type": "udm",
+        "name": "Gateway",
+        "model": "UCG Max"
+      },
+      {
+        "mac": "aa:00:00:00:00:02",
+        "type": "usw",
+        "name": "Office Switch",
+        "model": "USW-Lite-8-PoE",
+        "uplink": {
+          "uplink_mac": "aa:00:00:00:00:01",
+          "uplink_remote_port": 2
+        },
+        "port_table": [
+          {
+            "port_idx": 1,
+            "up": true,
+            "speed": 1000,
+            "full_duplex": true,
+            "poe_enable": false,
+            "rx_bytes": 100,
+            "tx_bytes": 200,
+            "rx_errors": 0,
+            "tx_errors": 0,
+            "is_uplink": true
+          },
+          {
+            "port_idx": 2,
+            "up": true,
+            "speed": 100,
+            "full_duplex": false,
+            "poe_enable": false,
+            "rx_bytes": 200,
+            "tx_bytes": 400,
+            "rx_errors": 4,
+            "tx_errors": 0
+          },
+          {
+            "port_idx": 3,
+            "up": true,
+            "speed": 1000,
+            "full_duplex": true,
+            "poe_enable": false,
+            "rx_bytes": 300,
+            "tx_bytes": 600,
+            "rx_errors": 0,
+            "tx_errors": 0
+          },
+          {
+            "port_idx": 4,
+            "up": false,
+            "speed": 0,
+            "full_duplex": true,
+            "poe_enable": false,
+            "rx_bytes": 400,
+            "tx_bytes": 800,
+            "rx_errors": 0,
+            "tx_errors": 0
+          }
+        ]
+      },
+      {
+        "mac": "aa:00:00:00:00:03",
+        "type": "uap",
+        "name": "Office AP",
+        "model": "U7 Pro",
+        "uplink": {
+          "uplink_mac": "aa:00:00:00:00:02",
+          "uplink_remote_port": 2
+        }
+      },
+      {
+        "mac": "aa:00:00:00:00:04",
+        "type": "uap",
+        "name": "Garage AP",
+        "model": "U6 Pro",
+        "uplink": {
+          "uplink_mac": "aa:00:00:00:00:02",
+          "uplink_remote_port": 5
+        }
+      }
+    ],
+    "sta": [
+      {
+        "mac": "bb:00:00:00:00:01",
+        "name": "desktop",
+        "sw_mac": "aa:00:00:00:00:02",
+        "sw_port": 3,
+        "is_wired": true
+      },
+      {
+        "mac": "bb:00:00:00:00:02",
+        "name": "phone",
+        "ap_mac": "aa:00:00:00:00:03",
+        "is_wired": false
+      }
+    ],
+    "alluser": [
+      {
+        "mac": "bb:00:00:00:00:01",
+        "name": "desktop",
+        "last_seen": 1767000000,
+        "is_wired": true
+      },
+      {
+        "mac": "bb:00:00:00:00:03",
+        "hostname": "old-printer",
+        "is_wired": true,
+        "last_seen": 1766000000,
+        "last_ip": "10.0.0.50",
+        "last_uplink_name": "Office Switch",
+        "last_uplink_remote_port": 6
+      },
+      {
+        "mac": "bb:00:00:00:00:04",
+        "name": "old-tablet",
+        "is_wired": false,
+        "last_seen": 1765000000,
+        "last_ip": "10.0.0.51"
+      }
+    ]
+  }
+}

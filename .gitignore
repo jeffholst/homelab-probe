@@ -12,3 +12,4 @@ __pycache__/**
 # Python envs / build
 .venv/
 *.egg-info/
+build/
