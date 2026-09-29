@@ -3,13 +3,14 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "unifi-clients-export"
-version = "1.0.0"
-description = "Export UniFi Network clients and infrastructure to CSV files"
+name = "unifi-sentinel"
+version = "0.1.0"
+description = "Query, troubleshoot and inventory a UniFi Network controller"
 readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "Apache-2.0"}
 authors = [
+    {name = "Jeff Holst"},
     {name = "Eric Fitzgerald"}
 ]
 keywords = ["unifi", "network", "export", "csv", "ubiquiti"]
@@ -29,16 +30,15 @@ classifiers = [
 
 dependencies = [
     "requests>=2.31.0",
-    "pandas>=2.0.0",
     "python-dotenv>=1.0.0",
 ]
 
 [project.urls]
-Homepage = "https://github.com/efitz/unifi-clients-export"
-Issues = "https://github.com/efitz/unifi-clients-export/issues"
+Homepage = "https://github.com/jeffholst/unifi-sentinel"
+Issues = "https://github.com/jeffholst/unifi-sentinel/issues"
 
 [project.scripts]
-unifi-clients-export = "uce:main"
+unifi-sentinel = "unifi_sentinel.cli:main"
 
 [tool.setuptools]
-py-modules = ["uce"]
+packages = ["unifi_sentinel"]

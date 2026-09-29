@@ -1,10 +1,14 @@
-# UniFi Clients Export
+# UniFi Sentinel
 
-A Python script to export all client devices and UniFi infrastructure from a UniFi Network controller to CSV files.
+> Forked from [ericfitz/unifi-clients-export](https://github.com/ericfitz/unifi-clients-export); being extended for querying, troubleshooting and inventory.
+
+Commands: `export` (CSV export), `info` (controller version and sites).
+
+A Python script to export connected client devices and UniFi infrastructure from a UniFi Network controller to CSV files.
 
 ## Features
 
-- **Comprehensive Client Export**: Exports all clients (online and offline) with connection details
+- **Connected Client Export**: Exports connected clients with connection details
 - **UniFi Device Inventory**: Includes all UniFi infrastructure devices (switches, access points, gateways)
 - **Switch Port Mapping**: Generates detailed port information for each switch, including:
   - Connected clients and devices
@@ -28,18 +32,18 @@ You have two options:
 
 **Option A: Download the Latest Release (Recommended for most users)**
 
-Download the latest release zip file from the [Releases page](https://github.com/ericfitz/unifi-clients-export/releases) and extract it:
+Download the latest release zip file from the [Releases page](https://github.com/jeffholst/unifi-sentinel/releases) and extract it:
 
 ```bash
-unzip unifi-clients-export-*.zip
-cd unifi-clients-export
+unzip unifi-sentinel-*.zip
+cd unifi-sentinel
 ```
 
 **Option B: Clone the Repository**
 
 ```bash
-git clone https://github.com/ericfitz/unifi-clients-export
-cd unifi-clients-export
+git clone https://github.com/jeffholst/unifi-sentinel
+cd unifi-sentinel
 ```
 
 ### 2. Configure Your Environment
@@ -62,7 +66,7 @@ VERIFY_SSL=false
 ### Getting Your API Key
 
 1. Log in to your UniFi Network Application
-2. Navigate to **Settings > Control Plane > Applications**
+2. Navigate to **Settings > Control Plane > Integrations**
 3. Click **Create API Key**
 4. Give it a descriptive name (e.g., "Client Export - Read Only")
 5. Select **Read Only** permissions
@@ -101,7 +105,7 @@ pip install -r requirements.txt
 Run the script using `uv`:
 
 ```bash
-uv run uce.py
+uv run unifi-sentinel.py export
 ```
 
 Dependencies are automatically installed and managed by uv using PEP 723 inline metadata.
@@ -112,14 +116,14 @@ Make sure your virtual environment is activated, then run:
 
 ```bash
 source venv/bin/activate
-python3 uce.py
+python3 unifi-sentinel.py export
 ```
 
 # On Windows when not using wsl:
 
 ```windows
 venv\Scripts\activate
-python3 uce.py
+python3 unifi-sentinel.py export
 ```
 
 The script will generate the following files:
@@ -128,7 +132,7 @@ The script will generate the following files:
 
 1. **`unifi_clients.csv`** - Master inventory file containing:
 
-   - All client devices (wireless and wired)
+   - Connected client devices (wireless and wired)
    - All UniFi infrastructure devices (switches, APs, gateways)
    - Columns: Type, Name, MAC Address, IP Address, Model, Connection Type, Switch, Port, Last Seen, Status
 
@@ -185,7 +189,7 @@ Port 6,6,Up,1000 Mbps,Yes,Yes,4.95,Class 4,Client,homeassistant,2C:CF:67:10:44:C
 
 ### "ERROR: API_KEY is not set or using placeholder value"
 
-- Get your API key from **Settings > Control Plane > Applications**
+- Get your API key from **Settings > Control Plane > Integrations**
 - Update the `API_KEY` value in your `.env` file
 
 ### SSL Certificate Errors
@@ -204,7 +208,6 @@ Port 6,6,Up,1000 Mbps,Yes,Yes,4.95,Class 4,Client,homeassistant,2C:CF:67:10:44:C
 Dependencies are managed via PEP 723 inline script metadata:
 
 - `requests` - HTTP client for UniFi API
-- `pandas` - Data manipulation and CSV export
 - `python-dotenv` - Environment variable management
 
 ## License
