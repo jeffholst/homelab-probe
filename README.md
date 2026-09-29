@@ -1,60 +1,47 @@
 # UniFi Sentinel
 
-> Forked from [ericfitz/unifi-clients-export](https://github.com/ericfitz/unifi-clients-export); being extended for querying, troubleshooting and inventory.
+A command-line tool for querying, troubleshooting and inventorying a UniFi Network controller. It is **read-only**: it only sends GET requests to the controller.
 
-Commands: `export` (CSV export), `info` (controller version and sites).
+> **Status: early development.** The Integration API field mappings have not yet been verified against a live controller. See [open issues](https://github.com/jeffholst/unifi-sentinel/issues) for the roadmap.
 
-A Python script to export connected client devices and UniFi infrastructure from a UniFi Network controller to CSV files.
+## Credits
+
+UniFi Sentinel is a fork of [ericfitz/unifi-clients-export](https://github.com/ericfitz/unifi-clients-export) by Eric Fitzgerald, whose CSV export is the foundation of the `export` command. It is licensed under the Apache License 2.0, as is the original.
+
+## Commands
+
+| Command  | Description                                                    |
+| -------- | -------------------------------------------------------------- |
+| `export` | Export connected clients, UniFi devices and switch ports to CSV |
+| `info`   | Show the controller application info and available sites       |
+
+Planned: `query` and `diagnose` subcommands, offline-client history, and richer inventory reports.
 
 ## Features
 
-- **Connected Client Export**: Exports connected clients with connection details
-- **UniFi Device Inventory**: Includes all UniFi infrastructure devices (switches, access points, gateways)
-- **Switch Port Mapping**: Generates detailed port information for each switch, including:
-  - Connected clients and devices
-  - PoE status and power consumption
-  - Port speed and duplex settings
-  - Traffic statistics (RX/TX bytes, packets, errors)
-- **Network Topology**: Shows which switch and port each device is connected to
-- **Environment-based Configuration**: Secure credential management via `.env` files
+- **Client and device inventory**: connected clients (wired and wireless) and all UniFi devices (switches, access points, gateways) in one CSV
+- **Switch port mapping**: per-switch CSVs with port status, speed, duplex, PoE, connected client or device, and traffic counters
+- **Network topology**: which switch and port each client or device is attached to
+- **Official API first**: uses the UniFi Network Integration API (`/proxy/network/integration/v1`). Legacy endpoints are used only for data the Integration API does not expose (per-port counters and client-to-port mapping) and degrade gracefully with a warning if unavailable
+- **Environment-based configuration**: credentials live in a `.env` file
 
 ## Requirements
 
 - Python 3.8 or higher
-- UniFi Network Application v9.5.21 or higher
-- Read-only API key from your UniFi controller
+- A UniFi Network Application recent enough to support the Integration API and API keys (9.5.21+ recommended)
+- An API key from your controller (read-only access is sufficient, and recommended)
 
 ## Installation
-
-### 1. Get the Code
-
-You have two options:
-
-**Option A: Download the Latest Release (Recommended for most users)**
-
-Download the latest release zip file from the [Releases page](https://github.com/jeffholst/unifi-sentinel/releases) and extract it:
-
-```bash
-unzip unifi-sentinel-*.zip
-cd unifi-sentinel
-```
-
-**Option B: Clone the Repository**
 
 ```bash
 git clone https://github.com/jeffholst/unifi-sentinel
 cd unifi-sentinel
-```
-
-### 2. Configure Your Environment
-
-Copy the example configuration and edit it with your settings:
-
-```bash
 cp example.env .env
 ```
 
-Edit `.env` with your UniFi controller details:
+### Configure
+
+Edit `.env`:
 
 ```env
 CONTROLLER_URL=https://your-controller-ip:443
@@ -63,101 +50,54 @@ SITE_ID=default
 VERIFY_SSL=false
 ```
 
-### Getting Your API Key
+| Variable         | Required | Default   | Description                                                        |
+| ---------------- | -------- | --------- | ------------------------------------------------------------------ |
+| `CONTROLLER_URL` | Yes      | -         | Controller URL (include protocol and port)                         |
+| `API_KEY`        | Yes      | -         | API key from the controller                                        |
+| `SITE_ID`        | No       | `default` | Site name, internal reference (e.g. `default`) or UUID             |
+| `VERIFY_SSL`     | No       | `true`    | Set to `false`, `0` or `no` for self-signed certificates           |
+
+Any other `VERIFY_SSL` value (or none) enables verification.
+
+### Getting an API key
 
 1. Log in to your UniFi Network Application
-2. Navigate to **Settings > Control Plane > Integrations**
-3. Click **Create API Key**
-4. Give it a descriptive name (e.g., "Client Export - Read Only")
-5. Select **Read Only** permissions
-6. Copy the generated API key to your `.env` file
+2. Go to **Settings > Control Plane > Integrations**
+3. Click **Create API Key** and give it a descriptive name
+4. Copy the key into `.env`
 
-### 3. Install Dependencies
+### Install dependencies
 
-Choose your preferred method:
-
-#### Option A: If you are going to run the tool using uv run (Recommended)
-
-[uv](https://docs.astral.sh/uv/) automatically manages dependencies - no manual installation or virtual environment management needed!
-
-Install uv if you haven't already:
+**With [uv](https://docs.astral.sh/uv/) (recommended):** nothing to install; dependencies are resolved on first run.
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-The dependencies will be installed the first time you run the tool with uv run.
-
-#### Option B: If you are going to run the tool directly with the python(3) executable (uses pip and venv to manage dependencies)
-
-Create a virtual environment and install dependencies:
+**With pip:**
 
 ```bash
 python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
 ## Usage
 
-### With uv (Recommended)
-
-Run the script using `uv`:
-
 ```bash
+uv run unifi-sentinel.py info
 uv run unifi-sentinel.py export
+uv run unifi-sentinel.py export -o ./out   # write CSVs to a directory
 ```
 
-Dependencies are automatically installed and managed by uv using PEP 723 inline metadata.
+Without uv, activate the virtual environment and use `python3 unifi-sentinel.py ...`. Run `--help` on the tool or any command for options.
 
-### With python executable
+### Output files
 
-Make sure your virtual environment is activated, then run:
+1. **`unifi_clients.csv`**: master inventory of connected clients and UniFi devices. Columns: Type, Name, MAC Address, IP Address, Model, Connection Type, Switch, Port, Last Seen, Status. Only currently connected clients are listed; offline clients are not yet supported.
+2. **`switch_<name>.csv`**: one file per switch with port status, speed, duplex, PoE, connected client or device, and traffic counters.
 
-```bash
-source venv/bin/activate
-python3 unifi-sentinel.py export
-```
-
-# On Windows when not using wsl:
-
-```windows
-venv\Scripts\activate
-python3 unifi-sentinel.py export
-```
-
-The script will generate the following files:
-
-### Output Files
-
-1. **`unifi_clients.csv`** - Master inventory file containing:
-
-   - Connected client devices (wireless and wired)
-   - All UniFi infrastructure devices (switches, APs, gateways)
-   - Columns: Type, Name, MAC Address, IP Address, Model, Connection Type, Switch, Port, Last Seen, Status
-
-2. **`switch_<name>.csv`** - Per-switch port details, one file per switch:
-   - Port status and configuration
-   - Connected clients and devices
-   - PoE information and power consumption
-   - Traffic statistics
-
-## Configuration Options
-
-| Variable         | Required | Default   | Description                                      |
-| ---------------- | -------- | --------- | ------------------------------------------------ |
-| `CONTROLLER_URL` | Yes      | -         | UniFi controller URL (include protocol and port) |
-| `API_KEY`        | Yes      | -         | Read-only API key from UniFi controller          |
-| `SITE_ID`        | No       | `default` | Site ID (use 'default' for single-site setups)   |
-| `VERIFY_SSL`     | No       | `true`    | SSL certificate verification (`true`/`false`)    |
-
-### Boolean Values
-
-For `VERIFY_SSL`, the following values are treated as `false`:
-
-- `false`, `False`, `0`, `no`, `No`
-
-All other values (or missing) default to `true` for security.
+CSV files are ignored by git.
 
 ## Example Output
 
@@ -182,43 +122,35 @@ Port 6,6,Up,1000 Mbps,Yes,Yes,4.95,Class 4,Client,homeassistant,2C:CF:67:10:44:C
 
 ## Troubleshooting
 
-### "ERROR: CONTROLLER_URL is not set"
-
-- Make sure you've copied `example.env` to `.env`
-- Verify your `.env` file contains the `CONTROLLER_URL` setting
-
-### "ERROR: API_KEY is not set or using placeholder value"
-
-- Get your API key from **Settings > Control Plane > Integrations**
-- Update the `API_KEY` value in your `.env` file
-
-### SSL Certificate Errors
-
-- If using a self-signed certificate, set `VERIFY_SSL=false` in your `.env` file
-- For production environments, consider using a valid SSL certificate
-
-### Connection Timeouts
-
-- Verify your `CONTROLLER_URL` is correct and accessible
-- Check that your UniFi controller is running and reachable
-- Ensure firewall rules allow access to the controller
+- **`CONTROLLER_URL is not set` / `API_KEY is not set`**: copy `example.env` to `.env` and fill it in.
+- **`401 Unauthorized`**: the API key is invalid or was revoked; create a new one.
+- **SSL certificate errors**: for a self-signed certificate set `VERIFY_SSL=false`, or install a valid certificate.
+- **Connection errors or timeouts**: check `CONTROLLER_URL` and that the controller is reachable from this machine.
+- **`Site '...' not found`**: run `info` to list site names, references and IDs.
+- **`legacy stat/... unavailable` warning**: switch port mapping and counters will be incomplete, but the rest of the export still runs.
 
 ## Development
 
-Dependencies are managed via PEP 723 inline script metadata:
+```text
+unifi-sentinel.py        thin launcher
+unifi_sentinel/
+  config.py              .env / environment loading
+  client.py              UniFiClient: the only code that makes HTTP calls
+  export.py              CSV export
+  cli.py                 argparse subcommands
+```
 
-- `requests` - HTTP client for UniFi API
-- `python-dotenv` - Environment variable management
+New features are new subcommands in `cli.py` backed by modules that take a `UniFiClient`. Dependencies are declared in `pyproject.toml`, `requirements.txt` and the launcher's PEP 723 block, and the uv lockfile is `uv.lock`; keep them in sync. See [CLAUDE.md](CLAUDE.md) for contributor and AI-assistant guidelines.
 
 ## License
 
-This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+Apache License 2.0. See [LICENSE](LICENSE).
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Issues and pull requests are welcome. Work is tracked in [GitHub issues](https://github.com/jeffholst/unifi-sentinel/issues).
 
 ## Acknowledgments
 
-- UniFi Network Application API documentation
-- [uv](https://docs.astral.sh/uv/) for fast Python package management
+- [ericfitz/unifi-clients-export](https://github.com/ericfitz/unifi-clients-export), the project this was forked from
+- [uv](https://docs.astral.sh/uv/) for Python package management
