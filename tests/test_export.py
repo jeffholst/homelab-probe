@@ -37,3 +37,18 @@ def test_switch_ports_match_when_mac_table_count_missing():
     clients = [{"mac": "cc:cc", "name": "pc", "sw_mac": "aa:aa", "sw_port": 2}]
     rows = build_switch_ports(switches, clients)["SW"]
     assert rows[0]["Connected Name"] == "pc"
+
+
+def test_device_type_label_precedence():
+    from unifi_sentinel.export import device_type_label
+    # legacy code wins
+    assert device_type_label({"model": "UCG Max"}, "udm") == "Dream Machine"
+    # model prefix beats the ambiguous "switching" feature (UCG Max)
+    assert device_type_label({"model": "UCG Max", "features": ["switching"]}) == "Gateway"
+    assert device_type_label({"model": "USW-Lite-8-PoE"}) == "Switch"
+    assert device_type_label({"model": "USPM16P"}) == "Switch"
+    assert device_type_label({"model": "USP-PDU-Pro"}) == "PDU"
+    assert device_type_label({"model": "U7 Pro"}) == "Access Point"
+    # unknown model falls back to features, then Unknown
+    assert device_type_label({"model": "XYZ", "features": ["accessPoint"]}) == "Access Point"
+    assert device_type_label({"model": "XYZ"}) == "Unknown"
