@@ -110,7 +110,8 @@ def build_inventory(
         if uplink.get("uplink_remote_port") is not None:
             port = str(uplink["uplink_remote_port"])
         legacy_type = (legacy_device_by_mac.get(mac) or {}).get("type", "")
-        friendly = DEVICE_TYPE_MAP.get(legacy_type) or legacy_type.upper() or "Unknown"
+        device_type = d.get("type") or legacy_type
+        friendly = DEVICE_TYPE_MAP.get(device_type.lower()) or device_type.upper() or "Unknown"
         rows.append({
             "Type": f"Device - {friendly}",
             "Name": d.get("name") or "Unknown",
