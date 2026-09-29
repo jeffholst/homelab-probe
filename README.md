@@ -14,7 +14,7 @@ UniFi Sentinel is a fork of [ericfitz/unifi-clients-export](https://github.com/e
 | -------- | -------------------------------------------------------------- |
 | `export` | Export connected clients, UniFi devices and switch ports to CSV |
 | `query`  | List and filter devices, clients and DHCP reservations (table or `--json`) |
-| `diagnose` | Read-only health checks: offline devices, port errors, half-duplex and low-speed links, high CPU/memory |
+| `diagnose` | Read-only health checks with 🛑 critical, ⚠️ warning and ℹ️ info findings |
 | `info`   | Show the controller application info and available sites       |
 
 Planned: richer inventory and troubleshooting reports.
@@ -102,6 +102,18 @@ uv run unifi-sentinel.py diagnose                    # health checks
 ```
 
 Run these from the project root (uv uses `pyproject.toml`). After `pip install .` use `unifi-sentinel <command>` instead. Run `--help` on the tool or any command for options.
+
+### Diagnose
+
+`diagnose` prints findings sorted by severity:
+
+| Level | Examples |
+| ----- | -------- |
+| 🛑 critical | gateway offline; an offline switch or device that other devices uplink through; CPU or memory at 98% or higher |
+| ⚠️ warning | other offline devices; port rx/tx errors; half-duplex links; CPU or memory at least 90% but below 98% |
+| ℹ️ info | ports negotiated at 100 Mbps or less; legacy data unavailable (port checks skipped) |
+
+Emoji labels are used on a UTF-8 terminal. When output is piped or redirected, or with `--no-emoji`, it prints text labels (`[CRITICAL]`, `[WARNING ]`, `[INFO    ]`) instead.
 
 ### DHCP reservations
 

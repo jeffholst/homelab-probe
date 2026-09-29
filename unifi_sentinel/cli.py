@@ -8,7 +8,7 @@ from typing import List, Optional
 from . import __version__
 from .client import UniFiAPIError, UniFiClient
 from .config import ConfigError, load_config
-from .diagnose import diagnose, format_findings
+from .diagnose import diagnose, format_findings, stream_supports_emoji
 from .export import run_export
 from .query import query_rows, render
 from .snapshot import collect_snapshot
@@ -36,7 +36,9 @@ def build_parser() -> argparse.ArgumentParser:
                        help="Also list previously seen clients that are not connected")
     query.add_argument("--json", action="store_true", help="Output JSON instead of a table")
 
-    sub.add_parser("diagnose", help="Run read-only health checks (offline devices, port errors, ...)")
+    diag = sub.add_parser("diagnose", help="Run read-only health checks (offline devices, port errors, ...)")
+    diag.add_argument("--no-emoji", action="store_true",
+                      help="Use text severity labels (automatic when output is not a UTF-8 terminal)")
 
     sub.add_parser("info", help="Show controller version and available sites")
     return parser
@@ -60,7 +62,9 @@ def main(argv: Optional[List[str]] = None) -> int:
             rows = query_rows(snap, args.kind, args.search, args.include_offline)
             print(render(rows, args.json, args.kind))
         elif args.command == "diagnose":
-            print(format_findings(diagnose(collect_snapshot(client, config.site))))
+            findings = diagnose(collect_snapshot(client, config.site))
+            emoji = not args.no_emoji and stream_supports_emoji(sys.stdout)
+            print(format_findings(findings, emoji))
     except (ConfigError, UniFiAPIError) as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1

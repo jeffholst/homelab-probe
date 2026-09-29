@@ -91,3 +91,62 @@ def test_ssl_error_message_is_actionable(monkeypatch):
     monkeypatch.setattr(client.session, "get", boom)
     with pytest.raises(UniFiAPIError, match="VERIFY_SSL=false"):
         client.info()
+
+
+def _fleet(gw_state="ONLINE", sw_state="ONLINE"):
+    return Snapshot(
+        site={"id": "s"},
+        devices=[
+            {"id": "gw", "macAddress": "aa:01", "name": "GW", "model": "UCG Max", "state": gw_state},
+            {"id": "sw", "macAddress": "aa:02", "name": "SW", "model": "USW Ultra", "state": sw_state},
+            {"id": "ap", "macAddress": "aa:03", "name": "AP", "model": "U7 Pro", "state": "OFFLINE"},
+        ],
+        clients=[],
+        device_details={"sw": {"uplink": {"deviceId": "gw"}}, "ap": {"uplink": {"deviceId": "sw"}}},
+        legacy_devices=[{"mac": "aa:01", "type": "udm"}],
+    )
+
+
+def test_offline_gateway_is_critical_and_sorts_first():
+    findings = diagnose(_fleet(gw_state="OFFLINE"))
+    assert findings[0].severity == "critical"
+    assert (findings[0].subject, findings[0].message) == ("GW", "device is offline (gateway)")
+    assert [f.severity for f in findings] == sorted(
+        (f.severity for f in findings), key=["critical", "warning", "info"].index)
+
+
+def test_offline_uplink_switch_is_critical_but_leaf_is_warning():
+    findings = {(f.severity, f.subject): f.message for f in diagnose(_fleet(sw_state="OFFLINE"))}
+    assert findings[("critical", "SW")] == "device is offline (1 device(s) uplink through it)"
+    assert ("warning", "AP") in findings  # AP has no downstream devices
+
+
+def test_resource_use_thresholds():
+    snap = _fleet()
+    snap.device_stats = {"gw": {"cpuUtilizationPct": 99.0, "memoryUtilizationPct": 92.0}}
+    got = {(f.severity, f.message) for f in diagnose(snap) if f.subject == "GW"}
+    assert got == {("critical", "CPU utilization 99%"), ("warning", "memory utilization 92%")}
+
+
+def test_format_findings_emoji_and_text():
+    from unifi_sentinel.diagnose import Finding, format_findings, stream_supports_emoji
+
+    findings = [Finding("critical", "GW", "down"), Finding("warning", "A", "x"),
+                Finding("warning", "B", "y"), Finding("info", "C", "z")]
+    emoji = format_findings(findings)
+    assert emoji.splitlines()[0].startswith("\U0001F6D1 GW: down")
+    assert emoji.endswith("\U0001F6D1 1 critical, ⚠️ 2 warnings, ℹ️ 1 info")
+
+    text = format_findings(findings, emoji=False)
+    assert text.splitlines()[0] == "[CRITICAL] GW: down"
+    assert text.endswith("1 critical, 2 warnings, 1 info")
+    # zero counts are omitted
+    assert format_findings([Finding("info", "C", "z")], emoji=False).endswith("1 info")
+    assert format_findings([]) == "No issues found."
+
+    class Tty:
+        encoding = "UTF-8"
+        def isatty(self): return True
+    class Pipe(Tty):
+        def isatty(self): return False
+    assert stream_supports_emoji(Tty()) and not stream_supports_emoji(Pipe())
