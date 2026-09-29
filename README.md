@@ -13,9 +13,11 @@ UniFi Sentinel is a fork of [ericfitz/unifi-clients-export](https://github.com/e
 | Command  | Description                                                    |
 | -------- | -------------------------------------------------------------- |
 | `export` | Export connected clients, UniFi devices and switch ports to CSV |
+| `query`  | List and filter devices and clients (table or `--json`)        |
+| `diagnose` | Read-only health checks: offline devices, port errors, half-duplex and low-speed links |
 | `info`   | Show the controller application info and available sites       |
 
-Planned: `query` and `diagnose` subcommands and richer inventory reports.
+Planned: richer inventory and troubleshooting reports.
 
 ## Features
 
@@ -89,6 +91,9 @@ uv run unifi-sentinel.py info
 uv run unifi-sentinel.py export
 uv run unifi-sentinel.py export -o ./out   # write CSVs to a directory
 uv run unifi-sentinel.py export --include-offline   # also list previously seen clients
+uv run unifi-sentinel.py query devices               # table of UniFi devices
+uv run unifi-sentinel.py query clients -s printer --json   # filter, JSON output
+uv run unifi-sentinel.py diagnose                    # health checks
 ```
 
 Without uv, activate the virtual environment and use `python3 unifi-sentinel.py ...`. Run `--help` on the tool or any command for options.
@@ -137,7 +142,10 @@ unifi-sentinel.py        thin launcher
 unifi_sentinel/
   config.py              .env / environment loading
   client.py              UniFiClient: the only code that makes HTTP calls
-  export.py              CSV export
+  snapshot.py            collect_snapshot: one read of the controller, output-agnostic
+  export.py              inventory rows and CSV export
+  query.py               filtering and table/JSON rendering
+  diagnose.py            read-only health checks
   cli.py                 argparse subcommands
 ```
 

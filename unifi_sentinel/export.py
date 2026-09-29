@@ -2,12 +2,11 @@
 
 import csv
 import re
-import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from .client import UniFiAPIError, UniFiClient
+from .snapshot import Snapshot
 
 INVENTORY_COLUMNS = [
     "Type", "Name", "MAC Address", "IP Address", "Model", "Connection Type",
@@ -73,24 +72,11 @@ def _fmt_time(value: Optional[str]) -> str:
         return value
 
 
-def _warn(msg: str) -> None:
-    print(f"Warning: {msg}", file=sys.stderr)
-
-
 def _write_csv(path: Path, columns: List[str], rows: List[Dict[str, Any]]) -> None:
     with path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=columns)
         writer.writeheader()
         writer.writerows(rows)
-
-
-def _legacy_or_empty(client: UniFiClient, site_ref: str, resource: str) -> List[Dict[str, Any]]:
-    """Legacy data supplies switch/port mapping; failure degrades gracefully."""
-    try:
-        return client.legacy_stat(site_ref, resource)
-    except UniFiAPIError as e:
-        _warn(f"legacy stat/{resource} unavailable, port mapping will be incomplete: {e}")
-        return []
 
 
 def build_inventory(
@@ -255,32 +241,21 @@ def build_switch_ports(
     return result
 
 
-def run_export(
-    client: UniFiClient, site: str, output_dir: Path, include_offline: bool = False
-) -> None:
-    site_info = client.resolve_site(site)
-    site_id = site_info["id"]
-    site_ref = site_info.get("internalReference") or site
-    print(f"Site: {site_info.get('name')} ({site_id})")
-
-    devices = client.devices(site_id)
-    clients = client.clients(site_id)
-    print(f"Found {len(devices)} device(s), {len(clients)} connected client(s)")
-
-    legacy_devices = _legacy_or_empty(client, site_ref, "device")
-    legacy_clients = _legacy_or_empty(client, site_ref, "sta")
+def run_export(snap: Snapshot, output_dir: Path) -> None:
+    """Write the inventory and per-switch CSVs. ``snap.all_users`` (if collected)
+    adds previously seen, not-connected clients."""
+    print(f"Site: {snap.site.get('name')} ({snap.site.get('id')})")
+    print(f"Found {len(snap.devices)} device(s), {len(snap.clients)} connected client(s)")
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    rows = build_inventory(devices, clients, legacy_devices, legacy_clients)
-    if include_offline:
-        all_users = _legacy_or_empty(client, site_ref, "alluser")
-        rows += build_offline_clients(clients, devices, all_users)
+    rows = build_inventory(snap.devices, snap.clients, snap.legacy_devices, snap.legacy_clients)
+    rows += build_offline_clients(snap.clients, snap.devices, snap.all_users)
     inventory_path = output_dir / "unifi_clients.csv"
     _write_csv(inventory_path, INVENTORY_COLUMNS, rows)
     print(f"Wrote {len(rows)} entries -> {inventory_path}")
 
-    for name, port_rows in build_switch_ports(legacy_devices, legacy_clients).items():
+    for name, port_rows in build_switch_ports(snap.legacy_devices, snap.legacy_clients).items():
         safe = re.sub(r"[^\w \-]", "_", name)
         path = output_dir / f"switch_{safe}.csv"
         _write_csv(path, list(port_rows[0].keys()), port_rows)
