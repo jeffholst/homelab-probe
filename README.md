@@ -120,7 +120,7 @@ Emoji labels are used on a UTF-8 terminal. When output is piped or redirected, o
 | Code | Meaning |
 | ---- | ------- |
 | 0 | success; for `diagnose`, no findings at or above the `--fail-on` threshold |
-| 1 | `diagnose` found at least one warning (and no critical) |
+| 1 | `diagnose` found at least one non-critical finding at or above the `--fail-on` threshold |
 | 2 | `diagnose` found at least one critical finding |
 | 3 | error: bad configuration, or the controller could not be reached or returned an error |
 | 64 | command-line usage error |
