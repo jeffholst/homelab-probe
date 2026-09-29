@@ -28,6 +28,35 @@ DEVICE_TYPE_MAP = {
 }
 
 
+# Model prefixes, longest first, for when the legacy type code is unavailable.
+# The Integration API `features` list cannot tell gateways from switches
+# (a UCG Max reports only "switching"), so the model is checked first.
+MODEL_PREFIX_TYPES = [
+    ("UCG", "Gateway"), ("UXG", "Gateway"), ("UDM", "Dream Machine"),
+    ("UDR", "Dream Machine"), ("UDW", "Dream Machine"), ("UX", "Dream Machine"),
+    ("UBB", "Building Bridge"), ("ULTE", "LTE"), ("USP", "PDU"),
+    ("USW", "Switch"), ("USL", "Switch"), ("USM", "Switch"), ("US-", "Switch"),
+    ("USPM", "Switch"),
+    ("UAP", "Access Point"), ("U6", "Access Point"), ("U7", "Access Point"),
+    ("UWB", "Access Point"), ("E7", "Access Point"),
+]
+FEATURE_TYPES = {"accessPoint": "Access Point", "switching": "Switch"}
+
+
+def device_type_label(device: Dict[str, Any], legacy_type: str = "") -> str:
+    """Friendly device type: legacy type code, then model prefix, then features."""
+    if legacy_type.lower() in DEVICE_TYPE_MAP:
+        return DEVICE_TYPE_MAP[legacy_type.lower()]
+    model = (device.get("model") or "").upper()
+    for prefix, label in sorted(MODEL_PREFIX_TYPES, key=lambda x: -len(x[0])):
+        if model.startswith(prefix):
+            return label
+    for feature in device.get("features") or []:
+        if feature in FEATURE_TYPES:
+            return FEATURE_TYPES[feature]
+    return legacy_type.upper() or "Unknown"
+
+
 def _mac(value: Optional[str]) -> str:
     return (value or "").upper()
 
@@ -110,8 +139,7 @@ def build_inventory(
         if uplink.get("uplink_remote_port") is not None:
             port = str(uplink["uplink_remote_port"])
         legacy_type = (legacy_device_by_mac.get(mac) or {}).get("type", "")
-        device_type = d.get("type") or legacy_type
-        friendly = DEVICE_TYPE_MAP.get(device_type.lower()) or device_type.upper() or "Unknown"
+        friendly = device_type_label(d, legacy_type)
         rows.append({
             "Type": f"Device - {friendly}",
             "Name": d.get("name") or "Unknown",
