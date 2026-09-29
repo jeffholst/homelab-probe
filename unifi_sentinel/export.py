@@ -152,8 +152,12 @@ def build_offline_clients(
             "IP Address": u.get("last_ip") or u.get("ip") or "",
             "Model": "",
             "Connection Type": "Wired" if u.get("is_wired") else "Wireless",
-            "Switch": "",
-            "Port": "",
+            "Switch": (u.get("last_uplink_name") or "") if u.get("is_wired") else "",
+            "Port": (
+                str(u["last_uplink_remote_port"])
+                if u.get("is_wired") and u.get("last_uplink_remote_port") is not None
+                else ""
+            ),
             "Last Seen": (
                 datetime.fromtimestamp(last_seen).strftime("%Y-%m-%d %H:%M:%S")
                 if last_seen
@@ -188,7 +192,8 @@ def build_switch_ports(
         for port in sw["port_table"]:
             key = (sw_mac, port.get("port_idx"))
             ctype = cname = cmac = cmodel = ""
-            if port.get("up") and port.get("mac_table_count", 0) > 0:
+            # mac_table_count is null on some models (e.g. USW Ultra), so match on link state.
+            if port.get("up"):
                 if key in client_by_port:
                     c = client_by_port[key]
                     ctype, cname, cmac = "Client", c.get("name") or c.get("hostname") or "", _mac(c.get("mac"))
