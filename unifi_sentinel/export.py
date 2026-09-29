@@ -94,7 +94,7 @@ def build_inventory(
             "IP Address": c.get("ipAddress", ""),
             "Model": "",
             "Connection Type": "Wired" if wired else "Wireless",
-            "Switch": switch if wired or switch else "",
+            "Switch": switch if wired else "",
             "Port": port,
             "Last Seen": _fmt_time(c.get("connectedAt")),
             # The clients endpoint lists only currently connected clients.
