@@ -130,7 +130,7 @@ Port 6,6,Up,1000 Mbps,Yes,Yes,4.95,Class 4,Client,homeassistant,2C:CF:67:10:44:C
 
 - **`CONTROLLER_URL is not set` / `API_KEY is not set`**: copy `example.env` to `.env` and fill it in.
 - **`401 Unauthorized`**: the API key is invalid or was revoked; create a new one.
-- **SSL certificate errors**: for a self-signed certificate set `VERIFY_SSL=false`, or install a valid certificate.
+- **`TLS certificate verification failed`**: for a self-signed certificate set `VERIFY_SSL=false`, or install a valid certificate on the controller.
 - **Connection errors or timeouts**: check `CONTROLLER_URL` and that the controller is reachable from this machine.
 - **`Site '...' not found`**: run `info` to list site names, references and IDs.
 - **`legacy stat/... unavailable` warning**: switch port mapping and counters will be incomplete, but the rest of the export still runs.
