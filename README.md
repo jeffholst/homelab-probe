@@ -32,18 +32,18 @@ You have two options:
 
 **Option A: Download the Latest Release (Recommended for most users)**
 
-Download the latest release zip file from the [Releases page](https://github.com/ericfitz/unifi-clients-export/releases) and extract it:
+Download the latest release zip file from the [Releases page](https://github.com/jeffholst/unifi-sentinel/releases) and extract it:
 
 ```bash
-unzip unifi-clients-export-*.zip
-cd unifi-clients-export
+unzip unifi-sentinel-*.zip
+cd unifi-sentinel
 ```
 
 **Option B: Clone the Repository**
 
 ```bash
-git clone https://github.com/ericfitz/unifi-clients-export
-cd unifi-clients-export
+git clone https://github.com/jeffholst/unifi-sentinel
+cd unifi-sentinel
 ```
 
 ### 2. Configure Your Environment
