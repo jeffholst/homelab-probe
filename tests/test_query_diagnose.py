@@ -1,3 +1,5 @@
+import pytest
+
 from unifi_sentinel.diagnose import diagnose
 from unifi_sentinel.query import query_rows
 from unifi_sentinel.snapshot import Snapshot
@@ -150,3 +152,63 @@ def test_format_findings_emoji_and_text():
     class Pipe(Tty):
         def isatty(self): return False
     assert stream_supports_emoji(Tty()) and not stream_supports_emoji(Pipe())
+
+
+def test_exit_code_by_severity_and_threshold():
+    from unifi_sentinel.diagnose import Finding, exit_code
+
+    crit, warn, info = Finding("critical", "a", "x"), Finding("warning", "b", "y"), Finding("info", "c", "z")
+    assert exit_code([]) == 0
+    assert exit_code([info]) == 0
+    assert exit_code([info, warn]) == 1
+    assert exit_code([warn, crit]) == 2
+    # --fail-on threshold
+    assert exit_code([info], "info") == 1
+    assert exit_code([warn], "critical") == 0
+    assert exit_code([warn, info], "critical") == 0
+    assert exit_code([crit], "critical") == 2
+    assert exit_code([crit, warn], "info") == 2
+
+
+def _run_cli(fake_client, monkeypatch, argv):
+    from unifi_sentinel import cli
+    monkeypatch.setenv("CONTROLLER_URL", "https://controller")
+    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, cfg: fake_client))
+    return cli.main(argv)
+
+
+def test_cli_diagnose_exit_codes(fake_client, monkeypatch):
+    assert _run_cli(fake_client, monkeypatch, ["diagnose"]) == 1
+    assert _run_cli(fake_client, monkeypatch, ["diagnose", "--fail-on", "critical"]) == 0
+    assert _run_cli(fake_client, monkeypatch, ["diagnose", "--fail-on", "info"]) == 1
+
+
+def test_cli_critical_exits_2(fake_client, monkeypatch):
+    fake_client.session.fx = {**fake_client.session.fx, "devices": [
+        {**d, "state": "OFFLINE"} if d["id"] == "gw1" else d
+        for d in fake_client.session.fx["devices"]]}
+    assert _run_cli(fake_client, monkeypatch, ["diagnose"]) == 2
+    assert _run_cli(fake_client, monkeypatch, ["diagnose", "--fail-on", "critical"]) == 2
+
+
+def test_cli_errors_and_usage_use_distinct_codes(fake_client, monkeypatch, capsys):
+    from unifi_sentinel import cli
+    fake_client.session.status = 500
+    assert _run_cli(fake_client, monkeypatch, ["diagnose"]) == cli.EXIT_ERROR == 3
+    assert _run_cli(fake_client, monkeypatch, ["info"]) == 3
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["diagnose", "--fail-on", "bogus"])
+    assert exc.value.code == cli.EXIT_USAGE == 64  # not 2, which means critical
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["--version"])
+    assert exc.value.code == 0
+
+
+def test_null_uplink_in_device_detail_does_not_crash():
+    from unifi_sentinel.export import build_inventory
+    devices = [{"id": "sw", "macAddress": "bb:bb", "name": "SW", "model": "USW Ultra"}]
+    rows = build_inventory(devices, [], [], [], device_details={"sw": {"uplink": None}})
+    assert rows[0]["Switch"] == ""
+    snap = Snapshot(site={}, devices=devices, clients=[], device_details={"sw": {"uplink": None}})
+    assert isinstance(diagnose(snap), list)

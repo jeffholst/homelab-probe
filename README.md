@@ -115,6 +115,24 @@ Run these from the project root (uv uses `pyproject.toml`). After `pip install .
 
 Emoji labels are used on a UTF-8 terminal. When output is piped or redirected, or with `--no-emoji`, it prints text labels (`[CRITICAL]`, `[WARNING ]`, `[INFO    ]`) instead.
 
+#### Exit codes
+
+| Code | Meaning |
+| ---- | ------- |
+| 0 | success; for `diagnose`, no findings at or above the `--fail-on` threshold |
+| 1 | `diagnose` found at least one warning (and no critical) |
+| 2 | `diagnose` found at least one critical finding |
+| 3 | error: bad configuration, or the controller could not be reached or returned an error |
+| 64 | command-line usage error |
+
+`--fail-on {info,warning,critical}` sets the lowest severity that gives a non-zero code (default `warning`). Critical always exits 2. Example cron entry that only alerts on outages:
+
+```bash
+*/15 * * * * cd /path/to/unifi-sentinel && uv run unifi-sentinel.py diagnose --fail-on critical || notify-me
+```
+
+Tool errors used to exit 1 for every command; they now exit 3 so that 1 and 2 only ever mean findings.
+
 ### DHCP reservations
 
 `query reservations` lists every enabled fixed IP reservation, including clients that are currently offline. Columns: Name, MAC Address, Reserved IP, Network, VLAN, Current IP, Status, Last Seen. It reads the legacy `stat/alluser` and `rest/networkconf` endpoints, since the Integration API does not expose reservations. Only clients with the reservation enabled are listed; disabled reservations keep a stale IP on the controller and are ignored.
