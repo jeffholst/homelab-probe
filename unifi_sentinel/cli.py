@@ -8,7 +8,10 @@ from typing import List, Optional
 from . import __version__
 from .client import UniFiAPIError, UniFiClient
 from .config import ConfigError, load_config
+from .diagnose import diagnose, format_findings
 from .export import run_export
+from .query import query_rows, render
+from .snapshot import collect_snapshot
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -25,6 +28,16 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("--include-offline", action="store_true",
                         help="Also list previously seen clients that are not connected")
 
+    query = sub.add_parser("query", help="List and filter devices and clients")
+    query.add_argument("kind", nargs="?", default="all", choices=["all", "devices", "clients"])
+    query.add_argument("-s", "--search", default="",
+                       help="Case-insensitive substring match on any field")
+    query.add_argument("--include-offline", action="store_true",
+                       help="Also list previously seen clients that are not connected")
+    query.add_argument("--json", action="store_true", help="Output JSON instead of a table")
+
+    sub.add_parser("diagnose", help="Run read-only health checks (offline devices, port errors, ...)")
+
     sub.add_parser("info", help="Show controller version and available sites")
     return parser
 
@@ -39,7 +52,12 @@ def main(argv: Optional[List[str]] = None) -> int:
             for s in client.sites():
                 print(f"Site: {s.get('name')} ref={s.get('internalReference')} id={s.get('id')}")
         elif args.command == "export":
-            run_export(client, config.site, args.output_dir, args.include_offline)
+            run_export(collect_snapshot(client, config.site, args.include_offline), args.output_dir)
+        elif args.command == "query":
+            snap = collect_snapshot(client, config.site, args.include_offline)
+            print(render(query_rows(snap, args.kind, args.search, args.include_offline), args.json))
+        elif args.command == "diagnose":
+            print(format_findings(diagnose(collect_snapshot(client, config.site))))
     except (ConfigError, UniFiAPIError) as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
