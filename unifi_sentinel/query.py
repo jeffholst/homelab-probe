@@ -15,7 +15,8 @@ def query_rows(
 ) -> List[Dict[str, Any]]:
     """Rows for ``kind`` ('devices', 'clients' or 'all'), optionally filtered by a
     case-insensitive substring match against any field."""
-    rows = build_inventory(snap.devices, snap.clients, snap.legacy_devices, snap.legacy_clients)
+    rows = build_inventory(snap.devices, snap.clients, snap.legacy_devices, snap.legacy_clients,
+                           snap.device_details, snap.device_stats)
     if include_offline:
         rows += build_offline_clients(snap.clients, snap.devices, snap.all_users)
     if kind == "devices":

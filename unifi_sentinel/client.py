@@ -11,6 +11,7 @@ the legacy endpoints remain available for that data only.
 from typing import Any, Dict, Iterator, List, Optional
 
 import requests
+import urllib3
 
 from .config import Config
 
@@ -34,6 +35,9 @@ class UniFiClient:
         self.base_url = base_url.rstrip("/")
         self.verify_ssl = verify_ssl
         self.timeout = timeout
+        if not verify_ssl:
+            # User opted out (VERIFY_SSL=false); suppress the per-request warning.
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         self.session = requests.Session()
         self.session.headers.update(
             {"X-API-KEY": api_key, "Accept": "application/json"}
@@ -51,6 +55,12 @@ class UniFiClient:
             resp = self.session.get(
                 url, params=params, verify=self.verify_ssl, timeout=self.timeout
             )
+        except requests.exceptions.SSLError as e:
+            raise UniFiAPIError(
+                f"TLS certificate verification failed for {self.base_url}. Install a "
+                "trusted certificate on the controller, or set VERIFY_SSL=false in .env "
+                "if it uses a self-signed one."
+            ) from e
         except requests.exceptions.RequestException as e:
             raise UniFiAPIError(f"Connection error for {url}: {e}") from e
 

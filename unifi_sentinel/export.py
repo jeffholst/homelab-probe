@@ -84,7 +84,11 @@ def build_inventory(
     clients: List[Dict[str, Any]],
     legacy_devices: List[Dict[str, Any]],
     legacy_clients: List[Dict[str, Any]],
+    device_details: Optional[Dict[str, Dict[str, Any]]] = None,
+    device_stats: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
+    device_details = device_details or {}
+    device_stats = device_stats or {}
     names_by_mac = {_mac(d.get("macAddress")): d.get("name") or d.get("macAddress") for d in devices}
     names_by_id = {d.get("id"): d.get("name") or d.get("macAddress") for d in devices}
     legacy_client_by_mac = {_mac(c.get("mac")): c for c in legacy_clients}
@@ -124,6 +128,9 @@ def build_inventory(
             switch = names_by_mac.get(_mac(uplink["uplink_mac"]), _mac(uplink["uplink_mac"]))
         if uplink.get("uplink_remote_port") is not None:
             port = str(uplink["uplink_remote_port"])
+        if not switch:
+            # Integration API uplink (no port number, but works without legacy data).
+            switch = names_by_id.get((device_details.get(d.get("id")) or {}).get("uplink", {}).get("deviceId"), "")
         legacy_type = (legacy_device_by_mac.get(mac) or {}).get("type", "")
         friendly = device_type_label(d, legacy_type)
         rows.append({
@@ -135,7 +142,7 @@ def build_inventory(
             "Connection Type": "Wired",
             "Switch": switch,
             "Port": port,
-            "Last Seen": "",
+            "Last Seen": _fmt_time((device_stats.get(d.get("id")) or {}).get("lastHeartbeatAt")),
             "Status": "Online" if d.get("state") == "ONLINE" else "Offline",
         })
     return rows
@@ -197,6 +204,8 @@ def build_switch_ports(
         if up.get("uplink_mac") and up.get("uplink_remote_port") is not None:
             device_by_uplink.setdefault((_mac(up["uplink_mac"]), up["uplink_remote_port"]), dev)
 
+    device_by_mac = {_mac(d.get("mac")): d for d in legacy_devices}
+
     result: Dict[str, List[Dict[str, Any]]] = {}
     for sw in legacy_devices:
         if sw.get("type") != "usw" or not sw.get("port_table"):
@@ -207,8 +216,15 @@ def build_switch_ports(
             key = (sw_mac, port.get("port_idx"))
             ctype = cname = cmac = cmodel = ""
             # mac_table_count is null on some models (e.g. USW Ultra), so match on link state.
+            uplink_dev = device_by_mac.get(_mac((sw.get("uplink") or {}).get("uplink_mac")))
             if port.get("up"):
-                if key in client_by_port:
+                if port.get("is_uplink") and uplink_dev:
+                    dev = uplink_dev
+                    friendly = DEVICE_TYPE_MAP.get(dev.get("type", ""), dev.get("type", "").upper())
+                    ctype = f"Device - {friendly}"
+                    cname = dev.get("name") or dev.get("hostname") or ""
+                    cmac, cmodel = _mac(dev.get("mac")), dev.get("model", "")
+                elif key in client_by_port:
                     c = client_by_port[key]
                     ctype, cname, cmac = "Client", c.get("name") or c.get("hostname") or "", _mac(c.get("mac"))
                 elif key in device_by_uplink:
@@ -249,7 +265,8 @@ def run_export(snap: Snapshot, output_dir: Path) -> None:
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    rows = build_inventory(snap.devices, snap.clients, snap.legacy_devices, snap.legacy_clients)
+    rows = build_inventory(snap.devices, snap.clients, snap.legacy_devices, snap.legacy_clients,
+                           snap.device_details, snap.device_stats)
     rows += build_offline_clients(snap.clients, snap.devices, snap.all_users)
     inventory_path = output_dir / "unifi_clients.csv"
     _write_csv(inventory_path, INVENTORY_COLUMNS, rows)

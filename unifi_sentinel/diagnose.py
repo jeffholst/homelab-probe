@@ -5,6 +5,7 @@ from typing import Any, Dict, List
 
 from .snapshot import Snapshot
 
+RESOURCE_WARN_PCT = 90
 SEVERITY_ORDER = {"warning": 0, "info": 1}
 
 
@@ -23,6 +24,14 @@ def diagnose(snap: Snapshot) -> List[Finding]:
             findings.append(Finding(
                 "warning", d.get("name") or d.get("macAddress", "?"),
                 f"device is {str(d.get('state', 'unknown')).lower()}"))
+
+    for d in snap.devices:
+        st = snap.device_stats.get(d.get("id")) or {}
+        for key, label in (("cpuUtilizationPct", "CPU"), ("memoryUtilizationPct", "memory")):
+            if (st.get(key) or 0) >= RESOURCE_WARN_PCT:
+                findings.append(Finding(
+                    "warning", d.get("name") or d.get("macAddress", "?"),
+                    f"{label} utilization {st[key]:.0f}%"))
 
     if not snap.legacy_devices:
         findings.append(Finding(

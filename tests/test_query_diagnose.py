@@ -40,3 +40,54 @@ def test_diagnose_findings():
     assert not any(f.subject == "SW port 3" for f in findings)
     # warnings sort before info
     assert findings[0].severity == "warning"
+
+
+def test_diagnose_high_resource_use():
+    snap = make_snapshot()
+    snap.device_stats = {"d1": {"cpuUtilizationPct": 95.0, "memoryUtilizationPct": 50.0}}
+    msgs = [(f.subject, f.message) for f in diagnose(snap)]
+    assert ("SW", "CPU utilization 95%") in msgs
+    assert not any("memory" in m for _, m in msgs)
+
+
+def test_inventory_uses_integration_uplink_and_heartbeat():
+    from unifi_sentinel.export import build_inventory
+    devices = [{"id": "gw", "macAddress": "aa:aa", "name": "GW", "model": "UCG Max"},
+               {"id": "sw", "macAddress": "bb:bb", "name": "SW", "model": "USW Ultra",
+                "state": "ONLINE"}]
+    rows = build_inventory(
+        devices, [], [], [],
+        device_details={"sw": {"uplink": {"deviceId": "gw"}}},
+        device_stats={"sw": {"lastHeartbeatAt": "2026-01-01T10:00:00Z"}},
+    )
+    sw = next(r for r in rows if r["Name"] == "SW")
+    assert sw["Switch"] == "GW"
+    assert sw["Last Seen"].startswith("2026-01-0")
+
+
+def test_switch_uplink_port_names_upstream_device():
+    from unifi_sentinel.export import build_switch_ports
+    legacy = [
+        {"mac": "aa:aa", "type": "udm", "name": "GW", "model": "UCG Max"},
+        {"mac": "bb:bb", "type": "usw", "name": "SW",
+         "uplink": {"uplink_mac": "aa:aa", "uplink_remote_port": 2},
+         "port_table": [{"port_idx": 8, "up": True, "is_uplink": True}]},
+    ]
+    row = build_switch_ports(legacy, [])["SW"][0]
+    assert row["Connected Name"] == "GW"
+    assert row["Connected Type"] == "Device - Dream Machine"
+
+
+def test_ssl_error_message_is_actionable(monkeypatch):
+    import pytest
+    import requests
+    from unifi_sentinel.client import UniFiAPIError, UniFiClient
+
+    client = UniFiClient("https://x", "key", verify_ssl=True)
+
+    def boom(*a, **k):
+        raise requests.exceptions.SSLError("bad cert")
+
+    monkeypatch.setattr(client.session, "get", boom)
+    with pytest.raises(UniFiAPIError, match="VERIFY_SSL=false"):
+        client.info()
