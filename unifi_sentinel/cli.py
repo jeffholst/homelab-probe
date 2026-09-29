@@ -22,6 +22,8 @@ def build_parser() -> argparse.ArgumentParser:
     export = sub.add_parser("export", help="Export clients, devices and switch ports to CSV")
     export.add_argument("-o", "--output-dir", type=Path, default=Path("."),
                         help="Directory for CSV files (default: current directory)")
+    export.add_argument("--include-offline", action="store_true",
+                        help="Also list previously seen clients that are not connected")
 
     sub.add_parser("info", help="Show controller version and available sites")
     return parser
@@ -37,7 +39,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             for s in client.sites():
                 print(f"Site: {s.get('name')} ref={s.get('internalReference')} id={s.get('id')}")
         elif args.command == "export":
-            run_export(client, config.site, args.output_dir)
+            run_export(client, config.site, args.output_dir, args.include_offline)
     except (ConfigError, UniFiAPIError) as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
