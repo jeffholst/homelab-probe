@@ -31,7 +31,7 @@ def _uplink_parents(snap: Snapshot) -> Dict[str, int]:
     }
     counts: Dict[str, int] = {}
     for d in snap.devices:
-        parent = (snap.device_details.get(d.get("id")) or {}).get("uplink", {}).get("deviceId")
+        parent = ((snap.device_details.get(d.get("id")) or {}).get("uplink") or {}).get("deviceId")
         if not parent:
             parent = id_by_mac.get(legacy_uplink.get((d.get("macAddress") or "").upper(), ""))
         if parent:
