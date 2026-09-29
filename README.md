@@ -4,11 +4,11 @@
 
 Commands: `export` (CSV export), `info` (controller version and sites).
 
-A Python script to export all client devices and UniFi infrastructure from a UniFi Network controller to CSV files.
+A Python script to export connected client devices and UniFi infrastructure from a UniFi Network controller to CSV files.
 
 ## Features
 
-- **Comprehensive Client Export**: Exports all clients (online and offline) with connection details
+- **Connected Client Export**: Exports connected clients with connection details
 - **UniFi Device Inventory**: Includes all UniFi infrastructure devices (switches, access points, gateways)
 - **Switch Port Mapping**: Generates detailed port information for each switch, including:
   - Connected clients and devices
@@ -132,7 +132,7 @@ The script will generate the following files:
 
 1. **`unifi_clients.csv`** - Master inventory file containing:
 
-   - All client devices (wireless and wired)
+   - Connected client devices (wireless and wired)
    - All UniFi infrastructure devices (switches, APs, gateways)
    - Columns: Type, Name, MAC Address, IP Address, Model, Connection Type, Switch, Port, Last Seen, Status
 
