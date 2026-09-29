@@ -15,7 +15,7 @@ UniFi Sentinel is a fork of [ericfitz/unifi-clients-export](https://github.com/e
 | `export` | Export connected clients, UniFi devices and switch ports to CSV |
 | `info`   | Show the controller application info and available sites       |
 
-Planned: `query` and `diagnose` subcommands, offline-client history, and richer inventory reports.
+Planned: `query` and `diagnose` subcommands and richer inventory reports.
 
 ## Features
 
@@ -88,13 +88,14 @@ pip install -r requirements.txt
 uv run unifi-sentinel.py info
 uv run unifi-sentinel.py export
 uv run unifi-sentinel.py export -o ./out   # write CSVs to a directory
+uv run unifi-sentinel.py export --include-offline   # also list previously seen clients
 ```
 
 Without uv, activate the virtual environment and use `python3 unifi-sentinel.py ...`. Run `--help` on the tool or any command for options.
 
 ### Output files
 
-1. **`unifi_clients.csv`**: master inventory of connected clients and UniFi devices. Columns: Type, Name, MAC Address, IP Address, Model, Connection Type, Switch, Port, Last Seen, Status. Only currently connected clients are listed; offline clients are not yet supported.
+1. **`unifi_clients.csv`**: master inventory of connected clients and UniFi devices. Columns: Type, Name, MAC Address, IP Address, Model, Connection Type, Switch, Port, Last Seen, Status. By default only currently connected clients are listed; pass `--include-offline` to add previously seen clients with Status `Offline` (from the legacy `stat/alluser` endpoint).
 2. **`switch_<name>.csv`**: one file per switch with port status, speed, duplex, PoE, connected client or device, and traffic counters.
 
 CSV files are ignored by git.

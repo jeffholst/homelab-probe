@@ -127,6 +127,43 @@ def build_inventory(
     return rows
 
 
+def build_offline_clients(
+    known_clients: List[Dict[str, Any]],
+    devices: List[Dict[str, Any]],
+    all_users: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Rows for previously seen clients that are not currently connected.
+
+    ``all_users`` comes from legacy ``stat/alluser``, which lists every client
+    the controller has ever seen.
+    """
+    connected = {_mac(c.get("macAddress")) for c in known_clients}
+    device_macs = {_mac(d.get("macAddress")) for d in devices}
+    rows: List[Dict[str, Any]] = []
+    for u in all_users:
+        mac = _mac(u.get("mac"))
+        if not mac or mac in connected or mac in device_macs:
+            continue
+        last_seen = u.get("last_seen")
+        rows.append({
+            "Type": "Client",
+            "Name": u.get("name") or u.get("hostname") or "Unknown",
+            "MAC Address": mac,
+            "IP Address": u.get("last_ip") or u.get("ip") or "",
+            "Model": "",
+            "Connection Type": "Wired" if u.get("is_wired") else "Wireless",
+            "Switch": "",
+            "Port": "",
+            "Last Seen": (
+                datetime.fromtimestamp(last_seen).strftime("%Y-%m-%d %H:%M:%S")
+                if last_seen
+                else ""
+            ),
+            "Status": "Offline",
+        })
+    return rows
+
+
 def build_switch_ports(
     legacy_devices: List[Dict[str, Any]], legacy_clients: List[Dict[str, Any]]
 ) -> Dict[str, List[Dict[str, Any]]]:
@@ -185,7 +222,9 @@ def build_switch_ports(
     return result
 
 
-def run_export(client: UniFiClient, site: str, output_dir: Path) -> None:
+def run_export(
+    client: UniFiClient, site: str, output_dir: Path, include_offline: bool = False
+) -> None:
     site_info = client.resolve_site(site)
     site_id = site_info["id"]
     site_ref = site_info.get("internalReference") or site
@@ -201,6 +240,9 @@ def run_export(client: UniFiClient, site: str, output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     rows = build_inventory(devices, clients, legacy_devices, legacy_clients)
+    if include_offline:
+        all_users = _legacy_or_empty(client, site_ref, "alluser")
+        rows += build_offline_clients(clients, devices, all_users)
     inventory_path = output_dir / "unifi_clients.csv"
     _write_csv(inventory_path, INVENTORY_COLUMNS, rows)
     print(f"Wrote {len(rows)} entries -> {inventory_path}")
