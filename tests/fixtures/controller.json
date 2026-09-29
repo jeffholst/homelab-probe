@@ -296,7 +296,10 @@
         "mac": "bb:00:00:00:00:01",
         "name": "desktop",
         "last_seen": 1767000000,
-        "is_wired": true
+        "is_wired": true,
+        "use_fixedip": true,
+        "fixed_ip": "10.0.0.10",
+        "last_connection_network_id": "net-1"
       },
       {
         "mac": "bb:00:00:00:00:03",
@@ -305,14 +308,39 @@
         "last_seen": 1766000000,
         "last_ip": "10.0.0.50",
         "last_uplink_name": "Office Switch",
-        "last_uplink_remote_port": 6
+        "last_uplink_remote_port": 6,
+        "use_fixedip": true,
+        "fixed_ip": "10.0.0.50",
+        "virtual_network_override_enabled": true,
+        "virtual_network_override_id": "net-2",
+        "last_connection_network_id": "net-1"
       },
       {
         "mac": "bb:00:00:00:00:04",
         "name": "old-tablet",
         "is_wired": false,
         "last_seen": 1765000000,
-        "last_ip": "10.0.0.51"
+        "last_ip": "10.0.0.51",
+        "use_fixedip": false,
+        "fixed_ip": "10.0.0.99",
+        "last_connection_network_name": "Main"
+      }
+    ]
+  },
+  "legacy_rest": {
+    "networkconf": [
+      {
+        "_id": "net-1",
+        "name": "Main",
+        "purpose": "corporate",
+        "vlan_enabled": false
+      },
+      {
+        "_id": "net-2",
+        "name": "IoT",
+        "purpose": "corporate",
+        "vlan_enabled": true,
+        "vlan": 20
       }
     ]
   }

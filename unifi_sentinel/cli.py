@@ -29,7 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Also list previously seen clients that are not connected")
 
     query = sub.add_parser("query", help="List and filter devices and clients")
-    query.add_argument("kind", nargs="?", default="all", choices=["all", "devices", "clients"])
+    query.add_argument("kind", nargs="?", default="all", choices=["all", "devices", "clients", "reservations"])
     query.add_argument("-s", "--search", default="",
                        help="Case-insensitive substring match on any field")
     query.add_argument("--include-offline", action="store_true",
@@ -54,8 +54,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         elif args.command == "export":
             run_export(collect_snapshot(client, config.site, args.include_offline), args.output_dir)
         elif args.command == "query":
-            snap = collect_snapshot(client, config.site, args.include_offline)
-            print(render(query_rows(snap, args.kind, args.search, args.include_offline), args.json))
+            snap = collect_snapshot(
+                client, config.site, args.include_offline,
+                include_reservations=args.kind == "reservations")
+            rows = query_rows(snap, args.kind, args.search, args.include_offline)
+            print(render(rows, args.json, args.kind))
         elif args.command == "diagnose":
             print(format_findings(diagnose(collect_snapshot(client, config.site))))
     except (ConfigError, UniFiAPIError) as e:

@@ -124,3 +124,8 @@ class UniFiClient:
         reference (e.g. 'default'), not the UUID."""
         body = self._get(f"{LEGACY_PREFIX}/s/{site_ref}/stat/{resource}")
         return body.get("data", [])
+
+    def legacy_rest(self, site_ref: str, resource: str) -> List[Dict[str, Any]]:
+        """GET /api/s/{site}/rest/{resource} (e.g. 'networkconf')."""
+        body = self._get(f"{LEGACY_PREFIX}/s/{site_ref}/rest/{resource}")
+        return body.get("data", [])

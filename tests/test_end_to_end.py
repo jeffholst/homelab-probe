@@ -80,3 +80,33 @@ def test_cli_reports_missing_config(monkeypatch, capsys):
     monkeypatch.setattr("unifi_sentinel.config.load_dotenv", lambda: None)
     assert cli.main(["info"]) == 1
     assert "CONTROLLER_URL" in capsys.readouterr().err
+
+
+def test_reservations_include_offline_and_skip_stale(fake_client):
+    from unifi_sentinel.query import render
+    from unifi_sentinel.reservations import build_reservations
+
+    snap = collect_snapshot(fake_client, "default", include_reservations=True)
+    rows = build_reservations(snap)
+
+    assert [r["Reserved IP"] for r in rows] == ["10.0.0.10", "10.0.0.50"]  # sorted, no stale .99
+    desktop, printer = rows
+    assert (desktop["Name"], desktop["Status"], desktop["Current IP"]) == ("desktop", "Online", "10.0.0.10")
+    assert (desktop["Network"], desktop["VLAN"]) == ("Main", 1)
+    # offline reservation, network from the override, not the last connection
+    assert (printer["Name"], printer["Status"], printer["Current IP"]) == ("old-printer", "Offline", "")
+    assert (printer["Network"], printer["VLAN"]) == ("IoT", 20)
+    assert printer["Last Seen"] != ""
+
+    assert [r["Name"] for r in query_rows(snap, "reservations", search="iot")] == ["old-printer"]
+    assert "Reserved IP" in render(rows, False, "reservations")
+    assert '"Reserved IP": "10.0.0.50"' in render(rows, True, "reservations")
+
+
+def test_query_reservations_via_cli(fake_client, monkeypatch, capsys):
+    monkeypatch.setenv("CONTROLLER_URL", "https://controller")
+    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, cfg: fake_client))
+    assert cli.main(["query", "reservations"]) == 0
+    out = capsys.readouterr().out
+    assert "old-printer" in out and "10.0.0.99" not in out and "2 row(s)" in out
