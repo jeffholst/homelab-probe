@@ -23,6 +23,9 @@ class Snapshot:
     # Integration API per-device detail and latest statistics, keyed by device id.
     device_details: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     device_stats: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    # Legacy rest/networkconf. Client records reference these ids, which differ
+    # from the Integration API network UUIDs.
+    networks: List[Dict[str, Any]] = field(default_factory=list)
 
 
 def _legacy_or_empty(client: UniFiClient, site_ref: str, resource: str) -> List[Dict[str, Any]]:
@@ -48,9 +51,22 @@ def _device_extras(client: UniFiClient, site_id: str, devices: List[Dict[str, An
     return details, stats
 
 
+def _legacy_rest_or_empty(client: UniFiClient, site_ref: str, resource: str) -> List[Dict[str, Any]]:
+    try:
+        return client.legacy_rest(site_ref, resource)
+    except UniFiAPIError as e:
+        warn(f"legacy rest/{resource} unavailable, network names may be missing: {e}")
+        return []
+
+
 def collect_snapshot(
-    client: UniFiClient, site: str, include_offline: bool = False
+    client: UniFiClient,
+    site: str,
+    include_offline: bool = False,
+    include_reservations: bool = False,
 ) -> Snapshot:
+    """``include_offline`` and ``include_reservations`` both need the legacy
+    ``stat/alluser`` list; reservations also need the network configuration (names, VLANs)."""
     site_info = client.resolve_site(site)
     site_ref = site_info.get("internalReference") or site
     devices = client.devices(site_info["id"])
@@ -63,5 +79,12 @@ def collect_snapshot(
         clients=client.clients(site_info["id"]),
         legacy_devices=_legacy_or_empty(client, site_ref, "device"),
         legacy_clients=_legacy_or_empty(client, site_ref, "sta"),
-        all_users=_legacy_or_empty(client, site_ref, "alluser") if include_offline else [],
+        all_users=(
+            _legacy_or_empty(client, site_ref, "alluser")
+            if include_offline or include_reservations
+            else []
+        ),
+        networks=(
+            _legacy_rest_or_empty(client, site_ref, "networkconf") if include_reservations else []
+        ),
     )

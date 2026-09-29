@@ -13,7 +13,7 @@ UniFi Sentinel is a fork of [ericfitz/unifi-clients-export](https://github.com/e
 | Command  | Description                                                    |
 | -------- | -------------------------------------------------------------- |
 | `export` | Export connected clients, UniFi devices and switch ports to CSV |
-| `query`  | List and filter devices and clients (table or `--json`)        |
+| `query`  | List and filter devices, clients and DHCP reservations (table or `--json`) |
 | `diagnose` | Read-only health checks: offline devices, port errors, half-duplex and low-speed links |
 | `info`   | Show the controller application info and available sites       |
 
@@ -95,10 +95,15 @@ uv run unifi-sentinel.py export -o ./out   # write CSVs to a directory
 uv run unifi-sentinel.py export --include-offline   # also list previously seen clients
 uv run unifi-sentinel.py query devices               # table of UniFi devices
 uv run unifi-sentinel.py query clients -s printer --json   # filter, JSON output
+uv run unifi-sentinel.py query reservations          # DHCP fixed IP reservations
 uv run unifi-sentinel.py diagnose                    # health checks
 ```
 
 Run these from the project root (uv uses `pyproject.toml`). After `pip install .` use `unifi-sentinel <command>` instead. Run `--help` on the tool or any command for options.
+
+### DHCP reservations
+
+`query reservations` lists every enabled fixed IP reservation, including clients that are currently offline. Columns: Name, MAC Address, Reserved IP, Network, VLAN, Current IP, Status, Last Seen. It reads the legacy `stat/alluser` and `rest/networkconf` endpoints, since the Integration API does not expose reservations. Only clients with the reservation enabled are listed; disabled reservations keep a stale IP on the controller and are ignored.
 
 ### Output files
 
@@ -147,6 +152,7 @@ unifi_sentinel/
   snapshot.py            collect_snapshot: one read of the controller, output-agnostic
   export.py              inventory rows and CSV export
   query.py               filtering and table/JSON rendering
+  reservations.py        DHCP fixed IP reservations
   diagnose.py            read-only health checks
   cli.py                 argparse subcommands
 ```

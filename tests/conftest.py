@@ -10,6 +10,7 @@ from unifi_sentinel.client import UniFiClient
 FIXTURE = json.loads((Path(__file__).parent / "fixtures" / "controller.json").read_text())
 INTEGRATION = "/proxy/network/integration/v1"
 LEGACY = "/proxy/network/api/s/default/stat/"
+LEGACY_REST = "/proxy/network/api/s/default/rest/"
 
 
 class FakeResponse:
@@ -60,6 +61,8 @@ class FakeSession:
             else:
                 body = fx["device_detail"].get(rest)
             return FakeResponse(200, body) if body else FakeResponse(404, {})
+        if path.startswith(LEGACY_REST):
+            return FakeResponse(200, {"data": fx["legacy_rest"][path[len(LEGACY_REST):]]})
         if path.startswith(LEGACY):
             return FakeResponse(200, {"data": fx["legacy"][path[len(LEGACY):]]})
         return FakeResponse(404, {})

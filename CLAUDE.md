@@ -22,7 +22,8 @@ Fork of [ericfitz/unifi-clients-export](https://github.com/ericfitz/unifi-client
 ## UniFi API notes
 
 - Prefer the Integration API (`/proxy/network/integration/v1`): paginated, site IDs are UUIDs. `Config.site` may be a name, internal reference (`default`) or UUID; use `resolve_site`.
-- Legacy `/proxy/network/api/s/{ref}/stat/...` takes the internal reference, not the UUID. It is used only for data the Integration API lacks (per-port counters, client-to-switch-port).
+- Legacy `/proxy/network/api/s/{ref}/stat/...` takes the internal reference, not the UUID. It is used only for data the Integration API lacks (per-port counters, client-to-switch-port, DHCP reservations, network config).
+- Legacy client records reference networks by legacy ids (from `rest/networkconf`), which do not match Integration API network UUIDs. A reservation is `use_fixedip` true; `fixed_ip` alone is stale-prone.
 - Integration API field names were written from docs and are not yet verified against a live controller; verify before relying on them.
 
 ## Safety
