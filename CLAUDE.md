@@ -39,4 +39,6 @@ Fork of [ericfitz/unifi-clients-export](https://github.com/ericfitz/unifi-client
 ## Git and GitHub
 
 - Commit only when asked. When asked to check in code, always create a feature branch and open a PR; never commit to `main`.
+- Open the PR and stop; do not merge it. PRs normally wait for a GitHub Copilot code review, and the user merges after addressing it. Merge only when the user explicitly asks for that PR.
+- This repo is a fork, so always pass `--repo jeffholst/unifi-sentinel` to `gh pr create`; the default target is the upstream repo.
 - Track work in GitHub issues (`jeffholst/unifi-sentinel`) and reference them in commits and PRs. Pushing and issue creation need the `jeffholst` gh account active (`gh auth switch -u jeffholst`).

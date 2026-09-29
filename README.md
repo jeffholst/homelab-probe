@@ -2,7 +2,7 @@
 
 A command-line tool for querying, troubleshooting and inventorying a UniFi Network controller. It is **read-only**: it only sends GET requests to the controller.
 
-> **Status: early development.** The Integration API field mappings have not yet been verified against a live controller. See [open issues](https://github.com/jeffholst/unifi-sentinel/issues) for the roadmap.
+> **Status: early development.** Tested against one live controller (Network 10.6.106); other versions and hardware may differ. See [open issues](https://github.com/jeffholst/unifi-sentinel/issues) for the roadmap.
 
 ## Credits
 
@@ -14,7 +14,7 @@ UniFi Sentinel is a fork of [ericfitz/unifi-clients-export](https://github.com/e
 | -------- | -------------------------------------------------------------- |
 | `export` | Export connected clients, UniFi devices and switch ports to CSV |
 | `query`  | List and filter devices, clients and DHCP reservations (table or `--json`) |
-| `diagnose` | Read-only health checks: offline devices, port errors, half-duplex and low-speed links |
+| `diagnose` | Read-only health checks: offline devices, port errors, half-duplex and low-speed links, high CPU/memory |
 | `info`   | Show the controller application info and available sites       |
 
 Planned: richer inventory and troubleshooting reports.
@@ -24,7 +24,9 @@ Planned: richer inventory and troubleshooting reports.
 - **Client and device inventory**: connected clients (wired and wireless) and all UniFi devices (switches, access points, gateways) in one CSV
 - **Switch port mapping**: per-switch CSVs with port status, speed, duplex, PoE, connected client or device, and traffic counters
 - **Network topology**: which switch and port each client or device is attached to
-- **Official API first**: uses the UniFi Network Integration API (`/proxy/network/integration/v1`). Legacy endpoints are used only for data the Integration API does not expose (per-port counters and client-to-port mapping) and degrade gracefully with a warning if unavailable
+- **DHCP reservations**: list every fixed IP reservation, including offline clients, with network and VLAN
+- **Querying and health checks**: filter devices and clients from the command line (table or JSON) and run read-only diagnostics
+- **Official API first**: uses the UniFi Network Integration API (`/proxy/network/integration/v1`). Legacy endpoints are used only for data the Integration API does not expose (per-port counters, client-to-port mapping, DHCP reservations and network config) and degrade gracefully with a warning if unavailable
 - **Environment-based configuration**: credentials live in a `.env` file
 
 ## Requirements
