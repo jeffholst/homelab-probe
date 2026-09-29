@@ -135,6 +135,13 @@ Port 4,4,Up,1000 Mbps,Yes,No,0.00,Unknown,Device - Switch,Switch - Front,70:A7:4
 Port 6,6,Up,1000 Mbps,Yes,Yes,4.95,Class 4,Client,homeassistant,2C:CF:67:10:44:CC,,195791846,11065229054,...
 ```
 
+## API documentation
+
+- [UniFi Network API documentation](https://developer.ui.com/network/v10.4.57/gettingstarted) on developer.ui.com, versioned by Network Application release (use the newest version listed). The copy matching your controller's version is also under **UniFi Network > Integrations** in the controller.
+- [Getting Started with the Official UniFi API](https://help.ui.com/hc/en-us/articles/30076656117655-Getting-Started-with-the-Official-UniFi-API) in the Ubiquiti Help Center, including how to create API keys.
+
+The official documentation covers the Integration API only. The legacy `stat/*` and `rest/*` endpoints this tool also uses (port counters, client-to-port mapping, DHCP reservations, network config) are undocumented; their fields were determined from live controller responses.
+
 ## Troubleshooting
 
 - **`CONTROLLER_URL is not set` / `API_KEY is not set`**: copy `example.env` to `.env` and fill it in.
@@ -172,4 +179,5 @@ Issues and pull requests are welcome. Work is tracked in [GitHub issues](https:/
 ## Acknowledgments
 
 - [ericfitz/unifi-clients-export](https://github.com/ericfitz/unifi-clients-export), the project this was forked from
+- [UniFi Network API documentation](https://developer.ui.com/network/v10.4.57/gettingstarted) from Ubiquiti
 - [uv](https://docs.astral.sh/uv/) for Python package management
