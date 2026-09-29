@@ -40,13 +40,18 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("--include-offline", action="store_true",
                         help="Also list previously seen clients that are not connected")
 
-    query = sub.add_parser("query", help="List and filter devices and clients")
-    query.add_argument("kind", nargs="?", default="all", choices=["all", "devices", "clients", "reservations"])
+    query = sub.add_parser("query", help="List and filter devices, clients, reservations and switch ports")
+    query.add_argument("kind", nargs="?", default="all", choices=["all", "devices", "clients", "reservations", "ports"])
     query.add_argument("-s", "--search", default="",
                        help="Case-insensitive substring match on any field")
     query.add_argument("--include-offline", action="store_true",
                        help="Also list previously seen clients that are not connected")
     query.add_argument("--json", action="store_true", help="Output JSON instead of a table")
+    query.add_argument("--switch", default="",
+                       help="ports only: switch name (case-insensitive substring)")
+    query.add_argument("--down", action="store_true", help="ports only: only ports that are down")
+    query.add_argument("--errors", action="store_true",
+                       help="ports only: only ports with rx/tx errors")
 
     diag = sub.add_parser("diagnose", help="Run read-only health checks (offline devices, port errors, ...)")
     diag.add_argument("--fail-on", choices=[INFO, WARNING, CRITICAL], default=WARNING,
@@ -60,7 +65,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Optional[List[str]] = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if args.command == "query" and args.kind != "ports" and (args.switch or args.down or args.errors):
+        parser.error("--switch, --down and --errors only apply to 'query ports'")
     try:
         config = load_config()
         client = UniFiClient.from_config(config)
@@ -74,7 +82,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             snap = collect_snapshot(
                 client, config.site, args.include_offline,
                 include_reservations=args.kind == "reservations")
-            rows = query_rows(snap, args.kind, args.search, args.include_offline)
+            rows = query_rows(snap, args.kind, args.search, args.include_offline,
+                              args.switch, args.down, args.errors)
             print(render(rows, args.json, args.kind))
         elif args.command == "diagnose":
             findings = diagnose(collect_snapshot(client, config.site))
