@@ -26,8 +26,10 @@ Planned: richer inventory and troubleshooting reports.
 - **Switch port mapping**: per-switch CSVs with port status, speed, duplex, PoE, connected client or device, and traffic counters
 - **Network topology**: which switch and port each client or device is attached to
 - **DHCP reservations**: list every fixed IP reservation, including offline clients, with network and VLAN
-- **Querying and health checks**: filter devices and clients from the command line (table or JSON) and run read-only diagnostics
-- **Official API first**: uses the UniFi Network Integration API (`/proxy/network/integration/v1`). Legacy endpoints are used only for data the Integration API does not expose (per-port counters, client-to-port mapping, DHCP reservations and network config) and degrade gracefully with a warning if unavailable
+- **Querying**: list and filter devices, clients, DHCP reservations and switch ports from the command line (table or JSON)
+- **New client detection**: list every known client that is in no client group, newest first, to spot new devices
+- **Health checks**: read-only diagnostics with severity levels and exit codes for scripts and cron
+- **Official API first**: uses the UniFi Network Integration API (`/proxy/network/integration/v1`). Legacy endpoints are used only for data the Integration API does not expose (per-port counters, client-to-port mapping, DHCP reservations, network config and client groups) and degrade gracefully with a warning if unavailable
 - **Environment-based configuration**: credentials live in a `.env` file
 
 ## Requirements
@@ -98,6 +100,7 @@ uv run unifi-sentinel.py export -o ./out   # write CSVs to a directory
 uv run unifi-sentinel.py export --include-offline   # also list previously seen clients
 uv run unifi-sentinel.py query devices               # UniFi devices with firmware and uptime
 uv run unifi-sentinel.py query clients -s printer --json   # filter, JSON output
+uv run unifi-sentinel.py query clients --include-offline   # also previously seen clients
 uv run unifi-sentinel.py query reservations          # DHCP fixed IP reservations
 uv run unifi-sentinel.py query ports                 # every switch port
 uv run unifi-sentinel.py query ports --down --switch rack   # down ports on matching switches
@@ -106,7 +109,7 @@ uv run unifi-sentinel.py new-clients                 # clients in no client grou
 uv run unifi-sentinel.py diagnose                    # health checks
 ```
 
-Run these from the project root (uv uses `pyproject.toml`). After `pip install .` use `unifi-sentinel <command>` instead. Run `--help` on the tool or any command for options.
+`query` takes an optional kind (`all` by default, `devices`, `clients`, `reservations` or `ports`). Run these from the project root (uv uses `pyproject.toml`). After `pip install .` use `unifi-sentinel <command>` instead. Run `--help` on the tool or any command for options.
 
 ### Diagnose
 
@@ -184,6 +187,32 @@ Device - Switch,Switch - Den,6C:63:F8:AC:65:96,192.168.1.137,USPM16P,Wired,Switc
 Device - Access Point,AP - Media Room,94:2A:6F:2C:85:52,192.168.1.228,U7PROMAX,Wired,Switch - Media Room,1,2025-11-17 10:41:22,Online
 ```
 
+### diagnose
+
+Sample from synthetic data (text labels are used when output is piped; a UTF-8 terminal shows emojis):
+
+```text
+[WARNING ] Garage AP: device is offline
+[WARNING ] Office Switch: CPU utilization 95%
+[WARNING ] Office Switch port 2: 4 rx/tx errors
+[WARNING ] Office Switch port 2: link is half duplex
+[WARNING ] old-printer: reserved IP 10.0.0.50 is outside network IoT (10.0.20.1/24)
+[INFO    ] Office Switch port 2: negotiated at 100 Mbps
+
+5 warnings, 1 info
+```
+
+### new-clients
+
+```text
+Name         MAC Address        IP Address  Vendor  Connection Type  Where                        First Seen           Last Seen            Status
+-----------  -----------------  ----------  ------  ---------------  ---------------------------  -------------------  -------------------  -------
+old-tablet   BB:00:00:00:00:04  10.0.0.51           Wireless                                      2025-06-15 10:06:40  2025-12-05 23:46:40  Offline
+old-printer  BB:00:00:00:00:03  10.0.0.50           Wired            Wired, Office Switch port 6  2023-11-14 16:13:20  2025-12-17 13:33:20  Offline
+
+2 client(s) in no group
+```
+
 ### switch_Switch - Den.csv
 
 ```csv
@@ -198,7 +227,7 @@ Port 6,6,Up,1000 Mbps,Yes,Yes,4.95,Class 4,Client,homeassistant,2C:CF:67:10:44:C
 - [UniFi Network API documentation](https://developer.ui.com/network/v10.4.57/gettingstarted) on developer.ui.com, versioned by Network Application release (use the newest version listed). The copy matching your controller's version is also under **UniFi Network > Integrations** in the controller.
 - [Getting Started with the Official UniFi API](https://help.ui.com/hc/en-us/articles/30076656117655-Getting-Started-with-the-Official-UniFi-API) in the Ubiquiti Help Center, including how to create API keys.
 
-The official documentation covers the Integration API only. The legacy `stat/*` and `rest/*` endpoints this tool also uses (port counters, client-to-port mapping, DHCP reservations, network config) are undocumented; their fields were determined from live controller responses.
+The official documentation covers the Integration API only. The legacy `stat/*`, `rest/*` and `v2/api/*` endpoints this tool also uses (port counters, client-to-port mapping, DHCP reservations, network config, client groups) are undocumented; their fields were determined from live controller responses.
 
 ## Troubleshooting
 
@@ -207,7 +236,11 @@ The official documentation covers the Integration API only. The legacy `stat/*` 
 - **`TLS certificate verification failed`**: for a self-signed certificate set `VERIFY_SSL=false`, or install a valid certificate on the controller.
 - **Connection errors or timeouts**: check `CONTROLLER_URL` and that the controller is reachable from this machine.
 - **`Site '...' not found`**: run `info` to list site names, references and IDs.
-- **`legacy stat/... unavailable` warning**: switch port mapping and counters will be incomplete, but the rest of the export still runs.
+- **`... unavailable` warnings**: the tool degrades instead of failing. The rest of the command still runs, with less data:
+  - `legacy stat/... unavailable`: switch port mapping, port counters and offline clients are incomplete
+  - `legacy rest/... unavailable`: network names and VLANs are missing (reservations, subnet checks)
+  - `legacy v2 ... unavailable`: group names are missing; `new-clients` trusts each client's own group list
+  - `detail/statistics unavailable for N device(s)`: no uptime, heartbeat or CPU/memory for those devices (normal for offline devices)
 
 ## Development
 
@@ -223,9 +256,12 @@ unifi_sentinel/
   new_clients.py         clients in no client group
   diagnose.py            read-only health checks
   cli.py                 argparse subcommands
+tests/
+  conftest.py            FakeSession: a fake controller served from the fixture
+  fixtures/controller.json   synthetic, sanitized controller data
 ```
 
-New features are new subcommands in `cli.py` backed by modules that take a `UniFiClient`. Dependencies are declared once, in `pyproject.toml` (lockfile: `uv.lock`; regenerate with `uv lock`). Run the tests with `uv run pytest`; they use a synthetic fixture in `tests/fixtures/` and never contact a controller. See [CLAUDE.md](CLAUDE.md) for contributor and AI-assistant guidelines.
+New features are new subcommands in `cli.py` backed by modules that take a `Snapshot` (fetching stays in `snapshot.py` and `client.py`). Dependencies are declared once, in `pyproject.toml` (lockfile: `uv.lock`; regenerate with `uv lock`). Run the tests with `uv run pytest`; they use a synthetic fixture in `tests/fixtures/` and never contact a controller. See [CLAUDE.md](CLAUDE.md) for contributor and AI-assistant guidelines.
 
 ## License
 

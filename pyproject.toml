@@ -15,7 +15,7 @@ authors = [
 ]
 keywords = ["unifi", "network", "export", "csv", "ubiquiti"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 3 - Alpha",
     "Intended Audience :: System Administrators",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
