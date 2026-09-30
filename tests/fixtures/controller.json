@@ -337,14 +337,16 @@
         "_id": "net-1",
         "name": "Main",
         "purpose": "corporate",
-        "vlan_enabled": false
+        "vlan_enabled": false,
+        "ip_subnet": "10.0.0.1/24"
       },
       {
         "_id": "net-2",
         "name": "IoT",
         "purpose": "corporate",
         "vlan_enabled": true,
-        "vlan": 20
+        "vlan": 20,
+        "ip_subnet": "10.0.20.1/24"
       }
     ]
   }

@@ -205,3 +205,18 @@ def test_export_csv_columns_unchanged(fake_client, tmp_path):
     assert list(read(tmp_path / "unifi_clients.csv")[0]) == [
         "Type", "Name", "MAC Address", "IP Address", "Model", "Connection Type",
         "Switch", "Port", "Last Seen", "Status"]
+
+
+def test_diagnose_flags_fixture_reservation_outside_subnet(fake_client, monkeypatch, capsys):
+    snap = collect_snapshot(fake_client, "default", include_reservations=True)
+    msgs = {(f.subject, f.message) for f in diagnose(snap)}
+    # old-printer is reserved 10.0.0.50 but overridden onto IoT (10.0.20.0/24)
+    assert ("old-printer", "reserved IP 10.0.0.50 is outside network IoT (10.0.20.1/24)") in msgs
+    # the connected desktop matches its reservation: no mismatch finding
+    assert not any(s == "desktop" for s, _ in msgs)
+
+    monkeypatch.setenv("CONTROLLER_URL", "https://controller")
+    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
+    assert cli.main(["diagnose", "--no-emoji"]) == 1
+    assert "old-printer: reserved IP 10.0.0.50 is outside network IoT" in capsys.readouterr().out

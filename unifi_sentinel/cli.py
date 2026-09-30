@@ -88,7 +88,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                               args.switch or "", args.down, args.errors)
             print(render(rows, args.json, args.kind))
         elif args.command == "diagnose":
-            findings = diagnose(collect_snapshot(client, config.site))
+            findings = diagnose(collect_snapshot(client, config.site, include_reservations=True))
             emoji = not args.no_emoji and stream_supports_emoji(sys.stdout)
             print(format_findings(findings, emoji))
             return exit_code(findings, args.fail_on)

@@ -18,26 +18,34 @@ def _ip_sort_key(ip: str) -> Tuple[int, Any]:
         return (1, ip)
 
 
-def build_reservations(snap: Snapshot) -> List[Dict[str, Any]]:
-    """One row per enabled reservation, connected or not.
+def reservation_records(snap: Snapshot) -> List[Tuple[Dict[str, Any], Dict[str, Any]]]:
+    """(client record, network config) for each enabled reservation, connected or not.
 
     A reservation is ``use_fixedip`` true with ``fixed_ip`` set. ``fixed_ip`` alone
-    is not enough: disabled reservations keep a stale value.
+    is not enough: disabled reservations keep a stale value. The network is ``{}``
+    when it cannot be resolved.
     """
     networks = {n.get("_id"): n for n in snap.networks}
-    connected = {_mac(c.get("macAddress")): c for c in snap.clients}
-
-    rows: List[Dict[str, Any]] = []
+    records = []
     for u in snap.all_users:
         if not (u.get("use_fixedip") and u.get("fixed_ip")):
             continue
-        mac = _mac(u.get("mac"))
-        live = connected.get(mac)
-
         net_id = (u.get("virtual_network_override_id")
                   if u.get("virtual_network_override_enabled")
                   else u.get("last_connection_network_id"))
-        net = networks.get(net_id) or {}
+        records.append((u, networks.get(net_id) or {}))
+    return records
+
+
+def build_reservations(snap: Snapshot) -> List[Dict[str, Any]]:
+    """One row per enabled reservation, connected or not."""
+    connected = {_mac(c.get("macAddress")): c for c in snap.clients}
+
+    rows: List[Dict[str, Any]] = []
+    for u, net in reservation_records(snap):
+        mac = _mac(u.get("mac"))
+        live = connected.get(mac)
+
         # Networks without VLAN tagging are on the default untagged VLAN 1.
         vlan = (net.get("vlan") if net.get("vlan_enabled") else 1) if net else ""
 

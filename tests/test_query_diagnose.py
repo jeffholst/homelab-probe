@@ -253,3 +253,56 @@ def test_clients_with_valid_ips_add_no_findings():
     snap = _client_snapshot([{"macAddress": "cc:01", "name": "ok", "type": "WIRED",
                               "ipAddress": "10.0.0.9"}])
     assert diagnose(snap) == []
+
+
+def _reservation_snapshot(users, clients=(), networks=None):
+    nets = networks if networks is not None else [
+        {"_id": "n1", "name": "Main", "ip_subnet": "10.0.0.1/24"},
+        {"_id": "n2", "name": "IoT", "ip_subnet": "10.0.20.1/24"}]
+    return Snapshot(site={"id": "s"}, devices=[], clients=list(clients),
+                    all_users=list(users), networks=nets,
+                    legacy_devices=[{"mac": "aa:02", "type": "usw"}])
+
+
+def _user(mac, name, ip, net="n1", **kw):
+    return {"mac": mac, "name": name, "use_fixedip": True, "fixed_ip": ip,
+            "last_connection_network_id": net, **kw}
+
+
+def _reservation_messages(snap):
+    return {(f.subject, f.message) for f in diagnose(snap) if f.severity == "warning"}
+
+
+def test_reservation_ip_mismatch_is_flagged_for_online_clients_only():
+    snap = _reservation_snapshot(
+        [_user("cc:01", "nas", "10.0.0.5"), _user("cc:02", "ok", "10.0.0.6"),
+         _user("cc:03", "away", "10.0.0.7")],
+        clients=[{"macAddress": "cc:01", "name": "nas", "type": "WIRED", "ipAddress": "10.0.0.99"},
+                 {"macAddress": "cc:02", "name": "ok", "type": "WIRED", "ipAddress": "10.0.0.6"}])
+    assert _reservation_messages(snap) == {
+        ("nas", "current IP 10.0.0.99 differs from its reservation 10.0.0.5")}
+
+
+def test_duplicate_reserved_ips_are_flagged_once_per_ip():
+    snap = _reservation_snapshot([_user("cc:01", "b", "10.0.0.5"), _user("cc:02", "a", "10.0.0.5"),
+                                  _user("cc:03", "c", "10.0.0.6")])
+    assert _reservation_messages(snap) == {("10.0.0.5", "reserved for 2 clients: a, b")}
+
+
+def test_reserved_ip_outside_network_subnet_is_flagged():
+    snap = _reservation_snapshot([
+        _user("cc:01", "sensor", "10.0.0.50", net="n2"),       # IoT is 10.0.20.0/24
+        _user("cc:02", "fine", "10.0.20.50", net="n2"),
+        _user("cc:03", "lost", "172.16.0.5", net="unknown"),   # network unresolved: skipped
+    ])
+    assert _reservation_messages(snap) == {
+        ("sensor", "reserved IP 10.0.0.50 is outside network IoT (10.0.20.1/24)")}
+
+
+def test_disabled_and_invalid_reservations_are_ignored():
+    stale = {**_user("cc:01", "stale", "10.9.9.9"), "use_fixedip": False}
+    snap = _reservation_snapshot(
+        [stale, _user("cc:02", "weird", "not-an-ip")],
+        networks=[{"_id": "n1", "name": "Main", "ip_subnet": "10.0.0.1/24"}])
+    assert _reservation_messages(snap) == set()  # unparsable IP is skipped, not a crash
+    assert diagnose(_reservation_snapshot([])) == []
