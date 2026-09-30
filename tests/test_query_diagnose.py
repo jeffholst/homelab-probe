@@ -340,10 +340,19 @@ def test_two_clients_sharing_an_ip_are_flagged_with_locations():
 def test_client_colliding_with_a_unifi_device_is_flagged():
     snap = _ip_snapshot(
         clients=[_client("cc:01", "laptop", "10.0.0.2")],
-        devices=[{"id": "sw", "macAddress": "aa:02", "name": "Office Switch", "ipAddress": "10.0.0.2"}])
+        devices=[{"id": "sw", "macAddress": "aa:02", "name": "Office Switch",
+                  "state": "ONLINE", "ipAddress": "10.0.0.2"}])
     ((subject, message),) = _ip_findings(snap)
     assert subject == "10.0.0.2"
     assert "Office Switch (UniFi device)" in message and "laptop (Wired)" in message
+
+
+def test_offline_device_ip_is_not_counted_as_a_holder():
+    snap = _ip_snapshot(
+        devices=[{"id": "ap", "macAddress": "aa:03", "name": "Office AP",
+                  "state": "OFFLINE", "ipAddress": "10.0.0.7"}],
+        users=[_user("cc:01", "owner", "10.0.0.7")])
+    assert _ip_findings(snap) == set()
 
 
 def test_reservation_whose_ip_is_used_by_another_client_is_flagged():
