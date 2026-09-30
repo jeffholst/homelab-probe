@@ -306,3 +306,71 @@ def test_disabled_and_invalid_reservations_are_ignored():
         networks=[{"_id": "n1", "name": "Main", "ip_subnet": "10.0.0.1/24"}])
     assert _reservation_messages(snap) == set()  # unparsable IP is skipped, not a crash
     assert diagnose(_reservation_snapshot([])) == []
+
+
+def _ip_snapshot(clients=(), devices=(), users=(), legacy_clients=()):
+    return Snapshot(
+        site={"id": "s"}, devices=list(devices), clients=list(clients), all_users=list(users),
+        legacy_clients=list(legacy_clients), legacy_devices=[{"mac": "aa:02", "type": "usw"}],
+        networks=[{"_id": "n1", "name": "Main", "ip_subnet": "10.0.0.1/24"}])
+
+
+def _client(mac, name, ip, kind="WIRED", **kw):
+    return {"macAddress": mac, "name": name, "type": kind, "ipAddress": ip, **kw}
+
+
+def _ip_findings(snap):
+    return {(f.subject, f.message) for f in diagnose(snap)
+            if "in use by" in f.message}
+
+
+def test_two_clients_sharing_an_ip_are_flagged_with_locations():
+    snap = _ip_snapshot(
+        clients=[_client("cc:01", "desktop", "10.0.0.50", uplinkDeviceId="sw"),
+                 _client("cc:02", "printer", "10.0.0.50", kind="WIRELESS", uplinkDeviceId="ap"),
+                 _client("cc:03", "unique", "10.0.0.51")],
+        devices=[{"id": "sw", "macAddress": "aa:02", "name": "Office Switch", "ipAddress": "10.0.0.2"},
+                 {"id": "ap", "macAddress": "aa:03", "name": "Office AP", "ipAddress": "10.0.0.3"}],
+        legacy_clients=[{"mac": "cc:01", "sw_mac": "aa:02", "sw_port": 3}])
+    assert _ip_findings(snap) == {(
+        "10.0.0.50", "in use by desktop (Wired, Office Switch port 3), "
+                     "printer (Wireless, via Office AP)")}
+
+
+def test_client_colliding_with_a_unifi_device_is_flagged():
+    snap = _ip_snapshot(
+        clients=[_client("cc:01", "laptop", "10.0.0.2")],
+        devices=[{"id": "sw", "macAddress": "aa:02", "name": "Office Switch", "ipAddress": "10.0.0.2"}])
+    ((subject, message),) = _ip_findings(snap)
+    assert subject == "10.0.0.2"
+    assert "Office Switch (UniFi device)" in message and "laptop (Wired)" in message
+
+
+def test_reservation_whose_ip_is_used_by_another_client_is_flagged():
+    snap = _ip_snapshot(
+        clients=[_client("cc:09", "intruder", "10.0.0.7")],
+        users=[_user("cc:01", "owner", "10.0.0.7")])  # owner offline / elsewhere
+    assert _ip_findings(snap) == {
+        ("owner", "reserved IP 10.0.0.7 is in use by intruder (Wired)")}
+
+
+def test_owner_using_its_own_reserved_ip_is_not_flagged():
+    snap = _ip_snapshot(clients=[_client("cc:01", "owner", "10.0.0.7")],
+                        users=[_user("cc:01", "owner", "10.0.0.7")])
+    assert _ip_findings(snap) == set()
+
+
+def test_owner_and_intruder_share_the_ip_reported_once_as_duplicate():
+    snap = _ip_snapshot(
+        clients=[_client("cc:01", "owner", "10.0.0.7"), _client("cc:09", "intruder", "10.0.0.7")],
+        users=[_user("cc:01", "owner", "10.0.0.7")])
+    found = _ip_findings(snap)
+    assert [s for s, _ in found] == ["10.0.0.7"]  # duplicate finding only, no reservation finding
+
+
+def test_empty_invalid_and_equivalent_ips():
+    snap = _ip_snapshot(clients=[
+        _client("cc:01", "a", ""), _client("cc:02", "b", ""),
+        _client("cc:03", "c", "not-an-ip"), _client("cc:04", "d", "not-an-ip"),
+        _client("cc:05", "e", "10.0.0.9"), _client("cc:06", "f", " 10.0.0.9 ")])
+    assert [s for s, _ in _ip_findings(snap)] == ["10.0.0.9"]  # only the real, normalized duplicate

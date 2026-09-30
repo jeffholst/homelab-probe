@@ -115,7 +115,7 @@ Run these from the project root (uv uses `pyproject.toml`). After `pip install .
 | Level | Examples |
 | ----- | -------- |
 | 🛑 critical | gateway offline; an offline switch or device that other devices uplink through; CPU or memory at 98% or higher |
-| ⚠️ warning | other offline devices; port rx/tx errors; half-duplex links; CPU or memory at least 90% but below 98%; connected clients with no IP address or a link-local (169.254.x.x) address, shown with where they attach; DHCP reservation problems: an online client whose current IP differs from its reservation, the same IP reserved for several clients, or a reserved IP outside its network's subnet |
+| ⚠️ warning | other offline devices; port rx/tx errors; half-duplex links; CPU or memory at least 90% but below 98%; connected clients with no IP address or a link-local (169.254.x.x) address, shown with where they attach; DHCP reservation problems: an online client whose current IP differs from its reservation, the same IP reserved for several clients, or a reserved IP outside its network's subnet; the same IP in use by several clients or UniFi devices on any VLAN, or a reserved IP currently used by a different client |
 | ℹ️ info | ports negotiated at 100 Mbps or less; legacy data unavailable (port checks skipped) |
 
 The reservation checks read the legacy `stat/alluser` and `rest/networkconf` endpoints (the same data as `query reservations`); offline clients are only checked for duplicate and out-of-subnet reservations, and a reservation whose network cannot be resolved is skipped for the subnet check.
