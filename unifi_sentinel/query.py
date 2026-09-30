@@ -46,7 +46,11 @@ def _add_device_details(rows: List[Dict[str, Any]], snap: Snapshot) -> None:
             row["Firmware"] = detail.get("firmwareVersion") or dev.get("firmwareVersion") or ""
             row["Update Available"] = "" if updatable is None else ("Yes" if updatable else "No")
             row["Uptime"] = format_uptime(uptime)
-            row["Uptime (s)"] = uptime if isinstance(uptime, (int, float)) else ""
+            row["Uptime (s)"] = (
+                uptime
+                if isinstance(uptime, (int, float)) and uptime >= 0
+                else ""
+            )
 
 
 def _search(rows: List[Dict[str, Any]], search: str) -> List[Dict[str, Any]]:
