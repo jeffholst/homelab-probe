@@ -55,11 +55,16 @@ def test_the_shipped_example_config_loads():
     ("[thresholds]\nresource_warn_pct = true\n", "must be a number"),
     ("[thresholds]\nresource_warn_pct = 150\n", "between 0 and 100"),
     ("[thresholds]\nresource_warn_pct = 99\nresource_critical_pct = 95\n", "must not exceed"),
+    ("[thresholds]\nresource_warn_pct = nan\n", "must be finite"),
+    ("[thresholds]\nslow_link_mbps = inf\n", "must be finite"),
     ("[thresholds]\nslow_link_mbps = -1\n", "at least 0"),
     ('[[ignore]]\nreason = "x"\n', "subject and/or a message"),
     ('[[ignore]]\nsubject = "x"\n', "a reason is required"),
     ('[[ignore]]\nsubject = "x"\nreason = "  "\n', "a reason is required"),
     ('[[ignore]]\nsubject = "x"\nreason = "y"\nextra = 1\n', "only subject, message and reason"),
+    ('[[ignore]]\nsubject = 1\nreason = "x"\n', "must be strings"),
+    ('[[ignore]]\nmessage = true\nreason = "x"\n', "must be strings"),
+    ('[[ignore]]\nsubject = "x"\nreason = []\n', "must be strings"),
     ("ignore = 5\n", "[[ignore]] tables"),
 ])
 def test_invalid_config_gives_a_clear_error(tmp_path, text, message):
@@ -74,6 +79,25 @@ def test_explicit_missing_config_is_an_error(tmp_path):
         load_settings(tmp_path / "nope.toml")
 
 
+def test_unreadable_config_is_a_clear_error(tmp_path, monkeypatch):
+    path = write(tmp_path, "")
+
+    def unreadable(*args, **kwargs):
+        raise PermissionError("permission denied")
+
+    monkeypatch.setattr(Path, "read_text", unreadable)
+    with pytest.raises(ConfigError, match="could not read config file") as exc:
+        load_settings(path)
+    assert str(path) in str(exc.value)
+
+
+def test_invalid_utf8_config_is_a_clear_error(tmp_path):
+    path = tmp_path / "cfg.toml"
+    path.write_bytes(b"\xff")
+    with pytest.raises(ConfigError, match="invalid TOML"):
+        load_settings(path)
+
+
 # -- ignore matching -------------------------------------------------------
 
 def test_ignore_rule_matching():
@@ -82,6 +106,9 @@ def test_ignore_rule_matching():
     assert not by_subject.matches("Garage AP 2", "anything")    # exact, not a prefix
     wildcard = IgnoreRule(subject="* port 2", reason="r")
     assert wildcard.matches("Office Switch port 2", "x") and not wildcard.matches("Switch port 3", "x")
+    bracketed = IgnoreRule(subject="Device [old]", reason="r")
+    assert bracketed.matches("Device [old]", "x")
+    assert not bracketed.matches("Device o", "x")
     by_message = IgnoreRule(message="OFFLINE", reason="r")
     assert by_message.matches("any", "device is offline (gateway)")  # substring, case-insensitive
     both = IgnoreRule(subject="Garage AP", message="offline", reason="r")

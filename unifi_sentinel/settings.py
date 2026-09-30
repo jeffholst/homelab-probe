@@ -1,6 +1,7 @@
 """diagnose settings: thresholds and an ignore list, from an optional TOML file."""
 
 import fnmatch
+import math
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -27,7 +28,8 @@ class IgnoreRule:
     reason: str = ""
 
     def matches(self, subject: str, message: str) -> bool:
-        if self.subject and not fnmatch.fnmatchcase(subject.lower(), self.subject.lower()):
+        pattern = self.subject.lower().replace("[", "[[]")
+        if self.subject and not fnmatch.fnmatchcase(subject.lower(), pattern):
             return False
         if self.message and self.message.lower() not in message.lower():
             return False
@@ -45,6 +47,8 @@ class DiagnoseSettings:
 def _number(name: str, value: Any, lo: float, hi: Optional[float] = None) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ConfigError(f"[thresholds] {name} must be a number, got {value!r}")
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ConfigError(f"[thresholds] {name} must be finite, got {value!r}")
     if value < lo or (hi is not None and value > hi):
         limit = f"between {lo:g} and {hi:g}" if hi is not None else f"at least {lo:g}"
         raise ConfigError(f"[thresholds] {name} must be {limit}, got {value!r}")
@@ -80,7 +84,9 @@ def _parse(data: Dict[str, Any]) -> DiagnoseSettings:
     for i, raw in enumerate(raw_rules, 1):
         if not isinstance(raw, dict) or set(raw) - {"subject", "message", "reason"}:
             raise ConfigError(f"[[ignore]] #{i}: only subject, message and reason are allowed")
-        rule = IgnoreRule(**{k: str(v) for k, v in raw.items()})
+        if any(not isinstance(value, str) for value in raw.values()):
+            raise ConfigError(f"[[ignore]] #{i}: subject, message and reason must be strings")
+        rule = IgnoreRule(**raw)
         if not (rule.subject or rule.message):
             raise ConfigError(f"[[ignore]] #{i}: give a subject and/or a message to match")
         if not rule.reason.strip():
@@ -103,7 +109,13 @@ def load_settings(path: Optional[Path] = None) -> DiagnoseSettings:
         raise ConfigError(f"config file not found: {path}")
 
     try:
-        data = tomllib.loads(path.read_text(encoding="utf-8"))
+        text = path.read_text(encoding="utf-8")
+    except OSError as e:
+        raise ConfigError(f"{path}: could not read config file: {e}") from e
+    except UnicodeDecodeError as e:
+        raise ConfigError(f"{path}: invalid TOML: {e}") from e
+    try:
+        data = tomllib.loads(text)
     except (tomllib.TOMLDecodeError, UnicodeDecodeError) as e:
         raise ConfigError(f"{path}: invalid TOML: {e}") from e
     try:
