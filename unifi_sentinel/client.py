@@ -17,6 +17,7 @@ from .config import Config
 
 INTEGRATION_PREFIX = "/proxy/network/integration/v1"
 LEGACY_PREFIX = "/proxy/network/api"
+LEGACY_V2_PREFIX = "/proxy/network/v2/api"
 PAGE_SIZE = 200
 
 
@@ -129,3 +130,8 @@ class UniFiClient:
         """GET /api/s/{site}/rest/{resource} (e.g. 'networkconf')."""
         body = self._get(f"{LEGACY_PREFIX}/s/{site_ref}/rest/{resource}")
         return body.get("data", [])
+
+    def legacy_v2(self, site_ref: str, resource: str) -> List[Dict[str, Any]]:
+        """GET /v2/api/site/{site}/{resource} (e.g. 'network-members-groups')."""
+        body = self._get(f"{LEGACY_V2_PREFIX}/site/{site_ref}/{resource}")
+        return body.get("data", []) if isinstance(body, dict) else body

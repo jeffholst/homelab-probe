@@ -26,6 +26,8 @@ class Snapshot:
     # Legacy rest/networkconf. Client records reference these ids, which differ
     # from the Integration API network UUIDs.
     networks: List[Dict[str, Any]] = field(default_factory=list)
+    # Client group definitions (legacy v2 network-members-groups): id, name, members.
+    client_groups: List[Dict[str, Any]] = field(default_factory=list)
 
 
 def _legacy_or_empty(client: UniFiClient, site_ref: str, resource: str) -> List[Dict[str, Any]]:
@@ -59,14 +61,24 @@ def _legacy_rest_or_empty(client: UniFiClient, site_ref: str, resource: str) -> 
         return []
 
 
+def _legacy_v2_or_empty(client: UniFiClient, site_ref: str, resource: str) -> List[Dict[str, Any]]:
+    try:
+        return client.legacy_v2(site_ref, resource)
+    except UniFiAPIError as e:
+        warn(f"legacy v2 {resource} unavailable, group names may be missing: {e}")
+        return []
+
+
 def collect_snapshot(
     client: UniFiClient,
     site: str,
     include_offline: bool = False,
     include_reservations: bool = False,
+    include_groups: bool = False,
 ) -> Snapshot:
-    """``include_offline`` and ``include_reservations`` both need the legacy
-    ``stat/alluser`` list; reservations also need the network configuration (names, VLANs)."""
+    """``include_offline``, ``include_reservations`` and ``include_groups`` all need the
+    legacy ``stat/alluser`` list; reservations also need the network configuration
+    (names, VLANs) and groups need the client group definitions."""
     site_info = client.resolve_site(site)
     site_ref = site_info.get("internalReference") or site
     devices = client.devices(site_info["id"])
@@ -81,10 +93,13 @@ def collect_snapshot(
         legacy_clients=_legacy_or_empty(client, site_ref, "sta"),
         all_users=(
             _legacy_or_empty(client, site_ref, "alluser")
-            if include_offline or include_reservations
+            if include_offline or include_reservations or include_groups
             else []
         ),
         networks=(
             _legacy_rest_or_empty(client, site_ref, "networkconf") if include_reservations else []
+        ),
+        client_groups=(
+            _legacy_v2_or_empty(client, site_ref, "network-members-groups") if include_groups else []
         ),
     )

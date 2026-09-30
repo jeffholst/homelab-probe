@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import ipaddress
 from typing import Any, Dict, List, Set
 
-from .export import device_type_label
+from .export import client_location, device_type_label
 from .reservations import reservation_records
 from .snapshot import Snapshot
 
@@ -45,25 +45,6 @@ def _uplink_parents(snap: Snapshot) -> Dict[str, int]:
     return counts
 
 
-def _client_location(snap: Snapshot, client: Dict[str, Any]) -> str:
-    """Where a client attaches: 'Wired, Switch port 3' or 'Wireless, via AP'."""
-    names_by_id = {d.get("id"): d.get("name") or d.get("macAddress") for d in snap.devices}
-    names_by_mac = {(d.get("macAddress") or "").upper(): d.get("name") or d.get("macAddress")
-                    for d in snap.devices}
-    mac = (client.get("macAddress") or "").upper()
-    legacy = next((c for c in snap.legacy_clients if (c.get("mac") or "").upper() == mac), {})
-    uplink = names_by_id.get(client.get("uplinkDeviceId"))
-
-    if client.get("type") == "WIRED":
-        switch = names_by_mac.get((legacy.get("sw_mac") or "").upper()) or uplink
-        port = legacy.get("sw_port")
-        if switch and port is not None:
-            return f"Wired, {switch} port {port}"
-        return f"Wired, {switch}" if switch else "Wired"
-    ap = uplink or names_by_mac.get((legacy.get("ap_mac") or "").upper())
-    return f"Wireless, via {ap}" if ap else "Wireless"
-
-
 def _client_ip_findings(snap: Snapshot) -> List[Finding]:
     findings: List[Finding] = []
     for c in snap.clients:
@@ -71,7 +52,7 @@ def _client_ip_findings(snap: Snapshot) -> List[Finding]:
         if ip and not ip.startswith(LINK_LOCAL_PREFIX):
             continue
         subject = c.get("name") or c.get("macAddress") or "?"
-        where = _client_location(snap, c)
+        where = client_location(snap, c)
         if ip:
             message = f"link-local address {ip}, DHCP probably failed ({where})"
         else:

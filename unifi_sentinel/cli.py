@@ -11,6 +11,7 @@ from .config import ConfigError, load_config
 from .diagnose import (CRITICAL, INFO, WARNING, diagnose, exit_code, format_findings,
                        stream_supports_emoji)
 from .export import run_export
+from .new_clients import render as render_new_clients, report as new_clients_report
 from .query import query_rows, render
 from .snapshot import collect_snapshot
 
@@ -53,6 +54,12 @@ def build_parser() -> argparse.ArgumentParser:
     query.add_argument("--errors", action="store_true",
                        help="ports only: only ports with rx/tx errors")
 
+    new = sub.add_parser(
+        "new-clients", help="List clients that are in no client group (all known clients)")
+    new.add_argument("-s", "--search", default="",
+                     help="Case-insensitive substring match on any field")
+    new.add_argument("--json", action="store_true", help="Output JSON instead of a table")
+
     diag = sub.add_parser("diagnose", help="Run read-only health checks (offline devices, port errors, ...)")
     diag.add_argument("--fail-on", choices=[INFO, WARNING, CRITICAL], default=WARNING,
                       help="Lowest severity that gives a non-zero exit code (default: warning); "
@@ -87,6 +94,9 @@ def main(argv: Optional[List[str]] = None) -> int:
             rows = query_rows(snap, args.kind, args.search, args.include_offline,
                               args.switch or "", args.down, args.errors)
             print(render(rows, args.json, args.kind))
+        elif args.command == "new-clients":
+            snap = collect_snapshot(client, config.site, include_groups=True)
+            print(render_new_clients(new_clients_report(snap, args.search), args.json))
         elif args.command == "diagnose":
             findings = diagnose(collect_snapshot(client, config.site, include_reservations=True))
             emoji = not args.no_emoji and stream_supports_emoji(sys.stdout)
