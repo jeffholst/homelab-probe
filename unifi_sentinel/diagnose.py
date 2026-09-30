@@ -13,6 +13,7 @@ EMOJI = {CRITICAL: "\U0001F6D1", WARNING: "\u26A0\uFE0F", INFO: "\u2139\uFE0F"}
 # Process exit codes for `diagnose` (see exit_code). Tool errors use cli.EXIT_ERROR.
 EXIT_OK, EXIT_WARNING, EXIT_CRITICAL = 0, 1, 2
 
+LINK_LOCAL_PREFIX = "169.254."
 RESOURCE_WARN_PCT = 90
 RESOURCE_CRITICAL_PCT = 98
 GATEWAY_TYPES = {"Gateway", "Dream Machine"}
@@ -40,6 +41,41 @@ def _uplink_parents(snap: Snapshot) -> Dict[str, int]:
         if parent:
             counts[parent] = counts.get(parent, 0) + 1
     return counts
+
+
+def _client_location(snap: Snapshot, client: Dict[str, Any]) -> str:
+    """Where a client attaches: 'Wired, Switch port 3' or 'Wireless, via AP'."""
+    names_by_id = {d.get("id"): d.get("name") or d.get("macAddress") for d in snap.devices}
+    names_by_mac = {(d.get("macAddress") or "").upper(): d.get("name") or d.get("macAddress")
+                    for d in snap.devices}
+    mac = (client.get("macAddress") or "").upper()
+    legacy = next((c for c in snap.legacy_clients if (c.get("mac") or "").upper() == mac), {})
+    uplink = names_by_id.get(client.get("uplinkDeviceId"))
+
+    if client.get("type") == "WIRED":
+        switch = names_by_mac.get((legacy.get("sw_mac") or "").upper()) or uplink
+        port = legacy.get("sw_port")
+        if switch and port is not None:
+            return f"Wired, {switch} port {port}"
+        return f"Wired, {switch}" if switch else "Wired"
+    ap = uplink or names_by_mac.get((legacy.get("ap_mac") or "").upper())
+    return f"Wireless, via {ap}" if ap else "Wireless"
+
+
+def _client_ip_findings(snap: Snapshot) -> List[Finding]:
+    findings: List[Finding] = []
+    for c in snap.clients:
+        ip = c.get("ipAddress") or ""
+        if ip and not ip.startswith(LINK_LOCAL_PREFIX):
+            continue
+        subject = c.get("name") or c.get("macAddress") or "?"
+        where = _client_location(snap, c)
+        if ip:
+            message = f"link-local address {ip}, DHCP probably failed ({where})"
+        else:
+            message = f"no IP address ({where})"
+        findings.append(Finding(WARNING, subject, message))
+    return findings
 
 
 def diagnose(snap: Snapshot) -> List[Finding]:
@@ -72,6 +108,8 @@ def diagnose(snap: Snapshot) -> List[Finding]:
                 findings.append(Finding(
                     level, d.get("name") or d.get("macAddress", "?"),
                     f"{label} utilization {st[key]:.0f}%"))
+
+    findings.extend(_client_ip_findings(snap))
 
     if not snap.legacy_devices:
         findings.append(Finding(
