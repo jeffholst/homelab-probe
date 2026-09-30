@@ -24,7 +24,8 @@
       ],
       "interfaces": [
         "ports"
-      ]
+      ],
+      "firmwareUpdatable": false
     },
     {
       "id": "sw1",
@@ -40,7 +41,8 @@
       ],
       "interfaces": [
         "ports"
-      ]
+      ],
+      "firmwareUpdatable": true
     },
     {
       "id": "ap1",
@@ -90,7 +92,8 @@
       ],
       "interfaces": [
         "ports"
-      ]
+      ],
+      "firmwareUpdatable": false
     },
     "sw1": {
       "id": "sw1",
@@ -109,7 +112,8 @@
       ],
       "uplink": {
         "deviceId": "gw1"
-      }
+      },
+      "firmwareUpdatable": true
     },
     "ap1": {
       "id": "ap1",
@@ -152,19 +156,19 @@
   },
   "device_stats": {
     "gw1": {
-      "uptimeSec": 1000,
+      "uptimeSec": 200000,
       "lastHeartbeatAt": "2026-01-01T10:00:00Z",
       "cpuUtilizationPct": 5.0,
       "memoryUtilizationPct": 40.0
     },
     "sw1": {
-      "uptimeSec": 1000,
+      "uptimeSec": 11520,
       "lastHeartbeatAt": "2026-01-01T10:00:00Z",
       "cpuUtilizationPct": 95.0,
       "memoryUtilizationPct": 50.0
     },
     "ap1": {
-      "uptimeSec": 1000,
+      "uptimeSec": 300,
       "lastHeartbeatAt": "2026-01-01T10:00:00Z",
       "cpuUtilizationPct": 10.0,
       "memoryUtilizationPct": 30.0

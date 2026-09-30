@@ -171,3 +171,37 @@ def test_query_ports_cli_and_flag_validation(fake_client, monkeypatch, capsys):
         cli.main(["query", "clients", "--switch", ""])
     assert exc.value.code != 0
     assert "only apply to 'query ports'" in capsys.readouterr().err
+
+
+def test_query_devices_shows_firmware_update_and_uptime(fake_client):
+    from unifi_sentinel.query import format_uptime, render
+
+    snap = collect_snapshot(fake_client, "default")
+    rows = {r["Name"]: r for r in query_rows(snap, "devices")}
+
+    assert rows["Gateway"]["Firmware"] == "5.0.0"
+    assert (rows["Gateway"]["Update Available"], rows["Gateway"]["Uptime"]) == ("No", "2d 7h")
+    assert (rows["Office Switch"]["Update Available"], rows["Office Switch"]["Uptime"]) == ("Yes", "3h 12m")
+    assert rows["Office AP"]["Uptime"] == "5m"
+    # offline device has no statistics; update flag unknown
+    assert (rows["Garage AP"]["Uptime"], rows["Garage AP"]["Uptime (s)"]) == ("", "")
+    assert rows["Garage AP"]["Update Available"] == ""
+
+    table = render(list(rows.values()), False, "devices")
+    assert "Firmware" in table and "Update Available" in table and "2d 7h" in table
+    assert "Uptime (s)" not in table  # numeric column is JSON-only
+    js = render(list(rows.values()), True, "devices")
+    assert '"Uptime (s)": 200000' in js and '"Firmware": "7.0.0"' in js
+
+    # clients and the mixed view are unchanged
+    assert "Firmware" not in render(query_rows(snap, "all"), False, "all")
+    assert "Firmware" not in render(query_rows(snap, "clients"), True, "clients")
+    assert [format_uptime(x) for x in (None, -1, 45, 59, 60, 3599, 3600, 90000)] == [
+        "", "", "45s", "59s", "1m", "59m", "1h 0m", "1d 1h"]
+
+
+def test_export_csv_columns_unchanged(fake_client, tmp_path):
+    run_export(collect_snapshot(fake_client, "default"), tmp_path)
+    assert list(read(tmp_path / "unifi_clients.csv")[0]) == [
+        "Type", "Name", "MAC Address", "IP Address", "Model", "Connection Type",
+        "Switch", "Port", "Last Seen", "Status"]
