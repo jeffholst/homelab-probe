@@ -28,6 +28,8 @@ class Snapshot:
     networks: List[Dict[str, Any]] = field(default_factory=list)
     # Client group definitions (legacy v2 network-members-groups): id, name, members.
     client_groups: Optional[List[Dict[str, Any]]] = None
+    # Legacy stat/health: one entry per subsystem (wlan, lan, wan, www, vpn).
+    health: List[Dict[str, Any]] = field(default_factory=list)
 
 
 def _legacy_or_empty(client: UniFiClient, site_ref: str, resource: str) -> List[Dict[str, Any]]:
@@ -35,6 +37,14 @@ def _legacy_or_empty(client: UniFiClient, site_ref: str, resource: str) -> List[
         return client.legacy_stat(site_ref, resource)
     except UniFiAPIError as e:
         warn(f"legacy stat/{resource} unavailable, port mapping will be incomplete: {e}")
+        return []
+
+
+def _legacy_health_or_empty(client: UniFiClient, site_ref: str) -> List[Dict[str, Any]]:
+    try:
+        return client.legacy_stat(site_ref, "health")
+    except UniFiAPIError as e:
+        warn(f"legacy stat/health unavailable, controller health and WAN checks were skipped: {e}")
         return []
 
 
@@ -80,9 +90,10 @@ def collect_snapshot(
     include_offline: bool = False,
     include_reservations: bool = False,
     include_groups: bool = False,
+    include_health: bool = False,
 ) -> Snapshot:
     """``include_offline``, ``include_reservations`` and ``include_groups`` all need the
-    legacy ``stat/alluser`` list; reservations also need the network configuration
+    legacy ``stat/alluser`` list (``include_health`` reads ``stat/health`` for ``diagnose``); reservations also need the network configuration
     (names, VLANs) and groups need the client group definitions."""
     site_info = client.resolve_site(site)
     site_ref = site_info.get("internalReference") or site
@@ -106,6 +117,7 @@ def collect_snapshot(
         networks=(
             _legacy_rest_or_empty(client, site_ref, "networkconf") if include_reservations else []
         ),
+        health=_legacy_health_or_empty(client, site_ref) if include_health else [],
         client_groups=(
             _legacy_v2_or_empty(client, site_ref, "network-members-groups") if include_groups else []
         ),

@@ -107,7 +107,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(render_new_clients(new_clients_report(snap, args.search), args.json))
         elif args.command == "diagnose":
             findings, ignored = apply_ignores(
-                diagnose(collect_snapshot(client, config.site, include_reservations=True), settings),
+                diagnose(collect_snapshot(client, config.site, include_reservations=True,
+                                          include_health=True), settings),
                 settings.ignore)
             emoji = not args.no_emoji and stream_supports_emoji(sys.stdout)
             print(format_findings(findings, emoji, len(ignored)))

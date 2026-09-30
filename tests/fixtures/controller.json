@@ -335,6 +335,42 @@
         "last_connection_network_name": "Main",
         "first_seen": 1750000000
       }
+    ],
+    "health": [
+      {
+        "subsystem": "wlan",
+        "status": "warning",
+        "num_adopted": 3,
+        "num_disconnected": 1,
+        "num_pending": 0,
+        "num_ap": 2
+      },
+      {
+        "subsystem": "lan",
+        "status": "ok",
+        "num_adopted": 2,
+        "num_disconnected": 0,
+        "num_pending": 0,
+        "num_sw": 1
+      },
+      {
+        "subsystem": "wan",
+        "status": "ok",
+        "gw_name": "Gateway",
+        "num_gw": 1,
+        "num_pending": 0
+      },
+      {
+        "subsystem": "www",
+        "status": "ok",
+        "latency": 20,
+        "drops": 0,
+        "speedtest_status": "Success"
+      },
+      {
+        "subsystem": "vpn",
+        "status": "ok"
+      }
     ]
   },
   "legacy_rest": {
