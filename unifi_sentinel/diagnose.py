@@ -61,6 +61,57 @@ def _client_ip_findings(snap: Snapshot) -> List[Finding]:
     return findings
 
 
+def _normalize_ip(value: Any) -> str:
+    """Canonical IP text, or '' when missing or unparsable."""
+    try:
+        return str(ipaddress.ip_address(str(value).strip()))
+    except ValueError:
+        return ""
+
+
+def _ip_holders(snap: Snapshot) -> Dict[str, Dict[str, str]]:
+    """{ip: {mac: description}} for connected clients and UniFi devices using each IP."""
+    holders: Dict[str, Dict[str, str]] = {}
+    for c in snap.clients:
+        ip = _normalize_ip(c.get("ipAddress"))
+        if ip:
+            name = c.get("name") or c.get("macAddress") or "?"
+            holders.setdefault(ip, {})[(c.get("macAddress") or name).upper()] = (
+                f"{name} ({client_location(snap, c)})")
+    for d in snap.devices:
+        if d.get("state") != "ONLINE":
+            continue
+        ip = _normalize_ip(d.get("ipAddress"))
+        if ip:
+            name = d.get("name") or d.get("macAddress") or "?"
+            holders.setdefault(ip, {})[(d.get("macAddress") or name).upper()] = (
+                f"{name} (UniFi device)")
+    return holders
+
+
+def _duplicate_ip_findings(snap: Snapshot) -> List[Finding]:
+    """IPs in use by several clients/devices, and reservations whose IP someone else uses.
+
+    Comparing the address itself covers every VLAN at once.
+    """
+    holders = _ip_holders(snap)
+    findings = [
+        Finding(WARNING, ip, f"in use by {', '.join(sorted(who.values()))}")
+        for ip, who in holders.items() if len(who) > 1
+    ]
+    for user, _net in reservation_records(snap):
+        reserved = _normalize_ip(user.get("fixed_ip"))
+        mac = (user.get("mac") or "").upper()
+        who = holders.get(reserved, {})
+        # If the owner holds the IP too, the duplicate finding above already covers it.
+        if who and mac not in who:
+            name = user.get("name") or user.get("hostname") or mac
+            findings.append(Finding(
+                WARNING, name,
+                f"reserved IP {reserved} is in use by {', '.join(sorted(who.values()))}"))
+    return findings
+
+
 def _reservation_findings(snap: Snapshot) -> List[Finding]:
     findings: List[Finding] = []
     connected = {(c.get("macAddress") or "").upper(): c for c in snap.clients}
@@ -129,6 +180,7 @@ def diagnose(snap: Snapshot) -> List[Finding]:
 
     findings.extend(_client_ip_findings(snap))
     findings.extend(_reservation_findings(snap))
+    findings.extend(_duplicate_ip_findings(snap))
 
     if not snap.legacy_devices:
         findings.append(Finding(
