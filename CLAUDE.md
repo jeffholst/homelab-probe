@@ -13,10 +13,18 @@ Fork of [ericfitz/unifi-clients-export](https://github.com/ericfitz/unifi-client
 - Run: `uv run unifi-sentinel.py <export|query|new-clients|diagnose|info>`
 - Tests: `uv run pytest`
 
+## Documentation
+
+- Every new feature must be documented in `README.md` in the same PR: a row in the Commands table, a usage example, a Features bullet, a section for anything non-obvious (columns, filters, data sources, caveats), the layout block if you add a module, and a `--help`-accurate list of flags. Changed behavior (flags, output columns, exit codes) updates the existing text too.
+- Keep `CLAUDE.md` current when adding a module or subcommand (Layout, Commands) or learning something non-obvious about the API.
+- Example output in docs must come from the synthetic fixture, never from a real network.
+- Before opening a PR, check that the README matches `unifi-sentinel <command> --help`.
+
 ## Conventions
 
 - Stdlib `csv`, not pandas. Match the surrounding style; type-hint public functions.
 - Raise `UniFiAPIError`/`ConfigError`; only `cli.main` turns them into messages and exit codes.
+- Exit codes: 0 success, 1 and 2 are reserved for `diagnose` findings (warning, critical), 3 is a config/connection error, 64 is a usage error. Do not reuse 1 or 2 for errors.
 - Dependencies are declared only in `pyproject.toml`; run `uv lock` after changing them and commit `uv.lock`.
 
 ## UniFi API notes
@@ -25,7 +33,7 @@ Fork of [ericfitz/unifi-clients-export](https://github.com/ericfitz/unifi-client
 - Legacy `/proxy/network/api/s/{ref}/stat/...` takes the internal reference, not the UUID. It is used only for data the Integration API lacks (per-port counters, client-to-switch-port, DHCP reservations, network config).
 - Legacy client records reference networks by legacy ids (from `rest/networkconf`), which do not match Integration API network UUIDs. A reservation is `use_fixedip` true; `fixed_ip` alone is stale-prone.
 - Client group membership is `network_members_group_ids` on legacy client records; group names/ids come from legacy v2 `/proxy/network/v2/api/site/{ref}/network-members-groups` (`client.legacy_v2`).
-- Integration API field names were written from docs and are not yet verified against a live controller; verify before relying on them.
+- Integration API and legacy fields were checked against one live controller (Network 10.6.106). Other versions and hardware may differ, and some fields vary by model (e.g. `mac_table_count` is null on some switches). Verify a new field against real data before relying on it.
 
 ## Safety
 
