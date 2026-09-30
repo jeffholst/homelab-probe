@@ -113,7 +113,7 @@ Run these from the project root (uv uses `pyproject.toml`). After `pip install .
 | Level | Examples |
 | ----- | -------- |
 | 🛑 critical | gateway offline; an offline switch or device that other devices uplink through; CPU or memory at 98% or higher |
-| ⚠️ warning | other offline devices; port rx/tx errors; half-duplex links; CPU or memory at least 90% but below 98% |
+| ⚠️ warning | other offline devices; port rx/tx errors; half-duplex links; CPU or memory at least 90% but below 98%; connected clients with no IP address or a link-local (169.254.x.x) address, shown with where they attach |
 | ℹ️ info | ports negotiated at 100 Mbps or less; legacy data unavailable (port checks skipped) |
 
 Emoji labels are used on a UTF-8 terminal. When output is piped or redirected, or with `--no-emoji`, it prints text labels (`[CRITICAL]`, `[WARNING ]`, `[INFO    ]`) instead.

@@ -212,3 +212,44 @@ def test_null_uplink_in_device_detail_does_not_crash():
     assert rows[0]["Switch"] == ""
     snap = Snapshot(site={}, devices=devices, clients=[], device_details={"sw": {"uplink": None}})
     assert isinstance(diagnose(snap), list)
+
+
+def _client_snapshot(clients, legacy_clients=()):
+    return Snapshot(
+        site={"id": "s"},
+        devices=[{"id": "sw", "macAddress": "aa:02", "name": "Office Switch", "state": "ONLINE"},
+                 {"id": "ap", "macAddress": "aa:03", "name": "Office AP", "state": "ONLINE"}],
+        clients=list(clients),
+        legacy_clients=list(legacy_clients),
+        legacy_devices=[{"mac": "aa:02", "type": "usw"}],
+    )
+
+
+def test_client_without_ip_is_flagged_with_location():
+    snap = _client_snapshot(
+        [{"macAddress": "cc:01", "name": "desktop", "type": "WIRED", "uplinkDeviceId": "sw"},
+         {"macAddress": "cc:02", "name": "phone", "type": "WIRELESS", "uplinkDeviceId": "ap",
+          "ipAddress": ""},
+         {"macAddress": "cc:03", "type": "WIRELESS"},  # unnamed, unknown AP
+         {"macAddress": "cc:04", "name": "healthy", "type": "WIRED", "ipAddress": "10.0.0.5"}],
+        [{"mac": "cc:01", "sw_mac": "aa:02", "sw_port": 3}],
+    )
+    got = {(f.severity, f.subject): f.message for f in diagnose(snap)}
+    assert got[("warning", "desktop")] == "no IP address (Wired, Office Switch port 3)"
+    assert got[("warning", "phone")] == "no IP address (Wireless, via Office AP)"
+    assert got[("warning", "cc:03")] == "no IP address (Wireless)"
+    assert not any(subject == "healthy" for _, subject in got)
+
+
+def test_link_local_client_is_flagged():
+    snap = _client_snapshot([{"macAddress": "cc:01", "name": "printer", "type": "WIRED",
+                              "ipAddress": "169.254.10.20", "uplinkDeviceId": "sw"}])
+    (finding,) = [f for f in diagnose(snap) if f.subject == "printer"]
+    assert finding.severity == "warning"
+    assert finding.message == "link-local address 169.254.10.20, DHCP probably failed (Wired, Office Switch)"
+
+
+def test_clients_with_valid_ips_add_no_findings():
+    snap = _client_snapshot([{"macAddress": "cc:01", "name": "ok", "type": "WIRED",
+                              "ipAddress": "10.0.0.9"}])
+    assert diagnose(snap) == []
