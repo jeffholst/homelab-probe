@@ -16,23 +16,23 @@ def _epoch(value: Any) -> str:
     return datetime.fromtimestamp(value).strftime("%Y-%m-%d %H:%M:%S") if value else ""
 
 
-def _is_grouped(user: Dict[str, Any], defined_ids: set) -> bool:
+def _is_grouped(user: Dict[str, Any], defined_ids: set, definitions_available: bool) -> bool:
     """True if the client is in at least one group. When group definitions are
     available, ids that no longer exist do not count; otherwise trust the raw list."""
     ids = user.get("network_members_group_ids") or []
-    return any(i in defined_ids for i in ids) if defined_ids else bool(ids)
+    return any(i in defined_ids for i in ids) if definitions_available else bool(ids)
 
 
 def ungrouped_clients(snap: Snapshot) -> List[Dict[str, Any]]:
     """Every known client (connected or not) in no client group, newest first-seen first."""
-    defined = {g.get("id") for g in snap.client_groups}
+    defined = {g.get("id") for g in snap.client_groups or []}
     connected = {_mac(c.get("macAddress")): c for c in snap.clients}
     device_macs = {_mac(d.get("macAddress")) for d in snap.devices}
 
     found = []
     for u in snap.all_users:
         mac = _mac(u.get("mac"))
-        if not mac or mac in device_macs or _is_grouped(u, defined):
+        if not mac or mac in device_macs or _is_grouped(u, defined, snap.client_groups is not None):
             continue
         live = connected.get(mac)
         wired = u.get("is_wired")

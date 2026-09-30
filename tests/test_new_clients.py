@@ -8,9 +8,10 @@ from unifi_sentinel.new_clients import render, report, ungrouped_clients
 from unifi_sentinel.snapshot import Snapshot, collect_snapshot
 
 
-def snapshot(users, clients=(), groups=(), devices=()):
+def snapshot(users, clients=(), groups=None, devices=()):
     return Snapshot(site={"id": "s"}, devices=list(devices), clients=list(clients),
-                    all_users=list(users), client_groups=list(groups))
+                    all_users=list(users),
+                    client_groups=list(groups) if groups is not None else None)
 
 
 def user(mac, name, groups=(), **kw):
@@ -32,6 +33,11 @@ def test_only_clients_in_no_group_are_listed():
 
 def test_id_of_a_deleted_group_does_not_count_as_membership():
     snap = snapshot([user("aa:01", "stale", ["deleted"]), user("aa:02", "ok", ["g2"])], groups=GROUPS)
+    assert names(ungrouped_clients(snap)) == ["stale"]
+
+
+def test_empty_group_definitions_do_not_trust_stale_ids():
+    snap = snapshot([user("aa:01", "stale", ["deleted"])], groups=[])
     assert names(ungrouped_clients(snap)) == ["stale"]
 
 
@@ -101,9 +107,24 @@ def test_group_definition_failure_warns_and_falls_back(fake_client, monkeypatch,
 
     monkeypatch.setattr(fake_client, "legacy_v2", boom)
     snap = collect_snapshot(fake_client, "default", include_groups=True)
-    assert snap.client_groups == []
-    assert "group names may be missing" in capsys.readouterr().err
+    assert snap.client_groups is None
+    warning = capsys.readouterr().err
+    assert "membership cannot be validated against deleted groups" in warning
+    assert "raw group IDs will be trusted" in warning
     assert names(ungrouped_clients(snap)) == ["old-tablet", "old-printer"]  # raw id lists used
+
+
+def test_alluser_failure_propagates_when_collecting_groups(fake_client, monkeypatch):
+    legacy_stat = fake_client.legacy_stat
+
+    def fail_alluser(site_ref, resource):
+        if resource == "alluser":
+            raise UniFiAPIError("alluser unavailable")
+        return legacy_stat(site_ref, resource)
+
+    monkeypatch.setattr(fake_client, "legacy_stat", fail_alluser)
+    with pytest.raises(UniFiAPIError, match="alluser unavailable"):
+        collect_snapshot(fake_client, "default", include_groups=True)
 
 
 def test_cli_new_clients(fake_client, monkeypatch, capsys):
