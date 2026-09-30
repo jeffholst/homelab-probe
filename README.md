@@ -95,7 +95,7 @@ uv run unifi-sentinel.py info
 uv run unifi-sentinel.py export
 uv run unifi-sentinel.py export -o ./out   # write CSVs to a directory
 uv run unifi-sentinel.py export --include-offline   # also list previously seen clients
-uv run unifi-sentinel.py query devices               # table of UniFi devices
+uv run unifi-sentinel.py query devices               # UniFi devices with firmware and uptime
 uv run unifi-sentinel.py query clients -s printer --json   # filter, JSON output
 uv run unifi-sentinel.py query reservations          # DHCP fixed IP reservations
 uv run unifi-sentinel.py query ports                 # every switch port
@@ -135,6 +135,10 @@ Emoji labels are used on a UTF-8 terminal. When output is piped or redirected, o
 ```
 
 Tool errors used to exit 1 for every command; they now exit 3 so that 1 and 2 only ever mean findings.
+
+### Devices
+
+`query devices` shows each UniFi device with its firmware version, whether a firmware update is available, and its uptime (for example `2d 7h`). Offline devices have no uptime. `--json` adds `Uptime (s)` with the raw seconds. These columns come from the Integration API and appear only for `query devices`; the `export` CSV columns are unchanged.
 
 ### Switch ports
 
