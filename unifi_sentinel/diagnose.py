@@ -1,9 +1,11 @@
 """Read-only health checks over a snapshot."""
 
 from dataclasses import dataclass
+import ipaddress
 from typing import Any, Dict, List, Set
 
 from .export import device_type_label
+from .reservations import reservation_records
 from .snapshot import Snapshot
 
 CRITICAL, WARNING, INFO = "critical", "warning", "info"
@@ -78,6 +80,41 @@ def _client_ip_findings(snap: Snapshot) -> List[Finding]:
     return findings
 
 
+def _reservation_findings(snap: Snapshot) -> List[Finding]:
+    findings: List[Finding] = []
+    connected = {(c.get("macAddress") or "").upper(): c for c in snap.clients}
+    by_ip: Dict[str, List[str]] = {}
+
+    for user, net in reservation_records(snap):
+        mac = (user.get("mac") or "").upper()
+        name = user.get("name") or user.get("hostname") or mac
+        reserved = user["fixed_ip"]
+        by_ip.setdefault(reserved, []).append(name)
+
+        # A client with no IP at all is reported by the client IP check instead.
+        current = (connected.get(mac) or {}).get("ipAddress") or ""
+        if current and current != reserved:
+            findings.append(Finding(
+                WARNING, name, f"current IP {current} differs from its reservation {reserved}"))
+
+        subnet = net.get("ip_subnet")
+        if subnet:
+            try:
+                inside = ipaddress.ip_address(reserved) in ipaddress.ip_network(subnet, strict=False)
+            except ValueError:
+                continue  # unparsable address or subnet: nothing reliable to say
+            if not inside:
+                findings.append(Finding(
+                    WARNING, name,
+                    f"reserved IP {reserved} is outside network {net.get('name') or '?'} ({subnet})"))
+
+    for ip, names in by_ip.items():
+        if len(names) > 1:
+            findings.append(Finding(
+                WARNING, ip, f"reserved for {len(names)} clients: {', '.join(sorted(names))}"))
+    return findings
+
+
 def diagnose(snap: Snapshot) -> List[Finding]:
     findings: List[Finding] = []
 
@@ -110,6 +147,7 @@ def diagnose(snap: Snapshot) -> List[Finding]:
                     f"{label} utilization {st[key]:.0f}%"))
 
     findings.extend(_client_ip_findings(snap))
+    findings.extend(_reservation_findings(snap))
 
     if not snap.legacy_devices:
         findings.append(Finding(
