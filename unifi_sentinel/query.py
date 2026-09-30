@@ -37,7 +37,11 @@ def _add_device_details(rows: List[Dict[str, Any]], snap: Snapshot) -> None:
         dev = by_mac.get(row["MAC Address"])
         if row["Type"].startswith("Device") and dev:
             detail = snap.device_details.get(dev.get("id")) or {}
-            uptime = (snap.device_stats.get(dev.get("id")) or {}).get("uptimeSec")
+            uptime = (
+                (snap.device_stats.get(dev.get("id")) or {}).get("uptimeSec")
+                if row["Status"] == "Online"
+                else None
+            )
             updatable = detail.get("firmwareUpdatable", dev.get("firmwareUpdatable"))
             row["Firmware"] = detail.get("firmwareVersion") or dev.get("firmwareVersion") or ""
             row["Update Available"] = "" if updatable is None else ("Yes" if updatable else "No")
