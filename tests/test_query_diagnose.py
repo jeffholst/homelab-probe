@@ -75,7 +75,7 @@ def test_switch_uplink_port_names_upstream_device():
          "uplink": {"uplink_mac": "aa:aa", "uplink_remote_port": 2},
          "port_table": [{"port_idx": 8, "up": True, "is_uplink": True}]},
     ]
-    row = build_switch_ports(legacy, [])["SW"][0]
+    row = build_switch_ports(legacy, [])["BB:BB"][1][0]
     assert row["Connected Name"] == "GW"
     assert row["Connected Type"] == "Device - Dream Machine"
 

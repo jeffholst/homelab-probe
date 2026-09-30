@@ -132,6 +132,25 @@ def test_query_ports_rows_and_filters(fake_client):
     assert '"RX Bytes"' in render(ports, True, "ports")  # JSON has every column
 
 
+def test_duplicate_switch_names_keep_all_ports_and_csvs(fake_client, tmp_path):
+    snap = collect_snapshot(fake_client, "default")
+    snap.legacy_devices = [*snap.legacy_devices, {
+        "mac": "aa:00:00:00:00:09", "type": "usw", "name": "Office Switch",
+        "port_table": [{"port_idx": 9, "up": True}],
+    }]
+
+    ports = query_rows(snap, "ports")
+    assert [(row["Switch"], row["Port Index"]) for row in ports][-1] == ("Office Switch", 9)
+    assert sum(row["Switch"] == "Office Switch" for row in ports) == 5
+
+    run_export(snap, tmp_path)
+    switch_csvs = sorted(tmp_path.glob("switch_Office Switch_*.csv"))
+    assert len(switch_csvs) == 2
+    assert sorted(row["Port Index"] for path in switch_csvs for row in read(path)) == [
+        "1", "2", "3", "4", "9"
+    ]
+
+
 def test_query_ports_cli_and_flag_validation(fake_client, monkeypatch, capsys):
     monkeypatch.setenv("CONTROLLER_URL", "https://controller")
     monkeypatch.setenv("API_KEY", "key")
@@ -140,8 +159,15 @@ def test_query_ports_cli_and_flag_validation(fake_client, monkeypatch, capsys):
     assert cli.main(["query", "ports", "--errors", "--switch", "office"]) == 0
     assert "1 row(s)" in capsys.readouterr().out
 
+    assert cli.main(["query", "ports", "--switch", ""]) == 0
+    assert "4 row(s)" in capsys.readouterr().out
+
     import pytest
     with pytest.raises(SystemExit) as exc:
         cli.main(["query", "clients", "--down"])
+    assert exc.value.code != 0
+    assert "only apply to 'query ports'" in capsys.readouterr().err
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["query", "clients", "--switch", ""])
     assert exc.value.code != 0
     assert "only apply to 'query ports'" in capsys.readouterr().err

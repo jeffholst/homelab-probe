@@ -47,7 +47,7 @@ def build_parser() -> argparse.ArgumentParser:
     query.add_argument("--include-offline", action="store_true",
                        help="Also list previously seen clients that are not connected")
     query.add_argument("--json", action="store_true", help="Output JSON instead of a table")
-    query.add_argument("--switch", default="",
+    query.add_argument("--switch",
                        help="ports only: switch name (case-insensitive substring)")
     query.add_argument("--down", action="store_true", help="ports only: only ports that are down")
     query.add_argument("--errors", action="store_true",
@@ -67,7 +67,9 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    if args.command == "query" and args.kind != "ports" and (args.switch or args.down or args.errors):
+    if args.command == "query" and args.kind != "ports" and (
+        args.switch is not None or args.down or args.errors
+    ):
         parser.error("--switch, --down and --errors only apply to 'query ports'")
     try:
         config = load_config()
@@ -83,7 +85,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 client, config.site, args.include_offline,
                 include_reservations=args.kind == "reservations")
             rows = query_rows(snap, args.kind, args.search, args.include_offline,
-                              args.switch, args.down, args.errors)
+                              args.switch or "", args.down, args.errors)
             print(render(rows, args.json, args.kind))
         elif args.command == "diagnose":
             findings = diagnose(collect_snapshot(client, config.site))

@@ -34,7 +34,7 @@ def port_rows(
     """
     rows = [
         {"Switch": name, **row}
-        for name, ports in build_switch_ports(snap.legacy_devices, snap.legacy_clients).items()
+        for name, ports in build_switch_ports(snap.legacy_devices, snap.legacy_clients).values()
         for row in ports
     ]
     if switch:
