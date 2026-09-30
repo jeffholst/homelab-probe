@@ -14,6 +14,7 @@ UniFi Sentinel is a fork of [ericfitz/unifi-clients-export](https://github.com/e
 | -------- | -------------------------------------------------------------- |
 | `export` | Export connected clients, UniFi devices and switch ports to CSV |
 | `query`  | List and filter devices, clients, DHCP reservations and switch ports (table or `--json`) |
+| `new-clients` | List clients that are in no client group, to spot new devices |
 | `diagnose` | Read-only health checks with 🛑 critical, ⚠️ warning and ℹ️ info findings |
 | `info`   | Show the controller application info and available sites       |
 
@@ -101,6 +102,7 @@ uv run unifi-sentinel.py query reservations          # DHCP fixed IP reservation
 uv run unifi-sentinel.py query ports                 # every switch port
 uv run unifi-sentinel.py query ports --down --switch rack   # down ports on matching switches
 uv run unifi-sentinel.py query ports --errors        # ports with rx/tx errors
+uv run unifi-sentinel.py new-clients                 # clients in no client group
 uv run unifi-sentinel.py diagnose                    # health checks
 ```
 
@@ -141,6 +143,12 @@ Tool errors used to exit 1 for every command; they now exit 3 so that 1 and 2 on
 ### Devices
 
 `query devices` shows each UniFi device with its firmware version, whether a firmware update is available, and its uptime (for example `2d 7h`). Offline devices have no uptime. `--json` adds `Uptime (s)` with the raw seconds. These columns come from the Integration API and appear only for `query devices`; the `export` CSV columns are unchanged.
+
+### New clients
+
+`new-clients` lists every known client, connected or not, that has not been added to at least one client group (Network > Client Groups), so newly seen devices stand out. Add a client to a group in the controller and it drops off the report. Columns: Name, MAC Address, IP Address, Vendor, Connection Type, Where (switch and port, or AP), First Seen, Last Seen, Status. Newest first-seen comes first, with no age cutoff. `-s TEXT` filters and `--json` prints JSON.
+
+Group membership comes from the legacy `stat/alluser` client records and the legacy v2 `network-members-groups` definitions; the Integration API has no client groups. A group that has been deleted does not count as membership. If the group definitions cannot be read, the tool warns and trusts each client's own group list.
 
 ### Switch ports
 
@@ -212,6 +220,7 @@ unifi_sentinel/
   export.py              inventory rows and CSV export
   query.py               filtering and table/JSON rendering
   reservations.py        DHCP fixed IP reservations
+  new_clients.py         clients in no client group
   diagnose.py            read-only health checks
   cli.py                 argparse subcommands
 ```

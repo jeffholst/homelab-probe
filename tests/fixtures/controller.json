@@ -303,7 +303,11 @@
         "is_wired": true,
         "use_fixedip": true,
         "fixed_ip": "10.0.0.10",
-        "last_connection_network_id": "net-1"
+        "last_connection_network_id": "net-1",
+        "network_members_group_ids": [
+          "grp-1"
+        ],
+        "first_seen": 1600000000
       },
       {
         "mac": "bb:00:00:00:00:03",
@@ -317,7 +321,8 @@
         "fixed_ip": "10.0.0.50",
         "virtual_network_override_enabled": true,
         "virtual_network_override_id": "net-2",
-        "last_connection_network_id": "net-1"
+        "last_connection_network_id": "net-1",
+        "first_seen": 1700000000
       },
       {
         "mac": "bb:00:00:00:00:04",
@@ -327,7 +332,8 @@
         "last_ip": "10.0.0.51",
         "use_fixedip": false,
         "fixed_ip": "10.0.0.99",
-        "last_connection_network_name": "Main"
+        "last_connection_network_name": "Main",
+        "first_seen": 1750000000
       }
     ]
   },
@@ -347,6 +353,24 @@
         "vlan_enabled": true,
         "vlan": 20,
         "ip_subnet": "10.0.20.1/24"
+      }
+    ]
+  },
+  "legacy_v2": {
+    "network-members-groups": [
+      {
+        "id": "grp-1",
+        "name": "Desktops",
+        "type": "CLIENTS",
+        "members": [
+          "bb:00:00:00:00:01"
+        ]
+      },
+      {
+        "id": "grp-2",
+        "name": "Unused",
+        "type": "CLIENTS",
+        "members": []
       }
     ]
   }
