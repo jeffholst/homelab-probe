@@ -110,3 +110,64 @@ def test_query_reservations_via_cli(fake_client, monkeypatch, capsys):
     assert cli.main(["query", "reservations"]) == 0
     out = capsys.readouterr().out
     assert "old-printer" in out and "10.0.0.99" not in out and "2 row(s)" in out
+
+
+def test_query_ports_rows_and_filters(fake_client):
+    from unifi_sentinel.query import render
+
+    snap = collect_snapshot(fake_client, "default")
+    ports = query_rows(snap, "ports")
+    assert [(r["Switch"], r["Port Index"]) for r in ports] == [("Office Switch", i) for i in (1, 2, 3, 4)]
+    assert next(r for r in ports if r["Port Index"] == 3)["Connected Name"] == "desktop"
+
+    assert [r["Port Index"] for r in query_rows(snap, "ports", down=True)] == [4]
+    assert [r["Port Index"] for r in query_rows(snap, "ports", errors=True)] == [2]
+    assert len(query_rows(snap, "ports", switch="OFFICE")) == 4
+    assert query_rows(snap, "ports", switch="nope") == []
+    assert [r["Port Index"] for r in query_rows(snap, "ports", search="desktop")] == [3]
+    assert query_rows(snap, "ports", down=True, errors=True) == []  # filters combine with AND
+
+    table = render(ports, False, "ports")
+    assert "Connected Name" in table and "4 row(s)" in table
+    assert '"RX Bytes"' in render(ports, True, "ports")  # JSON has every column
+
+
+def test_duplicate_switch_names_keep_all_ports_and_csvs(fake_client, tmp_path):
+    snap = collect_snapshot(fake_client, "default")
+    snap.legacy_devices = [*snap.legacy_devices, {
+        "mac": "aa:00:00:00:00:09", "type": "usw", "name": "Office Switch",
+        "port_table": [{"port_idx": 9, "up": True}],
+    }]
+
+    ports = query_rows(snap, "ports")
+    assert [(row["Switch"], row["Port Index"]) for row in ports][-1] == ("Office Switch", 9)
+    assert sum(row["Switch"] == "Office Switch" for row in ports) == 5
+
+    run_export(snap, tmp_path)
+    switch_csvs = sorted(tmp_path.glob("switch_Office Switch_*.csv"))
+    assert len(switch_csvs) == 2
+    assert sorted(row["Port Index"] for path in switch_csvs for row in read(path)) == [
+        "1", "2", "3", "4", "9"
+    ]
+
+
+def test_query_ports_cli_and_flag_validation(fake_client, monkeypatch, capsys):
+    monkeypatch.setenv("CONTROLLER_URL", "https://controller")
+    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, cfg: fake_client))
+
+    assert cli.main(["query", "ports", "--errors", "--switch", "office"]) == 0
+    assert "1 row(s)" in capsys.readouterr().out
+
+    assert cli.main(["query", "ports", "--switch", ""]) == 0
+    assert "4 row(s)" in capsys.readouterr().out
+
+    import pytest
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["query", "clients", "--down"])
+    assert exc.value.code != 0
+    assert "only apply to 'query ports'" in capsys.readouterr().err
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["query", "clients", "--switch", ""])
+    assert exc.value.code != 0
+    assert "only apply to 'query ports'" in capsys.readouterr().err

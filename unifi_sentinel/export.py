@@ -2,6 +2,7 @@
 
 import csv
 import re
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -191,8 +192,8 @@ def build_offline_clients(
 
 def build_switch_ports(
     legacy_devices: List[Dict[str, Any]], legacy_clients: List[Dict[str, Any]]
-) -> Dict[str, List[Dict[str, Any]]]:
-    """Return {switch name: port rows}, indexed once instead of scanned per port."""
+) -> Dict[str, Tuple[str, List[Dict[str, Any]]]]:
+    """Return {switch MAC: (switch name, port rows)}, indexed once per port."""
     client_by_port: Dict[Tuple[str, Any], Dict[str, Any]] = {}
     for c in legacy_clients:
         if c.get("sw_mac") and c.get("sw_port") is not None:
@@ -206,7 +207,7 @@ def build_switch_ports(
 
     device_by_mac = {_mac(d.get("mac")): d for d in legacy_devices}
 
-    result: Dict[str, List[Dict[str, Any]]] = {}
+    result: Dict[str, Tuple[str, List[Dict[str, Any]]]] = {}
     for sw in legacy_devices:
         if sw.get("type") != "usw" or not sw.get("port_table"):
             continue
@@ -253,7 +254,9 @@ def build_switch_ports(
                 "RX Errors": port.get("rx_errors", ""),
                 "TX Errors": port.get("tx_errors", ""),
             })
-        result[sw.get("name") or sw.get("hostname") or sw_mac] = rows
+        name = sw.get("name") or sw.get("hostname") or sw_mac
+        switch_id = sw_mac or f"switch-{len(result) + 1}"
+        result[switch_id] = (name, rows)
     return result
 
 
@@ -272,8 +275,12 @@ def run_export(snap: Snapshot, output_dir: Path) -> None:
     _write_csv(inventory_path, INVENTORY_COLUMNS, rows)
     print(f"Wrote {len(rows)} entries -> {inventory_path}")
 
-    for name, port_rows in build_switch_ports(snap.legacy_devices, snap.legacy_clients).items():
+    switches = build_switch_ports(snap.legacy_devices, snap.legacy_clients)
+    name_counts = Counter(name for name, _ in switches.values())
+    for mac, (name, port_rows) in switches.items():
         safe = re.sub(r"[^\w \-]", "_", name)
+        if name_counts[name] > 1:
+            safe += "_" + re.sub(r"[^\w \-]", "_", mac)
         path = output_dir / f"switch_{safe}.csv"
         _write_csv(path, list(port_rows[0].keys()), port_rows)
         print(f"   -> {path} ({len(port_rows)} ports)")

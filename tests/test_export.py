@@ -35,7 +35,7 @@ def test_switch_ports_match_when_mac_table_count_missing():
     switches = [{"mac": "aa:aa", "type": "usw", "name": "SW",
                  "port_table": [{"port_idx": 2, "up": True}]}]
     clients = [{"mac": "cc:cc", "name": "pc", "sw_mac": "aa:aa", "sw_port": 2}]
-    rows = build_switch_ports(switches, clients)["SW"]
+    rows = build_switch_ports(switches, clients)["AA:AA"][1]
     assert rows[0]["Connected Name"] == "pc"
 
 
