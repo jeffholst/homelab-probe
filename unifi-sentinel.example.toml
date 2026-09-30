@@ -1,0 +1,24 @@
+# Copy to unifi-sentinel.toml (git-ignored: it may name your devices) to tune `diagnose`.
+# It is read from the current directory, or pass --config FILE.
+
+# Every value is optional; these are the defaults.
+[thresholds]
+resource_warn_pct = 90       # CPU or memory at or above this: warning
+resource_critical_pct = 98   # CPU or memory at or above this: critical
+slow_link_mbps = 100         # ports negotiated at or below this speed: info
+
+# Suppress findings you have accepted. Each rule needs a reason, plus a subject
+# and/or a message. subject: case-insensitive name, * and ? wildcards.
+# message: case-insensitive substring. If both are given, both must match.
+# Ignored findings are counted in the summary, excluded from exit codes, and
+# listed with `diagnose --show-ignored`.
+
+[[ignore]]
+subject = "Garage AP"
+message = "offline"
+reason = "spare AP, kept unplugged on purpose"
+
+[[ignore]]
+subject = "* port 2"
+message = "negotiated at"
+reason = "printer only supports 100 Mbps"

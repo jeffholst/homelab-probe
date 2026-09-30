@@ -13,3 +13,4 @@ __pycache__/**
 .venv/
 *.egg-info/
 build/
+unifi-sentinel.toml

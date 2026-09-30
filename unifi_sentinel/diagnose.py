@@ -2,10 +2,11 @@
 
 from dataclasses import dataclass
 import ipaddress
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from .export import client_location, device_type_label
 from .reservations import reservation_records
+from .settings import DiagnoseSettings, IgnoreRule
 from .snapshot import Snapshot
 
 CRITICAL, WARNING, INFO = "critical", "warning", "info"
@@ -16,8 +17,6 @@ EMOJI = {CRITICAL: "\U0001F6D1", WARNING: "\u26A0\uFE0F", INFO: "\u2139\uFE0F"}
 EXIT_OK, EXIT_WARNING, EXIT_CRITICAL = 0, 1, 2
 
 LINK_LOCAL_PREFIX = "169.254."
-RESOURCE_WARN_PCT = 90
-RESOURCE_CRITICAL_PCT = 98
 GATEWAY_TYPES = {"Gateway", "Dream Machine"}
 
 
@@ -147,7 +146,8 @@ def _reservation_findings(snap: Snapshot) -> List[Finding]:
     return findings
 
 
-def diagnose(snap: Snapshot) -> List[Finding]:
+def diagnose(snap: Snapshot, settings: Optional[DiagnoseSettings] = None) -> List[Finding]:
+    settings = settings or DiagnoseSettings()
     findings: List[Finding] = []
 
     parents = _uplink_parents(snap)
@@ -172,8 +172,8 @@ def diagnose(snap: Snapshot) -> List[Finding]:
         st = snap.device_stats.get(d.get("id")) or {}
         for key, label in (("cpuUtilizationPct", "CPU"), ("memoryUtilizationPct", "memory")):
             pct = st.get(key) or 0
-            if pct >= RESOURCE_WARN_PCT:
-                level = CRITICAL if pct >= RESOURCE_CRITICAL_PCT else WARNING
+            if pct >= settings.resource_warn_pct:
+                level = CRITICAL if pct >= settings.resource_critical_pct else WARNING
                 findings.append(Finding(
                     level, d.get("name") or d.get("macAddress", "?"),
                     f"{label} utilization {st[key]:.0f}%"))
@@ -198,11 +198,26 @@ def diagnose(snap: Snapshot) -> List[Finding]:
                 findings.append(Finding(WARNING, label, f"{errors} rx/tx errors"))
             if port.get("full_duplex") is False:
                 findings.append(Finding(WARNING, label, "link is half duplex"))
-            if 0 < (port.get("speed") or 0) <= 100:
+            if 0 < (port.get("speed") or 0) <= settings.slow_link_mbps:
                 findings.append(Finding(
                     INFO, label, f"negotiated at {port['speed']} Mbps"))
 
     return sorted(findings, key=lambda f: (SEVERITY_ORDER[f.severity], f.subject))
+
+
+def apply_ignores(
+    findings: List[Finding], rules: Tuple[IgnoreRule, ...]
+) -> Tuple[List[Finding], List[Tuple[Finding, IgnoreRule]]]:
+    """Split findings into (kept, [(ignored finding, the rule that matched)])."""
+    kept: List[Finding] = []
+    ignored: List[Tuple[Finding, IgnoreRule]] = []
+    for f in findings:
+        rule = next((r for r in rules if r.matches(f.subject, f.message)), None)
+        if rule:
+            ignored.append((f, rule))
+        else:
+            kept.append(f)
+    return kept, ignored
 
 
 def exit_code(findings: List[Finding], fail_on: str = WARNING) -> int:
@@ -219,10 +234,12 @@ def exit_code(findings: List[Finding], fail_on: str = WARNING) -> int:
     return EXIT_WARNING if worst <= SEVERITY_ORDER[fail_on] else EXIT_OK
 
 
-def format_findings(findings: List[Finding], emoji: bool = True) -> str:
-    """Render findings. ``emoji=False`` uses text labels (logs, pipes, old terminals)."""
+def format_findings(findings: List[Finding], emoji: bool = True, ignored: int = 0) -> str:
+    """Render findings. ``emoji=False`` uses text labels (logs, pipes, old terminals).
+    ``ignored`` is how many findings the ignore list suppressed (noted in the summary)."""
+    note = f" ({ignored} ignored)" if ignored else ""
     if not findings:
-        return "No issues found."
+        return "No issues found." + note
 
     def label(severity: str) -> str:
         return EMOJI[severity] if emoji else f"[{severity.upper():8}]"
@@ -236,7 +253,13 @@ def format_findings(findings: List[Finding], emoji: bool = True) -> str:
             word = words[sev] + ("s" if sev == WARNING and counts[sev] != 1 else "")
             prefix = f"{EMOJI[sev]} " if emoji else ""
             parts.append(f"{prefix}{counts[sev]} {word}")
-    return "\n".join(lines) + "\n\n" + ", ".join(parts)
+    return "\n".join(lines) + "\n\n" + ", ".join(parts) + note
+
+
+def format_ignored(ignored: List[Tuple[Finding, IgnoreRule]]) -> str:
+    """The findings the ignore list suppressed, with each rule's reason."""
+    lines = [f"  {f.subject}: {f.message}  (ignored: {r.reason})" for f, r in ignored]
+    return f"Ignored ({len(ignored)}):\n" + "\n".join(lines)
 
 
 def stream_supports_emoji(stream: Any) -> bool:

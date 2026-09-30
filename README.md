@@ -28,7 +28,7 @@ Planned: richer inventory and troubleshooting reports.
 - **DHCP reservations**: list every fixed IP reservation, including offline clients, with network and VLAN
 - **Querying**: list and filter devices, clients, DHCP reservations and switch ports from the command line (table or JSON)
 - **New client detection**: list every known client that is in no client group, newest first, to spot new devices
-- **Health checks**: read-only diagnostics with severity levels and exit codes for scripts and cron
+- **Health checks**: read-only diagnostics with severity levels, exit codes for scripts and cron, and a TOML file for thresholds and an ignore list
 - **Official API first**: uses the UniFi Network Integration API (`/proxy/network/integration/v1`). Legacy endpoints are used only for data the Integration API does not expose (per-port counters, client-to-port mapping, DHCP reservations, network config and client groups) and degrade gracefully with a warning if unavailable
 - **Environment-based configuration**: credentials live in a `.env` file
 
@@ -117,13 +117,31 @@ uv run unifi-sentinel.py diagnose                    # health checks
 
 | Level | Examples |
 | ----- | -------- |
-| 🛑 critical | gateway offline; an offline switch or device that other devices uplink through; CPU or memory at 98% or higher |
-| ⚠️ warning | other offline devices; port rx/tx errors; half-duplex links; CPU or memory at least 90% but below 98%; connected clients with no IP address or a link-local (169.254.x.x) address, shown with where they attach; DHCP reservation problems: an online client whose current IP differs from its reservation, the same IP reserved for several clients, or a reserved IP outside its network's subnet; the same IP in use by several clients or UniFi devices on any VLAN, or a reserved IP currently used by a different client or UniFi device |
-| ℹ️ info | ports negotiated at 100 Mbps or less; legacy data unavailable (port checks skipped) |
+| 🛑 critical | gateway offline; an offline switch or device that other devices uplink through; CPU or memory at or above `resource_critical_pct` (default 98%) |
+| ⚠️ warning | other offline devices; port rx/tx errors; half-duplex links; CPU or memory at or above `resource_warn_pct` (default 90%) but below the critical level; connected clients with no IP address or a link-local (169.254.x.x) address, shown with where they attach; DHCP reservation problems: an online client whose current IP differs from its reservation, the same IP reserved for several clients, or a reserved IP outside its network's subnet; the same IP in use by several clients or UniFi devices on any VLAN, or a reserved IP currently used by a different client or UniFi device |
+| ℹ️ info | ports negotiated at or below `slow_link_mbps` (default 100 Mbps); legacy data unavailable (port checks skipped) |
 
 The reservation checks read the legacy `stat/alluser` and `rest/networkconf` endpoints (the same data as `query reservations`); offline clients are only checked for duplicate and out-of-subnet reservations, and a reservation whose network cannot be resolved is skipped for the subnet check.
 
 Emoji labels are used on a UTF-8 terminal. When output is piped or redirected, or with `--no-emoji`, it prints text labels (`[CRITICAL]`, `[WARNING ]`, `[INFO    ]`) instead.
+
+#### Configuration: thresholds and ignore list
+
+Thresholds and an ignore list live in an optional TOML file, read from `./unifi-sentinel.toml` or given with `diagnose --config FILE` (copy [unifi-sentinel.example.toml](unifi-sentinel.example.toml); the real file is git-ignored because it may name your devices).
+
+```toml
+[thresholds]                 # all optional; these are the defaults
+resource_warn_pct = 90       # CPU or memory: warning
+resource_critical_pct = 98   # CPU or memory: critical
+slow_link_mbps = 100         # ports negotiated at or below this: info
+
+[[ignore]]
+subject = "Garage AP"        # case-insensitive name; * and ? wildcards
+message = "offline"          # case-insensitive substring; both must match if both given
+reason = "spare AP, kept unplugged on purpose"   # required
+```
+
+Ignored findings are left out of the output, counted in the summary (`3 warnings (2 ignored)`), and excluded from exit codes, so a known-okay finding cannot fail a cron job. `diagnose --show-ignored` lists them with each rule's reason, so ignores do not hide problems forever. A rule needs a `reason` and a `subject` and/or `message`. A missing, unreadable or invalid file (unknown keys, bad values, rules without a reason) stops `diagnose` with exit code 3 before it contacts the controller. Other commands do not read this file. On Python 3.9 and 3.10 the `tomli` package (installed automatically) reads it.
 
 #### Exit codes
 
@@ -255,6 +273,7 @@ unifi_sentinel/
   reservations.py        DHCP fixed IP reservations
   new_clients.py         clients in no client group
   diagnose.py            read-only health checks
+  settings.py            diagnose thresholds and ignore list (TOML)
   cli.py                 argparse subcommands
 tests/
   conftest.py            FakeSession: a fake controller served from the fixture

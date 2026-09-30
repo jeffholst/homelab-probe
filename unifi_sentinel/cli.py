@@ -8,11 +8,12 @@ from typing import List, Optional
 from . import __version__
 from .client import UniFiAPIError, UniFiClient
 from .config import ConfigError, load_config
-from .diagnose import (CRITICAL, INFO, WARNING, diagnose, exit_code, format_findings,
-                       stream_supports_emoji)
+from .diagnose import (CRITICAL, INFO, WARNING, apply_ignores, diagnose, exit_code,
+                       format_findings, format_ignored, stream_supports_emoji)
 from .export import run_export
 from .new_clients import render as render_new_clients, report as new_clients_report
 from .query import query_rows, render
+from .settings import load_settings
 from .snapshot import collect_snapshot
 
 
@@ -64,6 +65,11 @@ def build_parser() -> argparse.ArgumentParser:
     diag.add_argument("--fail-on", choices=[INFO, WARNING, CRITICAL], default=WARNING,
                       help="Lowest severity that gives a non-zero exit code (default: warning); "
                            "critical always exits 2")
+    diag.add_argument("--config", type=Path, metavar="FILE",
+                      help="TOML file with thresholds and an ignore list "
+                           "(default: ./unifi-sentinel.toml if present)")
+    diag.add_argument("--show-ignored", action="store_true",
+                      help="Also list the findings suppressed by the ignore list")
     diag.add_argument("--no-emoji", action="store_true",
                       help="Use text severity labels (automatic when output is not a UTF-8 terminal)")
 
@@ -80,6 +86,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         parser.error("--switch, --down and --errors only apply to 'query ports'")
     try:
         config = load_config()
+        # Load diagnose settings first so a bad config file fails before any API call.
+        settings = load_settings(args.config) if args.command == "diagnose" else None
         client = UniFiClient.from_config(config)
         if args.command == "info":
             print(f"Application: {client.info()}")
@@ -98,9 +106,13 @@ def main(argv: Optional[List[str]] = None) -> int:
             snap = collect_snapshot(client, config.site, include_groups=True)
             print(render_new_clients(new_clients_report(snap, args.search), args.json))
         elif args.command == "diagnose":
-            findings = diagnose(collect_snapshot(client, config.site, include_reservations=True))
+            findings, ignored = apply_ignores(
+                diagnose(collect_snapshot(client, config.site, include_reservations=True), settings),
+                settings.ignore)
             emoji = not args.no_emoji and stream_supports_emoji(sys.stdout)
-            print(format_findings(findings, emoji))
+            print(format_findings(findings, emoji, len(ignored)))
+            if args.show_ignored and ignored:
+                print("\n" + format_ignored(ignored))
             return exit_code(findings, args.fail_on)
     except (ConfigError, UniFiAPIError) as e:
         print(f"ERROR: {e}", file=sys.stderr)
