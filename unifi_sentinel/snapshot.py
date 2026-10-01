@@ -263,6 +263,15 @@ def collect_event_snapshot(
     events, truncated, available = _events_or_empty(
         client, site_ref, since_seconds, categories or [], severities or [], search, now_ms
     )
-    return Snapshot(site=site_info, devices=[], clients=[], events=events,
-                    events_truncated=truncated, event_window_seconds=since_seconds,
-                    events_available=available)
+    snap = Snapshot(
+        site=site_info,
+        devices=[],
+        clients=[],
+        events=events,
+        events_truncated=truncated,
+        event_window_seconds=since_seconds,
+        events_available=available,
+    )
+    if client.trace is not None:
+        client.trace(describe_snapshot(snap))
+    return snap

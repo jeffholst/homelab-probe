@@ -8,7 +8,7 @@ import requests
 from unifi_sentinel import cli
 from unifi_sentinel.client import UniFiAPIError, UniFiClient
 from unifi_sentinel.config import Config
-from unifi_sentinel.snapshot import collect_snapshot, describe_snapshot
+from unifi_sentinel.snapshot import collect_event_snapshot, collect_snapshot, describe_snapshot
 
 KEY = "sekret-key-0123456789"
 MS = r"\(\d+ ms\)"
@@ -141,6 +141,14 @@ def test_collecting_a_snapshot_reports_it_when_tracing(fake_client):
     fake_client.trace = None
     collect_snapshot(fake_client, "default")
     assert quiet == []
+
+
+def test_collecting_event_snapshot_reports_it_when_tracing(fake_client):
+    lines = []
+    fake_client.trace = lines.append
+    snap = collect_event_snapshot(fake_client, "default", 3600)
+    assert lines[-1] == describe_snapshot(snap)
+    assert lines[-1].startswith("read ") and " events" in lines[-1]
 
 
 # -- the command line ------------------------------------------------------------------------------
