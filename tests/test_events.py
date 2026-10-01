@@ -5,8 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from unifi_sentinel import cli, client as client_module, events as events_module
+from unifi_sentinel import cli, client as client_module, snapshot as snapshot_module
 from unifi_sentinel.client import SYSTEM_LOG_PATH, UniFiAPIError, UniFiClient
+from unifi_sentinel.snapshot import collect_event_snapshot
 from unifi_sentinel.events import (event_json, event_row, fetch_events, make_filter, parse_duration,
                                    render_events, render_message, summarize)
 
@@ -100,51 +101,80 @@ def test_message_placeholders_are_filled_and_missing_ones_stay_readable():
 
 # -- fetching --------------------------------------------------------------
 
-def test_window_server_filters_and_paging(fake_client, monkeypatch):
-    got, more = fetch_events(fake_client, "default", DAY, limit=0)
-    assert names(got) == [f"ev{i}" for i in range(1, 11)] and not more        # newest first; ev11 is 10 days old
-    assert "ev11" in names(fetch_events(fake_client, "default", 14 * DAY, limit=0)[0])
+def event_snap(fake_client, since=DAY, **kw):
+    """Collect events the way the CLI does: the snapshot reads the log, fetch_events filters it."""
+    return collect_event_snapshot(fake_client, "default", since, **kw)
 
-    monkeypatch.setattr(events_module, "PAGE_SIZE", 3)
+
+def test_window_server_filters_and_paging(fake_client, monkeypatch):
+    got, more = fetch_events(event_snap(fake_client), limit=0)
+    assert names(got) == [f"ev{i}" for i in range(1, 11)] and not more        # newest first; ev11 is 10 days old
+    assert "ev11" in names(fetch_events(event_snap(fake_client, 14 * DAY), limit=0)[0])
+
+    monkeypatch.setattr(snapshot_module, "EVENT_PAGE_SIZE", 3)
     fake_client.session.posts.clear()
-    paged, _ = fetch_events(fake_client, "default", DAY, limit=0)
+    paged, _ = fetch_events(event_snap(fake_client), limit=0)
     assert names(paged) == names(got)
     assert [b["pageNumber"] for _, b in fake_client.session.posts] == [0, 1, 2, 3]
+    assert all(b["pageSize"] == 3 for _, b in fake_client.session.posts)
 
     fake_client.session.posts.clear()
-    audit, _ = fetch_events(fake_client, "default", DAY, categories=["audit"], limit=0)
+    audit, _ = fetch_events(event_snap(fake_client, categories=["audit"]), limit=0)
     assert names(audit) == ["ev9", "ev10"]
     assert fake_client.session.posts[0][1]["categories"] == ["AUDIT"]          # upper-cased, sent to the server
-    assert names(fetch_events(fake_client, "default", DAY, severities=["high"], limit=0)[0]) == ["ev7", "ev8"]
-    assert names(fetch_events(fake_client, "default", DAY, search="roamed", limit=0)[0]) == ["ev4"]
+    assert names(fetch_events(event_snap(fake_client, severities=["high"]), limit=0)[0]) == ["ev7", "ev8"]
+    assert names(fetch_events(event_snap(fake_client, search="roamed"), limit=0)[0]) == ["ev4"]
 
 
-def test_limit_marks_that_more_exist_and_stops_early(fake_client, monkeypatch):
-    monkeypatch.setattr(events_module, "PAGE_SIZE", 2)
-    fake_client.session.posts.clear()
-    got, more = fetch_events(fake_client, "default", DAY, limit=3)
+def test_limit_trims_the_collected_events_and_says_more_exist(fake_client, monkeypatch):
+    monkeypatch.setattr(snapshot_module, "EVENT_PAGE_SIZE", 2)
+    snap = event_snap(fake_client)
+    assert len(snap.events) == 10 and not snap.events_truncated                # the whole window was read
+    got, more = fetch_events(snap, limit=3)
     assert names(got) == ["ev1", "ev2", "ev3"] and more
-    assert len(fake_client.session.posts) == 2                                  # did not read every page
-    got, more = fetch_events(fake_client, "default", DAY, limit=10)
+    got, more = fetch_events(snap, limit=10)
     assert len(got) == 10 and more                                              # stopped exactly at the limit
-    got, more = fetch_events(fake_client, "default", DAY, limit=11)
+    got, more = fetch_events(snap, limit=11)
     assert len(got) == 10 and not more
 
 
-def test_predicate_is_applied_across_pages_before_the_limit(fake_client, monkeypatch):
-    monkeypatch.setattr(events_module, "PAGE_SIZE", 2)
-    got, more = fetch_events(fake_client, "default", DAY, predicate=make_filter(client="phone"), limit=2)
+def test_predicate_is_applied_before_the_limit(fake_client, monkeypatch):
+    monkeypatch.setattr(snapshot_module, "EVENT_PAGE_SIZE", 2)
+    snap = event_snap(fake_client)
+    got, more = fetch_events(snap, predicate=make_filter(client="phone"), limit=2)
     assert names(got) == ["ev1", "ev2"] and more
-    got, more = fetch_events(fake_client, "default", DAY, predicate=make_filter(client="phone"), limit=0)
+    got, more = fetch_events(snap, predicate=make_filter(client="phone"), limit=0)
     assert names(got) == ["ev1", "ev2", "ev3", "ev4", "ev5"] and not more
 
 
-def test_never_reads_more_than_max_events(fake_client, monkeypatch):
-    monkeypatch.setattr(events_module, "PAGE_SIZE", 2)
-    monkeypatch.setattr(events_module, "MAX_EVENTS", 4)
+def test_never_reads_more_than_max_events_and_says_so(fake_client, monkeypatch):
+    monkeypatch.setattr(snapshot_module, "EVENT_PAGE_SIZE", 2)
+    monkeypatch.setattr(snapshot_module, "MAX_EVENTS", 4)
     fake_client.session.posts.clear()
-    got, more = fetch_events(fake_client, "default", DAY, limit=0)
-    assert len(got) == 4 and not more and len(fake_client.session.posts) == 2
+    snap = event_snap(fake_client)
+    assert len(snap.events) == 4 and snap.events_truncated and len(fake_client.session.posts) == 2
+    got, more = fetch_events(snap, limit=0)
+    assert len(got) == 4 and more                                               # the cap, not --limit, stopped it
+    assert "the 20,000-event read cap was reached" in render_events(got, more, cap_truncated=True)
+    assert "the 20,000-event read cap" in render_events(got, more, summary=True, cap_truncated=True)
+    assert "use --limit 0" in render_events(got, more)                          # the plain limit note otherwise
+
+
+def test_a_window_that_fits_exactly_is_not_reported_as_truncated(fake_client, monkeypatch):
+    monkeypatch.setattr(snapshot_module, "EVENT_PAGE_SIZE", 5)
+    monkeypatch.setattr(snapshot_module, "MAX_EVENTS", 10)                      # exactly the 10 events
+    snap = event_snap(fake_client)
+    assert len(snap.events) == 10 and not snap.events_truncated
+
+
+def test_an_unreadable_log_degrades_to_a_warning_and_no_events(fake_client, monkeypatch, capsys):
+    def boom(site_ref, query):
+        raise UniFiAPIError("boom")
+
+    monkeypatch.setattr(fake_client, "system_log", boom)
+    snap = event_snap(fake_client)
+    assert snap.events == [] and not snap.events_truncated
+    assert "event log unavailable; event history was skipped: boom" in capsys.readouterr().err
 
 
 # -- filters the server cannot apply ---------------------------------------

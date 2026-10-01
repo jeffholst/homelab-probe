@@ -14,7 +14,6 @@ from .snapshot import Snapshot
 
 DEFAULT_SINCE = "24h"
 DEFAULT_LIMIT = 100
-MAX_EVENTS = 20_000      # never read more than this many events in one run
 SEVERITIES = ["low", "medium", "high"]
 EVENT_COLUMNS = ["Time", "Severity", "Category", "Event", "Message"]
 
