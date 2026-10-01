@@ -64,6 +64,18 @@ def speedtests_since(tests: List[Dict[str, Any]], days: int, now_ms: int) -> Lis
             and t["time"] >= cutoff]
 
 
+def speedtest_group(test: Dict[str, Any]) -> Any:
+    return test.get("wan_networkgroup") or test.get("interface_name")
+
+
+def speedtests_for_baseline(tests: List[Dict[str, Any]], days: int, now_ms: int) -> List[Dict[str, Any]]:
+    recent = speedtests_since(tests, days, now_ms)
+    if not recent:
+        return []
+    group = speedtest_group(recent[-1])
+    return [test for test in recent if speedtest_group(test) == group]
+
+
 def median_download(tests: List[Dict[str, Any]]) -> Optional[float]:
     values = [d for d in (_num(t.get("download_mbps")) for t in tests) if d is not None]
     return statistics.median(values) if len(values) >= MIN_SPEEDTESTS else None
@@ -78,11 +90,14 @@ def _spread(tests: List[Dict[str, Any]], key: str) -> Optional[Dict[str, float]]
 
 def _speedtest_section(snap: Snapshot, days: int, settings: DiagnoseSettings, now_ms: int) -> Dict[str, Any]:
     stored = [t for t in snap.speedtests if isinstance(t, dict)]
-    recent = speedtests_since(stored, days, now_ms)
+    recent = speedtests_for_baseline(stored, days, now_ms)
     last = stored[-1] if stored else None
     median = median_download(recent)
     limit = median * settings.wan_speed_drop_pct / 100 if median else None
-    slow = [t for t in recent if limit is not None and (_num(t.get("download_mbps")) or limit) < limit]
+    slow = [t for t in recent
+            if limit is not None
+            and (download := _num(t.get("download_mbps"))) is not None
+            and download < limit]
     return {
         "days": days, "count": len(recent), "total_stored": len(stored),
         "last": None if last is None else {
@@ -191,7 +206,8 @@ def render_text(wan: Dict[str, Any]) -> str:
 
     for link in wan["links"]:
         duplex = {True: "full duplex", False: "half duplex"}.get(link["full_duplex"], "")
-        text = f"  Link {link['port']}: {link['interface'] or '?'} {'up' if link['up'] else 'DOWN'}"
+        state = {True: "up", False: "DOWN"}.get(link["up"], "unknown")
+        text = f"  Link {link['port']}: {link['interface'] or '?'} {state}"
         if link["speed_mbps"]:
             text += f", {_mbps(link['speed_mbps'])}" + (f" {duplex}" if duplex else "")
             if link["max_speed_mbps"] and link["speed_mbps"] < link["max_speed_mbps"]:

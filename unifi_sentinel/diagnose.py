@@ -10,7 +10,7 @@ from .export import client_location, device_type_label
 from .query import format_uptime
 from .reservations import reservation_records
 from .wan import (SPEEDTEST_BASELINE_DAYS, describe_age, median_download, monitoring,
-                  speedtests_since)
+                  speedtests_for_baseline)
 from .settings import DiagnoseSettings, IgnoreRule
 from .snapshot import Snapshot
 
@@ -374,7 +374,7 @@ def _wan_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]:
                     f"over the last {window}{latency}"))
 
     now_ms = int(time.time() * 1000)
-    recent = speedtests_since(snap.speedtests, SPEEDTEST_BASELINE_DAYS, now_ms)
+    recent = speedtests_for_baseline(snap.speedtests, SPEEDTEST_BASELINE_DAYS, now_ms)
     median = median_download(recent)
     last = recent[-1] if recent else {}
     download = last.get("download_mbps")

@@ -63,6 +63,19 @@ def test_speedtests_since_and_median_need_enough_runs():
     assert median_download([run(1, None), *[run(1, 500) for _ in range(5)], {"download_mbps": "fast"}]) == 500
 
 
+def test_speedtest_baseline_does_not_mix_interfaces():
+    tests = [run(1, 900), run(2, 900), {**run(3, 500), "interface_name": "eth5"},
+             {**run(4, 500), "interface_name": "eth5"}, {**run(5, 900), "interface_name": "eth4"}]
+    report = build_wan(snap(tests), 30, now_ms=NOW)
+    assert report["speedtests"]["download"] == {"min": 900, "median": 900, "max": 900}
+
+
+def test_zero_speed_is_a_slow_run():
+    tests = [run(1, 0), *[run(days, 900) for days in range(2, 7)]]
+    report = build_wan(snap(tests), 30, now_ms=NOW)
+    assert report["speedtests"]["slow_runs"][0]["download_mbps"] == 0
+
+
 # -- the report from the fixture ---------------------------------------------
 
 @pytest.fixture
@@ -248,6 +261,18 @@ def test_speedtests_are_collected_oldest_first_and_only_when_asked(fake_client, 
     monkeypatch.setattr(fake_client, "legacy_v2", boom)
     assert collect_snapshot(fake_client, "default", include_speedtests=True).speedtests == []
     assert "speedtest history unavailable" in capsys.readouterr().err
+
+
+def test_malformed_speedtest_time_is_sorted_last_without_crashing(fake_client, monkeypatch):
+    monkeypatch.setattr(fake_client, "legacy_v2", lambda site_ref, resource: [
+        {"time": "bad", "download_mbps": 1}, {"time": 2, "download_mbps": 2}])
+    tests = collect_snapshot(fake_client, "default", include_speedtests=True).speedtests
+    assert [test["time"] for test in tests] == ["bad", 2]
+
+
+def test_unknown_link_status_is_not_rendered_as_down():
+    report = build_wan(snap(devices=[{"mac": "AA:01", "type": "udm", "wan1": {}}]), 30, now_ms=NOW)
+    assert "Link wan1: ? unknown" in render_text(report)
 
 
 # -- command line -------------------------------------------------------------------

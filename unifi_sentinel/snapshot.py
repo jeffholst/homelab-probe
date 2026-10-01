@@ -65,7 +65,11 @@ def _speedtests_or_empty(client: UniFiClient, site_ref: str) -> List[Dict[str, A
     except UniFiAPIError as e:
         warn(f"speedtest history unavailable, speedtest results were skipped: {e}")
         return []
-    return sorted((t for t in tests if isinstance(t, dict)), key=lambda t: t.get("time") or 0)
+    def sort_time(test: Dict[str, Any]) -> float:
+        value = test.get("time")
+        return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else 0.0
+
+    return sorted((t for t in tests if isinstance(t, dict)), key=sort_time)
 
 
 def _device_extras(client: UniFiClient, site_id: str, devices: List[Dict[str, Any]]):
