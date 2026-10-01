@@ -17,6 +17,7 @@ from .diagnose import (
     apply_ignores,
     diagnose,
     exit_code,
+    findings_json,
     format_findings,
     format_ignored,
     stream_supports_emoji,
@@ -259,6 +260,8 @@ def build_parser() -> argparse.ArgumentParser:
                       help="Also list the findings suppressed by the ignore list")
     diag.add_argument("--no-emoji", action="store_true",
                       help="Use text severity labels (automatic when output is not a UTF-8 terminal)")
+    diag.add_argument("--json", action="store_true",
+                      help="Print the findings as JSON (with a stable code per check); exit codes are unchanged")
 
     sub.add_parser("info", help="Show controller version and available sites")
     return parser
@@ -387,6 +390,9 @@ def main(argv: Optional[List[str]] = None) -> int:
                                           include_events=not args.no_events,
                                           event_since_seconds=args.since), settings),
                 settings.ignore)
+            if args.json:
+                _say(findings_json(findings, ignored, args.show_ignored))
+                return exit_code(findings, args.fail_on)
             emoji = not args.no_emoji and stream_supports_emoji(sys.stdout)
             _say(format_findings(findings, emoji, len(ignored)))
             if args.show_ignored and ignored:

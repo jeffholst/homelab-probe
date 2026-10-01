@@ -1,6 +1,7 @@
 """Read-only health checks over a snapshot."""
 
 import ipaddress
+import json
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -26,12 +27,66 @@ LINK_LOCAL_PREFIX = "169.254."
 GATEWAY_TYPES = {"Gateway", "Dream Machine"}
 # Subsystems whose controller status just reflects disconnected devices we already report.
 DEVICE_SUBSYSTEMS = {"lan", "wlan"}
+# Every check's stable ``code``, with what it reports. Codes are an interface (``diagnose --json``,
+# scripts, and later notifications key on them): never reuse or rename one; add new ones here.
+# tests/test_diagnose_json.py checks that every Finding in this module uses a code from this table
+# and that every code here is used.
+CODES = {
+    "device.offline": "a UniFi device is not online (critical for a gateway or one others uplink through)",
+    "device.cpu_high": "device CPU utilization at or above the warning threshold",
+    "device.memory_high": "device memory utilization at or above the warning threshold",
+    "controller.pending_adoption": "devices waiting to be adopted",
+    "controller.legacy_unavailable": "legacy device data could not be read, so port checks were skipped",
+    "health.subsystem": "a controller health subsystem is in a warning or error state",
+    "health.device_subsystem": "lan/wlan subsystem status that only reflects disconnected devices",
+    "internet.latency": "internet latency at or above the threshold",
+    "internet.drops": "internet drops at or above the threshold",
+    "internet.speedtest_failed": "the last speedtest failed",
+    "wan.availability": "24-hour internet availability below the threshold",
+    "wan.monitor_availability": "one monitored internet target below the availability threshold",
+    "wan.speedtest_slow": "the last speedtest download is well below the 30-day median",
+    "client.no_ip": "a connected client has no IP address",
+    "client.link_local_ip": "a connected client has a link-local (169.254.x.x) address",
+    "ip.duplicate": "the same IP is in use by several clients or devices",
+    "reservation.ip_mismatch": "an online client's IP differs from its reservation",
+    "reservation.outside_subnet": "a reserved IP is outside its network's subnet",
+    "reservation.duplicate": "the same IP is reserved for several clients",
+    "reservation.ip_in_use": "a reserved IP is in use by a different client or device",
+    "port.link_flaps": "a switch port's link has gone down repeatedly since boot",
+    "port.drops": "a switch port is dropping packets above the threshold",
+    "port.stp": "an up port is not in the STP forwarding state",
+    "port.poe_budget": "a switch's PoE budget use is at or above the threshold",
+    "port.errors": "a port has rx/tx errors",
+    "port.half_duplex": "a port link is half duplex",
+    "port.slow_link": "a port negotiated at or below the slow-link speed",
+    "link.below_capability": "an uplink negotiated below what both ends support",
+    "wifi.weak_signal": "a Wi-Fi client's signal is at or below the threshold",
+    "wifi.client_retries": "a Wi-Fi client retries too many transmissions",
+    "wifi.client_satisfaction": "a Wi-Fi client's satisfaction is below the threshold",
+    "wifi.radio_utilization": "an AP radio's channel utilization is at or above the threshold",
+    "wifi.radio_retries": "an AP radio retries too many transmissions",
+    "wifi.radio_satisfaction": "an AP radio's satisfaction is below the threshold",
+    "event.ip_conflict": "the controller reported an IP conflict in the event window",
+    "event.client_disconnects": "a client disconnected repeatedly in the event window",
+    "event.client_roams": "a client roamed repeatedly in the event window",
+    "event.device_unreachable": "a device was reported unreachable in the event window",
+    "event.internet_latency": "the controller reported high internet latency in the event window",
+    "event.log_truncated": "the event log read hit its cap, so event counts may be low",
+}
+
+
 @dataclass(frozen=True)
 class Finding:
     severity: str  # CRITICAL, WARNING or INFO
     subject: str
     message: str
     target_mac: Optional[str] = None
+    code: str = ""   # a key of CODES; empty only for findings built outside the checks (tests)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """The JSON form used by ``diagnose --json`` and by the ``client`` and ``topology`` views."""
+        return {"severity": self.severity, "code": self.code, "subject": self.subject,
+                "message": self.message, "mac": self.target_mac or ""}
 
 
 def _uplink_parents(snap: Snapshot) -> Dict[str, int]:
@@ -63,7 +118,8 @@ def _client_ip_findings(snap: Snapshot) -> List[Finding]:
             message = f"link-local address {ip}, DHCP probably failed ({where})"
         else:
             message = f"no IP address ({where})"
-        findings.append(Finding(WARNING, subject, message))
+        findings.append(Finding(WARNING, subject, message,
+                                code="client.link_local_ip" if ip else "client.no_ip"))
     return findings
 
 
@@ -102,7 +158,7 @@ def _duplicate_ip_findings(snap: Snapshot) -> List[Finding]:
     """
     holders = _ip_holders(snap)
     findings = [
-        Finding(WARNING, ip, f"in use by {', '.join(sorted(who.values()))}")
+        Finding(WARNING, ip, f"in use by {', '.join(sorted(who.values()))}", code="ip.duplicate")
         for ip, who in holders.items() if len(who) > 1
     ]
     for user, _net in reservation_records(snap):
@@ -114,7 +170,8 @@ def _duplicate_ip_findings(snap: Snapshot) -> List[Finding]:
             name = user.get("name") or user.get("hostname") or mac
             findings.append(Finding(
                 WARNING, name,
-                f"reserved IP {reserved} is in use by {', '.join(sorted(who.values()))}"))
+                f"reserved IP {reserved} is in use by {', '.join(sorted(who.values()))}",
+                code="reservation.ip_in_use"))
     return findings
 
 
@@ -133,7 +190,8 @@ def _reservation_findings(snap: Snapshot) -> List[Finding]:
         current = (connected.get(mac) or {}).get("ipAddress") or ""
         if current and current != reserved:
             findings.append(Finding(
-                WARNING, name, f"current IP {current} differs from its reservation {reserved}"))
+                WARNING, name, f"current IP {current} differs from its reservation {reserved}",
+                code="reservation.ip_mismatch"))
 
         subnet = net.get("ip_subnet")
         if subnet:
@@ -144,12 +202,14 @@ def _reservation_findings(snap: Snapshot) -> List[Finding]:
             if not inside:
                 findings.append(Finding(
                     WARNING, name,
-                    f"reserved IP {reserved} is outside network {net.get('name') or '?'} ({subnet})"))
+                    f"reserved IP {reserved} is outside network {net.get('name') or '?'} ({subnet})",
+                    code="reservation.outside_subnet"))
 
     for ip, names in by_ip.items():
         if len(names) > 1:
             findings.append(Finding(
-                WARNING, ip, f"reserved for {len(names)} clients: {', '.join(sorted(names))}"))
+                WARNING, ip, f"reserved for {len(names)} clients: {', '.join(sorted(names))}",
+                code="reservation.duplicate"))
     return findings
 
 
@@ -178,24 +238,27 @@ def _health_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding
             if name in DEVICE_SUBSYSTEMS and disconnected:
                 findings.append(Finding(
                     INFO, name, f"{name} subsystem reports {status}: {disconnected} "
-                                "device(s) disconnected (see the device findings)"))
+                                "device(s) disconnected (see the device findings)",
+                    code="health.device_subsystem"))
             else:
                 gateway = f" (gateway {h['gw_name']})" if h.get("gw_name") else ""
                 findings.append(Finding(
-                    severity_of[status], name, f"{name} subsystem is in {status} state{gateway}"))
+                    severity_of[status], name, f"{name} subsystem is in {status} state{gateway}",
+                    code="health.subsystem"))
 
         if name == "www":
             latency, drops = _number(h.get("latency")), _number(h.get("drops"))
             if latency and latency >= settings.wan_latency_warn_ms:
-                findings.append(Finding(WARNING, name, f"internet latency {latency:.0f} ms"))
+                findings.append(Finding(WARNING, name, f"internet latency {latency:.0f} ms", code="internet.latency"))
             if drops and drops >= settings.wan_drops_warn:
-                findings.append(Finding(WARNING, name, f"internet reports {drops:.0f} drops"))
+                findings.append(Finding(WARNING, name, f"internet reports {drops:.0f} drops", code="internet.drops"))
             speedtest = str(h.get("speedtest_status") or "")
             if any(word in speedtest.lower() for word in ("fail", "error")):
-                findings.append(Finding(INFO, name, f"last speedtest: {speedtest}"))
+                findings.append(Finding(INFO, name, f"last speedtest: {speedtest}", code="internet.speedtest_failed"))
 
     if pending:
-        findings.append(Finding(INFO, "controller", f"{pending} device(s) waiting to be adopted"))
+        findings.append(Finding(INFO, "controller", f"{pending} device(s) waiting to be adopted",
+                                code="controller.pending_adoption"))
     return findings
 
 
@@ -231,7 +294,7 @@ def _port_health_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Fi
                 since = f", switch up {uptime}" if uptime else ""
                 findings.append(Finding(
                     WARNING, label, f"link has gone down {flaps} times since boot{since}",
-                    (sw.get("mac") or "").upper()))
+                    (sw.get("mac") or "").upper(), code="port.link_flaps"))
 
             if not port.get("up"):
                 continue
@@ -245,12 +308,12 @@ def _port_health_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Fi
                             WARNING, label,
                             f"dropping {_pct_text(pct)}% of {direction} packets "
                             f"({dropped:.0f} of {packets:.0f})",
-                            (sw.get("mac") or "").upper()))
+                            (sw.get("mac") or "").upper(), code="port.drops"))
             stp = port.get("stp_state")
             if stp and stp != "forwarding":
                 findings.append(Finding(
                     WARNING, label, f"STP state is {stp}, not forwarding",
-                    (sw.get("mac") or "").upper()))
+                    (sw.get("mac") or "").upper(), code="port.stp"))
 
         budget, used = _number(sw.get("total_max_power")), _number(sw.get("total_used_power"))
         if budget > 0:
@@ -260,7 +323,7 @@ def _port_health_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Fi
                 findings.append(Finding(
                     level, name,
                     f"PoE budget {used:.1f} W of {budget:.0f} W used ({int(pct)}%)",
-                    (sw.get("mac") or "").upper()))
+                    (sw.get("mac") or "").upper(), code="port.poe_budget"))
     return findings
 
 
@@ -329,7 +392,8 @@ def _conflict_findings(conflicts: Dict[str, List[Dict[str, Any]]], snap: Snapsho
                 hints.append(f"{d['name']} holds the reservation for {ip}")
             elif held:
                 hints.append(f"{d['name']} is reserved {held}")
-        findings.append(Finding(WARNING, ip, text + "".join(f"; {h}" for h in hints)))
+        findings.append(Finding(WARNING, ip, text + "".join(f"; {h}" for h in hints),
+                                code="event.ip_conflict"))
     return findings
 
 
@@ -384,29 +448,36 @@ def _event_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]
     findings.extend(_conflict_findings(conflicts, snap, window))
     for name, n in sorted(disconnects.values()):
         if n >= threshold:
-            findings.append(Finding(WARNING, name, f"disconnected {_times(n)} in the last {window}"))
+            findings.append(Finding(WARNING, name, f"disconnected {_times(n)} in the last {window}",
+                                    code="event.client_disconnects"))
     for name, n in sorted(roams.values()):
         if n >= threshold:
             findings.append(Finding(
-                INFO, name, f"roamed {_times(n)} in the last {window} (normal for a mobile device)"))
+                INFO, name, f"roamed {_times(n)} in the last {window} (normal for a mobile device)",
+                code="event.client_roams"))
 
     for _identity, (device, event_name, n) in sorted(unreachable.items()):
         if device and device.get("state") != "ONLINE":
             continue                              # the offline finding already reports it
         name = (device or {}).get("name") or event_name or "?"
         if n >= threshold:
-            findings.append(Finding(WARNING, name, f"was unreachable {_times(n)} in the last {window}"))
+            findings.append(Finding(WARNING, name, f"was unreachable {_times(n)} in the last {window}",
+                                    code="event.device_unreachable"))
         elif device and device.get("state") == "ONLINE":
             findings.append(Finding(
-                INFO, name, f"was unreachable {_times(n)} in the last {window}; online now"))
+                INFO, name, f"was unreachable {_times(n)} in the last {window}; online now",
+                code="event.device_unreachable"))
         else:
-            findings.append(Finding(INFO, name, f"was unreachable {_times(n)} in the last {window}"))
+            findings.append(Finding(INFO, name, f"was unreachable {_times(n)} in the last {window}",
+                                    code="event.device_unreachable"))
     if latency:
         findings.append(Finding(
-            INFO, "internet", f"high latency was reported {_times(latency)} in the last {window}"))
+            INFO, "internet", f"high latency was reported {_times(latency)} in the last {window}",
+            code="event.internet_latency"))
     if snap.events_truncated:
         findings.append(Finding(
-            INFO, "controller", "the event log read was cut off at its cap; event counts may be low"))
+            INFO, "controller", "the event log read was cut off at its cap; event counts may be low",
+            code="event.log_truncated"))
     return findings
 
 
@@ -424,14 +495,16 @@ def _wan_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]:
         window = describe_duration(m["period_s"]) if m["period_s"] else "24h"
         if m["availability"] is not None and m["availability"] < settings.wan_availability_warn_pct:
             findings.append(Finding(
-                WARNING, "wan", f"internet availability{which} {m['availability']:.1f}% over the last {window}"))
+                WARNING, "wan", f"internet availability{which} {m['availability']:.1f}% over the last {window}",
+                code="wan.availability"))
         for t in m["targets"]:
             if t["availability"] is not None and t["availability"] < settings.wan_availability_warn_pct:
                 latency = f", latency {t['latency_ms']:.0f} ms" if t["latency_ms"] is not None else ""
                 findings.append(Finding(
                     WARNING, "wan",
                     f"monitor {t['target']} ({t['type']}) availability {t['availability']:.1f}% "
-                    f"over the last {window}{latency}"))
+                    f"over the last {window}{latency}",
+                    code="wan.monitor_availability"))
 
     now_ms = int(time.time() * 1000)
     recent = speedtests_for_baseline(snap.speedtests, SPEEDTEST_BASELINE_DAYS, now_ms)
@@ -444,7 +517,8 @@ def _wan_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]:
         findings.append(Finding(
             WARNING, "wan",
             f"last speedtest download {download:.0f} Mbps ({age} ago) is {download / median * 100:.0f}% "
-            f"of the {SPEEDTEST_BASELINE_DAYS}-day median ({median:.0f} Mbps)"))
+            f"of the {SPEEDTEST_BASELINE_DAYS}-day median ({median:.0f} Mbps)",
+            code="wan.speedtest_slow"))
     return findings
 
 
@@ -480,18 +554,20 @@ def _wifi_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]:
 
         signal = _number(c.get("signal"))
         if signal < 0 and signal <= settings.wifi_weak_signal_dbm:
-            findings.append(Finding(WARNING, name, f"weak Wi-Fi signal {signal:.0f} dBm{where}"))
+            findings.append(Finding(WARNING, name, f"weak Wi-Fi signal {signal:.0f} dBm{where}",
+                                    code="wifi.weak_signal"))
 
         attempts = _number(c.get("wifi_tx_attempts"))
         retries = _known_percent(c.get("wifi_tx_retries_percentage"))
         if (attempts >= settings.wifi_min_attempts and retries is not None
                 and retries >= settings.wifi_retry_pct):
             findings.append(Finding(
-                WARNING, name, f"{retries:.0f}% of Wi-Fi transmissions retried{where}"))
+                WARNING, name, f"{retries:.0f}% of Wi-Fi transmissions retried{where}", code="wifi.client_retries"))
 
         satisfaction = _known_percent(c.get("satisfaction"))
         if satisfaction is not None and satisfaction < settings.wifi_satisfaction_warn:
-            findings.append(Finding(WARNING, name, f"Wi-Fi satisfaction {satisfaction:.0f}%{where}"))
+            findings.append(Finding(WARNING, name, f"Wi-Fi satisfaction {satisfaction:.0f}%{where}",
+                                    code="wifi.client_satisfaction"))
 
     for ap in snap.legacy_devices:
         if ap.get("type") != "uap":
@@ -507,17 +583,17 @@ def _wifi_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]:
                 level = CRITICAL if util >= settings.radio_util_critical_pct else WARNING
                 findings.append(Finding(
                     level, label, f"channel utilization {util:.0f}%{on}",
-                    (ap.get("mac") or "").upper()))
+                    (ap.get("mac") or "").upper(), code="wifi.radio_utilization"))
             retries = _number(radio.get("tx_retries_pct"))
             if retries >= settings.wifi_retry_pct:
                 findings.append(Finding(
                     WARNING, label, f"{retries:.0f}% of transmissions retried{on}",
-                    (ap.get("mac") or "").upper()))
+                    (ap.get("mac") or "").upper(), code="wifi.radio_retries"))
             satisfaction = _known_percent(radio.get("satisfaction"))
             if satisfaction is not None and satisfaction < settings.wifi_satisfaction_warn:
                 findings.append(Finding(
                     WARNING, label, f"satisfaction {satisfaction:.0f}%{on}",
-                    (ap.get("mac") or "").upper()))
+                    (ap.get("mac") or "").upper(), code="wifi.radio_satisfaction"))
     return findings
 
 
@@ -556,7 +632,7 @@ def _uplink_speed_findings(snap: Snapshot) -> List[Finding]:
                 WARNING, _switch_name(d),
                 f"uplink to {name_by_mac.get(parent_mac, parent_mac)} negotiated at "
                 f"{speeds[0]:.0f} Mbps but both ends support {speeds[1]:.0f} Mbps",
-                (d.get("mac") or "").upper()))
+                (d.get("mac") or "").upper(), code="link.below_capability"))
     return findings
 
 
@@ -576,13 +652,15 @@ def diagnose(snap: Snapshot, settings: Optional[DiagnoseSettings] = None) -> Lis
         downstream = parents.get(d.get("id"), 0)
         if kind in GATEWAY_TYPES:
             findings.append(Finding(
-                CRITICAL, name, f"{message} (gateway)", (d.get("macAddress") or "").upper()))
+                CRITICAL, name, f"{message} (gateway)", (d.get("macAddress") or "").upper(),
+                code="device.offline"))
         elif downstream:
             findings.append(Finding(
                 CRITICAL, name, f"{message} ({downstream} device(s) uplink through it)",
-                (d.get("macAddress") or "").upper()))
+                (d.get("macAddress") or "").upper(), code="device.offline"))
         else:
-            findings.append(Finding(WARNING, name, message, (d.get("macAddress") or "").upper()))
+            findings.append(Finding(WARNING, name, message, (d.get("macAddress") or "").upper(),
+                                    code="device.offline"))
 
     for d in snap.devices:
         st = snap.device_stats.get(d.get("id")) or {}
@@ -593,7 +671,8 @@ def diagnose(snap: Snapshot, settings: Optional[DiagnoseSettings] = None) -> Lis
                 findings.append(Finding(
                     level, d.get("name") or d.get("macAddress", "?"),
                     f"{label} utilization {st[key]:.0f}%",
-                    (d.get("macAddress") or "").upper()))
+                    (d.get("macAddress") or "").upper(),
+                    code="device.cpu_high" if key == "cpuUtilizationPct" else "device.memory_high"))
 
     findings.extend(_health_findings(snap, settings))
     findings.extend(_wan_findings(snap, settings))
@@ -604,7 +683,8 @@ def diagnose(snap: Snapshot, settings: Optional[DiagnoseSettings] = None) -> Lis
     if not snap.legacy_devices:
         findings.append(Finding(
             INFO, "controller",
-            "legacy device data unavailable; port checks were skipped"))
+            "legacy device data unavailable; port checks were skipped",
+            code="controller.legacy_unavailable"))
 
     for sw in snap.legacy_devices:
         name = sw.get("name") or sw.get("hostname") or sw.get("mac", "?")
@@ -615,14 +695,16 @@ def diagnose(snap: Snapshot, settings: Optional[DiagnoseSettings] = None) -> Lis
             errors = (port.get("rx_errors") or 0) + (port.get("tx_errors") or 0)
             if errors > 0:
                 findings.append(Finding(
-                    WARNING, label, f"{errors} rx/tx errors", (sw.get("mac") or "").upper()))
+                    WARNING, label, f"{errors} rx/tx errors", (sw.get("mac") or "").upper(),
+                    code="port.errors"))
             if port.get("full_duplex") is False:
                 findings.append(Finding(
-                    WARNING, label, "link is half duplex", (sw.get("mac") or "").upper()))
+                    WARNING, label, "link is half duplex", (sw.get("mac") or "").upper(),
+                    code="port.half_duplex"))
             if 0 < (port.get("speed") or 0) <= settings.slow_link_mbps:
                 findings.append(Finding(
                     INFO, label, f"negotiated at {port['speed']} Mbps",
-                    (sw.get("mac") or "").upper()))
+                    (sw.get("mac") or "").upper(), code="port.slow_link"))
 
     findings.extend(_port_health_findings(snap, settings))
     findings.extend(_uplink_speed_findings(snap))
@@ -688,6 +770,26 @@ def format_ignored(ignored: List[Tuple[Finding, IgnoreRule]]) -> str:
     lines = [f"  {printable(f.subject)}: {printable(f.message)}  (ignored: {printable(r.reason)})"
              for f, r in ignored]
     return f"Ignored ({len(ignored)}):\n" + "\n".join(lines)
+
+
+JSON_VERSION = 1
+
+
+def findings_json(findings: List[Finding], ignored: List[Tuple[Finding, IgnoreRule]],
+                  show_ignored: bool = False) -> str:
+    """``diagnose --json``: the findings with their stable codes, a severity summary and the
+    number the ignore list suppressed. The ``ignored`` list (each with its rule's reason) is
+    only included with ``show_ignored``, as in the text output. Names are raw here, which is
+    safe: JSON escapes control characters itself."""
+    document: Dict[str, Any] = {
+        "version": JSON_VERSION,
+        "summary": {**{sev: sum(f.severity == sev for f in findings) for sev in SEVERITY_ORDER},
+                    "ignored": len(ignored)},
+        "findings": [f.to_dict() for f in findings],
+    }
+    if show_ignored:
+        document["ignored"] = [{**f.to_dict(), "reason": rule.reason} for f, rule in ignored]
+    return json.dumps(document, indent=2)
 
 
 def stream_supports_emoji(stream: Any) -> bool:
