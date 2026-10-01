@@ -7,12 +7,16 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from .diagnose import (BANDS, Finding, apply_ignores, diagnose, format_findings)
+from .events import describe_duration, event_json, make_filter
+from .events import subjects as event_subjects
 from .export import _fmt_time, _mac, device_type_label
 from .query import format_table
 from .reservations import reservation_records
 from .settings import DiagnoseSettings
 from .snapshot import Snapshot
 
+MAX_CLIENT_EVENTS = 10      # the client's own events listed before "... and N more"
+MAX_DEVICE_EVENTS = 5       # events about the devices it depends on
 CANDIDATE_COLUMNS = ["Name", "MAC Address", "IP Address", "Status"]
 MAX_CANDIDATES_SHOWN = 20
 
@@ -128,7 +132,8 @@ class DeviceIndex:
 
 
 def _hop(net: DeviceIndex, mac: str, port: Any = None, speed: Any = None, detail: str = "") -> Dict[str, Any]:
-    return {"device": net.name(mac), "type": net.kind(mac), "port": port,
+    return {"id": (net.integration.get(mac) or {}).get("id"), "device": net.name(mac),
+            "type": net.kind(mac), "port": port,
             "speed_mbps": _num(speed) or None, "detail": detail, "offline": net.offline(mac)}
 
 
@@ -265,12 +270,51 @@ def _related(findings: List[Finding], rec: Dict[str, Any], subjects: Set[str]) -
     return related
 
 
+def _recent_events(snap: Snapshot, rec: Dict[str, Any], hops: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """The client's recent events, and events about the devices it depends on.
+
+    Matches the client by MAC (an event's CLIENT id), so a similar name never mixes
+    clients up. Device events are the device-state events (category UNIFI_DEVICES: a device
+    going unreachable or reconnecting) with no CLIENT in them, so never another client's
+    connect on the same access point, and never internet-latency events, which also name the
+    gateway but say nothing about why a client dropped. A device is matched by its exact
+    name. Device events use stable IDs when available, then exact names as a fallback.
+    ``available`` is None when events were not requested.
+    """
+    requested = snap.event_window_seconds > 0
+    result: Dict[str, Any] = {
+        "available": snap.events_available if requested else None,
+        "window": describe_duration(snap.event_window_seconds) if requested else "",
+        "truncated": snap.events_truncated if requested and snap.events_available else None,
+        "client": [], "client_more": 0, "devices": [], "devices_more": 0}
+    if not (requested and snap.events_available):
+        return result
+
+    mine = make_filter(client=rec["mac"])
+    own = [e for e in snap.events if mine(e)]
+    path = [(h.get("id"), h["device"].lower()) for h in hops]
+
+    def on_path(device: Dict[str, Any]) -> bool:
+        name = str(device.get("name") or "").lower()
+        device_id = device.get("id")
+        return any((device_id == path_id if device_id not in (None, "") and path_id not in (None, "")
+                    else name == path_name)
+                   for path_id, path_name in path)
+
+    about = [e for e in snap.events if e.get("category") == "UNIFI_DEVICES"
+             and not event_subjects(e, "CLIENT") and
+             any(on_path(d) for d in event_subjects(e, "DEVICE"))]
+    result.update(client=own[:MAX_CLIENT_EVENTS], client_more=max(0, len(own) - MAX_CLIENT_EVENTS),
+                  devices=about[:MAX_DEVICE_EVENTS], devices_more=max(0, len(about) - MAX_DEVICE_EVENTS))
+    return result
+
+
 def build_client_detail(snap: Snapshot, rec: Dict[str, Any],
                         settings: Optional[DiagnoseSettings] = None) -> Dict[str, Any]:
     settings = settings or DiagnoseSettings()
     net = DeviceIndex(snap)
     live, sta, user = rec["live"], rec["sta"] or {}, rec["user"] or {}
-    hops, link, subjects = _attachment(snap, net, rec)
+    hops, link, path_subjects = _attachment(snap, net, rec)
     kept, ignored = apply_ignores(diagnose(snap, settings), settings.ignore)
 
     if rec["online"]:
@@ -279,6 +323,7 @@ def build_client_detail(snap: Snapshot, rec: Dict[str, Any],
     else:
         last_seen, since = _epoch(user.get("last_seen")), ""
 
+    recent = _recent_events(snap, rec, hops)
     return {
         "identity": {"name": rec["name"], "hostname": sta.get("hostname") or user.get("hostname") or "",
                      "mac": rec["mac"], "vendor": user.get("oui") or sta.get("oui") or "",
@@ -290,7 +335,14 @@ def build_client_detail(snap: Snapshot, rec: Dict[str, Any],
         "attachment": hops,
         "link": link,
         "findings": [{"severity": f.severity, "subject": f.subject, "message": f.message}
-                     for f in _related(kept, rec, subjects)],
+                     for f in _related(kept, rec, path_subjects)],
+        # null when events were not requested (--no-events), false when the log could not be read
+        "events_available": recent["available"],
+        "events_window": recent["window"],
+        "events_truncated": recent["truncated"],
+        "events": [event_json(e) for e in recent["client"]],
+        "device_events": [event_json(e) for e in recent["devices"]],
+        "events_omitted": {"client": recent["client_more"], "devices": recent["devices_more"]},
     }
 
 
@@ -332,6 +384,40 @@ def _link_text(link: Dict[str, Any]) -> str:
     return ", ".join(bits) or "no Wi-Fi quality data reported"
 
 
+def _events_text(detail: Dict[str, Any], mac: str) -> List[str]:
+    available = detail["events_available"]
+    if available is None:                       # --no-events
+        return []
+    window = detail["events_window"]
+    if not available:
+        return ["", "Recent events: unavailable (the event log could not be read)"]
+
+    def line(e: Dict[str, Any]) -> str:
+        return f"  {e['Time']}  {e['Event']}: {e['Message']}"
+
+    lines = ["", f"Recent events (last {window}, newest first):"]
+    if detail["events"]:
+        lines += [line(e) for e in detail["events"]]
+    elif detail["events_truncated"]:
+        lines.append("  no matching events found before the 20,000-event read cap")
+    else:
+        lines.append(f"  none about this client in the last {window}")
+    more = detail["events_omitted"]["client"]
+    if more:
+        count = f"at least {more}" if detail["events_truncated"] else str(more)
+        lines.append(f"  ... and {count} more; run: unifi-sentinel events --client {mac} --since {window}")
+    if detail["device_events"]:
+        lines += ["", "Events about the devices it depends on:"]
+        lines += [line(e) for e in detail["device_events"]]
+        if detail["events_omitted"]["devices"]:
+            more = detail["events_omitted"]["devices"]
+            count = f"at least {more}" if detail["events_truncated"] else str(more)
+            lines.append(f"  ... and {count} more")
+    if detail["events_truncated"]:
+        lines.append("  (the 20,000-event read cap was reached; omission counts are incomplete)")
+    return lines
+
+
 def render_detail(detail: Dict[str, Any], emoji: bool = True) -> str:
     i, a = detail["identity"], detail["addressing"]
     lines = [f"{i['name']}" + (f" ({i['hostname']})" if i["hostname"] and i["hostname"] != i["name"] else ""),
@@ -365,6 +451,8 @@ def render_detail(detail: Dict[str, Any], emoji: bool = True) -> str:
                                  if detail["attachment"] else "unknown (no uplink data)"))
     if detail["link"]:
         lines.append("Link:     " + _link_text(detail["link"]))
+
+    lines += _events_text(detail, i["mac"])
 
     lines.append("")
     findings = [Finding(f["severity"], f["subject"], f["message"]) for f in detail["findings"]]

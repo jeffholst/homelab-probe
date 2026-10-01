@@ -127,6 +127,11 @@ def build_parser() -> argparse.ArgumentParser:
     cview.add_argument("--config", type=Path, metavar="FILE",
                        help="TOML file with diagnose thresholds and ignore list "
                             "(default: ./unifi-sentinel.toml if present)")
+    cview.add_argument("--no-events", action="store_true",
+                       help="Skip the recent-events section, which otherwise sends the one approved "
+                            "read-only event-log query")
+    cview.add_argument("--since", type=_duration, default=_duration(DEFAULT_SINCE), metavar="DURATION",
+                       help=f"How far back the recent events reach, e.g. 12h, 7d (default: {DEFAULT_SINCE})")
     cview.add_argument("--no-emoji", action="store_true",
                        help="Use text severity labels (automatic when output is not a UTF-8 terminal)")
 
@@ -283,7 +288,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(topology_json(tree) if args.json else render_topology(tree, emoji, args.clients))
         elif args.command == "client":
             snap = collect_snapshot(client, config.site, include_reservations=True,
-                                    include_groups=True)
+                                    include_groups=True, include_events=not args.no_events,
+                                    event_since_seconds=args.since)
             matches = find_clients(snap, args.query)
             if len(matches) != 1:
                 print(render_candidates(args.query, matches), file=sys.stderr)

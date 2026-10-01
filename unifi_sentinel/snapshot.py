@@ -38,6 +38,7 @@ class Snapshot:
     events: List[Dict[str, Any]] = field(default_factory=list)
     events_truncated: bool = False
     event_window_seconds: int = 0     # how far back the events reach (0: events not collected)
+    events_available: bool = False    # True when the event log was requested and could be read
 
 
 def _legacy_or_empty(client: UniFiClient, site_ref: str, resource: str) -> List[Dict[str, Any]]:
@@ -100,7 +101,8 @@ def _events_or_empty(
     severities: List[str],
     search: str,
     now_ms: Optional[int] = None,
-) -> tuple[List[Dict[str, Any]], bool]:
+) -> tuple[List[Dict[str, Any]], bool, bool]:
+    """``(events, truncated, available)``; ``available`` is False when the log could not be read."""
     now = int(time.time() * 1000) if now_ms is None else now_ms
     query: Dict[str, Any] = {
         "timestampFrom": now - since_seconds * 1000,
@@ -125,11 +127,11 @@ def _events_or_empty(
             events.extend(data[:MAX_EVENTS - len(events)])
             page += 1
             if not data or page >= total_pages:
-                return events, False
-        return events, page < total_pages
+                return events, False, True
+        return events, page < total_pages, True
     except UniFiAPIError as e:
         warn(f"event log unavailable; event history was skipped: {e}")
-        return [], False
+        return [], False, False
 
 
 def collect_snapshot(
@@ -151,10 +153,10 @@ def collect_snapshot(
     (names, VLANs) and groups need the client group definitions."""
     site_info = client.resolve_site(site)
     site_ref = site_info.get("internalReference") or site
-    events, events_truncated = _events_or_empty(
+    events, events_truncated, events_available = _events_or_empty(
         client, site_ref, event_since_seconds, event_categories or [],
         event_severities or [], event_search, now_ms
-    ) if include_events else ([], False)
+    ) if include_events else ([], False, False)
     devices = client.devices(site_info["id"])
     details, stats = _device_extras(client, site_info["id"], devices)
     if include_groups:
@@ -182,6 +184,7 @@ def collect_snapshot(
         events=events,
         events_truncated=events_truncated,
         event_window_seconds=event_since_seconds if include_events else 0,
+        events_available=events_available,
     )
 
 
@@ -196,8 +199,9 @@ def collect_event_snapshot(
 ) -> Snapshot:
     site_info = client.resolve_site(site)
     site_ref = site_info.get("internalReference") or site
-    events, truncated = _events_or_empty(
+    events, truncated, available = _events_or_empty(
         client, site_ref, since_seconds, categories or [], severities or [], search, now_ms
     )
     return Snapshot(site=site_info, devices=[], clients=[], events=events,
-                    events_truncated=truncated, event_window_seconds=since_seconds)
+                    events_truncated=truncated, event_window_seconds=since_seconds,
+                    events_available=available)
