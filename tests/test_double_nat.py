@@ -25,6 +25,8 @@ from unifi_sentinel.wan import build_wan, classify_wan_address, nat_status, rend
     ("172.15.255.255", "public"), ("172.32.0.1", "public"),                                # just outside 172.16/12
     ("100.63.255.255", "public"), ("100.128.0.1", "public"),                                 # just outside 100.64/10
     ("192.169.0.1", "public"), ("11.0.0.1", "public"),
+    ("127.0.0.1", "unknown"), ("224.0.0.1", "unknown"), ("0.0.0.1", "unknown"),
+    ("::1", "unknown"), ("ff02::1", "unknown"),
     ("  192.168.0.9  ", "private"),
 ])
 def test_classification_by_range(ip, kind):

@@ -33,6 +33,10 @@ _CGNAT_V4 = ipaddress.ip_network("100.64.0.0/10")
 _LINK_LOCAL_V4 = ipaddress.ip_network("169.254.0.0/16")
 _PRIVATE_V6 = ipaddress.ip_network("fc00::/7")
 _LINK_LOCAL_V6 = ipaddress.ip_network("fe80::/10")
+_DOCUMENTATION_RANGES = [
+    ipaddress.ip_network(n) for n in
+    ("192.0.2.0/24", "198.51.100.0/24", "203.0.113.0/24", "2001:db8::/32")
+]
 
 
 def classify_wan_address(text: Any) -> str:
@@ -40,11 +44,13 @@ def classify_wan_address(text: Any) -> str:
 
     ``"private"`` (RFC 1918, or an IPv6 unique-local ``fc00::/7``): another router that does NAT
     sits in front of the gateway. ``"cgnat"``: the shared 100.64.0.0/10 range of carrier-grade
-    NAT. ``"link_local"``: no address was obtained. ``"public"``: anything else. ``"none"``:
-    nothing or ``0.0.0.0`` (the WAN is down). ``"unknown"``: not an IP address.
+    NAT. ``"link_local"``: no address was obtained. ``"public"``: globally reachable, or in a
+    documentation range used by synthetic data. Other special-use addresses are ``"unknown"``.
+    ``"none"``: nothing or ``0.0.0.0`` (the WAN is down). ``"unknown"``: not an IP address or an
+    unsupported special-use address.
 
-    The ranges are listed explicitly because Python's ``is_private`` also covers documentation
-    and benchmarking ranges that a real ISP never uses and that synthetic data does.
+    The NAT ranges are listed explicitly because Python's ``is_private`` also covers documentation
+    and benchmarking ranges; the documentation ranges are intentionally accepted for synthetic data.
     """
     value = "" if text is None else str(text).strip()
     if not value:
@@ -60,10 +66,16 @@ def classify_wan_address(text: Any) -> str:
             return "private"
         if ip in _CGNAT_V4:
             return "cgnat"
-        return "link_local" if ip in _LINK_LOCAL_V4 else "public"
-    if ip in _PRIVATE_V6:
-        return "private"
-    return "link_local" if ip in _LINK_LOCAL_V6 else "public"
+        if ip in _LINK_LOCAL_V4:
+            return "link_local"
+    else:
+        if ip in _PRIVATE_V6:
+            return "private"
+        if ip in _LINK_LOCAL_V6:
+            return "link_local"
+    if ip.is_multicast or ip.is_reserved:
+        return "unknown"
+    return "public" if ip.is_global or any(ip in net for net in _DOCUMENTATION_RANGES) else "unknown"
 
 
 _NAT_MESSAGES = {
