@@ -98,8 +98,15 @@ def plan(findings: List[Finding], state: Dict[str, Any], now: float, min_severit
         if key not in current or SEVERITY_ORDER[f.severity] < SEVERITY_ORDER[current[key].severity]:
             current[key] = f                                   # the worst one speaks for the identity
 
-    active = {key: entry for key, entry in (state.get("active") or {}).items()
-              if isinstance(entry, dict) and entry.get("severity") in SEVERITY_ORDER}
+    active = {}
+    for key, entry in (state.get("active") or {}).items():
+        if not isinstance(entry, dict) or entry.get("severity") not in SEVERITY_ORDER:
+            continue
+        try:
+            normalized = {**entry, "last_notified": float(entry.get("last_notified") or 0)}
+        except (TypeError, ValueError, OverflowError):
+            continue
+        active[key] = normalized
     events: List[Event] = []
     new_active: Dict[str, Any] = {}
     for key, f in current.items():
