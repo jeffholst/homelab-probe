@@ -251,7 +251,12 @@ def _pool_findings(snap: Snapshot) -> List[Finding]:
         mac = (user.get("mac") or "").upper()
         name = user.get("name") or user.get("hostname") or mac
         text = f"reserved IP {reserved} is inside the DHCP pool {pool[0]}-{pool[1]} of {net.get('name') or '?'}"
-        others = {m: who for m, who in holders.get(str(reserved), {}).items() if m != mac}
+        reservation_mac = mac.replace("-", ":")
+        others = {
+            m: who
+            for m, who in holders.get(str(reserved), {}).items()
+            if m.replace("-", ":") != reservation_mac
+        }
         if others:
             findings.append(Finding(
                 CRITICAL, name, f"{text}; also in use by {', '.join(sorted(others.values()))}",
