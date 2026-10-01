@@ -14,7 +14,6 @@ from .snapshot import Snapshot
 
 DEFAULT_SINCE = "24h"
 DEFAULT_LIMIT = 100
-MAX_EVENTS = 20_000      # never read more than this many events in one run
 SEVERITIES = ["low", "medium", "high"]
 EVENT_COLUMNS = ["Time", "Severity", "Category", "Event", "Message"]
 
@@ -103,8 +102,8 @@ def fetch_events(
     for event in snapshot.events:
         if predicate is None or predicate(event):
             found.append(event)
-            if limit and len(found) >= limit:
-                return found, True
+            if limit and len(found) > limit:
+                return found[:limit], True
     return found, snapshot.events_truncated
 
 

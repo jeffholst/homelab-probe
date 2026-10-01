@@ -8,6 +8,10 @@ from typing import Any, Dict, List, Optional
 from .client import UniFiAPIError, UniFiClient
 
 
+EVENT_PAGE_SIZE = 500   # events requested per system-log page
+MAX_EVENTS = 20_000     # never read more than this many events in one run
+
+
 def warn(msg: str) -> None:
     print(f"Warning: {msg}", file=sys.stderr)
 
@@ -100,7 +104,7 @@ def _events_or_empty(
     query: Dict[str, Any] = {
         "timestampFrom": now - since_seconds * 1000,
         "timestampTo": now,
-        "pageSize": 500,
+        "pageSize": EVENT_PAGE_SIZE,
     }
     if categories:
         query["categories"] = [c.upper() for c in categories]
@@ -113,11 +117,11 @@ def _events_or_empty(
     page = 0
     total_pages = 0
     try:
-        while len(events) < 20_000:
+        while len(events) < MAX_EVENTS:
             body = client.system_log(site_ref, {**query, "pageNumber": page})
             data = body["data"]
             total_pages = int(body.get("total_page_count") or 0)
-            events.extend(data[:20_000 - len(events)])
+            events.extend(data[:MAX_EVENTS - len(events)])
             page += 1
             if not data or page >= total_pages:
                 return events, False
