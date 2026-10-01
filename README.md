@@ -43,7 +43,7 @@ Planned: richer inventory and troubleshooting reports.
 - **New client detection**: list every known client that is in no client group, newest first, to spot new devices
 - **Health checks**: read-only diagnostics with severity levels, exit codes for scripts and cron, and a TOML file for thresholds and an ignore list
 - **Official API first**: uses the UniFi Network Integration API (`/proxy/network/integration/v1`). Legacy endpoints are used only for data the Integration API does not expose (per-port counters, client-to-port mapping, DHCP reservations, network config and client groups) and degrade gracefully with a warning if unavailable
-- **Safe output**: names come from devices on your network, so text output has control characters, line breaks and text-direction overrides removed, and exported CSV cells that a spreadsheet would run as a formula are neutralized
+- **Safe output**: names come from devices on your network, so text output has control characters, line breaks, text-direction overrides and invisible characters removed, and exported CSV cells that a spreadsheet would run as a formula are neutralized
 - **Environment-based configuration**: credentials live in a `.env` file
 
 ## Requirements
@@ -501,8 +501,8 @@ CSV files are ignored by git.
 
 A device or client chooses its own hostname, and so does anyone who joins your network, so names are treated as untrusted:
 
-- **CSV cells**: a text cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage return would run as a formula when the file is opened in Excel, Sheets or LibreOffice. Such cells are written with a leading apostrophe (`'=1+1`), which spreadsheets show as plain text; the apostrophe is the only change. Numbers and every other cell are written as they are. If you read the CSV with a script, strip a leading `'` from text columns.
-- **Text output** (tables, `diagnose`, `topology`, `client`, `wifi`, `wan`, `events`, `diff`, and messages): tabs and line breaks in a name become a space (so a name cannot add a fake line such as a forged `[CRITICAL]` finding), and other control characters, including terminal escape sequences, and the invisible left-to-right and right-to-left override characters are removed. Accented letters, emoji and right-to-left scripts such as Hebrew and Arabic are kept.
+- **CSV cells**: a text cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage return would run as a formula when the file is opened in Excel, Sheets or LibreOffice. Such cells are written with a leading apostrophe (`'=1+1`), so the spreadsheet treats it as text. Excel and LibreOffice show the apostrophe when they open a CSV; that is the price of safety, and it is the only change. Numbers and every other cell are written as they are (a number stored as text, such as `-67`, counts as text). If you read the CSV with a script, strip a leading `'` from text columns.
+- **Text output** (tables, `diagnose`, `topology`, `client`, `wifi`, `wan`, `events`, `diff`, and messages): tabs and line breaks in a name become a space (so a name cannot add a fake line such as a forged `[CRITICAL]` finding), and other control characters, including terminal escape sequences, are removed, as are the text-direction override and isolate characters that can disguise a name, and invisible characters (zero-width space, word joiner, byte order mark) that make two different names look the same. Accented letters, emoji (including their joiners) and right-to-left scripts such as Hebrew and Arabic, with their direction marks, are kept.
 - **`--json` output** is not changed: it carries the names as the controller reports them, with control characters escaped by JSON itself (`\u001b`). Treat them as untrusted data if you pass them on.
 
 ## Example Output

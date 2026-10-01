@@ -1,5 +1,6 @@
 """Names come from devices on the network, so they are untrusted when printed or exported."""
 
+import argparse
 import csv
 import json
 
@@ -14,7 +15,7 @@ from unifi_sentinel.snapshot import collect_snapshot
 from unifi_sentinel.util import clean_data, csv_safe, printable, safe_output
 
 # An escape sequence, a bell, a line break that forges a finding, and a bidi override.
-HOSTILE = "\x1b[31m\x07\n[CRITICAL] forged: all clear‮"
+HOSTILE = "\x1b[31m\x07\n[CRITICAL] forged: all clear\u202e"
 NAME_KEYS = {"name", "hostname", "essid", "gw_name", "isp_name"}
 
 
@@ -39,14 +40,26 @@ def run(fake_client, monkeypatch, argv):
 
 def test_printable_flattens_whitespace_and_removes_controls():
     assert printable("a\tb\r\nc\x1b[2Jd\x07e\x00f\x7fg\x9bh") == "a b c[2Jdefgh"
-    assert printable("line break\u0085next") == "line break next"
+    assert printable("line\u2028break\u0085next") == "line break next"
     assert printable("  padded  ") == "padded"
 
 
 def test_printable_removes_bidi_overrides_but_keeps_real_text():
-    assert printable("evil‮txt.exe⁦x⁩") == "eviltxt.exex"
+    assert printable("evil\u202etxt.exe\u2066x\u2069") == "eviltxt.exex"
     assert printable("Café ☕ 日本語 שלום مرحبا") == "Café ☕ 日本語 שלום مرحبا"
-    assert printable("👨‍👩‍👧 home") == "👨‍👩‍👧 home"      # emoji joiner kept
+    assert printable("👨\u200d👩\u200d👧 home") == "👨\u200d👩\u200d👧 home"      # emoji joiner kept
+
+
+def test_printable_keeps_weak_direction_marks_and_the_non_joiner():
+    assert printable("שלום\u200f (1)") == "שלום\u200f (1)"                       # RLM
+    assert printable("a\u200eb\u061cc") == "a\u200eb\u061cc"                    # LRM, ALM
+    assert printable("می\u200cخواهم") == "می\u200cخواهم"                         # Persian non-joiner
+
+
+@pytest.mark.parametrize("hidden", ["\u200b", "\u2060", "\u2063", "\ufeff"])
+def test_printable_removes_invisible_characters_so_lookalike_names_match(hidden):
+    assert printable(f"print{hidden}er") == "printer" == printable("printer")
+    assert safe_output(f"print{hidden}er") == "printer"
 
 
 def test_printable_handles_non_text_and_limit():
@@ -55,8 +68,13 @@ def test_printable_handles_non_text_and_limit():
     assert printable("short", limit=5) == "short"
 
 
+def test_printable_and_safe_output_agree_on_what_is_dangerous():
+    text = "a\x1b[0mb\u202ec\u200bd"
+    assert safe_output(text) == printable(text) == "a[0mbcd"
+
+
 def test_safe_output_keeps_lines_and_drops_escapes():
-    assert safe_output("one\ntwo\x1b[0m\r\nthree\tcol‮") == "one\ntwo[0m\nthree col"
+    assert safe_output("one\ntwo\x1b[0m\r\nthree\tcol\u202e") == "one\ntwo[0m\nthree col"
 
 
 @pytest.mark.parametrize("text", ["=1+1", "+1", "-1", "@SUM(A1)", "\tx", "\rx"])
@@ -67,6 +85,11 @@ def test_csv_safe_prefixes_formula_starts(text):
 @pytest.mark.parametrize("value", ["desktop", "", "a=b", " =x", "'quoted", 5, -5, 1.5, None, True])
 def test_csv_safe_leaves_everything_else_alone(value):
     assert csv_safe(value) == value
+
+
+def test_csv_safe_treats_numeric_looking_text_as_text():
+    # a column of numbers must hold numbers, or negative values gain an apostrophe
+    assert csv_safe("-67") == "'-67" and csv_safe(-67) == -67
 
 
 def test_clean_data_cleans_every_text_leaf_and_copies():
@@ -81,14 +104,14 @@ def test_clean_data_cleans_every_text_leaf_and_copies():
 def test_format_table_cells_cannot_break_rows_or_carry_controls():
     text = format_table([{"Name": "a" + HOSTILE, "Other": "ok"}], ["Name", "Other"])
     assert len(text.splitlines()) == 3 and all("\x1b" not in line for line in text.splitlines())
-    assert "‮" not in text and "\x07" not in text
+    assert "\u202e" not in text and "\x07" not in text
     assert not any(line.startswith("[CRITICAL]") for line in text.splitlines())
 
 
 def test_format_findings_cannot_forge_a_finding_line():
     text = format_findings([Finding("WARNING", "host" + HOSTILE, "msg" + HOSTILE)], emoji=False)
     assert not any(line.startswith("[CRITICAL]") for line in text.splitlines())
-    assert "\x1b" not in text and "‮" not in text
+    assert "\x1b" not in text and "\u202e" not in text
     ignored = format_ignored([(Finding("INFO", "host" + HOSTILE, "m"), IgnoreRule(reason="r" + HOSTILE))])
     assert "\x1b" not in ignored and "\n[CRITICAL]" not in ignored
 
@@ -109,8 +132,16 @@ COMMANDS = [
 ]
 
 
+def test_every_subcommand_has_a_hostile_name_case():
+    """A new subcommand must be added to COMMANDS (or to the list below with the reason)."""
+    parser = cli.build_parser()
+    subcommands = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
+    covered = {argv[0] for argv in COMMANDS} | {"export", "snapshot", "diff"}   # these have their own tests
+    assert set(subcommands.choices) <= covered, set(subcommands.choices) - covered
+
+
 def assert_clean(text, argv):
-    for bad in ("\x1b", "\x07", "‮", "\x9b"):
+    for bad in ("\x1b", "\x07", "\u202e", "\x9b"):
         assert bad not in text, f"{bad!r} reached the output of {argv}"
     for line in text.splitlines():
         assert not line.lstrip().startswith("[CRITICAL] forged"), f"forged line in {argv}: {line!r}"
@@ -123,8 +154,12 @@ def test_text_output_is_clean_with_hostile_names(fake_client, monkeypatch, capsy
     run(fake_client, monkeypatch, argv)
     captured = capsys.readouterr()
     assert_clean(captured.out + captured.err, argv)
-    if argv[0] not in ("info", "wan", "events"):
-        assert "desktop" in captured.out or "Office" in captured.out or "phone" in captured.out
+    assert captured.out.strip(), f"{argv} printed nothing"
+    shown = {"query devices": "Office Switch", "query clients": "desktop", "query ports": "Office",
+             "new-clients": "old-printer", "topology": "Office Switch", "client": "desktop",
+             "wifi": "Office AP", "events": "phone"}.get(" ".join(argv[:2]) if argv[0] == "query" else argv[0])
+    if shown:
+        assert shown in captured.out, f"{shown!r} missing from {argv}"
 
 
 def test_names_are_still_shown_without_the_dangerous_parts(fake_client, monkeypatch, capsys):
@@ -134,12 +169,23 @@ def test_names_are_still_shown_without_the_dangerous_parts(fake_client, monkeypa
     assert "desktop[31m [CRITICAL] forged: all clear" in out
 
 
-def test_wifi_and_events_json_stay_raw_but_escaped(fake_client, monkeypatch, capsys):
+def test_events_json_stays_raw_but_escaped(fake_client, monkeypatch, capsys):
     fake_client.session.events = poison(fake_client.session.events)
     run(fake_client, monkeypatch, ["events", "--json"])
     out = capsys.readouterr().out
     assert "\x1b" not in out and "\n[CRITICAL]" not in out        # json escapes both
-    assert "\\u001b" in out and any("\x1b" in e["Message"] or "\x1b" in str(e) for e in json.loads(out))
+    assert "\\u001b" in out and any("\x1b" in e["Message"] for e in json.loads(out))   # raw after decoding
+
+
+@pytest.mark.parametrize("argv", [["wifi", "--json"], ["topology", "--json"], ["wan", "--json"],
+                                  ["query", "clients", "--json"], ["client", "desktop", "--json"]],
+                         ids=lambda a: " ".join(a))
+def test_json_output_is_valid_and_has_no_raw_control_characters(fake_client, monkeypatch, capsys, argv):
+    fake_client.session.fx = poison(fake_client.session.fx)
+    run(fake_client, monkeypatch, argv)
+    out = capsys.readouterr().out
+    assert "\x1b" not in out and "\u202e" not in out
+    json.loads(out)
 
 
 def test_unmatched_client_query_is_not_echoed_raw(fake_client, monkeypatch, capsys):

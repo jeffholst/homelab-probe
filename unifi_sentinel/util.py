@@ -16,11 +16,13 @@ import re
 from typing import Any
 
 # Controls that are never wanted in a name: C0 (except tab, newline, CR, handled separately),
-# DEL and C1. Bidirectional overrides/isolates can reorder text to disguise it; the zero-width
-# joiner used by emoji and the plain right-to-left letters of Hebrew or Arabic are kept.
+# DEL and C1. Also removed: bidirectional overrides and isolates (they reorder text to disguise
+# it) and invisible characters (zero-width space, word joiner, BOM) that make two different
+# names look identical. Kept: the zero-width joiner and non-joiner (emoji and Persian need
+# them), the weak direction marks LRM, RLM and ALM, and the letters of right-to-left scripts.
 _CONTROLS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
-_BIDI = re.compile("[؜‎‏‪-‮⁦-⁩]")
-_LINE_BREAKS = re.compile(r"[\t\r\n\u0085  ]+")
+_HIDDEN = re.compile("[\u200b\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]")
+_LINE_BREAKS = re.compile(r"[\t\r\n\u0085\u2028\u2029]+")
 _BLOCK_CONTROLS = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
 _FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
 
@@ -28,12 +30,12 @@ _FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
 def printable(value: Any, limit: int = 0) -> str:
     """``value`` as one line of text that is safe to print.
 
-    Tabs and line breaks become a single space, other control characters and bidirectional
-    overrides are removed. ``limit`` (when above zero) cuts a long value with an ellipsis.
+    Tabs and line breaks become a single space; other control characters, bidirectional
+    overrides and invisible characters are removed. ``limit`` (when above zero) cuts a long value with an ellipsis.
     """
     text = "" if value is None else str(value)
     text = _LINE_BREAKS.sub(" ", text)
-    text = _BIDI.sub("", _CONTROLS.sub("", text)).strip()
+    text = _HIDDEN.sub("", _CONTROLS.sub("", text)).strip()
     if limit and len(text) > limit:
         text = text[:limit - 1] + "…"
     return text
@@ -43,7 +45,7 @@ def safe_output(text: str) -> str:
     """A block of already rendered text with control characters (including the escape that
     starts a terminal sequence) removed. Line breaks are kept; this is the last line of
     defence at the print boundary, not a replacement for ``printable`` on individual names."""
-    return _BIDI.sub("", _BLOCK_CONTROLS.sub("", text.replace("\t", " ").replace("\r", "")))
+    return _HIDDEN.sub("", _BLOCK_CONTROLS.sub("", text.replace("\t", " ").replace("\r", "")))
 
 
 def csv_safe(value: Any) -> Any:
@@ -51,7 +53,8 @@ def csv_safe(value: Any) -> Any:
 
     Text starting with ``=``, ``+``, ``-``, ``@``, a tab or a carriage return gets a leading
     apostrophe, which spreadsheets show as plain text. Numbers, booleans and None are left
-    alone (a negative number is a number, not a formula).
+    alone (a negative number is a number, not a formula). A string that merely looks numeric,
+    such as ``"-67"``, is text and is prefixed too, so a column of numbers must hold numbers.
     """
     if isinstance(value, str) and value.startswith(_FORMULA_START):
         return "'" + value
