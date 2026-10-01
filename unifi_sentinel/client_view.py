@@ -216,7 +216,7 @@ def _attachment(snap: Snapshot, net: DeviceIndex, rec: Dict[str, Any]
     return hops, link, subjects
 
 
-def _addressing(snap: Snapshot, rec: Dict[str, Any]) -> Dict[str, Any]:
+def addressing(snap: Snapshot, rec: Dict[str, Any]) -> Dict[str, Any]:
     sta, user = rec["sta"] or {}, rec["user"] or {}
     mac = rec["mac"]
 
@@ -286,7 +286,7 @@ def build_client_detail(snap: Snapshot, rec: Dict[str, Any],
                      "status": "Online" if rec["online"] else "Offline",
                      "connected_since": since, "first_seen": _epoch(user.get("first_seen")),
                      "last_seen": last_seen},
-        "addressing": _addressing(snap, rec),
+        "addressing": addressing(snap, rec),
         "attachment": hops,
         "link": link,
         "findings": [{"severity": f.severity, "subject": f.subject, "message": f.message}
