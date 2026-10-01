@@ -221,7 +221,8 @@ def _run_history(client: UniFiClient, config: Any, args: argparse.Namespace) -> 
 
     old = load_snapshot(old_path)
     if new_path:
-        new, new_label = load_snapshot(new_path), label_for(load_snapshot(new_path), new_path.name)
+        new = load_snapshot(new_path)
+        new_label = label_for(new, new_path.name)
     else:
         new, new_label = _live_inventory(client, config), "the network right now"
     result = diff_snapshots(old, new)

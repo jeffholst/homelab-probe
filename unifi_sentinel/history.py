@@ -40,9 +40,13 @@ def _where(snap: Snapshot, idx: DeviceIndex, rec: Record) -> Tuple[str, str]:
             mac = next((m for m, d in idx.integration.items() if d.get("id") == live.get("uplinkDeviceId")), "")
         port = sta.get("sw_port") if rec["wired"] else None
         return (idx.name(mac) if mac else ""), ("" if port is None else str(port))
-    if rec["wired"] and user.get("last_uplink_name"):
+    if rec["wired"]:
+        mac = (user.get("last_uplink_mac") or "").upper()
+        device = idx.name(mac) if mac else ""
+        if not device or device == mac:
+            device = user.get("last_uplink_name") or device
         port = user.get("last_uplink_remote_port")
-        return user["last_uplink_name"], ("" if port is None else str(port))
+        return device, ("" if port is None else str(port))
     return "", ""
 
 
@@ -102,7 +106,10 @@ def list_snapshots(directory: Path) -> List[Path]:
         stamp, n = _FILE_RE.match(p.name).groups()
         return stamp, int(n or 0)
 
-    return sorted((p for p in directory.iterdir() if p.is_file() and _FILE_RE.match(p.name)), key=age_key)
+    try:
+        return sorted((p for p in directory.iterdir() if p.is_file() and _FILE_RE.match(p.name)), key=age_key)
+    except OSError as e:
+        raise ConfigError(f"cannot read snapshot directory {directory}: {e.strerror or e}") from e
 
 
 def save_snapshot(record: Record, path: Optional[Path] = None, directory: Path = Path(DEFAULT_DIR),
@@ -122,9 +129,9 @@ def save_snapshot(record: Record, path: Optional[Path] = None, directory: Path =
     path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
+        os.fchmod(f.fileno(), 0o600)
         json.dump(record, f, indent=2)
         f.write("\n")
-    os.chmod(path, 0o600)        # also covers replacing a file that was created with looser permissions
     return path
 
 
@@ -132,7 +139,9 @@ def prune(directory: Path, keep: int, protect: Optional[Path] = None) -> List[Pa
     """Delete the oldest snapshot files beyond the newest ``keep``. Only files named like
     ones this tool writes are touched, and ``protect`` (the one just saved) never is."""
     files = list_snapshots(directory)
-    doomed = [p for p in files[:max(0, len(files) - keep)] if p != protect]
+    protected = Path(os.path.abspath(protect)) if protect is not None else None
+    candidates = [p for p in files if protected is None or Path(os.path.abspath(p)) != protected]
+    doomed = candidates[:max(0, len(files) - keep)]
     for p in doomed:
         p.unlink()
     return doomed
@@ -153,9 +162,15 @@ def load_snapshot(path: Path) -> Record:
     if record["schema_version"] != SCHEMA_VERSION:
         raise ConfigError(f"{path} uses snapshot format {record['schema_version']!r}; "
                           f"this version of unifi-sentinel reads format {SCHEMA_VERSION}")
+    for key in ("site", "controller"):
+        if not isinstance(record.get(key), dict):
+            raise ConfigError(f"{path} is damaged: '{key}' is missing or not an object")
     for key in ("devices", "clients", "reservations"):
         if not isinstance(record.get(key), list):
             raise ConfigError(f"{path} is damaged: '{key}' is missing or not a list")
+        if any(not isinstance(item, dict) or not isinstance(item.get("mac"), str) or not item["mac"]
+               for item in record[key]):
+            raise ConfigError(f"{path} is damaged: '{key}' contains an item without a MAC address")
     return record
 
 

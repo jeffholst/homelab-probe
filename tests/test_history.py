@@ -86,6 +86,10 @@ def test_where_never_crashes_on_missing_data(snap):
     assert _where(snap, idx, {**base, "online": False, "user": {}}) == ("", "")
     assert _where(snap, idx, {**base, "online": False, "wired": True,
                               "user": {"last_uplink_name": "SW", "last_uplink_remote_port": 4}}) == ("SW", "4")
+    assert _where(snap, idx, {**base, "online": False, "wired": True,
+                              "user": {"last_uplink_mac": "AA:00:00:00:00:02",
+                                       "last_uplink_name": "old name", "last_uplink_remote_port": 4}}) == (
+                                          "Office Switch", "4")
     live = {"uplinkDeviceId": "gw1"}                                             # Integration API fallback
     assert _where(snap, idx, {**base, "live": live, "wired": True}) == ("Gateway", "")
     assert all(isinstance(known_clients(snap), list) for _ in range(1))
@@ -124,16 +128,32 @@ def test_explicit_path_needs_force_to_replace_and_fixes_permissions(record, tmp_
     assert stat.S_IMODE(target.stat().st_mode) == 0o600
 
 
-def test_prune_keeps_the_newest_protects_the_new_file_and_ignores_other_files(record, tmp_path):
+def test_force_sets_permissions_before_writing(record, tmp_path, monkeypatch):
+    target = tmp_path / "private.json"
+    target.write_text("old")
+    target.chmod(0o644)
+    original_dump = json.dump
+
+    def check_mode_before_write(value, file, **kwargs):
+        assert stat.S_IMODE(os.fstat(file.fileno()).st_mode) == 0o600
+        return original_dump(value, file, **kwargs)
+
+    monkeypatch.setattr("unifi_sentinel.history.json.dump", check_mode_before_write)
+    save_snapshot(record, target, force=True)
+
+
+def test_prune_keeps_the_newest_protects_the_new_file_and_ignores_other_files(record, tmp_path,
+                                                                                monkeypatch):
     names = [f"{FILE_PREFIX}2026090{d}-120000.json" for d in range(1, 6)]
     for n in names:
         (tmp_path / n).write_text("{}")
     other = [tmp_path / "notes.txt", tmp_path / "snapshot-bogus.json", tmp_path / "snapshot-20260901-120000.json.bak"]
     for p in other:
         p.write_text("keep")
-    removed = prune(tmp_path, keep=2, protect=tmp_path / names[0])
-    assert sorted(p.name for p in removed) == names[1:3]                          # the oldest, except the protected one
-    assert [p.name for p in list_snapshots(tmp_path)] == [names[0], names[3], names[4]]
+    monkeypatch.chdir(tmp_path)
+    removed = prune(Path("."), keep=2, protect=tmp_path / names[0])
+    assert sorted(p.name for p in removed) == names[1:4]                          # protected counts toward keep
+    assert [p.name for p in list_snapshots(Path("."))] == [names[0], names[4]]
     assert all(p.exists() for p in other)
     assert prune(tmp_path, keep=10) == []                                         # fewer than N: nothing to do
 
@@ -157,14 +177,31 @@ def test_list_snapshots_handles_missing_directories_and_odd_names(tmp_path):
     assert [p.name for p in list_snapshots(tmp_path)] == ["snapshot-20260901-120000.json"]
 
 
+def test_list_snapshots_reports_directory_read_errors(tmp_path, monkeypatch):
+    def fail_iterdir(_directory):
+        raise PermissionError("Permission denied")
+
+    monkeypatch.setattr(Path, "iterdir", fail_iterdir)
+    with pytest.raises(ConfigError, match="cannot read snapshot directory"):
+        list_snapshots(tmp_path)
+
+
 @pytest.mark.parametrize("content, message", [
     ("not json at all", "invalid JSON"),
     ("[1, 2]", "no schema_version"),
     ('{"devices": []}', "no schema_version"),
     ('{"schema_version": 2}', "uses snapshot format 2"),
     ('{"schema_version": "1"}', "uses snapshot format '1'"),
-    ('{"schema_version": 1, "devices": [], "clients": []}', "'reservations' is missing"),
-    ('{"schema_version": 1, "devices": {}, "clients": [], "reservations": []}', "'devices' is missing or not a list"),
+    ('{"schema_version": 1, "devices": [], "clients": [], "site": {}, "controller": {}}',
+     "'reservations' is missing"),
+    ('{"schema_version": 1, "devices": {}, "clients": [], "reservations": [], "site": {}, "controller": {}}',
+     "'devices' is missing or not a list"),
+    ('{"schema_version": 1, "devices": [], "clients": [], "reservations": [], "site": [], "controller": {}}',
+     "'site' is missing or not an object"),
+    ('{"schema_version": 1, "devices": [], "clients": [], "reservations": [], "site": {}, "controller": null}',
+     "'controller' is missing or not an object"),
+    ('{"schema_version": 1, "devices": [{"name": "missing mac"}], "clients": [], "reservations": [], '
+     '"site": {}, "controller": {}}', "'devices' contains an item without a MAC address"),
 ])
 def test_load_rejects_bad_files_with_a_clear_message(tmp_path, content, message):
     path = tmp_path / "bad.json"
@@ -370,6 +407,22 @@ def test_cli_diff_of_two_files_by_name_by_last_two_and_as_json(fake_client, monk
     parsed = json.loads(capsys.readouterr().out)
     assert parsed["total"] == 1 and parsed["clients"]["changed"][0]["changes"][0]["field"] == "ip"
     assert set(parsed) == {"same_site", "controller", "devices", "clients", "reservations", "total"}
+
+
+def test_cli_diff_loads_each_snapshot_once(fake_client, monkeypatch, capsys, tmp_path, record):
+    first = save_snapshot(record, tmp_path / "first.json")
+    second = save_snapshot(record, tmp_path / "second.json")
+    original_load = cli.load_snapshot
+    loaded = []
+
+    def track_load(path):
+        loaded.append(path)
+        return original_load(path)
+
+    monkeypatch.setattr(cli, "load_snapshot", track_load)
+    assert _run(fake_client, monkeypatch, ["diff", str(first), str(second)]) == 0
+    assert loaded == [first, second]
+    assert "No changes." in capsys.readouterr().out
 
 
 def test_cli_snapshot_options_keep_output_and_force(fake_client, monkeypatch, capsys, tmp_path):
