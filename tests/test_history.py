@@ -27,14 +27,14 @@ from unifi_sentinel.history import (
     resolve,
     save_snapshot,
 )
-from unifi_sentinel.snapshot import collect_snapshot
+from unifi_sentinel.snapshot import Needs, collect_snapshot
 
 NOW = datetime(2026, 9, 30, 20, 15, 30, tzinfo=timezone(timedelta(hours=-5)))
 
 
 @pytest.fixture
 def snap(fake_client):
-    return collect_snapshot(fake_client, "default", include_reservations=True, include_groups=True)
+    return collect_snapshot(fake_client, "default", Needs(reservations=True, groups=True))
 
 
 @pytest.fixture

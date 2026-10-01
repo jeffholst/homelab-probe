@@ -5,7 +5,7 @@ import pytest
 from unifi_sentinel import cli
 from unifi_sentinel.client import UniFiAPIError
 from unifi_sentinel.new_clients import render, report, ungrouped_clients
-from unifi_sentinel.snapshot import Snapshot, collect_snapshot
+from unifi_sentinel.snapshot import Needs, Snapshot, collect_snapshot
 
 
 def snapshot(users, clients=(), groups=None, devices=()):
@@ -92,7 +92,7 @@ def test_search_json_and_table_rendering():
 
 
 def test_fixture_report_from_fake_controller(fake_client):
-    snap = collect_snapshot(fake_client, "default", include_groups=True)
+    snap = collect_snapshot(fake_client, "default", Needs(groups=True))
     assert {g["name"] for g in snap.client_groups} == {"Desktops", "Unused"}
     rows = ungrouped_clients(snap)
     # 'desktop' is in a group; the tablet was first seen after the printer
@@ -106,7 +106,7 @@ def test_group_definition_failure_warns_and_falls_back(fake_client, monkeypatch,
         raise UniFiAPIError("nope")
 
     monkeypatch.setattr(fake_client, "legacy_v2", boom)
-    snap = collect_snapshot(fake_client, "default", include_groups=True)
+    snap = collect_snapshot(fake_client, "default", Needs(groups=True))
     assert snap.client_groups is None
     warning = capsys.readouterr().err
     assert "membership cannot be validated against deleted groups" in warning
@@ -128,12 +128,12 @@ def break_alluser(fake_client, monkeypatch):
 def test_alluser_failure_propagates_when_it_is_required(fake_client, monkeypatch):
     break_alluser(fake_client, monkeypatch)
     with pytest.raises(UniFiAPIError, match="alluser unavailable"):
-        collect_snapshot(fake_client, "default", include_groups=True, users_required=True)
+        collect_snapshot(fake_client, "default", Needs(groups=True, users_required=True))
 
 
 def test_alluser_failure_degrades_with_a_warning_when_it_is_optional(fake_client, monkeypatch, capsys):
     break_alluser(fake_client, monkeypatch)
-    snap = collect_snapshot(fake_client, "default", include_groups=True, include_reservations=True)
+    snap = collect_snapshot(fake_client, "default", Needs(groups=True, reservations=True))
     assert snap.all_users == [] and len(snap.clients) == 2          # connected clients still work
     warning = capsys.readouterr().err
     assert "legacy stat/alluser unavailable" in warning

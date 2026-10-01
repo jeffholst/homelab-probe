@@ -19,7 +19,7 @@ from unifi_sentinel.events import (
     render_message,
     summarize,
 )
-from unifi_sentinel.snapshot import collect_event_snapshot
+from unifi_sentinel.snapshot import EventQuery, collect_event_snapshot
 
 SYSTEM_LOG = "/proxy/network/v2/api/site/default/system-log/all"
 DAY = 86400
@@ -111,9 +111,9 @@ def test_message_placeholders_are_filled_and_missing_ones_stay_readable():
 
 # -- fetching --------------------------------------------------------------
 
-def event_snap(fake_client, since=DAY, **kw):
+def event_snap(fake_client, since=DAY, categories=(), severities=(), search=""):
     """Collect events the way the CLI does: the snapshot reads the log, fetch_events filters it."""
-    return collect_event_snapshot(fake_client, "default", since, **kw)
+    return collect_event_snapshot(fake_client, "default", EventQuery(since, tuple(categories), tuple(severities), search))
 
 
 def test_window_server_filters_and_paging(fake_client, monkeypatch):

@@ -8,7 +8,7 @@ import requests
 from unifi_sentinel import cli
 from unifi_sentinel.client import UniFiAPIError, UniFiClient
 from unifi_sentinel.config import Config
-from unifi_sentinel.snapshot import collect_event_snapshot, collect_snapshot, describe_snapshot
+from unifi_sentinel.snapshot import EventQuery, Needs, collect_event_snapshot, collect_snapshot, describe_snapshot
 
 KEY = "sekret-key-0123456789"
 MS = r"\(\d+ ms\)"
@@ -125,7 +125,7 @@ def test_counters_and_the_summary():
 # -- what was read -------------------------------------------------------------------------------
 
 def test_describe_snapshot_lists_only_what_was_read(fake_client):
-    snap = collect_snapshot(fake_client, "default", include_reservations=True, include_health=True)
+    snap = collect_snapshot(fake_client, "default", Needs(reservations=True, health=True))
     text = describe_snapshot(snap)
     assert text.startswith("read 4 devices, 2 connected clients, 4 legacy devices")
     assert "networks" in text and "health subsystems" in text and "neighbor rows" not in text and "events" not in text
@@ -146,7 +146,7 @@ def test_collecting_a_snapshot_reports_it_when_tracing(fake_client):
 def test_collecting_event_snapshot_reports_it_when_tracing(fake_client):
     lines = []
     fake_client.trace = lines.append
-    snap = collect_event_snapshot(fake_client, "default", 3600)
+    snap = collect_event_snapshot(fake_client, "default", EventQuery(3600))
     assert lines[-1] == describe_snapshot(snap)
     assert lines[-1].startswith("read ") and " events" in lines[-1]
 

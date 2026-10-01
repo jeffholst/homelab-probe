@@ -10,7 +10,7 @@ from unifi_sentinel import cli
 from unifi_sentinel.diagnose import CRITICAL, INFO, WARNING, _pool_findings, apply_ignores, diagnose
 from unifi_sentinel.reservations import dhcp_pool
 from unifi_sentinel.settings import IgnoreRule
-from unifi_sentinel.snapshot import collect_snapshot
+from unifi_sentinel.snapshot import Needs, collect_snapshot
 
 
 def net(**kw):
@@ -72,11 +72,11 @@ def snapshot(fake_client, *, reservations=(), network=None, clients=()):
     for mac, name, ip in clients:
         fx["clients"].append({"id": f"c-{name}", "name": name, "type": "WIRELESS", "macAddress": mac,
                               "ipAddress": ip, "connectedAt": "2026-01-01T09:00:00Z", "uplinkDeviceId": "ap1"})
-    return collect_snapshot(fake_client, "default", include_reservations=True)
+    return collect_snapshot(fake_client, "default", Needs(reservations=True))
 
 
 def test_the_fixture_has_pools_and_no_reservation_inside_one(fake_client):
-    snap = collect_snapshot(fake_client, "default", include_reservations=True)
+    snap = collect_snapshot(fake_client, "default", Needs(reservations=True))
     assert [dhcp_pool(n)[0] for n in snap.networks] == ["ok", "ok"]
     assert _pool_findings(snap) == []                                  # reservations are .10 and .50, pool is .100-.200
 
@@ -155,7 +155,7 @@ def test_the_subject_falls_back_to_hostname_then_mac(fake_client):
          "last_connection_network_id": "net-1"},
         {"mac": "cc:00:00:00:00:02", "use_fixedip": True, "fixed_ip": "10.0.0.151",
          "last_connection_network_id": "net-1"}]
-    snap = collect_snapshot(fake_client, "default", include_reservations=True)
+    snap = collect_snapshot(fake_client, "default", Needs(reservations=True))
     assert sorted(f.subject for f in _pool_findings(snap)) == ["CC:00:00:00:00:02", "nas"]
 
 

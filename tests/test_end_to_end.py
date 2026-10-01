@@ -4,7 +4,7 @@ from unifi_sentinel import cli
 from unifi_sentinel.diagnose import diagnose
 from unifi_sentinel.export import run_export
 from unifi_sentinel.query import query_rows
-from unifi_sentinel.snapshot import collect_snapshot
+from unifi_sentinel.snapshot import Needs, collect_snapshot
 
 
 def read(path):
@@ -13,7 +13,7 @@ def read(path):
 
 
 def test_snapshot_collects_everything(fake_client):
-    snap = collect_snapshot(fake_client, "default", include_offline=True)
+    snap = collect_snapshot(fake_client, "default", Needs(offline=True))
     assert snap.site["id"] == "site-1"
     assert len(snap.devices) == 4 and len(snap.clients) == 2
     assert set(snap.device_details) == {"gw1", "sw1", "ap1", "ap2"}
@@ -22,7 +22,7 @@ def test_snapshot_collects_everything(fake_client):
 
 
 def test_export_writes_inventory_and_switch_csvs(fake_client, tmp_path):
-    run_export(collect_snapshot(fake_client, "default", True), tmp_path)
+    run_export(collect_snapshot(fake_client, "default", Needs(offline=True)), tmp_path)
     rows = {r["Name"]: r for r in read(tmp_path / "unifi_clients.csv")}
 
     assert rows["desktop"]["Switch"] == "Office Switch" and rows["desktop"]["Port"] == "3"
@@ -48,7 +48,7 @@ def test_query_filters_and_json(fake_client):
     assert {r["Name"] for r in query_rows(snap, "devices")} == {
         "Gateway", "Office Switch", "Office AP", "Garage AP"}
     assert [r["Name"] for r in query_rows(snap, "clients", search="PHONE")] == ["phone"]
-    full = collect_snapshot(fake_client, "default", include_offline=True)
+    full = collect_snapshot(fake_client, "default", Needs(offline=True))
     assert len(query_rows(full, "clients", include_offline=True)) == 4
 
 
@@ -84,7 +84,7 @@ def test_reservations_include_offline_and_skip_stale(fake_client):
     from unifi_sentinel.query import render
     from unifi_sentinel.reservations import build_reservations
 
-    snap = collect_snapshot(fake_client, "default", include_reservations=True)
+    snap = collect_snapshot(fake_client, "default", Needs(reservations=True))
     rows = build_reservations(snap)
 
     assert [r["Reserved IP"] for r in rows] == ["10.0.0.10", "10.0.0.50"]  # sorted, no stale .99
@@ -206,7 +206,7 @@ def test_export_csv_columns_unchanged(fake_client, tmp_path):
 
 
 def test_diagnose_flags_fixture_reservation_outside_subnet(fake_client, monkeypatch, capsys):
-    snap = collect_snapshot(fake_client, "default", include_reservations=True)
+    snap = collect_snapshot(fake_client, "default", Needs(reservations=True))
     msgs = {(f.subject, f.message) for f in diagnose(snap)}
     # old-printer is reserved 10.0.0.50 but overridden onto IoT (10.0.20.0/24)
     assert ("old-printer", "reserved IP 10.0.0.50 is outside network IoT (10.0.20.1/24)") in msgs

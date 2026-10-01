@@ -5,7 +5,7 @@ import pytest
 from unifi_sentinel import cli
 from unifi_sentinel.client import UniFiAPIError
 from unifi_sentinel.client_view import DeviceIndex
-from unifi_sentinel.snapshot import Snapshot, collect_snapshot
+from unifi_sentinel.snapshot import Needs, Snapshot, collect_snapshot
 from unifi_sentinel.wifi import (
     DEFAULT_MIN_SIGNAL,
     NAMES_PER_CHANNEL,
@@ -154,7 +154,7 @@ def test_2_4_ghz_40mhz_radio_span_uses_extension_channel_or_stays_unknown():
 
 @pytest.fixture
 def report(fake_client):
-    return build_wifi(collect_snapshot(fake_client, "default", include_neighbors=True))
+    return build_wifi(collect_snapshot(fake_client, "default", Needs(neighbors=True)))
 
 
 def channel(report, band, ch):
@@ -174,7 +174,7 @@ def test_fixture_counts_dedupe_and_strong_neighbors(report):
 
 
 def test_the_min_signal_cutoff_changes_what_is_strong(fake_client):
-    snap = collect_snapshot(fake_client, "default", include_neighbors=True)
+    snap = collect_snapshot(fake_client, "default", Needs(neighbors=True))
     loose = build_wifi(snap, min_signal=-95)
     assert loose["neighbors"]["strong"] == 9 and len(channel(loose, "ng", 1)["strong_networks"]) == 1
     tight = build_wifi(snap, min_signal=-55)
@@ -242,7 +242,7 @@ def test_6_ghz_has_no_neighbor_data_and_is_labelled_as_such():
 
 
 def test_filters_by_band_and_by_ap(fake_client):
-    snap = collect_snapshot(fake_client, "default", include_neighbors=True)
+    snap = collect_snapshot(fake_client, "default", Needs(neighbors=True))
     five = build_wifi(snap, band="na")
     assert [b["band"] for b in five["plan"]] == ["na"] and five["neighbors"]["total"] == 2
     assert {r["band"] for r in five["radios"]} <= {"na", ""}
@@ -367,7 +367,7 @@ def test_failed_neighbor_scan_is_not_reported_as_an_empty_scan(fake_client, monk
         return real(site_ref, resource)
 
     monkeypatch.setattr(fake_client, "legacy_stat", flaky)
-    snap = collect_snapshot(fake_client, "default", include_neighbors=True)
+    snap = collect_snapshot(fake_client, "default", Needs(neighbors=True))
     report = build_wifi(snap)
     assert snap.neighbors == [] and snap.neighbors_available is False
     assert report["neighbors"] == {

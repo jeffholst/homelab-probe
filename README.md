@@ -802,7 +802,7 @@ unifi-sentinel.py        thin launcher
 unifi_sentinel/
   config.py              .env / environment loading
   client.py              UniFiClient: the only code that makes HTTP calls
-  snapshot.py            collect_snapshot: one read of the controller, output-agnostic
+  snapshot.py            collect_snapshot: one read of the controller, as declared by a Needs object, output-agnostic
   export.py              inventory rows and CSV export
   query.py               filtering and table/JSON rendering
   reservations.py        DHCP fixed IP reservations
