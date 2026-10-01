@@ -168,7 +168,13 @@ For each switch port `diagnose` also checks the controller's port counters (the 
 #### Recent events
 
 `diagnose` also reads the controller's event log (the last 24 hours by default) so it notices things that **happened and went away**, which a snapshot of the network right now cannot see (an IP conflict is usually over by the time `diagnose` runs):
-- **IP conflicts:** a warning per IP, with how many times it was reported and when last.
+- **IP conflicts:** a warning per IP that names the devices involved, the network, how many times it was reported and when last. When one of the devices has a DHCP reservation for that address it says so, and when a device is reserved a *different* address it says that too, which points at a stale lease or a static IP on the device. Over a longer window it also says on how many different days the conflict happened, so a recurring one stands out. For example:
+
+  ```text
+  [WARNING ] 10.0.0.50: IP conflict reported 1 time in the last 24h between Guest Laptop and old-printer on Main (most recent 2026-09-30 20:57:30); old-printer holds the reservation for 10.0.0.50
+  ```
+
+  The devices come from the event itself (merged across events and de-duplicated by MAC address); an event that does not list any gets the shorter message with just the address.
 - **Flapping:** a client that disconnected `event_flap_count` (default 10) or more times in the window, wired and wireless together, is a warning. A device that was unreachable that often is a warning too.
 - **Roaming** is normal for phones (one phone here roams about 30 times a day), so a client that roamed `event_flap_count` or more times is only info.
 - **Unreachable earlier, online now:** info. A device that is offline right now is left to the existing offline finding.

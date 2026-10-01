@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 import ipaddress
+from datetime import datetime
 import time
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -270,6 +271,68 @@ def _times(n: int) -> str:
     return f"{n} time" + ("" if n == 1 else "s")
 
 
+def _conflict_devices(events: List[Dict[str, Any]]) -> Tuple[List[Dict[str, str]], str]:
+    """The devices an IP-conflict event names, merged across events and de-duplicated by MAC
+    (or by name when an entry has no MAC), plus the network name the events give.
+
+    The devices are in ``parameters["CLIENTS"]["clients"]``, a list inside the object, not
+    a single ``CLIENT`` like connect and disconnect events. Anything malformed is skipped.
+    """
+    seen: Dict[str, Dict[str, str]] = {}
+    network = ""
+    for e in events:
+        params = e.get("parameters") or {}
+        net = params.get("NETWORK")
+        if not network and isinstance(net, dict) and net.get("name"):
+            network = str(net["name"])
+        block = params.get("CLIENTS")
+        listed = block.get("clients") if isinstance(block, dict) else None
+        for c in listed if isinstance(listed, list) else []:
+            if not isinstance(c, dict):
+                continue
+            mac = str(c.get("mac") or "").upper()
+            name = str(c.get("name") or c.get("hostname") or mac or "")
+            if mac or name:
+                seen.setdefault(mac or name.lower(), {"mac": mac, "name": name or mac})
+    devices = sorted(seen.values(), key=lambda d: (d["name"].lower(), d["mac"]))
+    names = [d["name"].lower() for d in devices]
+    for d in devices:                                    # two devices with one name: tell them apart
+        if names.count(d["name"].lower()) > 1 and d["mac"]:
+            d["name"] = f"{d['name']} ({d['mac'][-5:]})"
+    return devices, network
+
+
+def _join(names: List[str]) -> str:
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+
+
+def _conflict_findings(conflicts: Dict[str, List[Dict[str, Any]]], snap: Snapshot, window: str) -> List[Finding]:
+    reserved = {(u.get("mac") or "").upper(): u["fixed_ip"] for u, _net in reservation_records(snap)}
+    findings = []
+    for ip, events in sorted(conflicts.items()):
+        stamps = [e.get("timestamp") or 0 for e in events]
+        devices, network = _conflict_devices(events)
+        days = {datetime.fromtimestamp(t / 1000).date() for t in stamps if t}
+        # across a long window, how many separate days it happened on says "recurring"
+        spread = (f" on {len(days)} different days"
+                  if len(events) > 1 and len(days) > 1 and snap.event_window_seconds >= 2 * 86400 else "")
+        text = f"IP conflict reported {_times(len(events))}{spread} in the last {window}"
+        if devices:
+            text += f" between {_join([d['name'] for d in devices])}"
+        if network:
+            text += f" on {network}"
+        text += f" (most recent {local_time(max(stamps))})"
+        hints = []
+        for d in devices:
+            held = reserved.get(d["mac"])
+            if held == ip:
+                hints.append(f"{d['name']} holds the reservation for {ip}")
+            elif held:
+                hints.append(f"{d['name']} is reserved {held}")
+        findings.append(Finding(WARNING, ip, text + "".join(f"; {h}" for h in hints)))
+    return findings
+
+
 def _event_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]:
     """Findings from the recent event log: things that happened and may have gone away.
 
@@ -283,7 +346,7 @@ def _event_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]
     threshold = settings.event_flap_count
     findings: List[Finding] = []
 
-    conflicts: Dict[str, List[int]] = {}
+    conflicts: Dict[str, List[Dict[str, Any]]] = {}
     disconnects: Dict[str, List[Any]] = {}       # client id -> [name, count]
     roams: Dict[str, List[Any]] = {}
     unreachable: Dict[str, List[Any]] = {}       # stable device identity -> [device, event name, count]
@@ -292,7 +355,7 @@ def _event_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]
         kind = str(e.get("event") or e.get("key") or "")
         if kind == "CLIENT_IP_CONFLICT":
             ip = str((((e.get("parameters") or {}).get("IP") or {}).get("name")) or "unknown IP")
-            conflicts.setdefault(ip, []).append(e.get("timestamp") or 0)
+            conflicts.setdefault(ip, []).append(e)
         elif kind.startswith("CLIENT_DISCONNECTED") or kind == "CLIENT_ROAMED":
             who = (subjects(e, "CLIENT") or [{}])[0]
             ident = str(who.get("id") or who.get("name") or "")
@@ -318,10 +381,7 @@ def _event_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]
         elif kind == "ISP_HIGH_LATENCY":
             latency += 1
 
-    for ip, stamps in sorted(conflicts.items()):
-        findings.append(Finding(
-            WARNING, ip, f"IP conflict reported {_times(len(stamps))} in the last {window} "
-                         f"(most recent {local_time(max(stamps))})"))
+    findings.extend(_conflict_findings(conflicts, snap, window))
     for name, n in sorted(disconnects.values()):
         if n >= threshold:
             findings.append(Finding(WARNING, name, f"disconnected {_times(n)} in the last {window}"))
