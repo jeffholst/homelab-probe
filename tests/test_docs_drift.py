@@ -40,6 +40,20 @@ SAMPLES = [
 ]
 # Deliberately not checked: the `diff` sample describes a hypothetical set of changes, and the CSV samples
 # come from a different synthetic site.
+COMMAND_DOC_SECTIONS = {
+    "export": ("Output files",),
+    "query": ("Devices", "Switch ports", "DHCP reservations", "Randomized MAC addresses"),
+    "snapshot": ("Snapshots and diff",),
+    "diff": ("Snapshots and diff",),
+    "topology": ("Topology",),
+    "wifi": ("Wi-Fi",),
+    "wan": ("WAN",),
+    "events": ("Event history",),
+    "client": ("Client view", "Randomized MAC addresses"),
+    "new-clients": ("New clients", "Randomized MAC addresses"),
+    "diagnose": ("Diagnose",),
+    "info": (),
+}
 
 
 def read():
@@ -139,9 +153,40 @@ def all_long_options():
     return sorted((o for o in options if o[1] != "--help"), key=lambda o: (o[0] or "", o[1]))
 
 
+def section_text(text, heading):
+    text = re.sub(r"(?ms)^```[^\n]*\n.*?^```\s*$", "", text)
+    lines = text.splitlines()
+    start = next(
+        i for i, line in enumerate(lines)
+        if (match := re.match(r"^(#{1,4}) " + re.escape(heading) + r"$", line))
+    )
+    level = len(re.match(r"^(#{1,4}) ", lines[start]).group(1))
+    end = next(
+        (i for i in range(start + 1, len(lines))
+         if (match := re.match(r"^(#{1,4}) ", lines[i])) and len(match.group(1)) <= level),
+        len(lines),
+    )
+    return "\n".join(lines[start + 1:end])
+
+
+def command_documentation(command):
+    text = read()
+    usage = next(body for heading, language, body in fenced_blocks(text)
+                 if heading == "Usage" and language == "bash")
+    usage_examples = []
+    parser = cli.build_parser()
+    for line in usage.splitlines():
+        argv = example_argv(line)
+        if argv is not None and parser.parse_args(argv).command == command:
+            usage_examples.append(line)
+    sections = [section_text(text, heading) for heading in COMMAND_DOC_SECTIONS[command]]
+    return "\n".join([*usage_examples, *sections])
+
+
 @pytest.mark.parametrize("command, option", all_long_options(), ids=lambda v: str(v))
 def test_every_long_option_is_documented(command, option):
-    assert re.search(re.escape(option) + r"(?![\w-])", read()), (
+    documentation = read() if command is None else command_documentation(command)
+    assert re.search(re.escape(option) + r"(?![\w-])", documentation), (
         f"{option} ({command or 'global'}) is not mentioned in the README")
 
 
