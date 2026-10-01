@@ -7,9 +7,10 @@ from typing import Any, Dict, List
 from .export import _fmt_time, _mac, client_location
 from .query import _search, format_table
 from .snapshot import Snapshot
+from .util import is_randomized_mac
 
 NEW_CLIENT_COLUMNS = ["Name", "MAC Address", "IP Address", "Vendor", "Connection Type",
-                      "Where", "First Seen", "Last Seen", "Status"]
+                      "Where", "First Seen", "Last Seen", "Status", "Private MAC"]
 
 
 def _epoch(value: Any) -> str:
@@ -57,6 +58,7 @@ def ungrouped_clients(snap: Snapshot) -> List[Dict[str, Any]]:
             "First Seen": _epoch(u.get("first_seen")),
             "Last Seen": last_seen,
             "Status": "Online" if live else "Offline",
+            "Private MAC": "yes" if is_randomized_mac(mac) else "",
         }))
     found.sort(key=lambda item: item[0], reverse=True)  # blank first-seen (0) ends up last
     return [row for _, row in found]

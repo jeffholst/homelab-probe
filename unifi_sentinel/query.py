@@ -6,11 +6,12 @@ from typing import Any, Dict, List, Optional
 from .export import INVENTORY_COLUMNS, build_inventory, build_offline_clients, build_switch_ports
 from .reservations import OFFLINE_RESERVATION_COLUMNS, RESERVATION_COLUMNS, build_reservations, offline_reservation_rows
 from .snapshot import Snapshot
-from .util import printable
+from .util import is_randomized_mac, printable
 
 TABLE_COLUMNS = ["Name", "MAC Address", "IP Address", "Model", "Connection Type",
                  "Switch", "Port", "Status"]
 DEVICE_EXTRA_COLUMNS = ["Firmware", "Update Available", "Uptime", "Uptime (s)"]
+CLIENT_EXTRA_COLUMNS = ["Private MAC"]   # "yes" for a randomized (locally administered) MAC address
 
 PORT_TABLE_COLUMNS = ["Switch", "Port", "Status", "Speed", "Full Duplex", "PoE Power (W)",
                       "Connected Name", "Connected MAC", "RX Errors", "TX Errors"]
@@ -114,7 +115,8 @@ def query_rows(
         rows = [r for r in rows if r["Type"].startswith("Device")]
         _add_device_details(rows, snap)
     elif kind == "clients":
-        rows = [r for r in rows if r["Type"] == "Client"]
+        rows = [{**r, "Private MAC": "yes" if is_randomized_mac(r["MAC Address"]) else ""}
+                for r in rows if r["Type"] == "Client"]
     return _search(rows, search)
 
 
@@ -140,10 +142,13 @@ def render(rows: List[Dict[str, Any]], as_json: bool, kind: str = "all", offline
             else INVENTORY_COLUMNS
         if kind == "devices":
             columns = INVENTORY_COLUMNS + DEVICE_EXTRA_COLUMNS
+        elif kind == "clients":
+            columns = INVENTORY_COLUMNS + CLIENT_EXTRA_COLUMNS
         return json.dumps([{c: r.get(c, "") for c in columns} for r in rows], indent=2)
     columns = {
         "reservations": OFFLINE_RESERVATION_COLUMNS if offline else RESERVATION_COLUMNS,
         "ports": PORT_TABLE_COLUMNS,
         "devices": TABLE_COLUMNS + DEVICE_EXTRA_COLUMNS[:3],
+        "clients": TABLE_COLUMNS + CLIENT_EXTRA_COLUMNS,
     }.get(kind, TABLE_COLUMNS)
     return format_table(rows, columns) + f"\n\n{len(rows)} row(s)"
