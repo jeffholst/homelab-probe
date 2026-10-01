@@ -52,6 +52,7 @@ class Config:
     site: str = DEFAULT_SITE
     verify_ssl: bool | str = True          # False, True, or the path of a CA bundle (file or directory)
     timeout: float = DEFAULT_TIMEOUT
+    env_file: Optional[Path] = field(default=None, compare=False)    # the .env that was read, if any (for --verbose)
     warnings: Tuple[str, ...] = field(default=(), compare=False)   # for cli.main to print
 
 
@@ -212,5 +213,6 @@ def load_config(env_file: Optional[Path] = None) -> Config:
         site=validate_site(os.getenv("SITE_ID")),
         verify_ssl=parse_verify(os.getenv("VERIFY_SSL")),
         timeout=parse_timeout(os.getenv("TIMEOUT")),
+        env_file=path,
         warnings=tuple(warnings),
     )

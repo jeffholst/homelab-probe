@@ -19,7 +19,7 @@ import warnings
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from typing import Any, Dict, List, Optional
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 import requests
 import urllib3
@@ -66,6 +66,12 @@ class UniFiClient:
         self.timeout = timeout
         self.retries = max(0, retries)
         self._sleep = time.sleep               # replaced in tests so backoff does not wait
+        # --verbose: called with one line per request attempt (never with the API key, a response
+        # body or a query's values); the counters feed the summary line at the end of a run.
+        self.trace: Optional[Callable[[str], None]] = None
+        self.attempts_made = 0
+        self.attempts_retried = 0
+        self.seconds_waiting = 0.0
         self.session = requests.Session()
         self.session.headers.update(
             {"X-API-KEY": api_key, "Accept": "application/json"}
@@ -79,9 +85,10 @@ class UniFiClient:
 
     def _get(self, path: str, params: Optional[Dict[str, Any]] = None) -> Any:
         url = f"{self.base_url}{path}"
+        label = f"GET {path}" + (f"?{urlencode(params)}" if params else "")
         return self._exchange(
             lambda: self.session.get(url, params=params, verify=self.verify_ssl, timeout=self.timeout),
-            url, retries=self.retries)
+            url, retries=self.retries, label=label)
 
     def _post_system_log(self, site_ref: str, query: Dict[str, Any]) -> Any:
         """POST a read-only query to the fixed system-log path. Never takes a path."""
@@ -90,11 +97,12 @@ class UniFiClient:
             raise ValueError(f"unsupported system-log query key(s): {', '.join(sorted(unexpected))}")
         url = self.base_url + SYSTEM_LOG_PATH.format(site=_segment(site_ref))
         # Not retried: it is the one request that is not a GET, so it stays as plain as possible.
+        label = "POST " + SYSTEM_LOG_PATH.format(site=_segment(site_ref)) + f" (query keys: {', '.join(sorted(query))})"
         return self._exchange(
             lambda: self.session.post(url, json=query, verify=self.verify_ssl, timeout=self.timeout),
-            url, retries=0)
+            url, retries=0, label=label)
 
-    def _exchange(self, send: Callable[[], requests.Response], url: str, retries: int) -> Any:
+    def _exchange(self, send: Callable[[], requests.Response], url: str, retries: int, label: str = "") -> Any:
         """Run one request (``send``) with the error handling shared by GET and POST.
 
         A connection failure, a timeout or a 502/503/504 is retried up to ``retries`` more times
@@ -103,34 +111,61 @@ class UniFiClient:
         """
         attempts = retries + 1
         for attempt in range(1, attempts + 1):
+            started = time.perf_counter()
             try:
                 with self._quiet_insecure_warnings():
                     resp = send()
             except requests.exceptions.SSLError as e:
+                self._note(label, started, "TLS certificate verification failed")
                 raise self._tls_error() from e
             except requests.exceptions.Timeout as e:
+                self._note(label, started, "timed out")
                 failure = UniFiAPIError(
                     f"timed out after {self.timeout:g} s{self._tries(attempt)}: {url}; "
                     "a slow gateway may need a longer --timeout")
                 cause: BaseException = e
             except requests.exceptions.ConnectionError as e:
+                self._note(label, started, "connection error")
                 failure = UniFiAPIError(
                     f"Connection error for {url}{self._tries(attempt)}: {self._redact(str(e))}")
                 cause = e
             except requests.exceptions.RequestException as e:
+                self._note(label, started, "request error")
                 raise UniFiAPIError(
                     f"Request error for {url}: {self._redact(str(e))}") from e
             except OSError as e:               # e.g. requests cannot read the CA bundle file
+                self._note(label, started, "could not send")
                 raise UniFiAPIError(f"cannot make the request to {url}: {self._redact(str(e))}") from e
             else:
+                self._note(label, started, str(resp.status_code))
                 if resp.status_code in RETRY_STATUSES and attempt < attempts:
-                    self._sleep(RETRY_BACKOFF_S * 2 ** (attempt - 1))
+                    self._back_off(label, attempt, attempts)
                     continue
                 return self._decode_response(resp, url, attempt)
             if attempt == attempts:
                 raise failure from cause
-            self._sleep(RETRY_BACKOFF_S * 2 ** (attempt - 1))
+            self._back_off(label, attempt, attempts)
         raise AssertionError("unreachable")     # pragma: no cover
+
+    def _note(self, label: str, started: float, outcome: str) -> None:
+        """Count one attempt and, with --verbose, say how it went and how long it took."""
+        elapsed = time.perf_counter() - started
+        self.attempts_made += 1
+        self.seconds_waiting += elapsed
+        if self.trace is not None:
+            self.trace(f"{label} -> {outcome} ({elapsed * 1000:.0f} ms)")
+
+    def _back_off(self, label: str, attempt: int, attempts: int) -> None:
+        pause = RETRY_BACKOFF_S * 2 ** (attempt - 1)
+        self.attempts_retried += 1
+        if self.trace is not None:
+            self.trace(f"{label} -> retrying in {pause:g} s (attempt {attempt + 1} of {attempts})")
+        self._sleep(pause)
+
+    def summary(self) -> str:
+        """One line for the end of a --verbose run."""
+        retried = f", {self.attempts_retried} retried" if self.attempts_retried else ""
+        return f"{self.attempts_made} request(s){retried}, {self.seconds_waiting:.1f} s waiting for the controller"
 
     @staticmethod
     def _tries(attempt: int) -> str:

@@ -25,7 +25,7 @@ UniFi Sentinel is a fork of [ericfitz/unifi-clients-export](https://github.com/e
 | `diagnose` | Read-only health checks with 🛑 critical, ⚠️ warning and ℹ️ info findings (`--json` for scripts) |
 | `info`   | Show the controller application info and available sites       |
 
-Planned: richer inventory and troubleshooting reports.
+The tool is still evolving; see open issues for planned reports, controller-version coverage, packaging, and release work.
 
 ## Features
 
@@ -40,6 +40,7 @@ Planned: richer inventory and troubleshooting reports.
 - **Internet health**: `wan` shows the connection's state, the controller's own 24-hour availability and latency monitoring per target, and the speedtest history with the runs that fell well below normal, to tell an internet problem from a LAN problem
 - **Event history**: what happened and when (disconnects, roams, IP conflicts, device outages, admin changes) from the controller's log, filterable by time, severity, category, client and device, with a summary of the noisiest clients
 - **Single-client troubleshooting**: `client <name|mac|ip>` shows where a client attaches (the full uplink chain to the gateway with port numbers and link speeds), its link quality, addressing and the `diagnose` findings that concern it
+- **Verbose logging**: `--verbose` shows every request (path, status, time, retries) and what was read on stderr, never the API key, to diagnose slow runs and undocumented endpoints
 - **Randomized MAC detection**: clients that use a private (locally administered) Wi-Fi MAC address are flagged in `query clients`, `new-clients` and `client`, and `diagnose` notes reservations tied to one, because they stop applying when the device changes its address
 - **New client detection**: list every known client that is in no client group, newest first, to spot new devices
 - **Health checks**: read-only diagnostics with severity levels, exit codes for scripts and cron, `--json` output with a stable code per check, and a TOML file for thresholds and an ignore list
@@ -89,6 +90,26 @@ VERIFY_SSL=true
 - **Timeouts and retries:** every request waits at most `TIMEOUT` seconds (default 15; `--timeout SECONDS` before the command overrides `.env`; a slow gateway may need more). A `GET` that fails with a connection error, a timeout or an HTTP 502, 503 or 504 is **retried twice** with a growing pause (0.5 s, then 1 s), so one brief blip no longer fails the command; anything else (a bad key, a 403, a 404 or 500, a certificate failure, a malformed answer) is reported at once, because trying again cannot change it. The single event-log `POST` is never retried. A message that says `(after 3 attempts)` means the retries were used up. A `403 Forbidden` means the API key is valid but not allowed to make that request.
 - **When a read fails:** required data stops the command with exit code 3; optional data warns and the command carries on with less. The list of connected clients and devices is required everywhere. Every legacy read is optional, **including the client history (`stat/alluser`)** for `query`, `client`, `diagnose` and the other reports (they warn that offline clients and reservations are unavailable), except for the two commands whose answer would be wrong without it: `new-clients` and `snapshot`/`diff` stop with exit code 3, so they never print a misleading list or save an incomplete snapshot.
 - **`SITE_ID`:** a site name may contain spaces and non-ASCII letters, but not `/`, `\`, `?`, `#` or control characters, and at most 128 characters; it is also percent-encoded wherever it appears in a URL.
+
+### Seeing what the tool does: `--verbose`
+
+`--verbose` (or `--debug`), given before the command, logs to **stderr** what the tool does, so the normal output on stdout is unchanged and can still be piped. It is the tool for diagnosing a slow run, a failing request or an undocumented endpoint:
+
+```text
+$ unifi-sentinel --verbose wan --json > wan.json
+[verbose] unifi-sentinel 0.1.0: settings from /home/me/unifi-sentinel/.env; controller https://192.168.1.1:443, site default, timeout 15 s, TLS verification off
+[verbose] GET /proxy/network/integration/v1/sites?offset=0&limit=200 -> 200 (41 ms)
+[verbose] GET /proxy/network/api/s/default/stat/health -> 503 (35 ms)
+[verbose] GET /proxy/network/api/s/default/stat/health -> retrying in 0.5 s (attempt 2 of 3)
+[verbose] GET /proxy/network/api/s/default/stat/health -> 200 (38 ms)
+[verbose] read 10 devices, 83 connected clients, 5 health subsystems, 91 speedtests
+[verbose] 27 request(s), 1 retried, 0.7 s waiting for the controller
+```
+
+- **The first line** shows which `.env` was read (or that only environment variables were used), the controller, site, timeout and how TLS is verified (`on`, `off`, or the CA bundle in use), so a command that talks to the wrong controller is obvious.
+- **One line per request attempt:** method, path (with the paging parameters), the HTTP status or what went wrong (`timed out`, `connection error`, `TLS certificate verification failed`), and the time in milliseconds. A retry shows the wait and the attempt number. The event-log `POST` shows the names of the query fields, never their values.
+- **`read ...`** lists what a snapshot collected (counts only), and the last line is the total number of requests, retries and time spent waiting for the controller. The last line is also printed when a request fails.
+- **Never logged:** the API key, response bodies, and query values. The paths do contain the site and device IDs, and the first line your controller's address, so **redact them before pasting the output into an issue**.
 
 ### Getting an API key
 
@@ -695,6 +716,7 @@ The official documentation covers the Integration API only. The legacy `stat/*`,
 - **`VERIFY_SSL must be one of ...` / `SITE_ID ... cannot be part of a site name`**: fix the value in `.env`; the message lists what is accepted.
 - **`401 Unauthorized`**: the API key is invalid or was revoked; create a new one.
 - **`TLS certificate verification failed`**: for a self-signed certificate point `VERIFY_SSL` at the certificate (or CA) file, or install a valid certificate on the controller; `VERIFY_SSL=false` skips the check and is a last resort. If `VERIFY_SSL` already names a file, the message says the certificate is not signed by anything in it.
+- **A command is slow or fails and you want to see why**: run it again with `--verbose` (see above) to see each request, its status and time, and any retries.
 - **Connection errors or timeouts**: check `CONTROLLER_URL` and that the controller is reachable from this machine. `timed out after 15 s (after 3 attempts)` means a slow gateway: raise `TIMEOUT` or pass `--timeout 60`.
 - **`403 Forbidden`**: the API key is valid but lacks access to that request; check the key under Settings > Control Plane > Integrations.
 - **`VERIFY_SSL names a CA bundle that does not exist`**: fix the path (it is relative to the directory you run from).
