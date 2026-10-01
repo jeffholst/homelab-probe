@@ -146,10 +146,10 @@ This installs a `unifi-sentinel` command.
 ```bash
 uv run unifi-sentinel.py info
 uv run unifi-sentinel.py export
-uv run unifi-sentinel.py export -o ./out   # write CSVs to a directory
+uv run unifi-sentinel.py export -o ./out   # write CSVs to a directory (long form: --output-dir)
 uv run unifi-sentinel.py export --include-offline   # also list previously seen clients
 uv run unifi-sentinel.py query devices               # UniFi devices with firmware and uptime
-uv run unifi-sentinel.py query clients -s printer --json   # filter, JSON output
+uv run unifi-sentinel.py query clients -s printer --json   # filter (long form: --search), JSON output
 uv run unifi-sentinel.py query clients --include-offline   # also previously seen clients
 uv run unifi-sentinel.py query reservations          # DHCP fixed IP reservations
 uv run unifi-sentinel.py query reservations --offline   # reserved clients that have been offline for a day or more
@@ -175,7 +175,7 @@ uv run unifi-sentinel.py diagnose                    # health checks
 uv run unifi-sentinel.py diagnose --json             # the same, as JSON with a stable code per finding
 ```
 
-`query` takes an optional kind (`all` by default, `devices`, `clients`, `reservations` or `ports`). Run these from the project root (uv uses `pyproject.toml`). After `pip install .` use `unifi-sentinel <command>` instead. Run `--help` on the tool or any command for options.
+`query` takes an optional kind (`all` by default, `devices`, `clients`, `reservations` or `ports`). Run these from the project root (uv uses `pyproject.toml`). After `pip install .` use `unifi-sentinel <command>` instead. Run `--help` on the tool or any command for options, and `--version` for the version.
 
 ### Diagnose
 
@@ -451,7 +451,7 @@ Clients
 - **What is saved:** devices (name, IP, model, type, firmware, state, uplink and port), every client the controller knows (name, IP, wired or Wi-Fi, online status, network and VLAN, the device and port it is on, client groups by name) and DHCP reservations, plus the site and controller version. It is built from the same rows the other commands print, not raw API data, and leaves out values that change constantly (uptime, last-seen times, traffic), so a diff shows real changes.
 - **What diff reports** (matching by MAC address): new and missing devices, clients and reservations; renamed items; IP, firmware, state, model and network or VLAN changes; devices and clients that **moved** (a different switch, port or AP; an unknown location, such as an offline Wi-Fi client, is never a move); group changes; reservation changes; and a controller version change. Clients that connected or disconnected are listed too, but only the first 15 of each (and of client IP changes); `--all` lists every one. `--json` prints everything.
 - **Choosing what to compare:** `diff` with no arguments compares the newest saved snapshot with the live network, `diff OLD` compares a snapshot (a path, or a file name inside the snapshot directory) with the live network, and `diff OLD NEW` or `--last-two` compare two files without contacting the controller.
-- **Files:** `snapshot` writes `snapshot-YYYYMMDD-HHMMSSZ.json` into `./snapshots/` (the time in the name is UTC, the `Z`, so the order never depends on time zone or daylight saving; the time inside the file keeps your local time and offset; files named without the `Z` by earlier versions are local time and still listed and sorted correctly, using their offset-bearing `captured_at` when available to disambiguate a repeated hour and falling back to the local filename time if unreadable) (change it with `--dir DIR`), never overwriting an existing file. `-o FILE` picks the name; it refuses to replace an existing file unless you add `--force`. `--keep N` afterwards deletes the oldest snapshots in the directory beyond the newest N; it only touches files named like the ones this tool writes, and never the one just saved.
+- **Files:** `snapshot` writes `snapshot-YYYYMMDD-HHMMSSZ.json` into `./snapshots/` (the time in the name is UTC, the `Z`, so the order never depends on time zone or daylight saving; the time inside the file keeps your local time and offset; files named without the `Z` by earlier versions are local time and still listed and sorted correctly, using their offset-bearing `captured_at` when available to disambiguate a repeated hour and falling back to the local filename time if unreadable) (change it with `--dir DIR`), never overwriting an existing file. `-o FILE` (long form `--output`) picks the name; it refuses to replace an existing file unless you add `--force`. `--keep N` afterwards deletes the oldest snapshots in the directory beyond the newest N; it only touches files named like the ones this tool writes, and never the one just saved.
 - **Privacy:** snapshots contain real MACs, IPs and device names. They are created readable only by you, and `snapshots/` is git-ignored. Do not commit or share them.
 - A snapshot file has a format version. A file from a newer, incompatible version, a damaged file, or one that is not a snapshot stops with a clear message (exit code 3).
 - Both commands only read from the controller; the files are written locally.
@@ -465,6 +465,19 @@ Gateway (UCG Max)
 `-- port 2 -> Office Switch (100 Mbps, supports 1000)   1 client   [WARNING x8]
     +-- port 2 -> Office AP   1 client
     `-- port 5 -> Garage AP   [OFFLINE]   [WARNING]
+
+Findings on these devices:
+  [WARNING ] Office Switch: CPU utilization 95%
+  [WARNING ] Office Switch: PoE budget 41.6 W of 52 W used (80%)
+  [WARNING ] Office Switch: uplink to Gateway negotiated at 100 Mbps but both ends support 1000 Mbps
+  [WARNING ] Office Switch port 1: link has gone down 5 times since boot, switch up 3h 12m
+  [WARNING ] Office Switch port 2: 4 rx/tx errors
+  [WARNING ] Office Switch port 2: link is half duplex
+  [WARNING ] Office Switch port 2: dropping 0.75% of rx packets (75 of 10000)
+  [WARNING ] Office Switch port 2: STP state is blocking, not forwarding
+  [WARNING ] Garage AP: device is offline
+
+4 devices, 2 clients, 1 offline, 1 link(s) below capability, 2 with findings
 ```
 
 Each line is `port N -> device`, where N is the **parent's** port the device plugs into, followed by the negotiated link speed, the number of connected clients (wired by switch port, wireless by AP), and flags.
@@ -508,9 +521,20 @@ Channel  Neighbors  Strong  Your radios
 
   Channel 11: strongest of 2 stronger than -80 dBm
     Eleven Net  (-50 dBm, WPA2-Personal (AES/CCMP))
-    LineBreak xxxxxxxxxxxxxxxxxxxxxxxxxxxxx…  (-70 dBm, WPA2-Personal (AES/CCMP))
+    Line Break xxxxxxxxxxxxxxxxxxxxxxxxxxxx…  (-70 dBm, WPA2-Personal (AES/CCMP))
 
-...
+5 GHz
+Channel  Neighbors  Strong  Your radios
+-------  ---------  ------  -----------
+36       0          0       Office AP
+44       1          1
+149      1          1
+
+  Channel 44: strongest of 1 stronger than -80 dBm
+    Five GHz Neighbor  (-55 dBm, WPA2-Personal (AES/CCMP))
+
+  Channel 149: strongest of 1 stronger than -80 dBm
+    Far Block  (-70 dBm, WPA2-Personal (AES/CCMP))
 
 Observations
   - Office AP 2.4 GHz (channel 6): 3 neighbors stronger than -80 dBm on the same channel, 1 overlapping it
@@ -548,13 +572,13 @@ example.com  icmp  100.0%        20 ms
 example.org  icmp  100.0%        24 ms
 
 Speedtests, last 30 days (11 runs), 12 stored
-  Last: 2026-09-30 16:10 (6h ago): download 880 Mbps, upload 40 Mbps, latency 25 ms
+  Last: 2026-10-01 10:13 (6h ago): download 880 Mbps, upload 40 Mbps, latency 25 ms
   Download: min 500 Mbps, median 925 Mbps, max 940 Mbps
   Upload: min 31 Mbps, median 40 Mbps, max 41 Mbps
   Latency: min 23 ms, median 24 ms, max 41 ms
 
   Download below 70% of the median (1):
-    2026-09-22 22:10  download 500 Mbps, upload 31 Mbps, latency 41 ms
+    2026-09-23 16:13  download 500 Mbps, upload 31 Mbps, latency 41 ms
 ```
 
 - **Now:** the WAN and internet subsystems of the controller's health (status, ISP, WAN IP, latency, drops) and the gateway's WAN link: its negotiated speed against what the port supports (a 1 Gbps plan on a 2.5 Gbps port is normal, so that is only shown, never flagged) and the live traffic rate.
@@ -572,15 +596,20 @@ Speedtests, last 30 days (11 runs), 12 stored
 ```text
 uv run unifi-sentinel.py events --client phone --since 6h
 Time                 Severity  Category        Event                         Message
--------------------  --------  --------------  ----------------------------  -------------------------------------------
-2026-01-01 10:10:00  Low       CLIENT_DEVICES  CLIENT_DISCONNECTED_WIRELESS  phone disconnected from Home. Time Connected: 25s.
-...
+-------------------  --------  --------------  ----------------------------  --------------------------------------------------
+2026-10-01 16:03:05  Low       CLIENT_DEVICES  CLIENT_DISCONNECTED_WIRELESS  phone disconnected from Home. Time Connected: 25s.
+2026-10-01 15:48:05  Low       CLIENT_DEVICES  CLIENT_CONNECTED_WIRELESS     phone connected to Home on Office AP.
+2026-10-01 15:33:05  Low       CLIENT_DEVICES  CLIENT_DISCONNECTED_WIRELESS  phone disconnected from Home. Time Connected: 2m.
+2026-10-01 15:23:05  Low       CLIENT_DEVICES  CLIENT_ROAMED                 phone roamed from Garage AP to Office AP.
+2026-10-01 15:13:05  Low       CLIENT_DEVICES  CLIENT_DISCONNECTED_WIRELESS  phone disconnected from Home. Time Connected: 1h.
+
+5 event(s)
 ```
 
 Options (the filters combine with AND; the first group is done by the controller, the second by this tool):
 - `--since DURATION`: how far back, such as `90m`, `24h`, `7d` or `2w` (default `24h`)
 - `--category NAME` (repeatable): for example `CLIENT_DEVICES`, `UNIFI_DEVICES`, `INTERNET_AND_WAN` or `AUDIT`
-- `--severity low|medium|high` (repeatable) and `-s TEXT` (text search)
+- `--severity low|medium|high` (repeatable) and `-s TEXT` or `--search TEXT` (text search)
 - `--event TEXT`: event types containing TEXT, such as `roam`, `disconnected` or `ip_conflict`
 - `--client NAME|MAC|IP` and `--device NAME|IP`: events about that client or UniFi device (MAC fragments of six or more hex digits work)
 - `--limit N`: the newest N events (default 100; `0` for all). At most 20,000 events are read from the controller per run.
@@ -615,7 +644,7 @@ Attached: desktop -> Office Switch port 3 (1000 Mbps) -> Gateway port 2 (100 Mbp
 Link:     1000 Mbps, full duplex, 0 errors, 60 dropped packets on its port
 
 Recent events (last 24h, newest first):
-  2026-10-01 01:31:49  CLIENT_CONNECTED_WIRED: desktop connected to Main on Office Switch Port 3.
+  2026-10-01 14:43:05  CLIENT_CONNECTED_WIRED: desktop connected to Main on Office Switch Port 3.
 
 Related findings:
 [WARNING ] Office Switch: CPU utilization 95%
@@ -636,7 +665,7 @@ Related findings:
 
 ### New clients
 
-`new-clients` lists every known client, connected or not, that has not been added to at least one client group (Network > Client Groups), so newly seen devices stand out. Add a client to a group in the controller and it drops off the report. Columns: Name, MAC Address, IP Address, Vendor, Connection Type, Where (switch and port, or AP), First Seen, Last Seen, Status, Private MAC (`yes` for a randomized address, see below). Newest first-seen comes first, with no age cutoff. `-s TEXT` filters and `--json` prints JSON.
+`new-clients` lists every known client, connected or not, that has not been added to at least one client group (Network > Client Groups), so newly seen devices stand out. Add a client to a group in the controller and it drops off the report. Columns: Name, MAC Address, IP Address, Vendor, Connection Type, Where (switch and port, or AP), First Seen, Last Seen, Status, Private MAC (`yes` for a randomized address, see below). Newest first-seen comes first, with no age cutoff. `-s TEXT` (or `--search TEXT`) filters and `--json` prints JSON.
 
 Group membership comes from the legacy `stat/alluser` client records and the legacy v2 `network-members-groups` definitions; the Integration API has no client groups. A group that has been deleted does not count as membership. If the group definitions cannot be read, the tool warns and trusts each client's own group list.
 
@@ -701,12 +730,18 @@ Sample from synthetic data with `diagnose --no-events` (text labels are used whe
 ```text
 [WARNING ] Garage AP: device is offline
 [WARNING ] Office Switch: CPU utilization 95%
+[WARNING ] Office Switch: PoE budget 41.6 W of 52 W used (80%)
+[WARNING ] Office Switch: uplink to Gateway negotiated at 100 Mbps but both ends support 1000 Mbps
+[WARNING ] Office Switch port 1: link has gone down 5 times since boot, switch up 3h 12m
 [WARNING ] Office Switch port 2: 4 rx/tx errors
 [WARNING ] Office Switch port 2: link is half duplex
+[WARNING ] Office Switch port 2: dropping 0.75% of rx packets (75 of 10000)
+[WARNING ] Office Switch port 2: STP state is blocking, not forwarding
 [WARNING ] old-printer: reserved IP 10.0.0.50 is outside network IoT (10.0.20.1/24)
 [INFO    ] Office Switch port 2: negotiated at 100 Mbps
+[INFO    ] wlan: wlan subsystem reports warning: 1 device(s) disconnected (see the device findings)
 
-5 warnings, 1 info
+10 warnings, 2 info
 ```
 
 ### new-clients
@@ -714,8 +749,8 @@ Sample from synthetic data with `diagnose --no-events` (text labels are used whe
 ```text
 Name         MAC Address        IP Address  Vendor  Connection Type  Where                        First Seen           Last Seen            Status   Private MAC
 -----------  -----------------  ----------  ------  ---------------  ---------------------------  -------------------  -------------------  -------  -----------
-old-tablet   BB:00:00:00:00:04  10.0.0.51           Wireless                                      2025-06-15 10:06:40  2025-12-05 23:46:40  Offline
-old-printer  BB:00:00:00:00:03  10.0.0.50           Wired            Wired, Office Switch port 6  2023-11-14 16:13:20  2026-10-01 05:12:43  Offline
+old-tablet   BB:00:00:00:00:04  10.0.0.51           Wireless                                      2025-06-15 15:06:40  2025-12-06 05:46:40  Offline
+old-printer  BB:00:00:00:00:03  10.0.0.50           Wired            Wired, Office Switch port 6  2023-11-14 22:13:20  2026-10-01 13:13:05  Offline
 
 2 client(s) in no group
 ```
@@ -798,6 +833,13 @@ uv run ruff check .       # lint (rules E, F, B, I, UP in pyproject.toml; lines 
 uv run mypy               # types; reported in CI but not blocking yet (about 27 known findings)
 uv lock --check           # uv.lock must match pyproject.toml; run `uv lock` after changing dependencies
 ```
+
+**Tests that keep the documentation and the output honest:**
+
+- `tests/test_golden.py` compares the text output of the main commands (`diagnose`, `topology`, `wan`, `wifi`, `client`, `events`, `new-clients` and the `query` kinds) with stored files in `tests/golden/`, produced from the synthetic fixture. Times, ages and table padding are normalised, so the files do not change from day to day. When a change to the output is intended, refresh them with `UPDATE_GOLDEN=1 uv run pytest tests/test_golden.py` and review the diff like code.
+- `tests/test_docs_drift.py` checks this README against the program: every example command parses with the real argument parser, every command has a row in the Commands table, every long option is mentioned (and every option the README shows exists), and the sample output blocks (topology, wifi, wan, client, diagnose, new-clients, events) equal what the commands print. After an intended output change, `UPDATE_README_SAMPLES=1 uv run pytest tests/test_docs_drift.py` rewrites those blocks. The `diff` sample is illustrative on purpose and is not checked.
+- `tests/test_entry_points.py` runs the launcher, the installed `unifi-sentinel` script and `python -m unifi_sentinel.cli` in subprocesses, and `tests/test_exit_codes.py` produces every documented exit code (0, 1, 2, 3, 4 and 64) from a real scenario and checks the table above.
+- Coverage: `COVERAGE_FILE=/tmp/.coverage uv run --with coverage coverage run --branch --source=unifi_sentinel -m pytest` then `COVERAGE_FILE=/tmp/.coverage uv run --with coverage coverage report -m`. It is at 100% of lines and branches; the few `pragma: no cover`/`no branch` comments say why a line cannot run (for example the Python 3.10-only `tomli` import, which CI covers).
 
 `uv run ruff check . --fix` applies the safe fixes (import order, unused imports). The `List[...]` and `Optional[...]` annotation style is not enforced yet, and there is no code formatter. See [CLAUDE.md](CLAUDE.md) for contributor and AI-assistant guidelines.
 

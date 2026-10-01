@@ -1,0 +1,14 @@
+[WARNING ] Garage AP: device is offline
+[WARNING ] Office Switch: CPU utilization 95%
+[WARNING ] Office Switch: PoE budget 41.6 W of 52 W used (80%)
+[WARNING ] Office Switch: uplink to Gateway negotiated at 100 Mbps but both ends support 1000 Mbps
+[WARNING ] Office Switch port 1: link has gone down 5 times since boot, switch up 3h 12m
+[WARNING ] Office Switch port 2: 4 rx/tx errors
+[WARNING ] Office Switch port 2: link is half duplex
+[WARNING ] Office Switch port 2: dropping 0.75% of rx packets (75 of 10000)
+[WARNING ] Office Switch port 2: STP state is blocking, not forwarding
+[WARNING ] old-printer: reserved IP 10.0.0.50 is outside network IoT (10.0.20.1/24)
+[INFO  ] Office Switch port 2: negotiated at 100 Mbps
+[INFO  ] wlan: wlan subsystem reports warning: 1 device(s) disconnected (see the device findings)
+
+10 warnings, 2 info

@@ -515,7 +515,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             detail = build_client_detail(snap, matches[0], settings)
             emoji = not args.no_emoji and stream_supports_emoji(sys.stdout)
             _say(to_json(detail) if args.json else render_detail(detail, emoji))
-        elif args.command == "diagnose":
+        elif args.command == "diagnose":  # pragma: no branch  (the last command; argparse rejects any other)
             findings, ignored = apply_ignores(
                 diagnose(collect_snapshot(client, config.site, include_reservations=True,
                                           include_health=True, include_speedtests=True,

@@ -1,0 +1,8 @@
+Name  MAC Address  IP Address  Model  Connection Type  Switch  Port  Status  Firmware  Update Available  Uptime
+---  ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
+Gateway  AA:00:00:00:00:01  10.0.0.1  UCG Max  Wired  Online  5.0.0  No  2d 7h
+Office Switch  AA:00:00:00:00:02  10.0.0.2  USW-Lite-8-PoE  Wired  Gateway  2  Online  7.0.0  Yes  3h 12m
+Office AP  AA:00:00:00:00:03  10.0.0.3  U7 Pro  Wired  Office Switch  2  Online  8.0.0  5m
+Garage AP  AA:00:00:00:00:04  10.0.0.4  U6 Pro  Wired  Office Switch  5  Offline  8.0.0
+
+4 row(s)

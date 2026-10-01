@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "summary": {
+    "critical": 0,
+    "warning": 10,
+    "info": 2,
+    "ignored": 0
+  },
+  "findings": [
+    {
+      "severity": "warning",
+      "code": "device.offline",
+      "subject": "Garage AP",
+      "message": "device is offline",
+      "mac": "AA:00:00:00:00:04"
+    },
+    {
+      "severity": "warning",
+      "code": "device.cpu_high",
+      "subject": "Office Switch",
+      "message": "CPU utilization 95%",
+      "mac": "AA:00:00:00:00:02"
+    },
+    {
+      "severity": "warning",
+      "code": "port.poe_budget",
+      "subject": "Office Switch",
+      "message": "PoE budget 41.6 W of 52 W used (80%)",
+      "mac": "AA:00:00:00:00:02"
+    },
+    {
+      "severity": "warning",
+      "code": "link.below_capability",
+      "subject": "Office Switch",
+      "message": "uplink to Gateway negotiated at 100 Mbps but both ends support 1000 Mbps",
+      "mac": "AA:00:00:00:00:02"
+    },
+    {
+      "severity": "warning",
+      "code": "port.link_flaps",
+      "subject": "Office Switch port 1",
+      "message": "link has gone down 5 times since boot, switch up 3h 12m",
+      "mac": "AA:00:00:00:00:02"
+    },
+    {
+      "severity": "warning",
+      "code": "port.errors",
+      "subject": "Office Switch port 2",
+      "message": "4 rx/tx errors",
+      "mac": "AA:00:00:00:00:02"
+    },
+    {
+      "severity": "warning",
+      "code": "port.half_duplex",
+      "subject": "Office Switch port 2",
+      "message": "link is half duplex",
+      "mac": "AA:00:00:00:00:02"
+    },
+    {
+      "severity": "warning",
+      "code": "port.drops",
+      "subject": "Office Switch port 2",
+      "message": "dropping 0.75% of rx packets (75 of 10000)",
+      "mac": "AA:00:00:00:00:02"
+    },
+    {
+      "severity": "warning",
+      "code": "port.stp",
+      "subject": "Office Switch port 2",
+      "message": "STP state is blocking, not forwarding",
+      "mac": "AA:00:00:00:00:02"
+    },
+    {
+      "severity": "warning",
+      "code": "reservation.outside_subnet",
+      "subject": "old-printer",
+      "message": "reserved IP 10.0.0.50 is outside network IoT (10.0.20.1/24)",
+      "mac": ""
+    },
+    {
+      "severity": "info",
+      "code": "port.slow_link",
+      "subject": "Office Switch port 2",
+      "message": "negotiated at 100 Mbps",
+      "mac": "AA:00:00:00:00:02"
+    },
+    {
+      "severity": "info",
+      "code": "health.device_subsystem",
+      "subject": "wlan",
+      "message": "wlan subsystem reports warning: 1 device(s) disconnected (see the device findings)",
+      "mac": ""
+    }
+  ]
+}
