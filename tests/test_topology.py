@@ -6,7 +6,7 @@ from unifi_sentinel import cli
 from unifi_sentinel.diagnose import Finding
 from unifi_sentinel.settings import DiagnoseSettings, IgnoreRule
 from unifi_sentinel.snapshot import Snapshot, collect_snapshot
-from unifi_sentinel.topology import (_assign_findings, build_topology, render_text, to_json)
+from unifi_sentinel.topology import _assign_findings, build_topology, render_text, to_json
 
 
 def dev(mac, name, parent=None, port=None, speed=None, kind="usw", own=None, **kw):
@@ -157,7 +157,9 @@ def test_client_counts_per_device_and_unavailable_client_data():
                {"mac": "C5", "name": "stray", "is_wired": True, "sw_mac": "ZZ:99"}]
     snap = Snapshot(site={}, devices=[], clients=[], legacy_devices=legacy, legacy_clients=clients)
     t = build_topology(snap, with_clients=True)
-    gw, = t["roots"]; sw, = gw["children"]; ap, = sw["children"]
+    gw, = t["roots"]
+    sw, = gw["children"]
+    ap, = sw["children"]
     assert sw["clients"] == {"wired": 2, "wireless": 0, "total": 2}
     assert ap["clients"] == {"wired": 0, "wireless": 2, "total": 2} and gw["clients"]["total"] == 0
     assert [(c["port"], c["name"]) for c in sw["wired_clients"]] == [(2, "pc1"), (4, "pc2")]   # by port
@@ -173,7 +175,9 @@ def test_client_counts_per_device_and_unavailable_client_data():
 
 def test_findings_go_to_their_exact_device_identity():
     names_ = {"1": "SW", "2": "SW 2"}
-    f = lambda subject, mac=None: Finding("warning", subject, "m", mac)
+    def f(subject, mac=None):
+        return Finding("warning", subject, "m", mac)
+
     got = _assign_findings([f("SW", "1"), f("SW port 1", "1"), f("SW 2", "2"),
                             f("same name", "missing"), f("client named SW")], names_)
     assert {mac: [x.subject for x in fs] for mac, fs in got.items()} == {

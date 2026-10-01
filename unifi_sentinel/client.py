@@ -14,8 +14,8 @@ That query changes nothing on the controller, and it is sent only by
 general-purpose POST/PUT/PATCH/DELETE method on this class.
 """
 
-from urllib.parse import quote
 from typing import Any, Dict, Iterator, List, Optional
+from urllib.parse import quote
 
 import requests
 import urllib3

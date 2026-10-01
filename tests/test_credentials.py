@@ -1,7 +1,6 @@
 """The API key is a credential: the file that holds it, the URL it travels to, and every place
 it could be printed."""
 
-import os
 import sys
 from pathlib import Path
 
@@ -10,8 +9,7 @@ import requests
 
 from unifi_sentinel import cli
 from unifi_sentinel.client import UniFiAPIError, UniFiClient
-from unifi_sentinel.config import (Config, ConfigError, env_file_warning, load_config,
-                                   validate_controller_url)
+from unifi_sentinel.config import Config, ConfigError, env_file_warning, load_config, validate_controller_url
 
 KEY = "sekret-key-0123456789"
 GOOD = f"CONTROLLER_URL=https://controller.example\nAPI_KEY={KEY}\n"

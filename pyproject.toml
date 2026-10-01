@@ -7,7 +7,7 @@ name = "unifi-sentinel"
 version = "0.1.0"
 description = "Query, troubleshoot and inventory a UniFi Network controller"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = {text = "Apache-2.0"}
 authors = [
     {name = "Jeff Holst"},
@@ -19,7 +19,6 @@ classifiers = [
     "Intended Audience :: System Administrators",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -35,7 +34,12 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=8.0"]
+dev = [
+    "mypy>=2.3.1",
+    "pytest>=8.0",
+    "ruff>=0.16.9",
+    "types-requests>=2.33.0.20260906",
+]
 
 [project.urls]
 Homepage = "https://github.com/jeffholst/unifi-sentinel"
@@ -49,3 +53,27 @@ packages = ["unifi_sentinel"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+extend-exclude = ["build", "snapshots"]
+
+[tool.ruff.lint]
+select = ["E", "F", "B", "I", "UP"]
+ignore = [
+    # Type-annotation modernisation (List[...] -> list[...], Optional[X] -> X | None) is
+    # deliberately not applied in one sweep; do it per module when the file is touched.
+    "UP006", "UP035", "UP045",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Test data (fixtures inline, long expected strings) reads better unwrapped.
+"tests/*" = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["unifi_sentinel"]
+
+[tool.mypy]
+files = ["unifi_sentinel"]
+warn_unused_configs = true

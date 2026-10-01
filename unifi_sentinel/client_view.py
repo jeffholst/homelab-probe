@@ -6,7 +6,7 @@ import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from .diagnose import (BANDS, Finding, apply_ignores, diagnose, format_findings)
+from .diagnose import BANDS, Finding, apply_ignores, diagnose, format_findings
 from .events import describe_duration, event_json, make_filter
 from .events import subjects as event_subjects
 from .export import _fmt_time, _mac, device_type_label

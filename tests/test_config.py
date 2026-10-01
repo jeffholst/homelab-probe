@@ -7,8 +7,15 @@ import pytest
 
 from unifi_sentinel import cli
 from unifi_sentinel.client import UniFiClient
-from unifi_sentinel.config import (ConfigError, ENV_FILE_VAR, MAX_SITE_LENGTH, find_env_file, load_config,
-                                   parse_bool, validate_site)
+from unifi_sentinel.config import (
+    ENV_FILE_VAR,
+    MAX_SITE_LENGTH,
+    ConfigError,
+    find_env_file,
+    load_config,
+    parse_bool,
+    validate_site,
+)
 from unifi_sentinel.settings import DEFAULT_FILENAME, DiagnoseSettings, load_settings
 
 GOOD = "CONTROLLER_URL=https://controller.example\nAPI_KEY=file-key\n"

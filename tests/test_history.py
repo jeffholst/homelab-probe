@@ -9,12 +9,24 @@ from pathlib import Path
 import pytest
 
 from unifi_sentinel import cli
-from unifi_sentinel.config import ConfigError
-from unifi_sentinel.history import (FILE_PREFIX, MAX_LISTED, SCHEMA_VERSION, _where, capture,
-                                    diff_snapshots, label_for, list_snapshots, load_snapshot, prune,
-                                    render_diff, resolve, save_snapshot)
 from unifi_sentinel.client_view import DeviceIndex, known_clients
-from unifi_sentinel.snapshot import Snapshot, collect_snapshot
+from unifi_sentinel.config import ConfigError
+from unifi_sentinel.history import (
+    FILE_PREFIX,
+    MAX_LISTED,
+    SCHEMA_VERSION,
+    _where,
+    capture,
+    diff_snapshots,
+    label_for,
+    list_snapshots,
+    load_snapshot,
+    prune,
+    render_diff,
+    resolve,
+    save_snapshot,
+)
+from unifi_sentinel.snapshot import collect_snapshot
 
 NOW = datetime(2026, 9, 30, 20, 15, 30, tzinfo=timezone(timedelta(hours=-5)))
 
@@ -248,7 +260,9 @@ def cli_rec(mac, name="pc", **kw):
 
 
 def changes(diff, kind):
-    freeze = lambda v: tuple(v) if isinstance(v, list) else v
+    def freeze(v):
+        return tuple(v) if isinstance(v, list) else v
+
     return {(c["name"], ch["field"], freeze(ch["old"]), freeze(ch["new"]))
             for c in diff[kind]["changed"] for ch in c["changes"]}
 

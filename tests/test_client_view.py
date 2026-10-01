@@ -4,9 +4,18 @@ import pytest
 
 from unifi_sentinel import cli
 from unifi_sentinel.client import UniFiAPIError
-from unifi_sentinel.client_view import (MAX_CLIENT_EVENTS, MAX_DEVICE_EVENTS, _related, build_client_detail,
-                                        candidate_rows, find_clients, known_clients, render_candidates,
-                                        render_detail, to_json)
+from unifi_sentinel.client_view import (
+    MAX_CLIENT_EVENTS,
+    MAX_DEVICE_EVENTS,
+    _related,
+    build_client_detail,
+    candidate_rows,
+    find_clients,
+    known_clients,
+    render_candidates,
+    render_detail,
+    to_json,
+)
 from unifi_sentinel.diagnose import Finding
 from unifi_sentinel.settings import DiagnoseSettings, IgnoreRule
 from unifi_sentinel.snapshot import Snapshot, collect_snapshot

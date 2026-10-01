@@ -8,26 +8,48 @@ from typing import Any, List, Optional
 
 from . import __version__
 from .client import UniFiAPIError, UniFiClient
+from .client_view import build_client_detail, find_clients, render_candidates, render_detail, to_json
 from .config import ConfigError, load_config
-from .client_view import (build_client_detail, find_clients, render_candidates,
-                          render_detail, to_json)
-from .diagnose import (CRITICAL, INFO, WARNING, apply_ignores, diagnose, exit_code,
-                       format_findings, format_ignored, stream_supports_emoji)
-from .events import (DEFAULT_LIMIT, DEFAULT_SINCE, SEVERITIES, fetch_events, make_filter,
-                     parse_duration, render_events)
+from .diagnose import (
+    CRITICAL,
+    INFO,
+    WARNING,
+    apply_ignores,
+    diagnose,
+    exit_code,
+    format_findings,
+    format_ignored,
+    stream_supports_emoji,
+)
+from .events import DEFAULT_LIMIT, DEFAULT_SINCE, SEVERITIES, fetch_events, make_filter, parse_duration, render_events
 from .export import run_export
-from .new_clients import render as render_new_clients, report as new_clients_report
+from .history import (
+    DEFAULT_DIR,
+    capture,
+    diff_snapshots,
+    label_for,
+    list_snapshots,
+    load_snapshot,
+    prune,
+    render_diff,
+    resolve,
+    save_snapshot,
+)
+from .new_clients import render as render_new_clients
+from .new_clients import report as new_clients_report
 from .query import query_rows, render
 from .settings import load_settings
-from .wifi import (DEFAULT_MIN_SIGNAL, build_wifi, parse_band,
-                   render_text as render_wifi, to_json as wifi_json)
-from .wan import DEFAULT_DAYS, build_wan, render_text as render_wan, to_json as wan_json
-from .topology import build_topology, render_text as render_topology, to_json as topology_json
-from .history import (DEFAULT_DIR, capture, diff_snapshots, label_for, list_snapshots, load_snapshot,
-                      prune, render_diff, resolve, save_snapshot)
 from .snapshot import collect_event_snapshot, collect_snapshot, warn
+from .topology import build_topology
+from .topology import render_text as render_topology
+from .topology import to_json as topology_json
 from .util import printable, safe_output
-
+from .wan import DEFAULT_DAYS, build_wan
+from .wan import render_text as render_wan
+from .wan import to_json as wan_json
+from .wifi import DEFAULT_MIN_SIGNAL, build_wifi, parse_band
+from .wifi import render_text as render_wifi
+from .wifi import to_json as wifi_json
 
 EXIT_ERROR = 3  # config or connection failure; 1 and 2 are reserved for diagnose findings
 EXIT_NO_MATCH = 4  # `client` found no client, or several (it lists them)
@@ -51,7 +73,7 @@ def _duration(text: str) -> int:
     try:
         return parse_duration(text)
     except ValueError as e:
-        raise argparse.ArgumentTypeError(str(e))
+        raise argparse.ArgumentTypeError(str(e)) from e
 
 
 def _non_negative(text: str) -> int:
@@ -78,7 +100,7 @@ def _band(text: str) -> str:
     try:
         return parse_band(text)
     except ValueError as e:
-        raise argparse.ArgumentTypeError(str(e))
+        raise argparse.ArgumentTypeError(str(e)) from e
 
 
 def _signal(text: str) -> float:
@@ -198,7 +220,7 @@ def build_parser() -> argparse.ArgumentParser:
                          help="Compare the two newest saved snapshots (no controller needed)")
     diffcmd.add_argument("--all", action="store_true",
                          help="List every client connect/disconnect and IP change instead of the first "
-                              f"few")
+                              "few")
     diffcmd.add_argument("--json", action="store_true", help="Output JSON instead of text")
 
     wifi = sub.add_parser(

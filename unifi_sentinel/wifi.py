@@ -184,7 +184,8 @@ def radios(snap: Snapshot, idx: DeviceIndex) -> List[Radio]:
                 "ap": idx.name(mac), "mac": mac, "band": r.get("radio") or "",
                 "channel": None if channel is None else int(channel), "online": not idx.offline(mac),
                 "width": None if _num(r.get("bw")) is None else int(_num(r.get("bw"))),
-                "tx_power": _num(r.get("tx_power")), "clients": None if _num(r.get("num_sta")) is None else int(_num(r.get("num_sta"))),
+                "tx_power": _num(r.get("tx_power")),
+                "clients": None if _num(r.get("num_sta")) is None else int(_num(r.get("num_sta"))),
                 "utilization": _num(r.get("cu_total")), "retries": _num(r.get("tx_retries_pct")),
                 "satisfaction": sat if sat is not None and sat >= 0 else None,      # -1 means unknown
                 "span": span_mhz(
@@ -205,7 +206,8 @@ def build_wifi(snap: Snapshot, min_signal: float = DEFAULT_MIN_SIGNAL, band: str
     idx = DeviceIndex(snap)
     all_radios = radios(snap, idx)
     needle = ap.strip().lower()
-    mine = [r for r in all_radios if (not needle or needle in r["ap"].lower()) and (not band or r["band"] in (band, ""))]
+    mine = [r for r in all_radios
+            if (not needle or needle in r["ap"].lower()) and (not band or r["band"] in (band, ""))]
     wanted_aps = {r["mac"].lower() for r in mine} if needle else None
 
     neighbors_available = snap.neighbors_available

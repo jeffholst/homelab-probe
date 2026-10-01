@@ -4,16 +4,28 @@ import pytest
 
 from unifi_sentinel import cli
 from unifi_sentinel.client import UniFiAPIError
-from unifi_sentinel.snapshot import Snapshot, collect_snapshot
-from unifi_sentinel.wifi import (DEFAULT_MIN_SIGNAL, NAMES_PER_CHANNEL, build_wifi, overlaps, own_bssids,
-                                 parse_band, radios, render_text, span_mhz, to_json, unique_neighbors)
 from unifi_sentinel.client_view import DeviceIndex
-
+from unifi_sentinel.snapshot import Snapshot, collect_snapshot
+from unifi_sentinel.wifi import (
+    DEFAULT_MIN_SIGNAL,
+    NAMES_PER_CHANNEL,
+    build_wifi,
+    overlaps,
+    own_bssids,
+    parse_band,
+    radios,
+    render_text,
+    span_mhz,
+    to_json,
+    unique_neighbors,
+)
 
 # -- spectrum -------------------------------------------------------------------
 
 def test_2_4_ghz_spans_overlap_when_channels_are_closer_than_five_apart():
-    span = lambda ch: span_mhz("ng", ch, 20)
+    def span(ch):
+        return span_mhz("ng", ch, 20)
+
     assert span(1) == (2401, 2423) and span(6) == (2426, 2448)
     assert not overlaps(span(1), span(6)) and not overlaps(span(6), span(11)) and not overlaps(span(1), span(11))
     for adjacent in (2, 3, 4, 5):
@@ -183,7 +195,9 @@ def test_observations_use_overlap_not_just_the_channel_number(report):
 
 
 def snap_two_aps(neighbors=()):
-    stats = lambda ch, band="ng", bw=20: [{"radio": band, "channel": ch, "bw": bw}]
+    def stats(ch, band="ng", bw=20):
+        return [{"radio": band, "channel": ch, "bw": bw}]
+
     devices = [ap("AA:01", "Upper", stats(6)), ap("AA:02", "Lower", stats(6)),
                ap("AA:03", "Hall", stats(4)), ap("AA:04", "Quiet", stats(11))]
     return Snapshot(site={}, devices=[], clients=[], legacy_devices=devices, neighbors=list(neighbors))
@@ -263,7 +277,7 @@ def test_names_are_capped_per_channel_unless_all():
     rows = [row(bssid=f"n{i:02d}", ch=11, sig=-40 - i, name=f"Net{i:02d}") for i in range(NAMES_PER_CHANNEL + 3)]
     w = build_wifi(snap_two_aps(rows))
     capped = render_text(w)
-    assert f"... and 3 more (use --all)" in capped
+    assert "... and 3 more (use --all)" in capped
     assert f"Net{NAMES_PER_CHANNEL - 1:02d}" in capped and f"Net{NAMES_PER_CHANNEL:02d}" not in capped
     full = render_text(w, show_all=True)
     assert "more (use --all)" not in full and f"Net{NAMES_PER_CHANNEL + 2:02d}" in full
