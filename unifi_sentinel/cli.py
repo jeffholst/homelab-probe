@@ -3,13 +3,14 @@
 import argparse
 import json
 import sys
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, List, Optional
 
 from . import __version__
 from .client import UniFiAPIError, UniFiClient
 from .client_view import build_client_detail, find_clients, render_candidates, render_detail, to_json
-from .config import ConfigError, load_config
+from .config import ConfigError, load_config, parse_timeout
 from .diagnose import (
     CRITICAL,
     INFO,
@@ -70,6 +71,13 @@ def _say(text: Any = "", file: Any = None) -> None:
     print(safe_output(str(text)), file=file)
 
 
+def _timeout(text: str) -> float:
+    try:
+        return parse_timeout(text)
+    except ConfigError as e:
+        raise argparse.ArgumentTypeError(str(e)) from e
+
+
 def _duration(text: str) -> int:
     try:
         return parse_duration(text)
@@ -120,6 +128,9 @@ def build_parser() -> argparse.ArgumentParser:
         description="Query, troubleshoot and inventory a UniFi Network controller.",
     )
     parser.add_argument("--version", action="version", version=__version__)
+    parser.add_argument("--timeout", type=_timeout, metavar="SECONDS",
+                        help="Seconds to wait for each request to the controller (before the command; "
+                             "default: TIMEOUT from .env, else 15)")
     parser.add_argument("--env-file", type=Path, metavar="FILE",
                         help="Read settings from this .env file (before the command). Default: "
                              "$UNIFI_SENTINEL_ENV, else ./.env in the current directory")
@@ -279,8 +290,8 @@ def _live_inventory(client: UniFiClient, config: Any) -> dict:
         version = str(client.info().get("applicationVersion") or "")
     except UniFiAPIError:
         version = ""
-    return capture(collect_snapshot(client, config.site, include_reservations=True, include_groups=True),
-                   version)
+    return capture(collect_snapshot(client, config.site, include_reservations=True, include_groups=True,
+                                    users_required=True), version)
 
 
 def _run_history(client: UniFiClient, config: Any, args: argparse.Namespace) -> int:
@@ -337,6 +348,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         parser.error("--config only applies with --offline")
     try:
         config = load_config(args.env_file)
+        if args.timeout is not None:
+            config = replace(config, timeout=args.timeout)      # the command line beats .env
         for message in config.warnings:
             warn(message)
         # Load diagnose settings first so a bad config file fails before any API call.
@@ -360,7 +373,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                               args.switch or "", args.down, args.errors, offline_days)
             _say(render(rows, args.json, args.kind, args.offline))
         elif args.command == "new-clients":
-            snap = collect_snapshot(client, config.site, include_groups=True)
+            snap = collect_snapshot(client, config.site, include_groups=True, users_required=True)
             _say(render_new_clients(new_clients_report(snap, args.search), args.json))
         elif args.command == "events":
             snap = collect_event_snapshot(

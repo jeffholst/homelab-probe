@@ -114,7 +114,7 @@ def test_group_definition_failure_warns_and_falls_back(fake_client, monkeypatch,
     assert names(ungrouped_clients(snap)) == ["old-tablet", "old-printer"]  # raw id lists used
 
 
-def test_alluser_failure_propagates_when_collecting_groups(fake_client, monkeypatch):
+def break_alluser(fake_client, monkeypatch):
     legacy_stat = fake_client.legacy_stat
 
     def fail_alluser(site_ref, resource):
@@ -123,8 +123,19 @@ def test_alluser_failure_propagates_when_collecting_groups(fake_client, monkeypa
         return legacy_stat(site_ref, resource)
 
     monkeypatch.setattr(fake_client, "legacy_stat", fail_alluser)
+
+
+def test_alluser_failure_propagates_when_it_is_required(fake_client, monkeypatch):
+    break_alluser(fake_client, monkeypatch)
     with pytest.raises(UniFiAPIError, match="alluser unavailable"):
-        collect_snapshot(fake_client, "default", include_groups=True)
+        collect_snapshot(fake_client, "default", include_groups=True, users_required=True)
+
+
+def test_alluser_failure_degrades_with_a_warning_when_it_is_optional(fake_client, monkeypatch, capsys):
+    break_alluser(fake_client, monkeypatch)
+    snap = collect_snapshot(fake_client, "default", include_groups=True, include_reservations=True)
+    assert snap.all_users == [] and len(snap.clients) == 2          # connected clients still work
+    assert "legacy stat/alluser unavailable" in capsys.readouterr().err
 
 
 def test_cli_new_clients(fake_client, monkeypatch, capsys):

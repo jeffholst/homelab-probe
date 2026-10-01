@@ -16,6 +16,7 @@ controller URL must be ``https://`` unless ``ALLOW_INSECURE_HTTP`` opts in, beca
 travels in a header of every request.
 """
 
+import math
 import os
 import shlex
 import stat
@@ -31,6 +32,9 @@ ENV_FILE_VAR = "UNIFI_SENTINEL_ENV"
 DEFAULT_ENV_FILE = ".env"
 DEFAULT_SITE = "default"
 MAX_SITE_LENGTH = 128
+DEFAULT_TIMEOUT = 15.0     # seconds per request
+MIN_TIMEOUT, MAX_TIMEOUT = 1.0, 600.0
+_CA_BUNDLE_SUFFIXES = (".pem", ".crt", ".cer")
 TRUE_WORDS = ("true", "yes", "1", "on")
 FALSE_WORDS = ("false", "no", "0", "off")
 _UNSAFE_SITE_CHARACTERS = "/\\?#"
@@ -46,7 +50,8 @@ class Config:
     controller_url: str
     api_key: str = field(repr=False)        # never shown, even by repr() in a traceback or log
     site: str = DEFAULT_SITE
-    verify_ssl: bool = True
+    verify_ssl: bool | str = True          # False, True, or the path of a CA bundle (file or directory)
+    timeout: float = DEFAULT_TIMEOUT
     warnings: Tuple[str, ...] = field(default=(), compare=False)   # for cli.main to print
 
 
@@ -62,6 +67,38 @@ def parse_bool(name: str, text: Optional[str], default: bool = True) -> bool:
         return False
     raise ConfigError(
         f"{name} must be one of {', '.join(TRUE_WORDS + FALSE_WORDS)} (got {text!r})")
+
+
+def parse_verify(text: Optional[str]) -> bool | str:
+    """``VERIFY_SSL``: the usual yes/no words, or the path of a CA bundle (a PEM file, or a directory
+    of certificates) to trust instead of the system store, which is the proper way to accept a
+    self-signed controller certificate. Unset or blank verifies with the system store."""
+    value = (text or "").strip()
+    if not value or value.lower() in TRUE_WORDS + FALSE_WORDS:
+        return parse_bool("VERIFY_SSL", value)
+    if not (any(c in value for c in "/\\~") or value.lower().endswith(_CA_BUNDLE_SUFFIXES)):
+        raise ConfigError(f"VERIFY_SSL must be one of {', '.join(TRUE_WORDS + FALSE_WORDS)}, "
+                          f"or the path of a CA bundle file (got {text!r})")
+    path = Path(value).expanduser()
+    if not (path.is_file() or path.is_dir()):
+        raise ConfigError(f"VERIFY_SSL names a CA bundle that does not exist: {value}")
+    if not os.access(path, os.R_OK):
+        raise ConfigError(f"VERIFY_SSL names a CA bundle that cannot be read: {value}")
+    return str(path)
+
+
+def parse_timeout(text: Optional[str]) -> float:
+    """The per-request timeout in seconds (``TIMEOUT`` or ``--timeout``); blank means the default."""
+    value = (text or "").strip()
+    if not value:
+        return DEFAULT_TIMEOUT
+    try:
+        seconds = float(value)
+    except ValueError:
+        raise ConfigError(f"TIMEOUT must be a number of seconds (got {text!r})") from None
+    if not math.isfinite(seconds) or not MIN_TIMEOUT <= seconds <= MAX_TIMEOUT:
+        raise ConfigError(f"TIMEOUT must be between {MIN_TIMEOUT:g} and {MAX_TIMEOUT:g} seconds (got {text!r})")
+    return seconds
 
 
 def validate_site(text: Optional[str]) -> str:
@@ -173,6 +210,7 @@ def load_config(env_file: Optional[Path] = None) -> Config:
         controller_url=url,
         api_key=api_key,
         site=validate_site(os.getenv("SITE_ID")),
-        verify_ssl=parse_bool("VERIFY_SSL", os.getenv("VERIFY_SSL")),
+        verify_ssl=parse_verify(os.getenv("VERIFY_SSL")),
+        timeout=parse_timeout(os.getenv("TIMEOUT")),
         warnings=tuple(warnings),
     )

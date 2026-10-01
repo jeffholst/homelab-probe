@@ -14,13 +14,17 @@ That query changes nothing on the controller, and it is sent only by
 general-purpose POST/PUT/PATCH/DELETE method on this class.
 """
 
-from typing import Any, Dict, Iterator, List, Optional
+import time
+import warnings
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from typing import Any, Dict, List, Optional
 from urllib.parse import quote
 
 import requests
 import urllib3
 
-from .config import Config
+from .config import DEFAULT_TIMEOUT, Config
 
 INTEGRATION_PREFIX = "/proxy/network/integration/v1"
 LEGACY_PREFIX = "/proxy/network/api"
@@ -33,6 +37,9 @@ SYSTEM_LOG_QUERY_KEYS = frozenset({
     "categories", "severities", "keys", "searchText",
 })
 PAGE_SIZE = 200
+GET_RETRIES = 2                        # extra attempts for a GET after a transient failure
+RETRY_BACKOFF_S = 0.5                  # wait before the first retry; doubles each time
+RETRY_STATUSES = frozenset({502, 503, 504})   # a gateway or proxy that is briefly unavailable
 
 
 def _segment(value: str) -> str:
@@ -50,15 +57,15 @@ class UniFiClient:
         self,
         base_url: str,
         api_key: str,
-        verify_ssl: bool = True,
-        timeout: int = 15,
+        verify_ssl: bool | str = True,
+        timeout: float = DEFAULT_TIMEOUT,
+        retries: int = GET_RETRIES,
     ) -> None:
         self.base_url = base_url.rstrip("/")
-        self.verify_ssl = verify_ssl
+        self.verify_ssl = verify_ssl           # True, False, or the path of a CA bundle
         self.timeout = timeout
-        if not verify_ssl:
-            # User opted out (VERIFY_SSL=false); suppress the per-request warning.
-            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        self.retries = max(0, retries)
+        self._sleep = time.sleep               # replaced in tests so backoff does not wait
         self.session = requests.Session()
         self.session.headers.update(
             {"X-API-KEY": api_key, "Accept": "application/json"}
@@ -66,20 +73,15 @@ class UniFiClient:
 
     @classmethod
     def from_config(cls, config: Config) -> "UniFiClient":
-        return cls(config.controller_url, config.api_key, config.verify_ssl)
+        return cls(config.controller_url, config.api_key, config.verify_ssl, config.timeout)
 
     # -- transport ---------------------------------------------------------
 
     def _get(self, path: str, params: Optional[Dict[str, Any]] = None) -> Any:
         url = f"{self.base_url}{path}"
-        try:
-            resp = self.session.get(
-                url, params=params, verify=self.verify_ssl, timeout=self.timeout)
-        except requests.exceptions.SSLError as e:
-            raise self._tls_error() from e
-        except requests.exceptions.RequestException as e:
-            raise UniFiAPIError(f"Connection error for {url}: {self._redact(str(e))}") from e
-        return self._decode_response(resp, url)
+        return self._exchange(
+            lambda: self.session.get(url, params=params, verify=self.verify_ssl, timeout=self.timeout),
+            url, retries=self.retries)
 
     def _post_system_log(self, site_ref: str, query: Dict[str, Any]) -> Any:
         """POST a read-only query to the fixed system-log path. Never takes a path."""
@@ -87,14 +89,65 @@ class UniFiClient:
         if unexpected:
             raise ValueError(f"unsupported system-log query key(s): {', '.join(sorted(unexpected))}")
         url = self.base_url + SYSTEM_LOG_PATH.format(site=_segment(site_ref))
-        try:
-            resp = self.session.post(
-                url, json=query, verify=self.verify_ssl, timeout=self.timeout)
-        except requests.exceptions.SSLError as e:
-            raise self._tls_error() from e
-        except requests.exceptions.RequestException as e:
-            raise UniFiAPIError(f"Connection error for {url}: {self._redact(str(e))}") from e
-        return self._decode_response(resp, url)
+        # Not retried: it is the one request that is not a GET, so it stays as plain as possible.
+        return self._exchange(
+            lambda: self.session.post(url, json=query, verify=self.verify_ssl, timeout=self.timeout),
+            url, retries=0)
+
+    def _exchange(self, send: Callable[[], requests.Response], url: str, retries: int) -> Any:
+        """Run one request (``send``) with the error handling shared by GET and POST.
+
+        A connection failure, a timeout or a 502/503/504 is retried up to ``retries`` more times
+        with a doubling pause; a TLS failure, any other status and a bad body are not, because
+        trying again cannot change them. Everything that can be shown is stripped of the API key.
+        """
+        attempts = retries + 1
+        for attempt in range(1, attempts + 1):
+            try:
+                with self._quiet_insecure_warnings():
+                    resp = send()
+            except requests.exceptions.SSLError as e:
+                raise self._tls_error() from e
+            except requests.exceptions.Timeout as e:
+                failure = UniFiAPIError(
+                    f"timed out after {self.timeout:g} s{self._tries(attempt)}: {url}; "
+                    "a slow gateway may need a longer --timeout")
+                cause: BaseException = e
+            except requests.exceptions.RequestException as e:
+                failure = UniFiAPIError(
+                    f"Connection error for {url}{self._tries(attempt)}: {self._redact(str(e))}")
+                cause = e
+            except OSError as e:               # e.g. requests cannot read the CA bundle file
+                raise UniFiAPIError(f"cannot make the request to {url}: {self._redact(str(e))}") from e
+            else:
+                if resp.status_code in RETRY_STATUSES and attempt < attempts:
+                    self._sleep(RETRY_BACKOFF_S * 2 ** (attempt - 1))
+                    continue
+                return self._decode_response(resp, url, attempt)
+            if attempt == attempts:
+                raise failure from cause
+            self._sleep(RETRY_BACKOFF_S * 2 ** (attempt - 1))
+        raise AssertionError("unreachable")     # pragma: no cover
+
+    @staticmethod
+    def _tries(attempt: int) -> str:
+        return f" (after {attempt} attempts)" if attempt > 1 else ""
+
+    @contextmanager
+    def _quiet_insecure_warnings(self) -> Iterator[None]:
+        """Hide urllib3's "unverified HTTPS request" warning for this client's own requests only.
+
+        The user chose ``VERIFY_SSL=false``, so repeating the warning is noise; but it is not
+        turned off for the whole process (the old ``urllib3.disable_warnings`` did that).
+        ``warnings.catch_warnings`` is not thread-safe, so a future parallel fetch must set the
+        filter once up front instead of per request.
+        """
+        if self.verify_ssl is False:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", urllib3.exceptions.InsecureRequestWarning)
+                yield
+        else:
+            yield
 
     def _redact(self, text: str) -> str:
         """``text`` with the API key hidden, for anything taken from a response or an exception
@@ -103,17 +156,29 @@ class UniFiClient:
         return text.replace(key, "***") if isinstance(key, str) and key else text
 
     def _tls_error(self) -> UniFiAPIError:
+        if isinstance(self.verify_ssl, str):
+            return UniFiAPIError(
+                f"TLS certificate verification failed for {self.base_url}: the certificate is not signed "
+                f"by anything in the CA bundle {self.verify_ssl} (VERIFY_SSL). Use the CA that signed the "
+                f"controller's certificate, or its own certificate file."
+            )
         return UniFiAPIError(
             f"TLS certificate verification failed for {self.base_url}. Install a "
-            f"trusted certificate on the controller, or set VERIFY_SSL=false in .env "
-            f"if it uses a self-signed one."
+            f"trusted certificate on the controller, point VERIFY_SSL at a CA bundle that "
+            f"trusts it, or set VERIFY_SSL=false in .env if you accept an unverified connection."
         )
 
-    def _decode_response(self, resp: requests.Response, url: str) -> Any:
+    def _decode_response(self, resp: requests.Response, url: str, attempt: int = 1) -> Any:
         if resp.status_code == 401:
             raise UniFiAPIError(f"401 Unauthorized for {url}: invalid API key.")
+        if resp.status_code == 403:
+            raise UniFiAPIError(
+                f"403 Forbidden for {url}: the API key is valid but is not allowed to make this request. "
+                "Check the key's access in Settings > Control Plane > Integrations (some legacy endpoints "
+                "may also reject API keys on some controller versions).")
         if not resp.ok:
-            raise UniFiAPIError(f"HTTP {resp.status_code} for {url}: {self._redact(resp.text)[:500]}")
+            raise UniFiAPIError(
+                f"HTTP {resp.status_code} for {url}{self._tries(attempt)}: {self._redact(resp.text)[:500]}")
         try:
             return resp.json()
         except ValueError as e:
