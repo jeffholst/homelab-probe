@@ -3,6 +3,7 @@ import json
 import os
 import re
 import stat
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -111,7 +112,7 @@ def test_where_never_crashes_on_missing_data(snap):
 
 def test_save_load_round_trip_default_name_and_permissions(record, tmp_path):
     path = save_snapshot(record, directory=tmp_path / "snaps")                    # creates the directory
-    assert path.name == "snapshot-20260930-201530.json" and path.parent == tmp_path / "snaps"
+    assert path.name == "snapshot-20261001-011530Z.json" and path.parent == tmp_path / "snaps"   # -05:00 -> UTC
     assert load_snapshot(path) == record
     assert stat.S_IMODE(path.stat().st_mode) == 0o600                            # owner-only: it holds real MACs and IPs
 
@@ -121,10 +122,76 @@ def test_default_names_never_overwrite(record, tmp_path):
     second = save_snapshot(record, directory=tmp_path)
     third = save_snapshot(record, directory=tmp_path)
     assert [p.name for p in (first, second, third)] == [
-        "snapshot-20260930-201530.json", "snapshot-20260930-201530-1.json", "snapshot-20260930-201530-2.json"]
+        "snapshot-20261001-011530Z.json", "snapshot-20261001-011530Z-1.json", "snapshot-20261001-011530Z-2.json"]
     assert list_snapshots(tmp_path) == [first, second, third]                      # chronological, not text order
-    third.rename(tmp_path / "snapshot-20260930-201530-10.json")                  # -10 is newer than -2, not older
-    assert [p.name for p in list_snapshots(tmp_path)][-1] == "snapshot-20260930-201530-10.json"
+    third.rename(tmp_path / "snapshot-20261001-011530Z-10.json")                 # -10 is newer than -2, not older
+    assert [p.name for p in list_snapshots(tmp_path)][-1] == "snapshot-20261001-011530Z-10.json"
+
+
+@pytest.fixture
+def new_york(monkeypatch):
+    """Run the test as if the machine were in New York (daylight saving ends 2026-11-01)."""
+    if not hasattr(time, "tzset"):
+        pytest.skip("needs time.tzset")
+    monkeypatch.setenv("TZ", "America/New_York")
+    time.tzset()
+    yield
+    monkeypatch.undo()
+    time.tzset()
+
+
+def at(*args, offset_hours):
+    return capture_with(datetime(*args, tzinfo=timezone(timedelta(hours=offset_hours))))
+
+
+def capture_with(moment):
+    return {"schema_version": 1, "captured_at": moment.isoformat(), "site": {}, "controller": {},
+            "devices": [], "clients": [], "reservations": []}
+
+
+def test_names_are_utc_whatever_the_machines_time_zone(new_york, tmp_path):
+    path = save_snapshot(at(2026, 6, 1, 8, 30, 0, offset_hours=-4), directory=tmp_path)    # local summer time
+    assert path.name == "snapshot-20260601-123000Z.json"
+    path = save_snapshot(at(2026, 6, 1, 14, 30, 0, offset_hours=2), directory=tmp_path)     # a record from elsewhere
+    assert path.name == "snapshot-20260601-123000Z-1.json"
+
+
+def test_snapshots_across_the_daylight_saving_fall_back_stay_in_order(new_york, tmp_path):
+    """01:30 EDT happens before 01:10 EST on 2026-11-01, but the local clock reads later for the first."""
+    first = save_snapshot(at(2026, 11, 1, 1, 30, 0, offset_hours=-4), directory=tmp_path)   # 05:30Z
+    second = save_snapshot(at(2026, 11, 1, 1, 10, 0, offset_hours=-5), directory=tmp_path)  # 06:10Z
+    assert [first.name, second.name] == ["snapshot-20261101-053000Z.json", "snapshot-20261101-061000Z.json"]
+    assert list_snapshots(tmp_path) == [first, second]                                      # not text-of-local-time order
+    assert prune(tmp_path, keep=1) == [first] and list_snapshots(tmp_path) == [second]      # --keep keeps the later one
+
+
+def test_old_local_time_names_still_sort_among_new_utc_names(new_york, tmp_path):
+    old = tmp_path / "snapshot-20260930-201530.json"          # written by an earlier version: 20:15:30 EDT = 00:15:30Z
+    old.write_text("{}")
+    before = tmp_path / "snapshot-20261001-001500Z.json"
+    after = tmp_path / "snapshot-20261001-001600Z.json"
+    for p in (before, after):
+        p.write_text("{}")
+    assert list_snapshots(tmp_path) == [before, old, after]
+
+
+def test_old_names_use_captured_at_to_disambiguate_repeated_hour(new_york, tmp_path):
+    later = tmp_path / "snapshot-20261101-013000.json"
+    earlier = tmp_path / "snapshot-20261101-013000-1.json"
+    later.write_text(json.dumps(capture_with(datetime(2026, 11, 1, 1, 30,
+                                                   tzinfo=timezone(timedelta(hours=-5))))))
+    earlier.write_text(json.dumps(capture_with(datetime(2026, 11, 1, 1, 30,
+                                                     tzinfo=timezone(timedelta(hours=-4))))))
+    assert list_snapshots(tmp_path) == [earlier, later]
+
+
+def test_names_that_are_not_real_dates_are_ignored(tmp_path):
+    for name in ("snapshot-20261399-250000.json", "snapshot-20261399-250000Z.json", "snapshot-00000000-000000Z.json"):
+        (tmp_path / name).write_text("{}")
+    good = tmp_path / "snapshot-20261001-001500Z.json"
+    good.write_text("{}")
+    assert list_snapshots(tmp_path) == [good]
+    assert prune(tmp_path, keep=0, protect=good) == []                                     # nothing else is touched
 
 
 def test_explicit_path_needs_force_to_replace_and_fixes_permissions(record, tmp_path):

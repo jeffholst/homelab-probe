@@ -270,3 +270,15 @@ def test_cli_env_file_is_a_global_option_given_before_the_command(tmp_path):
     with pytest.raises(SystemExit) as exc:
         cli.main(["info", "--env-file", str(envfile)])                       # after the command: not accepted
     assert exc.value.code == cli.EXIT_USAGE
+
+
+# -- the example file ------------------------------------------------------------
+
+def test_example_env_verifies_certificates_and_every_value_is_valid():
+    """A fresh copy of the example must not switch certificate checking off, and must parse."""
+    from dotenv import dotenv_values
+    values = dotenv_values(Path(__file__).resolve().parent.parent / "example.env")
+    assert parse_bool("VERIFY_SSL", values["VERIFY_SSL"]) is True
+    assert validate_site(values["SITE_ID"]) == "default"
+    assert values["CONTROLLER_URL"].startswith("https://")
+    assert "ALLOW_INSECURE_HTTP" not in values                      # the lab opt-in stays commented out

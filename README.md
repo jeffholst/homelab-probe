@@ -69,7 +69,7 @@ Edit `.env`:
 CONTROLLER_URL=https://your-controller-ip:443
 API_KEY=your-api-key-here
 SITE_ID=default
-VERIFY_SSL=false
+VERIFY_SSL=true
 ```
 
 | Variable         | Required | Default   | Description                                                        |
@@ -81,7 +81,7 @@ VERIFY_SSL=false
 | `ALLOW_INSECURE_HTTP` | No  | `false`   | Lab-only opt-in to an `http://` controller URL (same words as `VERIFY_SSL`) |
 
 - **Where the `.env` file is found**, first match wins: the file given with `--env-file FILE` (before the command, for example `unifi-sentinel --env-file lab.env diagnose`); the file named by the `UNIFI_SENTINEL_ENV` environment variable; `.env` in the **current directory**. Parent directories and the installed package's directory are not searched, so an installed copy (`pip install .`) works from whichever directory holds your `.env`, an unrelated project's `.env` is never picked up, and running from a subdirectory of the project does not find the project's `.env` (use `--env-file` or run from the project root). A file named with `--env-file` or `UNIFI_SENTINEL_ENV` must exist. Real environment variables always take precedence over values in the file. The `unifi-sentinel.toml` settings file for `diagnose` is likewise read from the current directory.
-- **`VERIFY_SSL`:** an unset or empty value verifies certificates. Any other word than the ones above is an error that lists the accepted words, so a typo such as `off-ish` can never silently mean "verify".
+- **`VERIFY_SSL`:** the example file ships with `true`. A UniFi controller usually has a self-signed certificate, so the first run may fail with `TLS certificate verification failed`; then either install a trusted certificate on the controller or set `VERIFY_SSL=false`, which sends your API key without checking who answers (acceptable on a trusted home network, not elsewhere). An unset or empty value verifies certificates. Any other word than the ones above is an error that lists the accepted words, so a typo such as `off-ish` can never silently mean "verify".
 - **Protecting the API key:** the key is a credential for your controller, so keep `.env` private with `chmod 600 .env`. If the file that was read is accessible to your group or to other users (any of the group or other permission bits set), the command prints one warning that names the file and the `chmod 600` fix, and carries on. It is only a warning, and it is skipped on Windows where file modes mean little. A symlink is judged by the file it points to. The key is never printed: error messages, warnings and `repr()` of the configuration leave it out, and if a server or proxy echoes it back in an error body it is replaced with `***`.
 - **`CONTROLLER_URL`:** it needs a scheme and a host (`https://host` or `https://host:port`; a trailing slash is removed). An `http://` URL is refused, because the API key is sent in a header of every request and would travel in clear text; use `https://` (with `VERIFY_SSL=false` for a self-signed certificate). For a lab network you trust you can opt in with `ALLOW_INSECURE_HTTP=true`; every run then prints a warning that the key travels in clear text. A URL containing a user name, password, query (`?`), fragment (`#`), space, backslash or control character is refused.
 - **`SITE_ID`:** a site name may contain spaces and non-ASCII letters, but not `/`, `\`, `?`, `#` or control characters, and at most 128 characters; it is also percent-encoded wherever it appears in a URL.
@@ -263,16 +263,16 @@ Tool errors used to exit 1 for every command; they now exit 3 so that 1 and 2 on
 When something breaks, the first question is "what changed since it last worked?". `snapshot` saves the inventory, and `diff` compares.
 
 ```bash
-uv run unifi-sentinel.py snapshot                         # now: ./snapshots/snapshot-20260930-201530.json
+uv run unifi-sentinel.py snapshot                         # now: ./snapshots/snapshot-20261001-011530Z.json
 # ...later, when something is wrong...
 uv run unifi-sentinel.py diff                             # the newest snapshot against the network right now
 uv run unifi-sentinel.py diff --last-two                  # the two newest snapshots (no controller needed)
-uv run unifi-sentinel.py diff snapshot-20260929-080000.json   # a named snapshot against now
+uv run unifi-sentinel.py diff snapshot-20260929-080000Z.json   # a named snapshot against now
 uv run unifi-sentinel.py diff OLD.json NEW.json           # two files
 ```
 
 ```text
-Comparing snapshot-20260930-201530.json (captured 2026-09-30 20:15) -> the network right now
+Comparing snapshot-20261001-011530Z.json (captured 2026-09-30 20:15) -> the network right now
 
 Devices
   Firmware changed (1):
@@ -292,7 +292,7 @@ Clients
 - **What is saved:** devices (name, IP, model, type, firmware, state, uplink and port), every client the controller knows (name, IP, wired or Wi-Fi, online status, network and VLAN, the device and port it is on, client groups by name) and DHCP reservations, plus the site and controller version. It is built from the same rows the other commands print, not raw API data, and leaves out values that change constantly (uptime, last-seen times, traffic), so a diff shows real changes.
 - **What diff reports** (matching by MAC address): new and missing devices, clients and reservations; renamed items; IP, firmware, state, model and network or VLAN changes; devices and clients that **moved** (a different switch, port or AP; an unknown location, such as an offline Wi-Fi client, is never a move); group changes; reservation changes; and a controller version change. Clients that connected or disconnected are listed too, but only the first 15 of each (and of client IP changes); `--all` lists every one. `--json` prints everything.
 - **Choosing what to compare:** `diff` with no arguments compares the newest saved snapshot with the live network, `diff OLD` compares a snapshot (a path, or a file name inside the snapshot directory) with the live network, and `diff OLD NEW` or `--last-two` compare two files without contacting the controller.
-- **Files:** `snapshot` writes `snapshot-YYYYMMDD-HHMMSS.json` into `./snapshots/` (change it with `--dir DIR`), never overwriting an existing file. `-o FILE` picks the name; it refuses to replace an existing file unless you add `--force`. `--keep N` afterwards deletes the oldest snapshots in the directory beyond the newest N; it only touches files named like the ones this tool writes, and never the one just saved.
+- **Files:** `snapshot` writes `snapshot-YYYYMMDD-HHMMSSZ.json` into `./snapshots/` (the time in the name is UTC, the `Z`, so the order never depends on time zone or daylight saving; the time inside the file keeps your local time and offset; files named without the `Z` by earlier versions are local time and still listed and sorted correctly, using their offset-bearing `captured_at` when available to disambiguate a repeated hour and falling back to the local filename time if unreadable) (change it with `--dir DIR`), never overwriting an existing file. `-o FILE` picks the name; it refuses to replace an existing file unless you add `--force`. `--keep N` afterwards deletes the oldest snapshots in the directory beyond the newest N; it only touches files named like the ones this tool writes, and never the one just saved.
 - **Privacy:** snapshots contain real MACs, IPs and device names. They are created readable only by you, and `snapshots/` is git-ignored. Do not commit or share them.
 - A snapshot file has a format version. A file from a newer, incompatible version, a damaged file, or one that is not a snapshot stops with a clear message (exit code 3).
 - Both commands only read from the controller; the files are written locally.

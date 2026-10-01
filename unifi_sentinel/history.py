@@ -9,7 +9,7 @@ Saved files hold real MACs and IPs, so they are git-ignored and created owner-on
 import json
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -24,7 +24,9 @@ from .util import clean_data
 SCHEMA_VERSION = 1
 DEFAULT_DIR = "snapshots"
 FILE_PREFIX = "snapshot-"
-_FILE_RE = re.compile(r"^snapshot-(\d{8}-\d{6})(?:-(\d+))?\.json$")
+# New names are UTC and end the time with "Z"; names without it were written in local time by
+# earlier versions and are still recognised.
+_FILE_RE = re.compile(r"^snapshot-(\d{8}-\d{6})(Z)?(?:-(\d+))?\.json$")
 MAX_LISTED = 15          # connection changes shown before "... and N more" (--all lifts it)
 Record = Dict[str, Any]
 
@@ -101,16 +103,43 @@ def list_snapshots(directory: Path) -> List[Path]:
     if not directory.is_dir():
         return []
 
-    def age_key(p: Path) -> Tuple[str, int]:
-        # By timestamp, then by the collision suffix as a number: sorting the names as text
-        # would put "...-1.json" (the newer) before "....json" (the older) of the same second.
-        stamp, n = _FILE_RE.match(p.name).groups()
-        return stamp, int(n or 0)
-
     try:
-        return sorted((p for p in directory.iterdir() if p.is_file() and _FILE_RE.match(p.name)), key=age_key)
+        found = [(key, p) for p in directory.iterdir() if p.is_file() and (key := _age_key(p)) is not None]
     except OSError as e:
         raise ConfigError(f"cannot read snapshot directory {directory}: {e.strerror or e}") from e
+    return [p for _, p in sorted(found, key=lambda item: item[0])]
+
+
+def _age_key(path: Path) -> Optional[Tuple[datetime, int]]:
+    """When a snapshot file name says it was taken (as a UTC instant), then its collision suffix
+    as a number, or None when the name is not one this tool writes (or not a real date).
+    Sorting the names as text would put ``...-1.json`` (the newer) before ``....json`` (the
+    older) of the same second, and would order a local-time name against a UTC one wrongly.
+    For a legacy local-time name, prefer the offset-bearing ``captured_at`` in its schema-v1
+    record to disambiguate a repeated daylight-saving hour. If the file cannot be read or does
+    not contain a usable timestamp, fall back to interpreting the name in the local time zone."""
+    match = _FILE_RE.match(path.name)
+    if not match:
+        return None
+    stamp, utc, n = match.groups()
+    try:
+        moment = datetime.strptime(stamp, "%Y%m%d-%H%M%S")
+        if utc:
+            moment = moment.replace(tzinfo=timezone.utc)
+        else:
+            fallback = moment.astimezone()  # old names: local time
+            try:
+                record = json.loads(path.read_text(encoding="utf-8"))
+                captured_at = record.get("captured_at") if (
+                    isinstance(record, dict) and record.get("schema_version") == SCHEMA_VERSION
+                ) else None
+                captured = datetime.fromisoformat(captured_at)
+                moment = captured.astimezone(timezone.utc) if captured.tzinfo is not None else fallback
+            except (OSError, TypeError, ValueError, AttributeError, json.JSONDecodeError):
+                moment = fallback
+    except (ValueError, OverflowError, OSError):
+        return None
+    return moment, int(n or 0)
 
 
 def save_snapshot(record: Record, path: Optional[Path] = None, directory: Path = Path(DEFAULT_DIR),
@@ -119,7 +148,9 @@ def save_snapshot(record: Record, path: Optional[Path] = None, directory: Path =
     ``directory`` (never overwriting an existing file). An explicit ``path`` that exists is
     only replaced with ``force``."""
     if path is None:
-        stamp = datetime.fromisoformat(record["captured_at"]).strftime("%Y%m%d-%H%M%S")
+        # UTC, so the order of the names never depends on the time zone or on daylight saving;
+        # the record itself keeps the local time with its offset.
+        stamp = datetime.fromisoformat(record["captured_at"]).astimezone(timezone.utc).strftime("%Y%m%d-%H%M%SZ")
         path, n = directory / f"{FILE_PREFIX}{stamp}.json", 0
         while path.exists():
             n += 1
