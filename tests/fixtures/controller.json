@@ -435,5 +435,316 @@
         "members": []
       }
     ]
-  }
+  },
+  "system_log": [
+    {
+      "id": "ev1",
+      "age_s": 600,
+      "key": "CLIENT_DISCONNECTED_WIRELESS_2",
+      "event": "CLIENT_DISCONNECTED_WIRELESS",
+      "category": "CLIENT_DEVICES",
+      "subcategory": "MONITORING_WIFI",
+      "type": "CLIENT_CONNECTION",
+      "severity": "LOW",
+      "status": "NEW",
+      "show_on_dashboard": false,
+      "target": "CLIENT",
+      "title_raw": "WiFi Client Disconnected",
+      "message_raw": "{CLIENT} disconnected from {WLAN}. Time Connected: {DURATION}.",
+      "parameters": {
+        "CLIENT": {
+          "id": "bb:00:00:00:00:02",
+          "name": "phone",
+          "hostname": "phone",
+          "ip": "10.0.0.11"
+        },
+        "WLAN": {
+          "name": "Home"
+        },
+        "DURATION": {
+          "name": "25s"
+        }
+      }
+    },
+    {
+      "id": "ev2",
+      "age_s": 1500,
+      "key": "CLIENT_CONNECTED_WIRELESS_2",
+      "event": "CLIENT_CONNECTED_WIRELESS",
+      "category": "CLIENT_DEVICES",
+      "subcategory": "MONITORING_WIFI",
+      "type": "CLIENT_CONNECTION",
+      "severity": "LOW",
+      "status": "NEW",
+      "show_on_dashboard": false,
+      "target": "CLIENT",
+      "title_raw": "WiFi Client Connected",
+      "message_raw": "{CLIENT} connected to {WLAN} on {DEVICE}.",
+      "parameters": {
+        "CLIENT": {
+          "id": "bb:00:00:00:00:02",
+          "name": "phone",
+          "hostname": "phone",
+          "ip": "10.0.0.11"
+        },
+        "WLAN": {
+          "name": "Home"
+        },
+        "DEVICE": {
+          "id": "ap-office-ap",
+          "name": "Office AP",
+          "ip": "10.0.0.3",
+          "model_name": "U7 Pro"
+        }
+      }
+    },
+    {
+      "id": "ev3",
+      "age_s": 2400,
+      "key": "CLIENT_DISCONNECTED_WIRELESS_2",
+      "event": "CLIENT_DISCONNECTED_WIRELESS",
+      "category": "CLIENT_DEVICES",
+      "subcategory": "MONITORING_WIFI",
+      "type": "CLIENT_CONNECTION",
+      "severity": "LOW",
+      "status": "NEW",
+      "show_on_dashboard": false,
+      "target": "CLIENT",
+      "title_raw": "WiFi Client Disconnected",
+      "message_raw": "{CLIENT} disconnected from {WLAN}. Time Connected: {DURATION}.",
+      "parameters": {
+        "CLIENT": {
+          "id": "bb:00:00:00:00:02",
+          "name": "phone",
+          "hostname": "phone",
+          "ip": "10.0.0.11"
+        },
+        "WLAN": {
+          "name": "Home"
+        },
+        "DURATION": {
+          "name": "2m"
+        }
+      }
+    },
+    {
+      "id": "ev4",
+      "age_s": 3000,
+      "key": "CLIENT_ROAMED_2",
+      "event": "CLIENT_ROAMED",
+      "category": "CLIENT_DEVICES",
+      "subcategory": "MONITORING_WIFI",
+      "type": "CLIENT_CONNECTION",
+      "severity": "LOW",
+      "status": "NEW",
+      "show_on_dashboard": false,
+      "target": "CLIENT",
+      "title_raw": "WiFi Client Roamed",
+      "message_raw": "{CLIENT} roamed from {DEVICE_FROM} to {DEVICE_TO}.",
+      "parameters": {
+        "CLIENT": {
+          "id": "bb:00:00:00:00:02",
+          "name": "phone",
+          "hostname": "phone",
+          "ip": "10.0.0.11"
+        },
+        "DEVICE_FROM": {
+          "id": "ap-garage-ap",
+          "name": "Garage AP",
+          "ip": "10.0.0.4",
+          "model_name": "U7 Pro"
+        },
+        "DEVICE_TO": {
+          "id": "ap-office-ap",
+          "name": "Office AP",
+          "ip": "10.0.0.3",
+          "model_name": "U7 Pro"
+        }
+      }
+    },
+    {
+      "id": "ev5",
+      "age_s": 3600,
+      "key": "CLIENT_DISCONNECTED_WIRELESS_2",
+      "event": "CLIENT_DISCONNECTED_WIRELESS",
+      "category": "CLIENT_DEVICES",
+      "subcategory": "MONITORING_WIFI",
+      "type": "CLIENT_CONNECTION",
+      "severity": "LOW",
+      "status": "NEW",
+      "show_on_dashboard": false,
+      "target": "CLIENT",
+      "title_raw": "WiFi Client Disconnected",
+      "message_raw": "{CLIENT} disconnected from {WLAN}. Time Connected: {DURATION}.",
+      "parameters": {
+        "CLIENT": {
+          "id": "bb:00:00:00:00:02",
+          "name": "phone",
+          "hostname": "phone",
+          "ip": "10.0.0.11"
+        },
+        "WLAN": {
+          "name": "Home"
+        },
+        "DURATION": {
+          "name": "1h"
+        }
+      }
+    },
+    {
+      "id": "ev6",
+      "age_s": 5400,
+      "key": "CLIENT_CONNECTED_WIRED_2",
+      "event": "CLIENT_CONNECTED_WIRED",
+      "category": "CLIENT_DEVICES",
+      "subcategory": "MONITORING_WIRED",
+      "type": "CLIENT_CONNECTION",
+      "severity": "LOW",
+      "status": "NEW",
+      "show_on_dashboard": false,
+      "target": "CLIENT",
+      "title_raw": "Wired Client Connected",
+      "message_raw": "{CLIENT} connected to {NETWORK} on {DEVICE} Port 3.",
+      "parameters": {
+        "CLIENT": {
+          "id": "bb:00:00:00:00:01",
+          "name": "desktop",
+          "hostname": "desktop",
+          "ip": "10.0.0.10"
+        },
+        "NETWORK": {
+          "name": "Main"
+        },
+        "DEVICE": {
+          "id": "sw1",
+          "name": "Office Switch",
+          "ip": "10.0.0.2"
+        }
+      }
+    },
+    {
+      "id": "ev7",
+      "age_s": 7200,
+      "key": "CLIENT_IP_CONFLICT",
+      "event": "CLIENT_IP_CONFLICT",
+      "category": "CLIENT_DEVICES",
+      "subcategory": "MONITORING_WIRED",
+      "type": "IP_CONFLICT",
+      "severity": "HIGH",
+      "status": "NEW",
+      "show_on_dashboard": false,
+      "target": "CLIENT",
+      "title_raw": "IP Conflict",
+      "message_raw": "Multiple devices are using the same IP {IP} address.",
+      "parameters": {
+        "IP": {
+          "name": "10.0.0.50"
+        }
+      }
+    },
+    {
+      "id": "ev8",
+      "age_s": 10800,
+      "key": "DEVICE_UNREACHABLE",
+      "event": "DEVICE_UNREACHABLE",
+      "category": "UNIFI_DEVICES",
+      "subcategory": "SYSTEM_DEVICES",
+      "type": "DEVICE_CONNECTION",
+      "severity": "HIGH",
+      "status": "NEW",
+      "show_on_dashboard": false,
+      "target": "DEVICE",
+      "title_raw": "Device Unreachable",
+      "message_raw": "{DEVICE} is unreachable.",
+      "parameters": {
+        "DEVICE": {
+          "id": "ap-garage-ap",
+          "name": "Garage AP",
+          "ip": "10.0.0.4",
+          "model_name": "U7 Pro"
+        }
+      }
+    },
+    {
+      "id": "ev9",
+      "age_s": 14400,
+      "key": "ADMIN_ACCESS",
+      "event": "ADMIN_ACCESS",
+      "category": "AUDIT",
+      "subcategory": "SYSTEM_ADMIN",
+      "type": "ADMIN_ACCESS",
+      "severity": "MEDIUM",
+      "status": "NEW",
+      "show_on_dashboard": false,
+      "target": "ADMIN",
+      "title_raw": "Admin Access",
+      "message_raw": "{ADMIN} accessed UniFi Network using the web. Source IP: {IP}",
+      "parameters": {
+        "ADMIN": {
+          "name": "Admin"
+        },
+        "IP": {
+          "name": "192.0.2.9"
+        }
+      }
+    },
+    {
+      "id": "ev10",
+      "age_s": 18000,
+      "key": "MADE_CHANGES_ONE_SETTING_OBJECT",
+      "event": "MADE_CHANGES",
+      "category": "AUDIT",
+      "subcategory": "SYSTEM_ADMIN",
+      "type": "ADMIN_ACCESS",
+      "severity": "MEDIUM",
+      "status": "NEW",
+      "show_on_dashboard": false,
+      "target": "ADMIN",
+      "title_raw": "Settings Changed",
+      "message_raw": "{ADMIN} made a change to {SETTING_NAME} in {OBJECT} {SECTION} settings.",
+      "parameters": {
+        "ADMIN": {
+          "name": "Admin"
+        },
+        "OBJECT": {
+          "name": "Office AP"
+        }
+      }
+    },
+    {
+      "id": "ev11",
+      "age_s": 864000,
+      "key": "CLIENT_ROAMED_2",
+      "event": "CLIENT_ROAMED",
+      "category": "CLIENT_DEVICES",
+      "subcategory": "MONITORING_WIFI",
+      "type": "CLIENT_CONNECTION",
+      "severity": "LOW",
+      "status": "NEW",
+      "show_on_dashboard": false,
+      "target": "CLIENT",
+      "title_raw": "WiFi Client Roamed",
+      "message_raw": "{CLIENT} roamed from {DEVICE_FROM} to {DEVICE_TO}.",
+      "parameters": {
+        "CLIENT": {
+          "id": "bb:00:00:00:00:01",
+          "name": "desktop",
+          "hostname": "desktop",
+          "ip": "10.0.0.10"
+        },
+        "DEVICE_FROM": {
+          "id": "ap-garage-ap",
+          "name": "Garage AP",
+          "ip": "10.0.0.4",
+          "model_name": "U7 Pro"
+        },
+        "DEVICE_TO": {
+          "id": "ap-office-ap",
+          "name": "Office AP",
+          "ip": "10.0.0.3",
+          "model_name": "U7 Pro"
+        }
+      }
+    }
+  ]
 }

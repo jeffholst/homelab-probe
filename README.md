@@ -1,6 +1,6 @@
 # UniFi Sentinel
 
-A command-line tool for querying, troubleshooting and inventorying a UniFi Network controller. It is **read-only**: it only sends GET requests to the controller.
+A command-line tool for querying, troubleshooting and inventorying a UniFi Network controller. It is **read-only**: it never changes anything on the controller. Every request is a GET, with one exception: the event log can only be queried with a POST, so `events` sends a read-only query to that one endpoint (see [Event history](#event-history)).
 
 > **Status: early development.** Tested against one live controller (Network 10.6.106); other versions and hardware may differ. See [open issues](https://github.com/jeffholst/unifi-sentinel/issues) for the roadmap.
 
@@ -14,6 +14,7 @@ UniFi Sentinel is a fork of [ericfitz/unifi-clients-export](https://github.com/e
 | -------- | -------------------------------------------------------------- |
 | `export` | Export connected clients, UniFi devices and switch ports to CSV |
 | `query`  | List and filter devices, clients, DHCP reservations and switch ports (table or `--json`) |
+| `events` | Event history from the controller log: disconnects, roams, IP conflicts, device outages |
 | `client` | Troubleshoot one client by name, MAC or IP: where it attaches, link quality and related findings |
 | `new-clients` | List clients that are in no client group, to spot new devices |
 | `diagnose` | Read-only health checks with 🛑 critical, ⚠️ warning and ℹ️ info findings |
@@ -28,6 +29,7 @@ Planned: richer inventory and troubleshooting reports.
 - **Network topology**: which switch and port each client or device is attached to
 - **DHCP reservations**: list every fixed IP reservation, including offline clients, with network and VLAN
 - **Querying**: list and filter devices, clients, DHCP reservations and switch ports from the command line (table or JSON)
+- **Event history**: what happened and when (disconnects, roams, IP conflicts, device outages, admin changes) from the controller's log, filterable by time, severity, category, client and device, with a summary of the noisiest clients
 - **Single-client troubleshooting**: `client <name|mac|ip>` shows where a client attaches (the full uplink chain to the gateway with port numbers and link speeds), its link quality, addressing and the `diagnose` findings that concern it
 - **New client detection**: list every known client that is in no client group, newest first, to spot new devices
 - **Health checks**: read-only diagnostics with severity levels, exit codes for scripts and cron, and a TOML file for thresholds and an ignore list
@@ -107,6 +109,10 @@ uv run unifi-sentinel.py query reservations          # DHCP fixed IP reservation
 uv run unifi-sentinel.py query ports                 # every switch port
 uv run unifi-sentinel.py query ports --down --switch rack   # down ports on matching switches
 uv run unifi-sentinel.py query ports --errors        # ports with rx/tx errors
+uv run unifi-sentinel.py events                      # the last 24 hours, newest first
+uv run unifi-sentinel.py events --since 7d --severity high   # recent serious events
+uv run unifi-sentinel.py events --client phone --event disconnected   # one client's drops
+uv run unifi-sentinel.py events --summary --since 7d   # counts and the noisiest clients
 uv run unifi-sentinel.py client desktop              # one client: attachment, link, findings
 uv run unifi-sentinel.py client aa:bb:cc:dd:ee:ff --json   # by MAC (any format) or IP, as JSON
 uv run unifi-sentinel.py new-clients                 # clients in no client group
@@ -205,6 +211,37 @@ Tool errors used to exit 1 for every command; they now exit 3 so that 1 and 2 on
 ### Devices
 
 `query devices` shows each UniFi device with its firmware version, whether a firmware update is available, and its uptime (for example `2d 7h`). Offline devices have no uptime. `--json` adds `Uptime (s)` with the raw seconds. These columns come from the Integration API and appear only for `query devices`; the `export` CSV columns are unchanged.
+
+### Event history
+
+`events` reads the controller's event log, so it can answer "why did the Wi-Fi drop at 3 pm?", which none of the other commands can because they show the network as it is now. The controller keeps about three months.
+
+```text
+uv run unifi-sentinel.py events --client phone --since 6h
+Time                 Severity  Category        Event                         Message
+-------------------  --------  --------------  ----------------------------  -------------------------------------------
+2026-01-01 10:10:00  Low       CLIENT_DEVICES  CLIENT_DISCONNECTED_WIRELESS  phone disconnected from Home. Time Connected: 25s.
+...
+```
+
+Options (the filters combine with AND; the first group is done by the controller, the second by this tool):
+- `--since DURATION`: how far back, such as `90m`, `24h`, `7d` or `2w` (default `24h`)
+- `--category NAME` (repeatable): for example `CLIENT_DEVICES`, `UNIFI_DEVICES`, `INTERNET_AND_WAN` or `AUDIT`
+- `--severity low|medium|high` (repeatable) and `-s TEXT` (text search)
+- `--event TEXT`: event types containing TEXT, such as `roam`, `disconnected` or `ip_conflict`
+- `--client NAME|MAC|IP` and `--device NAME|IP`: events about that client or UniFi device (MAC fragments of six or more hex digits work)
+- `--limit N`: the newest N events (default 100; `0` for all). At most 20,000 events are read from the controller per run.
+- `--summary`: instead of a list, counts by severity and event type over the whole window (it ignores `--limit`) and the noisiest client or device per event type, which is where a flapping device or client shows up
+- `--json`: the events as JSON
+
+Some audit events have no value for part of their message; those parts show as `<setting name>` and similar.
+
+#### The one POST, and why it is safe
+
+The event log has no GET endpoint. The controller only answers a POST that carries the time range and filters, and the request only *reads*: it returns events and changes nothing (reading does not mark events as read, and two identical queries return identical data). To keep the read-only promise checkable:
+- the POST is sent only by `UniFiClient.system_log`, to the one fixed `system-log/all` path, and the request body may only contain the documented query keys (anything else is rejected before anything is sent);
+- `UniFiClient` has no general-purpose POST, PUT, PATCH or DELETE method;
+- the test suite fails if any other code sends a POST, PUT, PATCH or DELETE, or if a second POST appears in `client.py`.
 
 ### Client view
 
@@ -348,6 +385,7 @@ unifi_sentinel/
   reservations.py        DHCP fixed IP reservations
   new_clients.py         clients in no client group
   client_view.py         single-client troubleshooting view
+  events.py              event history from the controller's system log
   diagnose.py            read-only health checks
   settings.py            diagnose thresholds and ignore list (TOML)
   cli.py                 argparse subcommands

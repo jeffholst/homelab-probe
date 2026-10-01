@@ -1,6 +1,7 @@
 """Data layer: one consistent read of the controller, independent of output format."""
 
 import sys
+import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -30,6 +31,8 @@ class Snapshot:
     client_groups: Optional[List[Dict[str, Any]]] = None
     # Legacy stat/health: one entry per subsystem (wlan, lan, wan, www, vpn).
     health: List[Dict[str, Any]] = field(default_factory=list)
+    events: List[Dict[str, Any]] = field(default_factory=list)
+    events_truncated: bool = False
 
 
 def _legacy_or_empty(client: UniFiClient, site_ref: str, resource: str) -> List[Dict[str, Any]]:
@@ -84,6 +87,46 @@ def _legacy_v2_or_empty(
         return None
 
 
+def _events_or_empty(
+    client: UniFiClient,
+    site_ref: str,
+    since_seconds: int,
+    categories: List[str],
+    severities: List[str],
+    search: str,
+    now_ms: Optional[int] = None,
+) -> tuple[List[Dict[str, Any]], bool]:
+    now = int(time.time() * 1000) if now_ms is None else now_ms
+    query: Dict[str, Any] = {
+        "timestampFrom": now - since_seconds * 1000,
+        "timestampTo": now,
+        "pageSize": 500,
+    }
+    if categories:
+        query["categories"] = [c.upper() for c in categories]
+    if severities:
+        query["severities"] = [s.upper() for s in severities]
+    if search:
+        query["searchText"] = search
+
+    events: List[Dict[str, Any]] = []
+    page = 0
+    total_pages = 0
+    try:
+        while len(events) < 20_000:
+            body = client.system_log(site_ref, {**query, "pageNumber": page})
+            data = body["data"]
+            total_pages = int(body.get("total_page_count") or 0)
+            events.extend(data[:20_000 - len(events)])
+            page += 1
+            if not data or page >= total_pages:
+                return events, False
+        return events, page < total_pages
+    except UniFiAPIError as e:
+        warn(f"event log unavailable; event history was skipped: {e}")
+        return [], False
+
+
 def collect_snapshot(
     client: UniFiClient,
     site: str,
@@ -91,12 +134,22 @@ def collect_snapshot(
     include_reservations: bool = False,
     include_groups: bool = False,
     include_health: bool = False,
+    include_events: bool = False,
+    event_since_seconds: int = 86400,
+    event_categories: Optional[List[str]] = None,
+    event_severities: Optional[List[str]] = None,
+    event_search: str = "",
+    now_ms: Optional[int] = None,
 ) -> Snapshot:
     """``include_offline``, ``include_reservations`` and ``include_groups`` all need the
     legacy ``stat/alluser`` list (``include_health`` reads ``stat/health`` for ``diagnose``); reservations also need the network configuration
     (names, VLANs) and groups need the client group definitions."""
     site_info = client.resolve_site(site)
     site_ref = site_info.get("internalReference") or site
+    events, events_truncated = _events_or_empty(
+        client, site_ref, event_since_seconds, event_categories or [],
+        event_severities or [], event_search, now_ms
+    ) if include_events else ([], False)
     devices = client.devices(site_info["id"])
     details, stats = _device_extras(client, site_info["id"], devices)
     if include_groups:
@@ -121,4 +174,24 @@ def collect_snapshot(
         client_groups=(
             _legacy_v2_or_empty(client, site_ref, "network-members-groups") if include_groups else []
         ),
+        events=events,
+        events_truncated=events_truncated,
     )
+
+
+def collect_event_snapshot(
+    client: UniFiClient,
+    site: str,
+    since_seconds: int,
+    categories: Optional[List[str]] = None,
+    severities: Optional[List[str]] = None,
+    search: str = "",
+    now_ms: Optional[int] = None,
+) -> Snapshot:
+    site_info = client.resolve_site(site)
+    site_ref = site_info.get("internalReference") or site
+    events, truncated = _events_or_empty(
+        client, site_ref, since_seconds, categories or [], severities or [], search, now_ms
+    )
+    return Snapshot(site=site_info, devices=[], clients=[], events=events,
+                    events_truncated=truncated)

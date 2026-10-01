@@ -6,6 +6,12 @@ which is documented, versioned and paginated. Site IDs are UUIDs.
 Legacy API: the undocumented ``/proxy/network/api`` endpoints. The Integration
 API does not expose per-port counters or which switch port a client is on, so
 the legacy endpoints remain available for that data only.
+
+Every request is a GET, with one approved exception: the event log
+(``v2/system-log/all``) can only be queried with a POST that carries the filter.
+That query changes nothing on the controller, and it is sent only by
+``UniFiClient.system_log`` to that one fixed path. There is deliberately no
+general-purpose POST/PUT/PATCH/DELETE method on this class.
 """
 
 from typing import Any, Dict, Iterator, List, Optional
@@ -18,6 +24,13 @@ from .config import Config
 INTEGRATION_PREFIX = "/proxy/network/integration/v1"
 LEGACY_PREFIX = "/proxy/network/api"
 LEGACY_V2_PREFIX = "/proxy/network/v2/api"
+# The single approved POST: a read-only query of the event log.
+SYSTEM_LOG_PATH = LEGACY_V2_PREFIX + "/site/{site}/system-log/all"
+# The only keys a system-log query may carry (anything else raises before sending).
+SYSTEM_LOG_QUERY_KEYS = frozenset({
+    "timestampFrom", "timestampTo", "pageNumber", "pageSize",
+    "categories", "severities", "keys", "searchText",
+})
 PAGE_SIZE = 200
 
 
@@ -54,17 +67,37 @@ class UniFiClient:
         url = f"{self.base_url}{path}"
         try:
             resp = self.session.get(
-                url, params=params, verify=self.verify_ssl, timeout=self.timeout
-            )
+                url, params=params, verify=self.verify_ssl, timeout=self.timeout)
         except requests.exceptions.SSLError as e:
-            raise UniFiAPIError(
-                f"TLS certificate verification failed for {self.base_url}. Install a "
-                "trusted certificate on the controller, or set VERIFY_SSL=false in .env "
-                "if it uses a self-signed one."
-            ) from e
+            raise self._tls_error() from e
         except requests.exceptions.RequestException as e:
             raise UniFiAPIError(f"Connection error for {url}: {e}") from e
+        return self._decode_response(resp, url)
 
+    def _post_system_log(self, site_ref: str, query: Dict[str, Any]) -> Any:
+        """POST a read-only query to the fixed system-log path. Never takes a path."""
+        unexpected = set(query) - SYSTEM_LOG_QUERY_KEYS
+        if unexpected:
+            raise ValueError(f"unsupported system-log query key(s): {', '.join(sorted(unexpected))}")
+        url = self.base_url + SYSTEM_LOG_PATH.format(site=site_ref)
+        try:
+            resp = self.session.post(
+                url, json=query, verify=self.verify_ssl, timeout=self.timeout)
+        except requests.exceptions.SSLError as e:
+            raise self._tls_error() from e
+        except requests.exceptions.RequestException as e:
+            raise UniFiAPIError(f"Connection error for {url}: {e}") from e
+        return self._decode_response(resp, url)
+
+    def _tls_error(self) -> UniFiAPIError:
+        return UniFiAPIError(
+            f"TLS certificate verification failed for {self.base_url}. Install a "
+            f"trusted certificate on the controller, or set VERIFY_SSL=false in .env "
+            f"if it uses a self-signed one."
+        )
+
+    @staticmethod
+    def _decode_response(resp: requests.Response, url: str) -> Any:
         if resp.status_code == 401:
             raise UniFiAPIError(f"401 Unauthorized for {url}: invalid API key.")
         if not resp.ok:
@@ -135,3 +168,18 @@ class UniFiClient:
         """GET /v2/api/site/{site}/{resource} (e.g. 'network-members-groups')."""
         body = self._get(f"{LEGACY_V2_PREFIX}/site/{site_ref}/{resource}")
         return body.get("data", []) if isinstance(body, dict) else body
+
+    # -- event log (the one approved POST) ----------------------------------
+
+    def system_log(self, site_ref: str, query: Dict[str, Any]) -> Dict[str, Any]:
+        """One page of the controller's event log (newest first).
+
+        ``query`` may use ``timestampFrom``/``timestampTo`` (milliseconds), ``pageNumber``,
+        ``pageSize``, and the server-side filters ``categories``, ``severities``, ``keys``
+        and ``searchText``. Returns ``{"data": [...], "page_number", "total_element_count",
+        "total_page_count"}``.
+        """
+        body = self._post_system_log(site_ref, query)
+        if not isinstance(body, dict) or not isinstance(body.get("data"), list):
+            raise UniFiAPIError("Unexpected response from the event log (no 'data' list)")
+        return body

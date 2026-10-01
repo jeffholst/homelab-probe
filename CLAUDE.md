@@ -5,7 +5,7 @@ Fork of [ericfitz/unifi-clients-export](https://github.com/ericfitz/unifi-client
 ## Layout
 
 - `unifi-sentinel.py`: thin launcher; all logic lives in `unifi_sentinel/`.
-- `unifi_sentinel/config.py`: env/`.env` loading. `client.py`: `UniFiClient`, the only place that makes HTTP calls. `snapshot.py`: `collect_snapshot`, the one read of the controller. `export.py`, `query.py`, `reservations.py`, `new_clients.py`, `client_view.py`, `diagnose.py`: pure functions over a `Snapshot`. `settings.py`: `diagnose` thresholds and ignore rules from an optional TOML file; new checks take their thresholds from `DiagnoseSettings`, never module constants. `cli.py`: argparse subcommands.
+- `unifi_sentinel/config.py`: env/`.env` loading. `client.py`: `UniFiClient`, the only place that makes HTTP calls. `snapshot.py`: `collect_snapshot`, the one read of the controller. `export.py`, `query.py`, `reservations.py`, `new_clients.py`, `client_view.py`, `events.py`, `diagnose.py`: pure functions over a `Snapshot`. `settings.py`: `diagnose` thresholds and ignore rules from an optional TOML file; new checks take their thresholds from `DiagnoseSettings`, never module constants. `cli.py`: argparse subcommands.
 - New features are new subcommands in `cli.py` backed by modules that take a `Snapshot`; keep fetching (snapshot), analysis and output separate.
 
 ## Commands
@@ -35,12 +35,13 @@ Fork of [ericfitz/unifi-clients-export](https://github.com/ericfitz/unifi-client
 - Controller health is legacy `stat/health` (subsystems `wlan`, `lan`, `wan`, `www`, `vpn`). `lan`/`wlan` turn `error`/`warning` merely because devices are disconnected, so `diagnose` only trusts them when `num_disconnected` is 0. `Snapshot.health` is collected with `include_health`.
 - Switch port health comes from legacy `stat/device` `port_table`: `link_down_count` is cumulative since boot, drops must be judged as a percentage of packets, and `poe_good` is false on any PoE-capable port without a PoE device (do not use it). A device's `uplink` dict carries `speed`/`max_speed` for its own uplink port.
 - Wi-Fi quality comes from legacy `stat/sta` (`signal` in dBm, `satisfaction`, `wifi_tx_retries_percentage`, `wifi_tx_attempts`, `radio` ng/na/6e) and each AP's `radio_table_stats` (`cu_total`, `tx_retries_pct`, `satisfaction`). Many clients lack these fields, radio `satisfaction` is -1 when unknown, and `anomalies` is on nearly every client (do not use it). Retry percentages need a minimum attempt count to mean anything.
+- Event log: POST `/proxy/network/v2/api/site/{ref}/system-log/all` with `timestampFrom`/`timestampTo` (ms), `pageNumber`, `pageSize` and the server filters `categories`, `severities`, `keys`, `searchText`. Singular names (`category`, `severity`, `types`) are silently ignored, so test a filter by checking the total changes. Records are newest first with `{PLACEHOLDER}` messages filled from `parameters[X].name`; some audit events leave placeholders unresolved. Reading does not change event status.
 - Client group membership is `network_members_group_ids` on legacy client records; group names/ids come from legacy v2 `/proxy/network/v2/api/site/{ref}/network-members-groups` (`client.legacy_v2`).
 - Integration API and legacy fields were checked against one live controller (Network 10.6.106). Other versions and hardware may differ, and some fields vary by model (e.g. `mac_table_count` is null on some switches). Verify a new field against real data before relying on it.
 
 ## Safety
 
-- Read-only by default: GET requests only. Any write to the controller (POST/PUT/PATCH/DELETE) needs explicit approval for that specific action.
+- Read-only: GET requests only, with **one approved exception**: the event log (`v2/system-log/all`) is POST-only, so `UniFiClient.system_log` sends a read-only query there (approved by the owner for event history, issue #49). It is the only POST: do not add a general POST/PUT/PATCH/DELETE to `UniFiClient`, and do not point `system_log` at any other path. `tests/test_events.py` enforces this. Any other write to the controller needs explicit approval for that specific action.
 - Ask before running anything that contacts the real controller.
 - Never print or commit `.env` or the API key. Redact real MACs, IPs and hostnames in issues, commits, PRs and test fixtures.
 

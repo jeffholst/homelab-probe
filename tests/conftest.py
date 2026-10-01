@@ -2,6 +2,7 @@
 
 import copy
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,7 @@ INTEGRATION = "/proxy/network/integration/v1"
 LEGACY = "/proxy/network/api/s/default/stat/"
 LEGACY_REST = "/proxy/network/api/s/default/rest/"
 LEGACY_V2 = "/proxy/network/v2/api/site/default/"
+SYSTEM_LOG = LEGACY_V2 + "system-log/all"
 
 
 class FakeResponse:
@@ -40,6 +42,20 @@ class FakeSession:
         self.headers = {}
         self.status = None
         self.calls = []
+        self.posts = []   # (path, body) of every POST, so tests can prove what was sent
+        now = time.time() * 1000
+        self.events = [
+            {**{k: v for k, v in e.items() if k != "age_s"}, "timestamp": int(now - e["age_s"] * 1000)}
+            for e in self.fx.get("system_log", [])]
+
+    def post(self, url, json=None, verify=True, timeout=None):
+        path = "/" + url.split("://", 1)[1].split("/", 1)[1]
+        self.posts.append((path, json))
+        if self.status:
+            return FakeResponse(self.status, {"error": "forced"})
+        if path != SYSTEM_LOG:
+            return FakeResponse(404, {})   # the only POST route is the event log query
+        return FakeResponse(200, _system_log(self.events, json or {}))
 
     def get(self, url, params=None, verify=True, timeout=None):
         path = "/" + url.split("://", 1)[1].split("/", 1)[1]
@@ -63,6 +79,8 @@ class FakeSession:
             else:
                 body = fx["device_detail"].get(rest)
             return FakeResponse(200, body) if body else FakeResponse(404, {})
+        if path == SYSTEM_LOG:
+            return FakeResponse(405, {})   # like the real controller: the event log is POST-only
         if path.startswith(LEGACY_V2):
             return FakeResponse(200, fx["legacy_v2"][path[len(LEGACY_V2):]])
         if path.startswith(LEGACY_REST):
@@ -70,6 +88,25 @@ class FakeSession:
         if path.startswith(LEGACY):
             return FakeResponse(200, {"data": fx["legacy"][path[len(LEGACY):]]})
         return FakeResponse(404, {})
+
+
+def _system_log(events, q):
+    """The event log query, honoring the same filters as the controller."""
+    chosen = [e for e in events
+              if q.get("timestampFrom", 0) <= e["timestamp"] <= q.get("timestampTo", float("inf"))]
+    if q.get("categories"):
+        chosen = [e for e in chosen if e["category"] in q["categories"]]
+    if q.get("severities"):
+        chosen = [e for e in chosen if e["severity"] in q["severities"]]
+    if q.get("keys"):
+        chosen = [e for e in chosen if e["key"] in q["keys"]]
+    if q.get("searchText"):
+        needle = q["searchText"].lower()
+        chosen = [e for e in chosen if needle in json.dumps(e).lower()]
+    chosen.sort(key=lambda e: e["timestamp"], reverse=True)
+    size, page = q.get("pageSize", 50), q.get("pageNumber", 0)
+    return {"data": chosen[page * size:(page + 1) * size], "page_number": page,
+            "total_element_count": len(chosen), "total_page_count": -(-len(chosen) // size)}
 
 
 @pytest.fixture
