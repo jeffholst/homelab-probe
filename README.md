@@ -14,6 +14,7 @@ UniFi Sentinel is a fork of [ericfitz/unifi-clients-export](https://github.com/e
 | -------- | -------------------------------------------------------------- |
 | `export` | Export connected clients, UniFi devices and switch ports to CSV |
 | `query`  | List and filter devices, clients, DHCP reservations and switch ports (table or `--json`) |
+| `client` | Troubleshoot one client by name, MAC or IP: where it attaches, link quality and related findings |
 | `new-clients` | List clients that are in no client group, to spot new devices |
 | `diagnose` | Read-only health checks with 🛑 critical, ⚠️ warning and ℹ️ info findings |
 | `info`   | Show the controller application info and available sites       |
@@ -27,6 +28,7 @@ Planned: richer inventory and troubleshooting reports.
 - **Network topology**: which switch and port each client or device is attached to
 - **DHCP reservations**: list every fixed IP reservation, including offline clients, with network and VLAN
 - **Querying**: list and filter devices, clients, DHCP reservations and switch ports from the command line (table or JSON)
+- **Single-client troubleshooting**: `client <name|mac|ip>` shows where a client attaches (the full uplink chain to the gateway with port numbers and link speeds), its link quality, addressing and the `diagnose` findings that concern it
 - **New client detection**: list every known client that is in no client group, newest first, to spot new devices
 - **Health checks**: read-only diagnostics with severity levels, exit codes for scripts and cron, and a TOML file for thresholds and an ignore list
 - **Official API first**: uses the UniFi Network Integration API (`/proxy/network/integration/v1`). Legacy endpoints are used only for data the Integration API does not expose (per-port counters, client-to-port mapping, DHCP reservations, network config and client groups) and degrade gracefully with a warning if unavailable
@@ -105,6 +107,8 @@ uv run unifi-sentinel.py query reservations          # DHCP fixed IP reservation
 uv run unifi-sentinel.py query ports                 # every switch port
 uv run unifi-sentinel.py query ports --down --switch rack   # down ports on matching switches
 uv run unifi-sentinel.py query ports --errors        # ports with rx/tx errors
+uv run unifi-sentinel.py client desktop              # one client: attachment, link, findings
+uv run unifi-sentinel.py client aa:bb:cc:dd:ee:ff --json   # by MAC (any format) or IP, as JSON
 uv run unifi-sentinel.py new-clients                 # clients in no client group
 uv run unifi-sentinel.py diagnose                    # health checks
 ```
@@ -187,6 +191,7 @@ Ignored findings are left out of the output, counted in the summary (`3 warnings
 | 1 | `diagnose` found at least one non-critical finding at or above the `--fail-on` threshold |
 | 2 | `diagnose` found at least one critical finding |
 | 3 | error: bad configuration, or the controller could not be reached or returned an error |
+| 4 | `client` found no client, or several (it lists them) |
 | 64 | command-line usage error |
 
 `--fail-on {info,warning,critical}` sets the lowest severity that gives a non-zero code (default `warning`). Critical always exits 2. Example cron entry that only alerts on outages:
@@ -200,6 +205,39 @@ Tool errors used to exit 1 for every command; they now exit 3 so that 1 and 2 on
 ### Devices
 
 `query devices` shows each UniFi device with its firmware version, whether a firmware update is available, and its uptime (for example `2d 7h`). Offline devices have no uptime. `--json` adds `Uptime (s)` with the raw seconds. These columns come from the Integration API and appear only for `query devices`; the `export` CSV columns are unchanged.
+
+### Client view
+
+`client <name|mac|ip>` answers "why is this device slow or offline?" in one place:
+
+```text
+desktop
+  MAC:        BB:00:00:00:00:01
+  Status:     Online, connected since 2026-01-01 09:00:00
+  Connection: Wired
+  IP:         10.0.0.10  (reserved 10.0.0.10, matches)
+  Network:    Main (VLAN 1)
+  Groups:     Desktops
+  First seen: 2020-09-13 12:26:40
+  Last seen:  connected now
+
+Attached: desktop -> Office Switch port 3 (1000 Mbps) -> Gateway port 2 (100 Mbps)
+Link:     1000 Mbps, full duplex, 0 errors, 60 dropped packets on its port
+
+Related findings:
+[WARNING ] Office Switch: CPU utilization 95%
+[WARNING ] Office Switch: PoE budget 41.6 W of 52 W used (80%)
+[WARNING ] Office Switch: uplink to Gateway negotiated at 100 Mbps but both ends support 1000 Mbps
+
+3 warnings
+```
+
+- **Finding the client:** an exact MAC (any separator or case), an exact IP, a single exact name, then a case-insensitive part of a name or hostname (or a MAC fragment of six or more hex digits). It looks across every client the controller knows, connected or not, but never UniFi devices. If several clients match it lists up to 20 of them and exits with code 4 instead of guessing; no match also exits 4.
+- **Attached:** the switch port (or AP, with band, channel and SSID) and each parent up to the gateway, with the parent's port and the negotiated link speed. Offline devices on the path are marked `OFFLINE`. An offline client shows the last uplink the controller recorded.
+- **Link:** for a wired client, its port's speed, duplex, errors and dropped packets; for Wi-Fi, signal, noise, rates, retries and satisfaction. Offline clients have none.
+- **Addressing:** the DHCP reservation and whether it matches the current IP, the network and VLAN, and the client groups by name (or that it is in none).
+- **Related findings:** the `diagnose` findings about this client, its IP, or the devices and ports on its path (not unrelated ports on the same switch). It uses the same thresholds and ignore list as `diagnose` (`--config FILE`, or `./unifi-sentinel.toml`).
+- `--json` prints the same data as JSON, and `--no-emoji` forces text severity labels.
 
 ### New clients
 
@@ -309,6 +347,7 @@ unifi_sentinel/
   query.py               filtering and table/JSON rendering
   reservations.py        DHCP fixed IP reservations
   new_clients.py         clients in no client group
+  client_view.py         single-client troubleshooting view
   diagnose.py            read-only health checks
   settings.py            diagnose thresholds and ignore list (TOML)
   cli.py                 argparse subcommands

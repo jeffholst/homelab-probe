@@ -8,6 +8,8 @@ from typing import List, Optional
 from . import __version__
 from .client import UniFiAPIError, UniFiClient
 from .config import ConfigError, load_config
+from .client_view import (build_client_detail, find_clients, render_candidates,
+                          render_detail, to_json)
 from .diagnose import (CRITICAL, INFO, WARNING, apply_ignores, diagnose, exit_code,
                        format_findings, format_ignored, stream_supports_emoji)
 from .export import run_export
@@ -18,6 +20,7 @@ from .snapshot import collect_snapshot
 
 
 EXIT_ERROR = 3  # config or connection failure; 1 and 2 are reserved for diagnose findings
+EXIT_NO_MATCH = 4  # `client` found no client, or several (it lists them)
 EXIT_USAGE = 64
 
 
@@ -61,6 +64,16 @@ def build_parser() -> argparse.ArgumentParser:
                      help="Case-insensitive substring match on any field")
     new.add_argument("--json", action="store_true", help="Output JSON instead of a table")
 
+    cview = sub.add_parser(
+        "client", help="Troubleshoot one client: where it attaches, link quality and related findings")
+    cview.add_argument("query", help="Client name, MAC address or IP address")
+    cview.add_argument("--json", action="store_true", help="Output JSON instead of text")
+    cview.add_argument("--config", type=Path, metavar="FILE",
+                       help="TOML file with diagnose thresholds and ignore list "
+                            "(default: ./unifi-sentinel.toml if present)")
+    cview.add_argument("--no-emoji", action="store_true",
+                       help="Use text severity labels (automatic when output is not a UTF-8 terminal)")
+
     diag = sub.add_parser("diagnose", help="Run read-only health checks (offline devices, port errors, ...)")
     diag.add_argument("--fail-on", choices=[INFO, WARNING, CRITICAL], default=WARNING,
                       help="Lowest severity that gives a non-zero exit code (default: warning); "
@@ -87,7 +100,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     try:
         config = load_config()
         # Load diagnose settings first so a bad config file fails before any API call.
-        settings = load_settings(args.config) if args.command == "diagnose" else None
+        settings = load_settings(args.config) if args.command in ("diagnose", "client") else None
         client = UniFiClient.from_config(config)
         if args.command == "info":
             print(f"Application: {client.info()}")
@@ -105,6 +118,16 @@ def main(argv: Optional[List[str]] = None) -> int:
         elif args.command == "new-clients":
             snap = collect_snapshot(client, config.site, include_groups=True)
             print(render_new_clients(new_clients_report(snap, args.search), args.json))
+        elif args.command == "client":
+            snap = collect_snapshot(client, config.site, include_reservations=True,
+                                    include_groups=True)
+            matches = find_clients(snap, args.query)
+            if len(matches) != 1:
+                print(render_candidates(args.query, matches), file=sys.stderr)
+                return EXIT_NO_MATCH
+            detail = build_client_detail(snap, matches[0], settings)
+            emoji = not args.no_emoji and stream_supports_emoji(sys.stdout)
+            print(to_json(detail) if args.json else render_detail(detail, emoji))
         elif args.command == "diagnose":
             findings, ignored = apply_ignores(
                 diagnose(collect_snapshot(client, config.site, include_reservations=True,

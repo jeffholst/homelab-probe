@@ -1,5 +1,6 @@
 """Fake controller backed by a synthetic, sanitized fixture (no real network data)."""
 
+import copy
 import json
 from pathlib import Path
 
@@ -35,7 +36,7 @@ class FakeSession:
     """Routes GETs to the fixture. Set ``status`` to force an error response."""
 
     def __init__(self, fixture=FIXTURE):
-        self.fx = fixture
+        self.fx = copy.deepcopy(fixture)  # tests may mutate the data; never share it
         self.headers = {}
         self.status = None
         self.calls = []
