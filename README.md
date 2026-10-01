@@ -75,9 +75,11 @@ VERIFY_SSL=false
 | `CONTROLLER_URL` | Yes      | -         | Controller URL (include protocol and port)                         |
 | `API_KEY`        | Yes      | -         | API key from the controller                                        |
 | `SITE_ID`        | No       | `default` | Site name, internal reference (e.g. `default`) or UUID             |
-| `VERIFY_SSL`     | No       | `true`    | Set to `false`, `0` or `no` for self-signed certificates           |
+| `VERIFY_SSL`     | No       | `true`    | `true`/`yes`/`1`/`on` or `false`/`no`/`0`/`off` (any case)         |
 
-Any other `VERIFY_SSL` value (or none) enables verification.
+- **Where the `.env` file is found**, first match wins: the file given with `--env-file FILE` (before the command, for example `unifi-sentinel --env-file lab.env diagnose`); the file named by the `UNIFI_SENTINEL_ENV` environment variable; `.env` in the **current directory**. Parent directories and the installed package's directory are not searched, so an installed copy (`pip install .`) works from whichever directory holds your `.env`, an unrelated project's `.env` is never picked up, and running from a subdirectory of the project does not find the project's `.env` (use `--env-file` or run from the project root). A file named with `--env-file` or `UNIFI_SENTINEL_ENV` must exist. Real environment variables always take precedence over values in the file. The `unifi-sentinel.toml` settings file for `diagnose` is likewise read from the current directory.
+- **`VERIFY_SSL`:** an unset or empty value verifies certificates. Any other word than the ones above is an error that lists the accepted words, so a typo such as `off-ish` can never silently mean "verify".
+- **`SITE_ID`:** a site name may contain spaces and non-ASCII letters, but not `/`, `\`, `?`, `#` or control characters, and at most 128 characters; it is also percent-encoded wherever it appears in a URL.
 
 ### Getting an API key
 
@@ -550,7 +552,9 @@ The official documentation covers the Integration API only. The legacy `stat/*`,
 
 ## Troubleshooting
 
-- **`CONTROLLER_URL is not set` / `API_KEY is not set`**: copy `example.env` to `.env` and fill it in.
+- **`CONTROLLER_URL is not set` / `API_KEY is not set`**: copy `example.env` to `.env` and fill it in, in the directory you run the command from, or point to it with `--env-file FILE` or `UNIFI_SENTINEL_ENV`.
+- **`env file not found`**: the file named with `--env-file` or `UNIFI_SENTINEL_ENV` does not exist.
+- **`VERIFY_SSL must be one of ...` / `SITE_ID ... cannot be part of a site name`**: fix the value in `.env`; the message lists what is accepted.
 - **`401 Unauthorized`**: the API key is invalid or was revoked; create a new one.
 - **`TLS certificate verification failed`**: for a self-signed certificate set `VERIFY_SSL=false`, or install a valid certificate on the controller.
 - **Connection errors or timeouts**: check `CONTROLLER_URL` and that the controller is reachable from this machine.
