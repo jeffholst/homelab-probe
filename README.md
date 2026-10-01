@@ -14,6 +14,8 @@ UniFi Sentinel is a fork of [ericfitz/unifi-clients-export](https://github.com/e
 | -------- | -------------------------------------------------------------- |
 | `export` | Export connected clients, UniFi devices and switch ports to CSV |
 | `query`  | List and filter devices, clients, DHCP reservations and switch ports (table or `--json`) |
+| `snapshot` | Save the current inventory to a local JSON file, to compare later |
+| `diff` | What changed: compare saved snapshots, or a snapshot against the live network |
 | `topology` | Draw the uplink tree from the gateway down: ports, link speeds, client counts and problems |
 | `events` | Event history from the controller log: disconnects, roams, IP conflicts, device outages |
 | `client` | Troubleshoot one client by name, MAC or IP: where it attaches, link quality and related findings |
@@ -30,6 +32,7 @@ Planned: richer inventory and troubleshooting reports.
 - **Network topology**: which switch and port each client or device is attached to
 - **DHCP reservations**: list every fixed IP reservation, including offline clients, with network and VLAN
 - **Querying**: list and filter devices, clients, DHCP reservations and switch ports from the command line (table or JSON)
+- **Snapshots and diff**: save the inventory to a file and see exactly what changed since: new or missing devices and clients, IP, firmware, state, location, reservation and group changes
 - **Topology**: the uplink tree from the gateway down, with the port each device plugs into, negotiated link speeds (and links below what both ends support), client counts, and offline or flagged devices
 - **Event history**: what happened and when (disconnects, roams, IP conflicts, device outages, admin changes) from the controller's log, filterable by time, severity, category, client and device, with a summary of the noisiest clients
 - **Single-client troubleshooting**: `client <name|mac|ip>` shows where a client attaches (the full uplink chain to the gateway with port numbers and link speeds), its link quality, addressing and the `diagnose` findings that concern it
@@ -111,6 +114,8 @@ uv run unifi-sentinel.py query reservations          # DHCP fixed IP reservation
 uv run unifi-sentinel.py query ports                 # every switch port
 uv run unifi-sentinel.py query ports --down --switch rack   # down ports on matching switches
 uv run unifi-sentinel.py query ports --errors        # ports with rx/tx errors
+uv run unifi-sentinel.py snapshot                    # save the inventory to ./snapshots/
+uv run unifi-sentinel.py diff                        # what changed since the newest snapshot?
 uv run unifi-sentinel.py topology                    # how the gateway, switches and APs are wired
 uv run unifi-sentinel.py topology --clients          # ...with the wired clients under each device
 uv run unifi-sentinel.py events                      # the last 24 hours, newest first
@@ -215,6 +220,45 @@ Tool errors used to exit 1 for every command; they now exit 3 so that 1 and 2 on
 ### Devices
 
 `query devices` shows each UniFi device with its firmware version, whether a firmware update is available, and its uptime (for example `2d 7h`). Offline devices have no uptime. `--json` adds `Uptime (s)` with the raw seconds. These columns come from the Integration API and appear only for `query devices`; the `export` CSV columns are unchanged.
+
+### Snapshots and diff
+
+When something breaks, the first question is "what changed since it last worked?". `snapshot` saves the inventory, and `diff` compares.
+
+```bash
+uv run unifi-sentinel.py snapshot                         # now: ./snapshots/snapshot-20260930-201530.json
+# ...later, when something is wrong...
+uv run unifi-sentinel.py diff                             # the newest snapshot against the network right now
+uv run unifi-sentinel.py diff --last-two                  # the two newest snapshots (no controller needed)
+uv run unifi-sentinel.py diff snapshot-20260929-080000.json   # a named snapshot against now
+uv run unifi-sentinel.py diff OLD.json NEW.json           # two files
+```
+
+```text
+Comparing snapshot-20260930-201530.json (captured 2026-09-30 20:15) -> the network right now
+
+Devices
+  Firmware changed (1):
+    Office Switch: 7.0.0 -> 7.1.0
+  State changed (1):
+    Garage AP: Online -> Offline
+
+Clients
+  New clients (1):
+    newcomer (10.0.0.19, Wireless)
+  IP changed (1):
+    printer: 10.0.0.50 -> 10.0.0.77
+
+3 change(s)
+```
+
+- **What is saved:** devices (name, IP, model, type, firmware, state, uplink and port), every client the controller knows (name, IP, wired or Wi-Fi, online status, network and VLAN, the device and port it is on, client groups by name) and DHCP reservations, plus the site and controller version. It is built from the same rows the other commands print, not raw API data, and leaves out values that change constantly (uptime, last-seen times, traffic), so a diff shows real changes.
+- **What diff reports** (matching by MAC address): new and missing devices, clients and reservations; renamed items; IP, firmware, state, model and network or VLAN changes; devices and clients that **moved** (a different switch, port or AP; an unknown location, such as an offline Wi-Fi client, is never a move); group changes; reservation changes; and a controller version change. Clients that connected or disconnected are listed too, but only the first 15 of each (and of client IP changes); `--all` lists every one. `--json` prints everything.
+- **Choosing what to compare:** `diff` with no arguments compares the newest saved snapshot with the live network, `diff OLD` compares a snapshot (a path, or a file name inside the snapshot directory) with the live network, and `diff OLD NEW` or `--last-two` compare two files without contacting the controller.
+- **Files:** `snapshot` writes `snapshot-YYYYMMDD-HHMMSS.json` into `./snapshots/` (change it with `--dir DIR`), never overwriting an existing file. `-o FILE` picks the name; it refuses to replace an existing file unless you add `--force`. `--keep N` afterwards deletes the oldest snapshots in the directory beyond the newest N; it only touches files named like the ones this tool writes, and never the one just saved.
+- **Privacy:** snapshots contain real MACs, IPs and device names. They are created readable only by you, and `snapshots/` is git-ignored. Do not commit or share them.
+- A snapshot file has a format version. A file from a newer, incompatible version, a damaged file, or one that is not a snapshot stops with a clear message (exit code 3).
+- Both commands only read from the controller; the files are written locally.
 
 ### Topology
 
@@ -411,6 +455,7 @@ unifi_sentinel/
   client_view.py         single-client troubleshooting view
   events.py              event history from the controller's system log
   topology.py            uplink tree: wiring, link speeds, client counts, flags
+  history.py             saved inventories (snapshot) and the diff between them
   diagnose.py            read-only health checks
   settings.py            diagnose thresholds and ignore list (TOML)
   cli.py                 argparse subcommands

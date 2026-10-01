@@ -5,12 +5,12 @@ Fork of [ericfitz/unifi-clients-export](https://github.com/ericfitz/unifi-client
 ## Layout
 
 - `unifi-sentinel.py`: thin launcher; all logic lives in `unifi_sentinel/`.
-- `unifi_sentinel/config.py`: env/`.env` loading. `client.py`: `UniFiClient`, the only place that makes HTTP calls. `snapshot.py`: `collect_snapshot`, the one read of the controller. `export.py`, `query.py`, `reservations.py`, `new_clients.py`, `client_view.py`, `events.py`, `topology.py`, `diagnose.py`: pure functions over a `Snapshot`. `settings.py`: `diagnose` thresholds and ignore rules from an optional TOML file; new checks take their thresholds from `DiagnoseSettings`, never module constants. `cli.py`: argparse subcommands.
+- `unifi_sentinel/config.py`: env/`.env` loading. `client.py`: `UniFiClient`, the only place that makes HTTP calls. `snapshot.py`: `collect_snapshot`, the one read of the controller. `export.py`, `query.py`, `reservations.py`, `new_clients.py`, `client_view.py`, `events.py`, `topology.py`, `history.py`, `diagnose.py`: pure functions over a `Snapshot`. `settings.py`: `diagnose` thresholds and ignore rules from an optional TOML file; new checks take their thresholds from `DiagnoseSettings`, never module constants. `cli.py`: argparse subcommands.
 - New features are new subcommands in `cli.py` backed by modules that take a `Snapshot`; keep fetching (snapshot), analysis and output separate.
 
 ## Commands
 
-- Run: `uv run unifi-sentinel.py <export|query|client|new-clients|diagnose|events|topology|info>`
+- Run: `uv run unifi-sentinel.py <export|query|client|new-clients|diagnose|events|topology|snapshot|diff|info>`
 - Tests: `uv run pytest`
 
 ## Documentation
@@ -37,6 +37,7 @@ Fork of [ericfitz/unifi-clients-export](https://github.com/ericfitz/unifi-client
 - Wi-Fi quality comes from legacy `stat/sta` (`signal` in dBm, `satisfaction`, `wifi_tx_retries_percentage`, `wifi_tx_attempts`, `radio` ng/na/6e) and each AP's `radio_table_stats` (`cu_total`, `tx_retries_pct`, `satisfaction`). Many clients lack these fields, radio `satisfaction` is -1 when unknown, and `anomalies` is on nearly every client (do not use it). Retry percentages need a minimum attempt count to mean anything.
 - Event log: POST `/proxy/network/v2/api/site/{ref}/system-log/all` with `timestampFrom`/`timestampTo` (ms), `pageNumber`, `pageSize` and the server filters `categories`, `severities`, `keys`, `searchText`. Singular names (`category`, `severity`, `types`) are silently ignored, so test a filter by checking the total changes. Records are newest first with `{PLACEHOLDER}` messages filled from `parameters[X].name`; some audit events leave placeholders unresolved. Reading does not change event status.
 - Uplinks: a device's legacy `uplink` dict has `uplink_mac` (the parent), `uplink_remote_port` (the PARENT's port), `port_idx` (its own uplink port), `speed` and `max_speed`; a gateway's uplink is its WAN link, not part of the tree. Integration `uplink.deviceId` names the parent when the legacy data does not. An offline device keeps its last known uplink. `DeviceIndex` (client_view.py) and `diagnose.uplink_speeds` are the shared helpers for names, state and negotiated-vs-capability speed.
+- Saved snapshots (`history.py`, schema version 1) hold real MACs/IPs: they are written owner-only into the git-ignored `snapshots/`, and tests and docs use only the synthetic fixture. Match by MAC; keep constantly changing values (uptime, last-seen, traffic) out of the record; an unknown location is never a "move". Snapshot file names sort by timestamp then numeric suffix, not as text.
 - Client group membership is `network_members_group_ids` on legacy client records; group names/ids come from legacy v2 `/proxy/network/v2/api/site/{ref}/network-members-groups` (`client.legacy_v2`).
 - Integration API and legacy fields were checked against one live controller (Network 10.6.106). Other versions and hardware may differ, and some fields vary by model (e.g. `mac_table_count` is null on some switches). Verify a new field against real data before relying on it.
 

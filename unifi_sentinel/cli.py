@@ -1,9 +1,10 @@
 """Command line interface."""
 
 import argparse
+import json
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from . import __version__
 from .client import UniFiAPIError, UniFiClient
@@ -19,6 +20,8 @@ from .new_clients import render as render_new_clients, report as new_clients_rep
 from .query import query_rows, render
 from .settings import load_settings
 from .topology import build_topology, render_text as render_topology, to_json as topology_json
+from .history import (DEFAULT_DIR, capture, diff_snapshots, label_for, list_snapshots, load_snapshot,
+                      prune, render_diff, resolve, save_snapshot)
 from .snapshot import collect_event_snapshot, collect_snapshot
 
 
@@ -48,6 +51,16 @@ def _non_negative(text: str) -> int:
         value = -1
     if value < 0:
         raise argparse.ArgumentTypeError(f"invalid value {text!r}: use a whole number, 0 or more")
+    return value
+
+
+def _positive(text: str) -> int:
+    try:
+        value = int(text)
+    except ValueError:
+        value = 0
+    if value < 1:
+        raise argparse.ArgumentTypeError(f"invalid value {text!r}: use a whole number, 1 or more")
     return value
 
 
@@ -129,6 +142,30 @@ def build_parser() -> argparse.ArgumentParser:
                       help="Use ASCII drawing and text severity labels (automatic when output is "
                            "not a UTF-8 terminal)")
 
+    snapcmd = sub.add_parser(
+        "snapshot", help="Save the current inventory to a local JSON file, for `diff` later")
+    snapcmd.add_argument("-o", "--output", type=Path, metavar="FILE",
+                         help="Write to this file instead of a timestamped one in --dir")
+    snapcmd.add_argument("--dir", type=Path, default=Path(DEFAULT_DIR), metavar="DIR",
+                         help=f"Directory for timestamped snapshots (default: ./{DEFAULT_DIR}/)")
+    snapcmd.add_argument("--keep", type=_positive, metavar="N",
+                         help="Afterwards delete the oldest snapshots in --dir, keeping the newest N")
+    snapcmd.add_argument("--force", action="store_true", help="Allow -o to replace an existing file")
+
+    diffcmd = sub.add_parser(
+        "diff", help="What changed: compare saved snapshots, or a snapshot against the live network")
+    diffcmd.add_argument("refs", nargs="*", metavar="OLD [NEW]",
+                         help="Snapshot files (or names inside --dir). One file is compared with the live "
+                              "network; none uses the newest saved snapshot")
+    diffcmd.add_argument("--dir", type=Path, default=Path(DEFAULT_DIR), metavar="DIR",
+                         help=f"Snapshot directory (default: ./{DEFAULT_DIR}/)")
+    diffcmd.add_argument("--last-two", action="store_true",
+                         help="Compare the two newest saved snapshots (no controller needed)")
+    diffcmd.add_argument("--all", action="store_true",
+                         help="List every client connect/disconnect and IP change instead of the first "
+                              f"few")
+    diffcmd.add_argument("--json", action="store_true", help="Output JSON instead of text")
+
     diag = sub.add_parser("diagnose", help="Run read-only health checks (offline devices, port errors, ...)")
     diag.add_argument("--fail-on", choices=[INFO, WARNING, CRITICAL], default=WARNING,
                       help="Lowest severity that gives a non-zero exit code (default: warning); "
@@ -145,9 +182,60 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _live_inventory(client: UniFiClient, config: Any) -> dict:
+    """The network as it is right now, as a snapshot record."""
+    try:
+        version = str(client.info().get("applicationVersion") or "")
+    except UniFiAPIError:
+        version = ""
+    return capture(collect_snapshot(client, config.site, include_reservations=True, include_groups=True),
+                   version)
+
+
+def _run_history(client: UniFiClient, config: Any, args: argparse.Namespace) -> int:
+    if args.command == "snapshot":
+        record = _live_inventory(client, config)
+        path = save_snapshot(record, args.output, args.dir, args.force)
+        print(f"Saved {len(record['devices'])} devices, {len(record['clients'])} clients and "
+              f"{len(record['reservations'])} reservations to {path}")
+        if args.keep:
+            for gone in prune(args.dir, args.keep, protect=path):
+                print(f"Removed old snapshot {gone}")
+        return 0
+
+    if args.last_two:
+        saved = list_snapshots(args.dir)
+        if len(saved) < 2:
+            raise ConfigError(f"need at least two saved snapshots in {args.dir}/ (found {len(saved)}); "
+                              "run `snapshot` first")
+        old_path, new_path = saved[-2], saved[-1]
+    else:
+        if args.refs:
+            old_path = resolve(args.refs[0], args.dir)
+        else:
+            saved = list_snapshots(args.dir)
+            if not saved:
+                raise ConfigError(f"no saved snapshots in {args.dir}/; run `snapshot` first")
+            old_path = saved[-1]
+        new_path = resolve(args.refs[1], args.dir) if len(args.refs) == 2 else None
+
+    old = load_snapshot(old_path)
+    if new_path:
+        new = load_snapshot(new_path)
+        new_label = label_for(new, new_path.name)
+    else:
+        new, new_label = _live_inventory(client, config), "the network right now"
+    result = diff_snapshots(old, new)
+    print(json.dumps(result, indent=2) if args.json
+          else render_diff(result, label_for(old, old_path.name), new_label, args.all))
+    return 0
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.command == "diff" and (len(args.refs) > 2 or (args.last_two and args.refs)):
+        parser.error("give at most two snapshots, and none with --last-two")
     if args.command == "query" and args.kind != "ports" and (
         args.switch is not None or args.down or args.errors
     ):
@@ -181,6 +269,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                 snap, predicate=make_filter(args.client, args.device, args.event),
                 limit=0 if args.summary else args.limit)  # a summary counts the whole window
             print(render_events(events, more, args.json, args.summary, snap.events_truncated))
+        elif args.command in ("snapshot", "diff"):
+            return _run_history(client, config, args)
         elif args.command == "topology":
             snap = collect_snapshot(client, config.site)
             tree = build_topology(snap, settings, with_clients=args.clients)
