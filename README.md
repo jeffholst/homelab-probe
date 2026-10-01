@@ -584,7 +584,7 @@ Phones, tablets and laptops often use a **private (randomized) Wi-Fi MAC address
 
 - `query clients` (table and `--json`) and `new-clients` have a **Private MAC** column: `yes` for a randomized address, empty otherwise. The CSV export and `query devices` are unchanged.
 - `client` adds `[randomized MAC: reservations and history may not hold]` after the MAC, and `client --json` has `identity.private_mac` (`true` or `false`).
-- `diagnose` adds two **info** findings, never a warning, because it is normal for phones: `reservation.private_mac` for each reservation whose MAC is randomized (it stops applying if the device changes its address), and one `client.private_mac_summary` finding with the count of connected clients that use randomized addresses. Silence either with the ignore list, for example `subject = "clients"` with `message = "randomized"`.
+- `diagnose` adds two **info** findings, never a warning, because it is normal for phones: `reservation.private_mac` for each reservation whose MAC is randomized (it stops applying if the device changes its address), and one `client.private_mac_summary` finding with the count of connected clients that use randomized addresses. To silence both, use an ignore with `message = "randomized"` (and a required `reason`); add `subject = "clients"` to silence only the summary, or use the reservation's client name to silence only that reservation.
 
 It is a hint, not proof: virtual machines, containers, bridges, VPNs and some IoT devices also use locally administered addresses, and for them the vendor (OUI) lookup is empty. A device that turned the feature off keeps its old random MAC until it reconnects.
 
