@@ -137,6 +137,7 @@ COMMANDS = {
     "events": (["events"], {"events"}),
     "client without events": (["client", "desktop", "--no-events"], BASE | {"alluser", "networkconf", "groups"}),
     "client": (["client", "desktop"], BASE | {"alluser", "networkconf", "groups", "events"}),
+    "client no match": (["client", "nobody-has-this-name"], BASE | {"alluser"}),
     "diagnose without events": (["diagnose", "--no-events"],
                                 BASE | {"alluser", "networkconf", "health", "speedtests"}),
     "diagnose": (["diagnose"], BASE | {"alluser", "networkconf", "health", "speedtests", "events"}),
@@ -151,7 +152,7 @@ def test_each_command_reads_exactly_what_it_declares(fake_client, monkeypatch, t
         argv = ["snapshot", "--dir", str(tmp_path / "snaps")]
     if argv[0] == "export":
         argv = [*argv, "-o", str(tmp_path)]
-    assert run(fake_client, monkeypatch, argv) in (0, 1, 2)
+    assert run(fake_client, monkeypatch, argv) in (0, 1, 2, 4)
     kinds = reads(fake_client)
     if argv[0] == "info":
         assert kinds == set() and fake_client.session.posts == []

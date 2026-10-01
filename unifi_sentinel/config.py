@@ -34,6 +34,7 @@ DEFAULT_SITE = "default"
 MAX_SITE_LENGTH = 128
 DEFAULT_TIMEOUT = 15.0     # seconds per request
 MIN_TIMEOUT, MAX_TIMEOUT = 1.0, 600.0
+DEFAULT_PARALLEL, MAX_PARALLEL = 6, 16     # requests in flight at once
 _CA_BUNDLE_SUFFIXES = (".pem", ".crt", ".cer")
 TRUE_WORDS = ("true", "yes", "1", "on")
 FALSE_WORDS = ("false", "no", "0", "off")
@@ -52,6 +53,7 @@ class Config:
     site: str = DEFAULT_SITE
     verify_ssl: bool | str = True          # False, True, or the path of a CA bundle (file or directory)
     timeout: float = DEFAULT_TIMEOUT
+    parallel: int = DEFAULT_PARALLEL
     # Notification destinations (diagnose --notify). The URLs and tokens are secrets: never shown.
     notify_ntfy_url: str = field(default="", repr=False)
     notify_ntfy_token: str = field(default="", repr=False)
@@ -138,6 +140,21 @@ def parse_timeout(text: Optional[str]) -> float:
     if not math.isfinite(seconds) or not MIN_TIMEOUT <= seconds <= MAX_TIMEOUT:
         raise ConfigError(f"TIMEOUT must be between {MIN_TIMEOUT:g} and {MAX_TIMEOUT:g} seconds (got {text!r})")
     return seconds
+
+
+def parse_parallel(text: Optional[str]) -> int:
+    """How many requests may be in flight at once (``PARALLEL_REQUESTS`` or ``--parallel``); 1 means one by
+    one. Blank means the default."""
+    value = (text or "").strip()
+    if not value:
+        return DEFAULT_PARALLEL
+    try:
+        number = int(value)
+    except ValueError:
+        raise ConfigError(f"PARALLEL_REQUESTS must be a whole number from 1 to {MAX_PARALLEL} (got {text!r})") from None
+    if not 1 <= number <= MAX_PARALLEL:
+        raise ConfigError(f"PARALLEL_REQUESTS must be between 1 and {MAX_PARALLEL} (got {text!r})")
+    return number
 
 
 def validate_site(text: Optional[str]) -> str:
@@ -255,6 +272,7 @@ def load_config(env_file: Optional[Path] = None) -> Config:
         site=validate_site(os.getenv("SITE_ID")),
         verify_ssl=parse_verify(os.getenv("VERIFY_SSL")),
         timeout=parse_timeout(os.getenv("TIMEOUT")),
+        parallel=parse_parallel(os.getenv("PARALLEL_REQUESTS")),
         env_file=path,
         warnings=tuple(warnings),
     )

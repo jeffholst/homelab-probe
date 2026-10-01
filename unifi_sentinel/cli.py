@@ -22,7 +22,7 @@ from .commands import (
     say,
     verbose,
 )
-from .config import ConfigError, load_config, parse_timeout
+from .config import ConfigError, load_config, parse_parallel, parse_timeout
 from .settings import load_settings
 from .snapshot import warn
 
@@ -41,12 +41,19 @@ def _describe_connection(config: Any) -> str:
         else f"CA bundle {config.verify_ssl}"
     source = str(config.env_file) if config.env_file else "environment variables only"
     return (f"settings from {source}; controller {config.controller_url}, site {config.site}, "
-            f"timeout {config.timeout:g} s, TLS verification {verify}")
+            f"timeout {config.timeout:g} s, TLS verification {verify}, up to {config.parallel} requests at once")
 
 
 def _timeout(text: str) -> float:
     try:
         return parse_timeout(text)
+    except ConfigError as e:
+        raise argparse.ArgumentTypeError(str(e)) from e
+
+
+def _parallel(text: str) -> int:
+    try:
+        return parse_parallel(text)
     except ConfigError as e:
         raise argparse.ArgumentTypeError(str(e)) from e
 
@@ -63,6 +70,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--timeout", type=_timeout, metavar="SECONDS",
                         help="Seconds to wait for each request to the controller (before the command; "
                              "default: TIMEOUT from .env, else 15)")
+    parser.add_argument("--parallel", type=_parallel, metavar="N",
+                        help="How many requests to make at once (before the command; 1 means one by one; "
+                             "default: PARALLEL_REQUESTS from .env, else 6)")
     parser.add_argument("--env-file", type=Path, metavar="FILE",
                         help="Read settings from this .env file (before the command). Default: "
                              "$UNIFI_SENTINEL_ENV, else ./.env in the current directory")
@@ -82,6 +92,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         config = load_config(args.env_file)
         if args.timeout is not None:
             config = replace(config, timeout=args.timeout)      # the command line beats .env
+        if args.parallel is not None:
+            config = replace(config, parallel=args.parallel)
         if args.verbose:
             message = f"unifi-sentinel {__version__}: {_describe_connection(config)}"
             verbose(message.replace(config.api_key, "***"))

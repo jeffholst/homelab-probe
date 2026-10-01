@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, TypedDict
 
 from . import __version__
-from .client_view import DeviceIndex, addressing, known_clients
+from .client_view import AddressingIndex, DeviceIndex, addressing, known_clients
 from .config import ConfigError
 from .query import query_rows
 from .reservations import build_reservations
@@ -70,8 +70,9 @@ def capture(snap: Snapshot, application_version: str = "", now: Optional[datetim
     } for r in query_rows(snap, "devices")]
 
     clients = []
+    lookups = AddressingIndex(snap)
     for rec in known_clients(snap):
-        info = addressing(snap, rec)
+        info = addressing(snap, rec, lookups)
         device, port = _where(snap, idx, rec)
         clients.append({
             "mac": rec["mac"], "name": rec["name"], "ip": rec["ip"],

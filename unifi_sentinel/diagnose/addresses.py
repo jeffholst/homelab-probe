@@ -3,7 +3,7 @@
 import ipaddress
 from typing import Any, Dict, List
 
-from ..export import client_location
+from ..export import LocationIndex
 from ..reservations import reservation_records
 from ..snapshot import Snapshot
 from ..util import is_randomized_mac
@@ -17,12 +17,13 @@ from .model import (
 
 def _client_ip_findings(snap: Snapshot) -> List[Finding]:
     findings: List[Finding] = []
+    locate = LocationIndex(snap).of
     for c in snap.clients:
         ip = c.get("ipAddress") or ""
         if ip and not ip.startswith(LINK_LOCAL_PREFIX):
             continue
         subject = c.get("name") or c.get("macAddress") or "?"
-        where = client_location(snap, c)
+        where = locate(c)
         if ip:
             message = f"link-local address {ip}, DHCP probably failed ({where})"
         else:
@@ -43,12 +44,13 @@ def normalize_ip(value: Any) -> str:
 def ip_holders(snap: Snapshot) -> Dict[str, Dict[str, str]]:
     """{ip: {mac: description}} for connected clients and UniFi devices using each IP."""
     holders: Dict[str, Dict[str, str]] = {}
+    locate = LocationIndex(snap).of
     for c in snap.clients:
         ip = normalize_ip(c.get("ipAddress"))
         if ip:
             name = c.get("name") or c.get("macAddress") or "?"
             holders.setdefault(ip, {})[(c.get("macAddress") or name).upper()] = (
-                f"{name} ({client_location(snap, c)})")
+                f"{name} ({locate(c)})")
     for d in snap.devices:
         if d.get("state") != "ONLINE":
             continue

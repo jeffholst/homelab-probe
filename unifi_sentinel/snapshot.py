@@ -2,7 +2,10 @@
 
 import sys
 import time
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+from functools import partial
 from typing import Any, Dict, List, Optional, Tuple
 
 from .client import UniFiAPIError, UniFiClient
@@ -46,7 +49,7 @@ class Snapshot:
     neighbors_available: bool = True
 
 
-def _legacy_or_empty(client: UniFiClient, site_ref: str, resource: str) -> List[Dict[str, Any]]:
+def _legacy_or_empty(client: UniFiClient, site_ref: str, resource: str, notes: List[str]) -> List[Dict[str, Any]]:
     try:
         return client.legacy_stat(site_ref, resource)
     except UniFiAPIError as e:
@@ -55,23 +58,23 @@ def _legacy_or_empty(client: UniFiClient, site_ref: str, resource: str) -> List[
             if resource == "alluser"
             else "port mapping will be incomplete"
         )
-        warn(f"legacy stat/{resource} unavailable; {impact}: {e}")
+        notes.append(f"legacy stat/{resource} unavailable; {impact}: {e}")
         return []
 
 
-def _legacy_health_or_empty(client: UniFiClient, site_ref: str) -> List[Dict[str, Any]]:
+def _legacy_health_or_empty(client: UniFiClient, site_ref: str, notes: List[str]) -> List[Dict[str, Any]]:
     try:
         return client.legacy_stat(site_ref, "health")
     except UniFiAPIError as e:
-        warn(f"legacy stat/health unavailable, controller health and WAN checks were skipped: {e}")
+        notes.append(f"legacy stat/health unavailable, controller health and WAN checks were skipped: {e}")
         return []
 
 
-def _speedtests_or_empty(client: UniFiClient, site_ref: str) -> List[Dict[str, Any]]:
+def _speedtests_or_empty(client: UniFiClient, site_ref: str, notes: List[str]) -> List[Dict[str, Any]]:
     try:
         tests = client.legacy_v2(site_ref, "speedtest")
     except UniFiAPIError as e:
-        warn(f"speedtest history unavailable, speedtest results were skipped: {e}")
+        notes.append(f"speedtest history unavailable, speedtest results were skipped: {e}")
         return []
     def sort_time(test: Dict[str, Any]) -> float:
         value = test.get("time")
@@ -80,44 +83,44 @@ def _speedtests_or_empty(client: UniFiClient, site_ref: str) -> List[Dict[str, A
     return sorted((t for t in tests if isinstance(t, dict)), key=sort_time)
 
 
-def _neighbors_or_empty(client: UniFiClient, site_ref: str) -> tuple[List[Dict[str, Any]], bool]:
+def _neighbors_or_empty(client: UniFiClient, site_ref: str, notes: List[str]) -> tuple[List[Dict[str, Any]], bool]:
     try:
         return [n for n in client.legacy_stat(site_ref, "rogueap") if isinstance(n, dict)], True
     except UniFiAPIError as e:
-        warn(f"neighboring networks unavailable; neighbor-based channel comparisons were skipped: {e}")
+        notes.append(f"neighboring networks unavailable; neighbor-based channel comparisons were skipped: {e}")
         return [], False
 
 
-def _device_extras(client: UniFiClient, site_id: str, devices: List[Dict[str, Any]]):
-    details: Dict[str, Dict[str, Any]] = {}
-    stats: Dict[str, Dict[str, Any]] = {}
-    failed = 0
-    for d in devices:
-        try:
-            details[d["id"]] = client.device(site_id, d["id"])
-            stats[d["id"]] = client.device_statistics(site_id, d["id"])
-        except UniFiAPIError:
-            failed += 1  # e.g. offline devices may have no statistics
-    if failed:
-        warn(f"detail/statistics unavailable for {failed} device(s)")
-    return details, stats
+def _device_extras(
+    client: UniFiClient, site_id: str, device: Dict[str, Any], notes: List[str]
+) -> tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+    """One device's (detail, statistics). Either is None when the controller has none (an offline device may
+    not have statistics); statistics are not asked for when the detail is missing."""
+    try:
+        detail = client.device(site_id, device["id"])
+    except UniFiAPIError:
+        return None, None
+    try:
+        return detail, client.device_statistics(site_id, device["id"])
+    except UniFiAPIError:
+        return detail, None
 
 
-def _legacy_rest_or_empty(client: UniFiClient, site_ref: str, resource: str) -> List[Dict[str, Any]]:
+def _legacy_rest_or_empty(client: UniFiClient, site_ref: str, resource: str, notes: List[str]) -> List[Dict[str, Any]]:
     try:
         return client.legacy_rest(site_ref, resource)
     except UniFiAPIError as e:
-        warn(f"legacy rest/{resource} unavailable, network names may be missing: {e}")
+        notes.append(f"legacy rest/{resource} unavailable, network names may be missing: {e}")
         return []
 
 
 def _legacy_v2_or_empty(
-    client: UniFiClient, site_ref: str, resource: str
+    client: UniFiClient, site_ref: str, resource: str, notes: List[str]
 ) -> Optional[List[Dict[str, Any]]]:
     try:
         return client.legacy_v2(site_ref, resource)
     except UniFiAPIError as e:
-        warn(
+        notes.append(
             f"legacy v2 {resource} unavailable; membership cannot be validated against "
             f"deleted groups, so raw group IDs will be trusted: {e}"
         )
@@ -168,6 +171,7 @@ def _events_or_empty(
     client: UniFiClient,
     site_ref: str,
     wanted: EventQuery,
+    notes: List[str],
     now_ms: Optional[int] = None,
 ) -> tuple[List[Dict[str, Any]], bool, bool]:
     """``(events, truncated, available)``; ``available`` is False when the log could not be read."""
@@ -198,7 +202,7 @@ def _events_or_empty(
                 return events, False, True
         return events, page < total_pages, True
     except UniFiAPIError as e:
-        warn(f"event log unavailable; event history was skipped: {e}")
+        notes.append(f"event log unavailable; event history was skipped: {e}")
         return [], False, False
 
 
@@ -214,6 +218,84 @@ def describe_snapshot(snap: "Snapshot") -> str:
     return "read " + (", ".join(found) if found else "nothing")
 
 
+class _Reads:
+    """Runs the independent reads of one collection, one by one or on the client's thread pool, and keeps each
+    read's warnings apart so they are shown in a fixed order whatever finished first.
+
+    Every task is a function of its notes list (where it records what degraded). With no pool a task runs when
+    it is submitted, so a required read that fails stops the collection at once, as it always did; with a pool
+    the failure surfaces from ``result`` in the order the results are asked for, which is deterministic.
+    """
+
+    def __init__(self, pool: Optional[ThreadPoolExecutor]) -> None:
+        self._pool = pool
+        self._futures: Dict[str, Any] = {}
+        self.notes: Dict[str, List[str]] = {}
+
+    def submit(self, name: str, task: Callable[[List[str]], Any]) -> None:
+        notes = self.notes.setdefault(name, [])
+        if self._pool is None:
+            self._futures[name] = (True, task(notes))
+        else:
+            self._futures[name] = (False, self._pool.submit(task, notes))
+
+    def result(self, name: str) -> Any:
+        done, value = self._futures[name]
+        return value if done else value.result()
+
+    def show_warnings(self, order: List[str]) -> None:
+        for name in order:
+            for message in self.notes.get(name, []):
+                warn(message)
+
+
+# The order in which a collection's warnings are shown (it does not depend on which read finished first).
+_WARNING_ORDER = ["events", "neighbors", "devices", "extras", "alluser", "clients", "legacy_devices",
+                  "legacy_clients", "networks", "health", "speedtests", "groups"]
+
+
+def _submit_extras(reads: "_Reads", needs: Needs, client: UniFiClient, site_ref: str, now_ms: Optional[int],
+                   users: bool) -> None:
+    """Queue the optional reads that ``needs`` asks for (``users``: also the client history)."""
+    if needs.events is not None:
+        wanted = needs.events
+        reads.submit("events", lambda notes: _events_or_empty(client, site_ref, wanted, notes, now_ms))
+    if needs.neighbors:
+        reads.submit("neighbors", lambda notes: _neighbors_or_empty(client, site_ref, notes))
+    if users and (needs.groups or needs.offline or needs.reservations):
+        if needs.users_required:
+            reads.submit("alluser", lambda notes: client.legacy_stat(site_ref, "alluser"))
+        else:
+            reads.submit("alluser", lambda notes: _legacy_or_empty(client, site_ref, "alluser", notes))
+    if needs.reservations:
+        reads.submit("networks", lambda notes: _legacy_rest_or_empty(client, site_ref, "networkconf", notes))
+    if needs.health:
+        reads.submit("health", lambda notes: _legacy_health_or_empty(client, site_ref, notes))
+    if needs.speedtests:
+        reads.submit("speedtests", lambda notes: _speedtests_or_empty(client, site_ref, notes))
+    if needs.groups:
+        reads.submit("groups", lambda notes: _legacy_v2_or_empty(client, site_ref, "network-members-groups", notes))
+
+
+def _apply_extras(snap: Snapshot, reads: "_Reads", needs: Needs, users: bool) -> None:
+    """Put the results of ``_submit_extras`` into the snapshot."""
+    if needs.events is not None:
+        snap.events, snap.events_truncated, snap.events_available = reads.result("events")
+        snap.event_window_seconds = needs.events.since_seconds
+    if needs.neighbors:
+        snap.neighbors, snap.neighbors_available = reads.result("neighbors")
+    if users and (needs.groups or needs.offline or needs.reservations):
+        snap.all_users = reads.result("alluser")
+    if needs.reservations:
+        snap.networks = reads.result("networks")
+    if needs.health:
+        snap.health = reads.result("health")
+    if needs.speedtests:
+        snap.speedtests = reads.result("speedtests")
+    if needs.groups:
+        snap.client_groups = reads.result("groups")
+
+
 def collect_snapshot(
     client: UniFiClient,
     site: str,
@@ -221,50 +303,63 @@ def collect_snapshot(
     now_ms: Optional[int] = None,
 ) -> Snapshot:
     """One read of the controller: the devices and connected clients always, and whatever ``needs``
-    adds (see ``Needs``). ``now_ms`` fixes the clock of the event window, for tests."""
+    adds (see ``Needs``). ``now_ms`` fixes the clock of the event window, for tests.
+
+    The reads do not depend on each other (except a device's detail and statistics on the device list), so
+    when the client has more than one worker they run side by side; the result and the order of the warnings
+    are the same either way."""
     site_info = client.resolve_site(site)
     site_ref = site_info.get("internalReference") or site
-    events, events_truncated, events_available = _events_or_empty(
-        client, site_ref, needs.events, now_ms
-    ) if needs.events is not None else ([], False, False)
-    neighbors, neighbors_available = (
-        _neighbors_or_empty(client, site_ref) if needs.neighbors else ([], False)
-    )
-    devices = client.devices(site_info["id"])
-    details, stats = _device_extras(client, site_info["id"], devices)
-    if not (needs.groups or needs.offline or needs.reservations):
-        all_users: List[Dict[str, Any]] = []
-    elif needs.users_required:
-        all_users = client.legacy_stat(site_ref, "alluser")
-    else:
-        all_users = _legacy_or_empty(client, site_ref, "alluser")
-    snap = Snapshot(
-        site=site_info,
-        devices=devices,
-        device_details=details,
-        device_stats=stats,
-        clients=client.clients(site_info["id"]),
-        legacy_devices=_legacy_or_empty(client, site_ref, "device"),
-        legacy_clients=_legacy_or_empty(client, site_ref, "sta"),
-        all_users=all_users,
-        networks=(
-            _legacy_rest_or_empty(client, site_ref, "networkconf") if needs.reservations else []
-        ),
-        health=_legacy_health_or_empty(client, site_ref) if needs.health else [],
-        speedtests=_speedtests_or_empty(client, site_ref) if needs.speedtests else [],
-        neighbors=neighbors,
-        neighbors_available=neighbors_available,
-        client_groups=(
-            _legacy_v2_or_empty(client, site_ref, "network-members-groups") if needs.groups else []
-        ),
-        events=events,
-        events_truncated=events_truncated,
-        event_window_seconds=needs.events.since_seconds if needs.events is not None else 0,
-        events_available=events_available,
-    )
+    site_id = site_info["id"]
+    snap = Snapshot(site=site_info, devices=[], clients=[])
+    with client.parallel() as pool:
+        reads = _Reads(pool)
+        try:
+            reads.submit("devices", lambda notes: client.devices(site_id))
+            reads.submit("clients", lambda notes: client.clients(site_id))
+            reads.submit("legacy_devices", lambda notes: _legacy_or_empty(client, site_ref, "device", notes))
+            reads.submit("legacy_clients", lambda notes: _legacy_or_empty(client, site_ref, "sta", notes))
+            _submit_extras(reads, needs, client, site_ref, now_ms, users=True)
+            snap.devices = reads.result("devices")
+            for i, device in enumerate(snap.devices):             # each device's detail and statistics
+                reads.submit(f"extras{i}", partial(_device_extras, client, site_id, device))
+            snap.clients = reads.result("clients")
+            snap.legacy_devices = reads.result("legacy_devices")
+            snap.legacy_clients = reads.result("legacy_clients")
+            _apply_extras(snap, reads, needs, users=True)
+            failed = 0
+            for i, device in enumerate(snap.devices):
+                detail, stats = reads.result(f"extras{i}")
+                if detail is not None:
+                    snap.device_details[device["id"]] = detail
+                if stats is not None:
+                    snap.device_stats[device["id"]] = stats
+                if detail is None or stats is None:
+                    failed += 1                                   # e.g. offline devices may have no statistics
+            if failed:
+                reads.notes.setdefault("extras", []).append(f"detail/statistics unavailable for {failed} device(s)")
+        finally:
+            reads.show_warnings(_WARNING_ORDER)
     if client.trace is not None:
         client.trace(describe_snapshot(snap))
     return snap
+
+
+def extend_snapshot(client: UniFiClient, snap: Snapshot, needs: Needs, now_ms: Optional[int] = None) -> None:
+    """Read more into a snapshot that ``collect_snapshot`` already made: the optional reads in ``needs`` (the
+    network configuration, client groups, health, speedtests, neighbors and the event log), not the devices
+    and clients or the client history, which are already there. A command that first looks something up
+    in the cheap data (``client``) uses this to read the rest only when the lookup found something."""
+    site_ref = snap.site.get("internalReference") or snap.site.get("name") or ""
+    with client.parallel() as pool:
+        reads = _Reads(pool)
+        try:
+            _submit_extras(reads, needs, client, site_ref, now_ms, users=False)
+            _apply_extras(snap, reads, needs, users=False)
+        finally:
+            reads.show_warnings(_WARNING_ORDER)
+    if client.trace is not None:
+        client.trace(describe_snapshot(snap))
 
 
 def collect_event_snapshot(
@@ -276,7 +371,10 @@ def collect_event_snapshot(
     """Only the event log (no devices or clients), for the `events` command."""
     site_info = client.resolve_site(site)
     site_ref = site_info.get("internalReference") or site
-    events, truncated, available = _events_or_empty(client, site_ref, wanted, now_ms)
+    notes: List[str] = []
+    events, truncated, available = _events_or_empty(client, site_ref, wanted, notes, now_ms)
+    for message in notes:
+        warn(message)
     snap = Snapshot(
         site=site_info,
         devices=[],
