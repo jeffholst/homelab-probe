@@ -10,7 +10,7 @@ Fork of [ericfitz/unifi-clients-export](https://github.com/ericfitz/unifi-client
 
 ## Commands
 
-- Run: `uv run unifi-sentinel.py <export|query|client|new-clients|diagnose|info>`
+- Run: `uv run unifi-sentinel.py <export|query|client|new-clients|diagnose|events|topology|info>`
 - Tests: `uv run pytest`
 
 ## Documentation

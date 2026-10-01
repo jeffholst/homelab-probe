@@ -171,13 +171,13 @@ def test_client_counts_per_device_and_unavailable_client_data():
 
 # -- findings assignment ---------------------------------------------------
 
-def test_findings_go_to_the_device_with_the_longest_matching_name():
-    names_ = {"1": "SW", "2": "SW 2", "3": "SWX"}
-    f = lambda subject: Finding("warning", subject, "m")
-    got = _assign_findings([f("SW"), f("SW port 1"), f("SW 2 port 1"), f("sw 2"), f("SWX radio"),
-                            f("SWITCH port 1"), f("Unrelated"), f("10.0.0.5")], names_)
+def test_findings_go_to_their_exact_device_identity():
+    names_ = {"1": "SW", "2": "SW 2"}
+    f = lambda subject, mac=None: Finding("warning", subject, "m", mac)
+    got = _assign_findings([f("SW", "1"), f("SW port 1", "1"), f("SW 2", "2"),
+                            f("same name", "missing"), f("client named SW")], names_)
     assert {mac: [x.subject for x in fs] for mac, fs in got.items()} == {
-        "1": ["SW", "SW port 1"], "2": ["SW 2 port 1", "sw 2"], "3": ["SWX radio"]}
+        "1": ["SW", "SW port 1"], "2": ["SW 2"]}
 
 
 def test_the_ignore_list_hides_findings_from_the_tree(fake_client):

@@ -43,18 +43,11 @@ def _link(snap: Snapshot, idx: DeviceIndex, mac: str) -> Tuple[str, Optional[int
 
 
 def _assign_findings(findings: List[Finding], names: Dict[str, str]) -> Dict[str, List[Finding]]:
-    """Give each finding to the device it is about. A subject is a device name or starts
-    with one followed by a space (``Switch port 3``, ``AP 5 GHz radio``). The longest
-    matching name wins so ``SW 2 port 1`` is not credited to a device named ``SW``."""
-    by_len = sorted(names.items(), key=lambda item: -len(item[1]))
+    """Give device findings to their exact target MAC."""
     result: Dict[str, List[Finding]] = {}
     for f in findings:
-        subject = f.subject.lower()
-        for mac, name in by_len:
-            lowered = name.lower()
-            if subject == lowered or subject.startswith(lowered + " "):
-                result.setdefault(mac, []).append(f)
-                break
+        if f.target_mac and f.target_mac in names:
+            result.setdefault(f.target_mac, []).append(f)
     return result
 
 

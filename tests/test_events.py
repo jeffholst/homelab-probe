@@ -133,7 +133,7 @@ def test_limit_trims_the_collected_events_and_says_more_exist(fake_client, monke
     got, more = fetch_events(snap, limit=3)
     assert names(got) == ["ev1", "ev2", "ev3"] and more
     got, more = fetch_events(snap, limit=10)
-    assert len(got) == 10 and more                                              # stopped exactly at the limit
+    assert len(got) == 10 and not more                                           # all collected events were returned
     got, more = fetch_events(snap, limit=11)
     assert len(got) == 10 and not more
 
