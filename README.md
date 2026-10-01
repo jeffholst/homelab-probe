@@ -117,8 +117,8 @@ uv run unifi-sentinel.py diagnose                    # health checks
 
 | Level | Examples |
 | ----- | -------- |
-| 🛑 critical | a switch's PoE budget at or above `poe_critical_pct` (default 95%); the controller reports a WAN, internet or VPN subsystem in `error`; a LAN/WLAN `error` with no disconnected device to explain it; gateway offline; an offline switch or device that other devices uplink through; CPU or memory at or above `resource_critical_pct` (default 98%) |
-| ⚠️ warning | a port whose link has gone down `link_flap_count` or more times since boot (default 5); a port dropping `port_drop_pct` or more of its packets (default 0.1%); an up port whose STP state is not forwarding; a switch's PoE budget at or above `poe_warn_pct` (default 80%); an uplink negotiated below what both ends support; a subsystem in `warning` the same way; internet latency at or above `wan_latency_warn_ms` (default 100 ms) or drops at or above `wan_drops_warn` (default 10); other offline devices; port rx/tx errors; half-duplex links; CPU or memory at or above `resource_warn_pct` (default 90%) but below the critical level; connected clients with no IP address or a link-local (169.254.x.x) address, shown with where they attach; DHCP reservation problems: an online client whose current IP differs from its reservation, the same IP reserved for several clients, or a reserved IP outside its network's subnet; the same IP in use by several clients or UniFi devices on any VLAN, or a reserved IP currently used by a different client or UniFi device |
+| 🛑 critical | an AP radio's channel utilization at or above `radio_util_critical_pct` (default 90%); a switch's PoE budget at or above `poe_critical_pct` (default 95%); the controller reports a WAN, internet or VPN subsystem in `error`; a LAN/WLAN `error` with no disconnected device to explain it; gateway offline; an offline switch or device that other devices uplink through; CPU or memory at or above `resource_critical_pct` (default 98%) |
+| ⚠️ warning | a Wi-Fi client with signal at or below `wifi_weak_signal_dbm` (default -75 dBm), `wifi_retry_pct` (default 30%) or more of its transmissions retried, or satisfaction below `wifi_satisfaction_warn` (default 50%); an AP radio with channel utilization at or above `radio_util_warn_pct` (default 70%), or retries or satisfaction past the same limits; a port whose link has gone down `link_flap_count` or more times since boot (default 5); a port dropping `port_drop_pct` or more of its packets (default 0.1%); an up port whose STP state is not forwarding; a switch's PoE budget at or above `poe_warn_pct` (default 80%); an uplink negotiated below what both ends support; a subsystem in `warning` the same way; internet latency at or above `wan_latency_warn_ms` (default 100 ms) or drops at or above `wan_drops_warn` (default 10); other offline devices; port rx/tx errors; half-duplex links; CPU or memory at or above `resource_warn_pct` (default 90%) but below the critical level; connected clients with no IP address or a link-local (169.254.x.x) address, shown with where they attach; DHCP reservation problems: an online client whose current IP differs from its reservation, the same IP reserved for several clients, or a reserved IP outside its network's subnet; the same IP in use by several clients or UniFi devices on any VLAN, or a reserved IP currently used by a different client or UniFi device |
 | ℹ️ info | the controller's LAN/WLAN status when it is only caused by disconnected devices (they are reported individually); devices waiting to be adopted; a failed speedtest; ports negotiated at or below `slow_link_mbps` (default 100 Mbps); legacy data unavailable (port checks skipped) |
 
 The reservation checks read the legacy `stat/alluser` and `rest/networkconf` endpoints (the same data as `query reservations`); offline clients are only checked for duplicate and out-of-subnet reservations, and a reservation whose network cannot be resolved is skipped for the subnet check.
@@ -138,6 +138,16 @@ For each switch port `diagnose` also checks the controller's port counters (the 
 - **PoE budget:** used power as a percentage of the switch's total PoE budget; switches without PoE are skipped. The per-port `poe_good` flag is deliberately not used: it is false on every PoE-capable port that simply has no PoE device attached.
 - **Uplink speed:** an uplink negotiated below what both ends support (the device's own maximum and the parent's port maximum). A gigabit device on a 2.5G port is at its own maximum and is not flagged.
 
+#### Wi-Fi quality
+
+`diagnose` checks every connected Wi-Fi client and every AP radio (from the legacy `stat/sta` and `stat/device` data; skipped with a warning if unavailable). Each client finding names the band and the AP it is on.
+- **Weak signal:** the client's signal at or below `wifi_weak_signal_dbm`.
+- **Retries:** the share of the client's transmissions that were retried, only once it has made at least `wifi_min_attempts` transmissions, because a percentage over a few packets is noise. The 30% default is deliberately high: on a busy 2.4 GHz band many clients retry 20 to 30% of the time because of neighboring networks, which is an environmental condition more than a per-client fault. Lower `wifi_retry_pct` to see more.
+- **Satisfaction:** the controller's own 0-100 score, flagged below `wifi_satisfaction_warn`.
+- **AP radios:** channel utilization (warning at `radio_util_warn_pct`, critical at `radio_util_critical_pct`), and the same retry and satisfaction limits per radio.
+
+Clients without signal or satisfaction data (the controller omits it for some) and radios that report satisfaction as unknown (`-1`) are never flagged. The controller's `anomalies` field is not used, because it is present on nearly every client.
+
 #### Configuration: thresholds and ignore list
 
 Thresholds and an ignore list live in an optional TOML file, read from `./unifi-sentinel.toml` or given with `diagnose --config FILE` (copy [unifi-sentinel.example.toml](unifi-sentinel.example.toml); the real file is git-ignored because it may name your devices).
@@ -154,6 +164,12 @@ port_drop_pct = 0.1          # dropped packets, % of a port's packets, at or abo
 min_packets_for_drop_pct = 1000 # minimum packets before evaluating drop percentage
 poe_warn_pct = 80            # switch PoE budget used at or above this: warning
 poe_critical_pct = 95        # switch PoE budget used at or above this: critical
+wifi_weak_signal_dbm = -75   # Wi-Fi client signal at or below this (dBm): warning
+wifi_retry_pct = 30          # client or radio TX retries at or above this (%): warning
+wifi_min_attempts = 1000     # client TX attempts needed before its retries are judged
+wifi_satisfaction_warn = 50  # client or radio satisfaction below this (%): warning
+radio_util_warn_pct = 70     # AP radio channel utilization at or above this: warning
+radio_util_critical_pct = 90 # AP radio channel utilization at or above this: critical
 
 [[ignore]]
 subject = "Garage AP"        # case-insensitive name; * and ? wildcards

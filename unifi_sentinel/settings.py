@@ -48,6 +48,12 @@ class DiagnoseSettings:
     min_packets_for_drop_pct: int = 1000 # minimum packet count before evaluating drop percentage
     poe_warn_pct: float = 80             # switch PoE budget used at or above: warning
     poe_critical_pct: float = 95         # switch PoE budget used at or above: critical
+    wifi_weak_signal_dbm: float = -75    # client signal at or below: warning
+    wifi_retry_pct: float = 30           # client or radio TX retries at or above: warning
+    wifi_min_attempts: int = 1000        # minimum client TX attempts before judging retries
+    wifi_satisfaction_warn: float = 50   # client or radio satisfaction below: warning
+    radio_util_warn_pct: float = 70      # radio channel utilization at or above: warning
+    radio_util_critical_pct: float = 90  # radio channel utilization at or above: critical
     ignore: Tuple[IgnoreRule, ...] = ()
 
 
@@ -74,7 +80,9 @@ def _parse(data: Dict[str, Any]) -> DiagnoseSettings:
         raise ConfigError("[thresholds] must be a table")
     known = {"resource_warn_pct", "resource_critical_pct", "slow_link_mbps",
              "wan_latency_warn_ms", "wan_drops_warn", "link_flap_count", "port_drop_pct",
-             "min_packets_for_drop_pct", "poe_warn_pct", "poe_critical_pct"}
+             "min_packets_for_drop_pct", "poe_warn_pct", "poe_critical_pct",
+             "wifi_weak_signal_dbm", "wifi_retry_pct", "wifi_min_attempts",
+             "wifi_satisfaction_warn", "radio_util_warn_pct", "radio_util_critical_pct"}
     if set(thresholds) - known:
         raise ConfigError(f"unknown [thresholds] key(s): {', '.join(sorted(set(thresholds) - known))} "
                           f"(valid: {', '.join(sorted(known))})")
@@ -98,8 +106,21 @@ def _parse(data: Dict[str, Any]) -> DiagnoseSettings:
                            thresholds.get("poe_critical_pct", defaults.poe_critical_pct), 0, 100)
     if poe_warn > poe_critical:
         raise ConfigError("[thresholds] poe_warn_pct must not exceed poe_critical_pct")
+    weak = _number("wifi_weak_signal_dbm",
+                   thresholds.get("wifi_weak_signal_dbm", defaults.wifi_weak_signal_dbm), -120, 0)
+    retry = _number("wifi_retry_pct", thresholds.get("wifi_retry_pct", defaults.wifi_retry_pct), 0, 100)
+    min_attempts = _number("wifi_min_attempts",
+                           thresholds.get("wifi_min_attempts", defaults.wifi_min_attempts), 1)
+    satisfaction = _number("wifi_satisfaction_warn",
+                           thresholds.get("wifi_satisfaction_warn", defaults.wifi_satisfaction_warn), 0, 100)
+    util_warn = _number("radio_util_warn_pct",
+                        thresholds.get("radio_util_warn_pct", defaults.radio_util_warn_pct), 0, 100)
+    util_critical = _number("radio_util_critical_pct",
+                            thresholds.get("radio_util_critical_pct", defaults.radio_util_critical_pct), 0, 100)
+    if util_warn > util_critical:
+        raise ConfigError("[thresholds] radio_util_warn_pct must not exceed radio_util_critical_pct")
     for name, value in (("wan_drops_warn", drops), ("link_flap_count", flaps),
-                        ("min_packets_for_drop_pct", min_packets)):
+                        ("min_packets_for_drop_pct", min_packets), ("wifi_min_attempts", min_attempts)):
         if value != int(value):
             raise ConfigError(f"[thresholds] {name} must be a whole number")
 
@@ -124,7 +145,10 @@ def _parse(data: Dict[str, Any]) -> DiagnoseSettings:
         wan_latency_warn_ms=latency, wan_drops_warn=int(drops),
         link_flap_count=int(flaps), port_drop_pct=drop_pct,
         min_packets_for_drop_pct=int(min_packets), poe_warn_pct=poe_warn,
-        poe_critical_pct=poe_critical, ignore=tuple(rules))
+        poe_critical_pct=poe_critical, wifi_weak_signal_dbm=weak, wifi_retry_pct=retry,
+        wifi_min_attempts=int(min_attempts), wifi_satisfaction_warn=satisfaction,
+        radio_util_warn_pct=util_warn, radio_util_critical_pct=util_critical,
+        ignore=tuple(rules))
 
 
 def load_settings(path: Optional[Path] = None) -> DiagnoseSettings:

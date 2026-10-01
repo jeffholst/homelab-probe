@@ -253,6 +253,75 @@ def _port_health_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Fi
     return findings
 
 
+BANDS = {"ng": "2.4 GHz", "na": "5 GHz", "6e": "6 GHz"}
+
+
+def _known_percent(value: Any) -> Optional[float]:
+    """A 0-100 quality value, or None when missing or unknown (the controller uses -1)."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+        return None
+    return float(value)
+
+
+def _wifi_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]:
+    """Weak signal, retries and low satisfaction for Wi-Fi clients, and busy or
+    retry-heavy AP radios.
+
+    Many connected clients report no signal or satisfaction at all, and some APs report
+    radio satisfaction as -1 (unknown), so missing values are never flagged. The
+    ``anomalies`` field is deliberately not used: it is present on nearly every client.
+    """
+    findings: List[Finding] = []
+    ap_name = {
+        (d.get("macAddress") or "").upper(): d.get("name") or d.get("macAddress") or "?"
+        for d in snap.devices
+    }
+    ap_name.update({(d.get("mac") or "").upper(): _switch_name(d) for d in snap.legacy_devices})
+
+    for c in snap.legacy_clients:
+        if c.get("is_wired"):
+            continue
+        name = c.get("name") or c.get("hostname") or c.get("mac") or "?"
+        ap = ap_name.get((c.get("ap_mac") or "").upper())
+        place = ", ".join(x for x in (BANDS.get(c.get("radio"), ""), f"on {ap}" if ap else "") if x)
+        where = f" ({place})" if place else ""
+
+        signal = _number(c.get("signal"))
+        if signal < 0 and signal <= settings.wifi_weak_signal_dbm:
+            findings.append(Finding(WARNING, name, f"weak Wi-Fi signal {signal:.0f} dBm{where}"))
+
+        attempts = _number(c.get("wifi_tx_attempts"))
+        retries = _known_percent(c.get("wifi_tx_retries_percentage"))
+        if (attempts >= settings.wifi_min_attempts and retries is not None
+                and retries >= settings.wifi_retry_pct):
+            findings.append(Finding(WARNING, name, f"{retries:.0f}% of Wi-Fi transmissions retried{where}"))
+
+        satisfaction = _known_percent(c.get("satisfaction"))
+        if satisfaction is not None and satisfaction < settings.wifi_satisfaction_warn:
+            findings.append(Finding(WARNING, name, f"Wi-Fi satisfaction {satisfaction:.0f}%{where}"))
+
+    for ap in snap.legacy_devices:
+        if ap.get("type") != "uap":
+            continue
+        for radio in ap.get("radio_table_stats") or []:
+            band = BANDS.get(radio.get("radio"), str(radio.get("radio") or "?"))
+            label = f"{_switch_name(ap)} {band} radio"
+            channel = radio.get("channel")
+            on = f" (channel {channel})" if channel not in (None, "") else ""
+
+            util = _known_percent(radio.get("cu_total"))
+            if util is not None and util >= settings.radio_util_warn_pct:
+                level = CRITICAL if util >= settings.radio_util_critical_pct else WARNING
+                findings.append(Finding(level, label, f"channel utilization {util:.0f}%{on}"))
+            retries = _number(radio.get("tx_retries_pct"))
+            if retries >= settings.wifi_retry_pct:
+                findings.append(Finding(WARNING, label, f"{retries:.0f}% of transmissions retried{on}"))
+            satisfaction = _known_percent(radio.get("satisfaction"))
+            if satisfaction is not None and satisfaction < settings.wifi_satisfaction_warn:
+                findings.append(Finding(WARNING, label, f"satisfaction {satisfaction:.0f}%{on}"))
+    return findings
+
+
 def _uplink_speed_findings(snap: Snapshot) -> List[Finding]:
     """An uplink negotiated below what both ends of the link support.
 
@@ -345,6 +414,7 @@ def diagnose(snap: Snapshot, settings: Optional[DiagnoseSettings] = None) -> Lis
 
     findings.extend(_port_health_findings(snap, settings))
     findings.extend(_uplink_speed_findings(snap))
+    findings.extend(_wifi_findings(snap, settings))
 
     return sorted(findings, key=lambda f: (SEVERITY_ORDER[f.severity], f.subject))
 
