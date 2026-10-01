@@ -71,6 +71,18 @@ def _say(text: Any = "", file: Any = None) -> None:
     print(safe_output(str(text)), file=file)
 
 
+def _verbose(message: str) -> None:
+    _say(f"[verbose] {message}", file=sys.stderr)
+
+
+def _describe_connection(config: Any) -> str:
+    verify = {True: "on", False: "off"}.get(config.verify_ssl) if isinstance(config.verify_ssl, bool) \
+        else f"CA bundle {config.verify_ssl}"
+    source = str(config.env_file) if config.env_file else "environment variables only"
+    return (f"settings from {source}; controller {config.controller_url}, site {config.site}, "
+            f"timeout {config.timeout:g} s, TLS verification {verify}")
+
+
 def _timeout(text: str) -> float:
     try:
         return parse_timeout(text)
@@ -128,6 +140,9 @@ def build_parser() -> argparse.ArgumentParser:
         description="Query, troubleshoot and inventory a UniFi Network controller.",
     )
     parser.add_argument("--version", action="version", version=__version__)
+    parser.add_argument("--verbose", "--debug", action="store_true", dest="verbose",
+                        help="Log each request to stderr (method, path, status, milliseconds, retries) and what "
+                             "was read, never the API key (before the command)")
     parser.add_argument("--timeout", type=_timeout, metavar="SECONDS",
                         help="Seconds to wait for each request to the controller (before the command; "
                              "default: TIMEOUT from .env, else 15)")
@@ -346,10 +361,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         parser.error("--offline and --config only apply to 'query reservations'")
     if args.command == "query" and args.config is not None and not args.offline:
         parser.error("--config only applies with --offline")
+    client: Optional[UniFiClient] = None
     try:
         config = load_config(args.env_file)
         if args.timeout is not None:
             config = replace(config, timeout=args.timeout)      # the command line beats .env
+        if args.verbose:
+            message = f"unifi-sentinel {__version__}: {_describe_connection(config)}"
+            _verbose(message.replace(config.api_key, "***"))
         for message in config.warnings:
             warn(message)
         # Load diagnose settings first so a bad config file fails before any API call.
@@ -357,6 +376,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             args.command == "query" and args.offline)
         settings = load_settings(args.config) if needs_settings else None
         client = UniFiClient.from_config(config)
+        if args.verbose:
+            client.trace = _verbose
         if args.command == "info":
             _say(f"Application: {client.info()}")
             for s in client.sites():
@@ -427,6 +448,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     except (ConfigError, UniFiAPIError) as e:
         _say(f"ERROR: {e}", file=sys.stderr)
         return EXIT_ERROR
+    finally:
+        if args.verbose and client is not None and client.attempts_made:
+            _verbose(client.summary())
     return 0
 
 

@@ -165,6 +165,18 @@ def _events_or_empty(
         return [], False, False
 
 
+def describe_snapshot(snap: "Snapshot") -> str:
+    """What a snapshot holds, as 'read 4 devices, 2 connected clients, ...' (empty parts left out).
+    Used by --verbose to show what was actually read."""
+    parts = [(snap.devices, "devices"), (snap.clients, "connected clients"),
+             (snap.legacy_devices, "legacy devices"), (snap.legacy_clients, "legacy clients"),
+             (snap.all_users, "known clients"), (snap.networks, "networks"),
+             (snap.client_groups or [], "client groups"), (snap.health, "health subsystems"),
+             (snap.speedtests, "speedtests"), (snap.neighbors, "neighbor rows"), (snap.events, "events")]
+    found = [f"{len(items)} {name}" for items, name in parts if items]
+    return "read " + (", ".join(found) if found else "nothing")
+
+
 def collect_snapshot(
     client: UniFiClient,
     site: str,
@@ -208,7 +220,7 @@ def collect_snapshot(
         all_users = client.legacy_stat(site_ref, "alluser")
     else:
         all_users = _legacy_or_empty(client, site_ref, "alluser")
-    return Snapshot(
+    snap = Snapshot(
         site=site_info,
         devices=devices,
         device_details=details,
@@ -232,6 +244,9 @@ def collect_snapshot(
         event_window_seconds=event_since_seconds if include_events else 0,
         events_available=events_available,
     )
+    if client.trace is not None:
+        client.trace(describe_snapshot(snap))
+    return snap
 
 
 def collect_event_snapshot(
@@ -248,6 +263,15 @@ def collect_event_snapshot(
     events, truncated, available = _events_or_empty(
         client, site_ref, since_seconds, categories or [], severities or [], search, now_ms
     )
-    return Snapshot(site=site_info, devices=[], clients=[], events=events,
-                    events_truncated=truncated, event_window_seconds=since_seconds,
-                    events_available=available)
+    snap = Snapshot(
+        site=site_info,
+        devices=[],
+        clients=[],
+        events=events,
+        events_truncated=truncated,
+        event_window_seconds=since_seconds,
+        events_available=available,
+    )
+    if client.trace is not None:
+        client.trace(describe_snapshot(snap))
+    return snap
