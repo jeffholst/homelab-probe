@@ -85,9 +85,11 @@ def validate_controller_url(text: Optional[str], allow_http: bool = False) -> st
     is refused unless ``allow_http`` (the key would be sent in clear text), and a URL carrying
     a user name or password, a query or a fragment is refused."""
     url = (text or "").strip()
+    if any(c.isspace() or c == "\\" or ord(c) < 32 or 127 <= ord(c) <= 159 for c in url):
+        raise ConfigError("CONTROLLER_URL must not contain spaces, backslashes or control characters")
     try:
         parts = urlsplit(url)
-        parts.port                             # raises ValueError for a bad port
+        _ = parts.port                         # raises ValueError for a bad port
     except ValueError as e:
         raise ConfigError(f"CONTROLLER_URL is not a valid URL ({e})") from e
     if parts.scheme.lower() not in ("http", "https") or not parts.hostname:
@@ -117,7 +119,7 @@ def env_file_warning(path: Path) -> Optional[str]:
         return None
     if not mode & SECRET_FILE_GROUP_OTHER_BITS:
         return None
-    return (f"{path} is readable by other users (mode {mode:04o}) and holds your API key; "
+    return (f"{path} is accessible to other users (mode {mode:04o}) and holds your API key; "
             f"run: chmod 600 {shlex.quote(str(path))}")
 
 
@@ -162,9 +164,13 @@ def load_config(env_file: Optional[Path] = None) -> Config:
             "Settings > Control Plane > Integrations and add it to .env."
         )
 
+    allow_http = parse_bool("ALLOW_INSECURE_HTTP", os.getenv("ALLOW_INSECURE_HTTP"), False)
+    url = validate_controller_url(controller_url, allow_http)
+    if url.lower().startswith("http://"):
+        warnings.append("CONTROLLER_URL uses http://: the API key is sent in clear text "
+                        "(allowed by ALLOW_INSECURE_HTTP)")
     return Config(
-        controller_url=validate_controller_url(
-            controller_url, parse_bool("ALLOW_INSECURE_HTTP", os.getenv("ALLOW_INSECURE_HTTP"), False)),
+        controller_url=url,
         api_key=api_key,
         site=validate_site(os.getenv("SITE_ID")),
         verify_ssl=parse_bool("VERIFY_SSL", os.getenv("VERIFY_SSL")),

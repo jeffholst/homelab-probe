@@ -2,6 +2,7 @@
 
 import copy
 import json
+import os
 import time
 from pathlib import Path
 
@@ -123,11 +124,15 @@ def _isolated_environment(tmp_path, monkeypatch):
     are looked up in the current directory) with the configuration variables unset. A test
     that needs a file creates it there, or changes directory itself.
     """
+    saved = dict(os.environ)       # load_dotenv writes os.environ directly, outside monkeypatch
     workdir = tmp_path / "cwd"
     workdir.mkdir()
     monkeypatch.chdir(workdir)
     for name in CONFIG_VARIABLES:
         monkeypatch.delenv(name, raising=False)
+    yield
+    os.environ.clear()
+    os.environ.update(saved)
 
 
 @pytest.fixture

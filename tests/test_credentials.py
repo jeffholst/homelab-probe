@@ -98,11 +98,11 @@ def test_cli_prints_one_warning_to_stderr_and_carries_on(monkeypatch, tmp_path, 
     path = write(tmp_path / "lab.env", mode=0o644)
     assert cli.main(["--env-file", str(path), "info"]) == 0
     captured = capsys.readouterr()
-    assert captured.err.count("readable by other users") == 1 and "chmod 600" in captured.err
+    assert captured.err.count("accessible to other users") == 1 and "chmod 600" in captured.err
     assert KEY not in captured.out + captured.err and "Site:" in captured.out
     path.chmod(0o600)
     assert cli.main(["--env-file", str(path), "info"]) == 0
-    assert "readable by other users" not in capsys.readouterr().err
+    assert "accessible to other users" not in capsys.readouterr().err
 
 
 # -- the controller URL -----------------------------------------------------------
@@ -156,6 +156,17 @@ def test_a_url_with_a_login_is_refused_and_never_echoed(given):
     assert "hunter2" not in str(caught.value) and "admin" not in str(caught.value)
 
 
+@pytest.mark.parametrize("given", [
+    "https://host\n.example", "https://ho st.example", "https://host.example\t/x",
+    "https://host.example/a b", "https://good.example\\@evil.example", "https://host.example\x1b[0m",
+    "https://host\x85.example",
+])
+def test_whitespace_backslashes_and_control_characters_are_refused_here_not_later(given):
+    """They used to pass and only failed inside the HTTP library, as a confusing connection error."""
+    with pytest.raises(ConfigError, match="spaces, backslashes or control characters"):
+        validate_controller_url(given)
+
+
 @pytest.mark.parametrize("given", ["https://controller.example?x=1", "https://controller.example/#top"])
 def test_a_query_or_fragment_is_refused(given):
     with pytest.raises(ConfigError, match="query"):
@@ -169,6 +180,16 @@ def test_load_config_refuses_http_and_allows_it_with_the_opt_in(monkeypatch):
         load_config()
     monkeypatch.setenv("ALLOW_INSECURE_HTTP", "true")
     assert load_config().controller_url == "http://192.0.2.1:8080"
+
+
+def test_using_the_opt_in_is_not_silent(monkeypatch):
+    monkeypatch.setenv("API_KEY", KEY)
+    monkeypatch.setenv("CONTROLLER_URL", "http://192.0.2.1")
+    monkeypatch.setenv("ALLOW_INSECURE_HTTP", "1")
+    cfg = load_config()
+    assert len(cfg.warnings) == 1 and "clear text" in cfg.warnings[0] and KEY not in cfg.warnings[0]
+    monkeypatch.setenv("CONTROLLER_URL", "https://192.0.2.1")
+    assert load_config().warnings == ()
 
 
 def test_the_opt_in_can_come_from_the_env_file(tmp_path):
