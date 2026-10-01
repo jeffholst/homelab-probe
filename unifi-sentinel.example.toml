@@ -24,6 +24,7 @@ radio_util_warn_pct = 70     # AP radio channel utilization at or above this: wa
 radio_util_critical_pct = 90 # AP radio channel utilization at or above this: critical
 reserved_offline_warn_days = 1      # a client with a DHCP reservation offline this many days: warning
 reserved_offline_critical_days = 7  # ... and this many days: critical
+notify_repeat_hours = 24           # `diagnose --notify` repeats a critical finding this often (0: never)
 
 # Suppress findings you have accepted. Each rule needs a reason, plus a subject
 # and/or a message. subject: case-insensitive name, * and ? wildcards.

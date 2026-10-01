@@ -52,6 +52,11 @@ class Config:
     site: str = DEFAULT_SITE
     verify_ssl: bool | str = True          # False, True, or the path of a CA bundle (file or directory)
     timeout: float = DEFAULT_TIMEOUT
+    # Notification destinations (diagnose --notify). The URLs and tokens are secrets: never shown.
+    notify_ntfy_url: str = field(default="", repr=False)
+    notify_ntfy_token: str = field(default="", repr=False)
+    notify_webhook_url: str = field(default="", repr=False)
+    notify_webhook_token: str = field(default="", repr=False)
     env_file: Optional[Path] = field(default=None, compare=False)    # the .env that was read, if any (for --verbose)
     warnings: Tuple[str, ...] = field(default=(), compare=False)   # for cli.main to print
 
@@ -86,6 +91,39 @@ def parse_verify(text: Optional[str]) -> bool | str:
     if not os.access(path, os.R_OK):
         raise ConfigError(f"VERIFY_SSL names a CA bundle that cannot be read: {value}")
     return str(path)
+
+
+def validate_notify_url(name: str, text: Optional[str], allow_http: bool = False) -> str:
+    """A notification destination URL, or '' when unset. The URL is a secret (a topic name or a
+    token is part of it), so no message here repeats it. It needs a scheme and a host, may carry
+    a path and a query, and must be ``https://`` unless ``allow_http`` (the lab opt-in)."""
+    url = (text or "").strip()
+    if not url:
+        return ""
+    if any(c.isspace() or c == "\\" or ord(c) < 32 or 127 <= ord(c) <= 159 for c in url):
+        raise ConfigError(f"{name} must not contain spaces, backslashes or control characters")
+    try:
+        parts = urlsplit(url)
+        _ = parts.port
+    except ValueError:
+        raise ConfigError(f"{name} is not a valid URL") from None
+    if parts.scheme.lower() not in ("http", "https") or not parts.hostname:
+        raise ConfigError(f"{name} must look like https://host/path (a scheme and a host are required)")
+    if parts.username is not None or parts.password is not None:
+        raise ConfigError(f"{name} must not contain a user name or password (use the token setting)")
+    if parts.fragment:
+        raise ConfigError(f"{name} must not contain a fragment (#)")
+    if parts.scheme.lower() == "http" and not allow_http:
+        raise ConfigError(f"{name} uses http://, which would send notifications in clear text. Use https://, "
+                          "or set ALLOW_INSECURE_HTTP=true for a lab network you trust.")
+    return url
+
+
+def validate_notify_token(name: str, text: Optional[str]) -> str:
+    token = (text or "").strip()
+    if any(c.isspace() or ord(c) < 32 or 127 <= ord(c) <= 159 for c in token):
+        raise ConfigError(f"{name} must not contain spaces or control characters")
+    return token
 
 
 def parse_timeout(text: Optional[str]) -> float:
@@ -208,6 +246,10 @@ def load_config(env_file: Optional[Path] = None) -> Config:
         warnings.append("CONTROLLER_URL uses http://: the API key is sent in clear text "
                         "(allowed by ALLOW_INSECURE_HTTP)")
     return Config(
+        notify_ntfy_url=validate_notify_url("NOTIFY_NTFY_URL", os.getenv("NOTIFY_NTFY_URL"), allow_http),
+        notify_ntfy_token=validate_notify_token("NOTIFY_NTFY_TOKEN", os.getenv("NOTIFY_NTFY_TOKEN")),
+        notify_webhook_url=validate_notify_url("NOTIFY_WEBHOOK_URL", os.getenv("NOTIFY_WEBHOOK_URL"), allow_http),
+        notify_webhook_token=validate_notify_token("NOTIFY_WEBHOOK_TOKEN", os.getenv("NOTIFY_WEBHOOK_TOKEN")),
         controller_url=url,
         api_key=api_key,
         site=validate_site(os.getenv("SITE_ID")),

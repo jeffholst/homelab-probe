@@ -59,6 +59,7 @@ class DiagnoseSettings:
     radio_util_critical_pct: float = 90  # radio channel utilization at or above: critical
     reserved_offline_warn_days: float = 1       # a reserved client offline this many days: warning
     reserved_offline_critical_days: float = 7   # a reserved client offline this many days: critical
+    notify_repeat_hours: float = 24             # a critical finding still unresolved is notified again (0: never)
     ignore: Tuple[IgnoreRule, ...] = ()
 
 
@@ -89,7 +90,7 @@ def _parse(data: Dict[str, Any]) -> DiagnoseSettings:
              "min_packets_for_drop_pct", "poe_warn_pct", "poe_critical_pct",
              "event_flap_count", "wifi_weak_signal_dbm", "wifi_retry_pct", "wifi_min_attempts",
              "wifi_satisfaction_warn", "radio_util_warn_pct", "radio_util_critical_pct",
-             "reserved_offline_warn_days", "reserved_offline_critical_days"}
+             "reserved_offline_warn_days", "reserved_offline_critical_days", "notify_repeat_hours"}
     if set(thresholds) - known:
         raise ConfigError(f"unknown [thresholds] key(s): {', '.join(sorted(set(thresholds) - known))} "
                           f"(valid: {', '.join(sorted(known))})")
@@ -138,6 +139,8 @@ def _parse(data: Dict[str, Any]) -> DiagnoseSettings:
         thresholds.get("reserved_offline_critical_days", defaults.reserved_offline_critical_days), 0)
     if offline_warn > offline_critical:
         raise ConfigError("[thresholds] reserved_offline_warn_days must not exceed reserved_offline_critical_days")
+    repeat_hours = _number("notify_repeat_hours",
+                           thresholds.get("notify_repeat_hours", defaults.notify_repeat_hours), 0, 24 * 365)
     for name, value in (("wan_drops_warn", drops), ("link_flap_count", flaps),
                         ("min_packets_for_drop_pct", min_packets), ("wifi_min_attempts", min_attempts),
                         ("event_flap_count", event_flaps)):
@@ -170,6 +173,7 @@ def _parse(data: Dict[str, Any]) -> DiagnoseSettings:
         wifi_min_attempts=int(min_attempts), wifi_satisfaction_warn=satisfaction,
         radio_util_warn_pct=util_warn, radio_util_critical_pct=util_critical,
         reserved_offline_warn_days=offline_warn, reserved_offline_critical_days=offline_critical,
+        notify_repeat_hours=repeat_hours,
         ignore=tuple(rules))
 
 
