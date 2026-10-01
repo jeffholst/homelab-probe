@@ -25,7 +25,7 @@ from .wan import DEFAULT_DAYS, build_wan, render_text as render_wan, to_json as 
 from .topology import build_topology, render_text as render_topology, to_json as topology_json
 from .history import (DEFAULT_DIR, capture, diff_snapshots, label_for, list_snapshots, load_snapshot,
                       prune, render_diff, resolve, save_snapshot)
-from .snapshot import collect_event_snapshot, collect_snapshot
+from .snapshot import collect_event_snapshot, collect_snapshot, warn
 from .util import printable, safe_output
 
 
@@ -302,6 +302,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         parser.error("--switch, --down and --errors only apply to 'query ports'")
     try:
         config = load_config(args.env_file)
+        for message in config.warnings:
+            warn(message)
         # Load diagnose settings first so a bad config file fails before any API call.
         settings = load_settings(args.config) if args.command in ("diagnose", "client", "topology", "wan") else None
         client = UniFiClient.from_config(config)

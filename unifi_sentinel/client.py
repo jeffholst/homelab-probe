@@ -78,7 +78,7 @@ class UniFiClient:
         except requests.exceptions.SSLError as e:
             raise self._tls_error() from e
         except requests.exceptions.RequestException as e:
-            raise UniFiAPIError(f"Connection error for {url}: {e}") from e
+            raise UniFiAPIError(f"Connection error for {url}: {self._redact(str(e))}") from e
         return self._decode_response(resp, url)
 
     def _post_system_log(self, site_ref: str, query: Dict[str, Any]) -> Any:
@@ -93,8 +93,14 @@ class UniFiClient:
         except requests.exceptions.SSLError as e:
             raise self._tls_error() from e
         except requests.exceptions.RequestException as e:
-            raise UniFiAPIError(f"Connection error for {url}: {e}") from e
+            raise UniFiAPIError(f"Connection error for {url}: {self._redact(str(e))}") from e
         return self._decode_response(resp, url)
+
+    def _redact(self, text: str) -> str:
+        """``text`` with the API key hidden, for anything taken from a response or an exception
+        (a misbehaving proxy or controller could echo the request headers)."""
+        key = self.session.headers.get("X-API-KEY")
+        return text.replace(key, "***") if isinstance(key, str) and key else text
 
     def _tls_error(self) -> UniFiAPIError:
         return UniFiAPIError(
@@ -103,12 +109,11 @@ class UniFiClient:
             f"if it uses a self-signed one."
         )
 
-    @staticmethod
-    def _decode_response(resp: requests.Response, url: str) -> Any:
+    def _decode_response(self, resp: requests.Response, url: str) -> Any:
         if resp.status_code == 401:
             raise UniFiAPIError(f"401 Unauthorized for {url}: invalid API key.")
         if not resp.ok:
-            raise UniFiAPIError(f"HTTP {resp.status_code} for {url}: {resp.text[:500]}")
+            raise UniFiAPIError(f"HTTP {resp.status_code} for {url}: {self._redact(resp.text)[:500]}")
         try:
             return resp.json()
         except ValueError as e:
