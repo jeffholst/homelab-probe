@@ -47,13 +47,14 @@ jobs:
   types:
     name: Types (mypy, not blocking yet)
     runs-on: ubuntu-latest
-    # Reports the current findings without failing the build; see the refactors issue (#75),
-    # which makes this blocking once the baseline is clean.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.2.0
         with:
           enable-cache: true
       - run: uv sync --locked
-      - run: uv run mypy
+      - name: mypy (findings are reported, not enforced)
+        # The baseline has known findings; the refactors issue (#75) makes this blocking once
+        # it is clean. The step is allowed to fail so the job and the PR stay green.
+        continue-on-error: true
+        run: uv run mypy
