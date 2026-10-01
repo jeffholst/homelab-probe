@@ -14,6 +14,7 @@ UniFi Sentinel is a fork of [ericfitz/unifi-clients-export](https://github.com/e
 | -------- | -------------------------------------------------------------- |
 | `export` | Export connected clients, UniFi devices and switch ports to CSV |
 | `query`  | List and filter devices, clients, DHCP reservations and switch ports (table or `--json`) |
+| `topology` | Draw the uplink tree from the gateway down: ports, link speeds, client counts and problems |
 | `events` | Event history from the controller log: disconnects, roams, IP conflicts, device outages |
 | `client` | Troubleshoot one client by name, MAC or IP: where it attaches, link quality and related findings |
 | `new-clients` | List clients that are in no client group, to spot new devices |
@@ -29,6 +30,7 @@ Planned: richer inventory and troubleshooting reports.
 - **Network topology**: which switch and port each client or device is attached to
 - **DHCP reservations**: list every fixed IP reservation, including offline clients, with network and VLAN
 - **Querying**: list and filter devices, clients, DHCP reservations and switch ports from the command line (table or JSON)
+- **Topology**: the uplink tree from the gateway down, with the port each device plugs into, negotiated link speeds (and links below what both ends support), client counts, and offline or flagged devices
 - **Event history**: what happened and when (disconnects, roams, IP conflicts, device outages, admin changes) from the controller's log, filterable by time, severity, category, client and device, with a summary of the noisiest clients
 - **Single-client troubleshooting**: `client <name|mac|ip>` shows where a client attaches (the full uplink chain to the gateway with port numbers and link speeds), its link quality, addressing and the `diagnose` findings that concern it
 - **New client detection**: list every known client that is in no client group, newest first, to spot new devices
@@ -109,6 +111,8 @@ uv run unifi-sentinel.py query reservations          # DHCP fixed IP reservation
 uv run unifi-sentinel.py query ports                 # every switch port
 uv run unifi-sentinel.py query ports --down --switch rack   # down ports on matching switches
 uv run unifi-sentinel.py query ports --errors        # ports with rx/tx errors
+uv run unifi-sentinel.py topology                    # how the gateway, switches and APs are wired
+uv run unifi-sentinel.py topology --clients          # ...with the wired clients under each device
 uv run unifi-sentinel.py events                      # the last 24 hours, newest first
 uv run unifi-sentinel.py events --since 7d --severity high   # recent serious events
 uv run unifi-sentinel.py events --client phone --event disconnected   # one client's drops
@@ -211,6 +215,26 @@ Tool errors used to exit 1 for every command; they now exit 3 so that 1 and 2 on
 ### Devices
 
 `query devices` shows each UniFi device with its firmware version, whether a firmware update is available, and its uptime (for example `2d 7h`). Offline devices have no uptime. `--json` adds `Uptime (s)` with the raw seconds. These columns come from the Integration API and appear only for `query devices`; the `export` CSV columns are unchanged.
+
+### Topology
+
+`topology` draws how the network is wired, so a broken or slow path is visible at a glance:
+
+```text
+Gateway (UCG Max)
+`-- port 2 -> Office Switch (100 Mbps, supports 1000)   1 client   [WARNING x8]
+    +-- port 2 -> Office AP   1 client
+    `-- port 5 -> Garage AP   [OFFLINE]   [WARNING]
+```
+
+Each line is `port N -> device`, where N is the **parent's** port the device plugs into, followed by the negotiated link speed, the number of connected clients (wired by switch port, wireless by AP), and flags.
+- **Link speed:** shown when known. `supports 1000` means the link negotiated below what both ends support (the same check `diagnose` makes), so it points at a bad cable, port or device. A gateway's own uplink is its internet connection and is not drawn.
+- **Flags:** `[OFFLINE]` for a device the controller reports as offline, and a warning or critical marker (`⚠️ 2`, or `[WARNING x2]` in plain text) when `diagnose` has findings about the device or one of its ports or radios. Those findings are listed under the tree. Info-level findings, such as ports at 100 Mbps, are left to `diagnose` so the flags mean something. It uses the same thresholds and ignore list as `diagnose` (`--config FILE`, or `./unifi-sentinel.toml`).
+- **Order:** children are sorted by the parent's port number, then by name.
+- **Unattached:** a device that cannot be reached from a gateway is listed separately with the reason: no uplink information, an uplink to an unknown device, or an uplink loop. Nothing silently disappears. An offline device's position is its last known one.
+- `--clients` lists the wired clients under each device with their port. `--json` prints the nested tree (and `--clients` adds `wired_clients`). `--no-emoji` forces plain ASCII drawing and text labels, which is also used automatically when output is not a UTF-8 terminal.
+
+The uplink and port data comes from the legacy `stat/device` and `stat/sta` data and the Integration API device detail, which is used for the parent when the legacy data has none (then no port number is shown).
 
 ### Event history
 
@@ -386,6 +410,7 @@ unifi_sentinel/
   new_clients.py         clients in no client group
   client_view.py         single-client troubleshooting view
   events.py              event history from the controller's system log
+  topology.py            uplink tree: wiring, link speeds, client counts, flags
   diagnose.py            read-only health checks
   settings.py            diagnose thresholds and ignore list (TOML)
   cli.py                 argparse subcommands

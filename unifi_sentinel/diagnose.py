@@ -26,6 +26,7 @@ class Finding:
     severity: str  # CRITICAL, WARNING or INFO
     subject: str
     message: str
+    target_mac: Optional[str] = None
 
 
 def _uplink_parents(snap: Snapshot) -> Dict[str, int]:
@@ -224,7 +225,8 @@ def _port_health_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Fi
             if flaps >= settings.link_flap_count:
                 since = f", switch up {uptime}" if uptime else ""
                 findings.append(Finding(
-                    WARNING, label, f"link has gone down {flaps} times since boot{since}"))
+                    WARNING, label, f"link has gone down {flaps} times since boot{since}",
+                    (sw.get("mac") or "").upper()))
 
             if not port.get("up"):
                 continue
@@ -237,10 +239,13 @@ def _port_health_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Fi
                         findings.append(Finding(
                             WARNING, label,
                             f"dropping {_pct_text(pct)}% of {direction} packets "
-                            f"({dropped:.0f} of {packets:.0f})"))
+                            f"({dropped:.0f} of {packets:.0f})",
+                            (sw.get("mac") or "").upper()))
             stp = port.get("stp_state")
             if stp and stp != "forwarding":
-                findings.append(Finding(WARNING, label, f"STP state is {stp}, not forwarding"))
+                findings.append(Finding(
+                    WARNING, label, f"STP state is {stp}, not forwarding",
+                    (sw.get("mac") or "").upper()))
 
         budget, used = _number(sw.get("total_max_power")), _number(sw.get("total_used_power"))
         if budget > 0:
@@ -249,7 +254,8 @@ def _port_health_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Fi
                 level = CRITICAL if pct >= settings.poe_critical_pct else WARNING
                 findings.append(Finding(
                     level, name,
-                    f"PoE budget {used:.1f} W of {budget:.0f} W used ({int(pct)}%)"))
+                    f"PoE budget {used:.1f} W of {budget:.0f} W used ({int(pct)}%)",
+                    (sw.get("mac") or "").upper()))
     return findings
 
 
@@ -294,7 +300,8 @@ def _wifi_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]:
         retries = _known_percent(c.get("wifi_tx_retries_percentage"))
         if (attempts >= settings.wifi_min_attempts and retries is not None
                 and retries >= settings.wifi_retry_pct):
-            findings.append(Finding(WARNING, name, f"{retries:.0f}% of Wi-Fi transmissions retried{where}"))
+            findings.append(Finding(
+                WARNING, name, f"{retries:.0f}% of Wi-Fi transmissions retried{where}"))
 
         satisfaction = _known_percent(c.get("satisfaction"))
         if satisfaction is not None and satisfaction < settings.wifi_satisfaction_warn:
@@ -312,46 +319,58 @@ def _wifi_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]:
             util = _known_percent(radio.get("cu_total"))
             if util is not None and util >= settings.radio_util_warn_pct:
                 level = CRITICAL if util >= settings.radio_util_critical_pct else WARNING
-                findings.append(Finding(level, label, f"channel utilization {util:.0f}%{on}"))
+                findings.append(Finding(
+                    level, label, f"channel utilization {util:.0f}%{on}",
+                    (ap.get("mac") or "").upper()))
             retries = _number(radio.get("tx_retries_pct"))
             if retries >= settings.wifi_retry_pct:
-                findings.append(Finding(WARNING, label, f"{retries:.0f}% of transmissions retried{on}"))
+                findings.append(Finding(
+                    WARNING, label, f"{retries:.0f}% of transmissions retried{on}",
+                    (ap.get("mac") or "").upper()))
             satisfaction = _known_percent(radio.get("satisfaction"))
             if satisfaction is not None and satisfaction < settings.wifi_satisfaction_warn:
-                findings.append(Finding(WARNING, label, f"satisfaction {satisfaction:.0f}%{on}"))
+                findings.append(Finding(
+                    WARNING, label, f"satisfaction {satisfaction:.0f}%{on}",
+                    (ap.get("mac") or "").upper()))
     return findings
 
 
-def _uplink_speed_findings(snap: Snapshot) -> List[Finding]:
-    """An uplink negotiated below what both ends of the link support.
+def uplink_speeds(snap: Snapshot, device: Dict[str, Any]) -> Optional[Tuple[float, float]]:
+    """``(negotiated, capability)`` Mbps for a legacy device's uplink, or None when the link
+    is down or either end's maximum is unknown.
 
-    The child's own port capability is the uplink's ``max_speed``; the parent's comes
-    from the Integration API port detail. Access points and end clients are not
-    compared with a port maximum (a gigabit AP on a 2.5G port is normal), so only the
-    child's reported maximum and the parent port's maximum are used.
+    The child's own port capability is the uplink's ``max_speed``; the parent's comes from
+    the Integration API port detail. Access points and end clients are not compared with a
+    port maximum (a gigabit AP on a 2.5G port is normal), so only these two are used.
     """
-    findings: List[Finding] = []
+    up = device.get("uplink") or {}
+    parent_mac = (up.get("uplink_mac") or "").upper()
+    speed, child_max = _number(up.get("speed")), _number(up.get("max_speed"))
+    if not (up.get("up") and parent_mac and speed and child_max):
+        return None
     id_by_mac = {(d.get("macAddress") or "").upper(): d.get("id") for d in snap.devices}
-    name_by_mac = {(d.get("mac") or "").upper(): _switch_name(d) for d in snap.legacy_devices}
+    parent_ports = ((snap.device_details.get(id_by_mac.get(parent_mac)) or {})
+                    .get("interfaces") or {}).get("ports") or []
+    parent_max = next((_number(p.get("maxSpeedMbps")) for p in parent_ports
+                       if p.get("idx") == up.get("uplink_remote_port")), 0.0)
+    if not parent_max:
+        return None
+    return speed, min(child_max, parent_max)
 
+
+def _uplink_speed_findings(snap: Snapshot) -> List[Finding]:
+    """An uplink negotiated below what both ends of the link support."""
+    findings: List[Finding] = []
+    name_by_mac = {(d.get("mac") or "").upper(): _switch_name(d) for d in snap.legacy_devices}
     for d in snap.legacy_devices:
-        up = d.get("uplink") or {}
-        parent_mac = (up.get("uplink_mac") or "").upper()
-        speed, child_max = _number(up.get("speed")), _number(up.get("max_speed"))
-        if not (up.get("up") and parent_mac and speed and child_max):
-            continue
-        parent_ports = ((snap.device_details.get(id_by_mac.get(parent_mac)) or {})
-                        .get("interfaces") or {}).get("ports") or []
-        parent_max = next((_number(p.get("maxSpeedMbps")) for p in parent_ports
-                           if p.get("idx") == up.get("uplink_remote_port")), 0.0)
-        if not parent_max:
-            continue
-        capability = min(child_max, parent_max)
-        if speed < capability:
+        speeds = uplink_speeds(snap, d)
+        if speeds and speeds[0] < speeds[1]:
+            parent_mac = ((d.get("uplink") or {}).get("uplink_mac") or "").upper()
             findings.append(Finding(
                 WARNING, _switch_name(d),
                 f"uplink to {name_by_mac.get(parent_mac, parent_mac)} negotiated at "
-                f"{speed:.0f} Mbps but both ends support {capability:.0f} Mbps"))
+                f"{speeds[0]:.0f} Mbps but both ends support {speeds[1]:.0f} Mbps",
+                (d.get("mac") or "").upper()))
     return findings
 
 
@@ -370,12 +389,14 @@ def diagnose(snap: Snapshot, settings: Optional[DiagnoseSettings] = None) -> Lis
         kind = device_type_label(d, legacy_type.get((d.get("macAddress") or "").upper(), ""))
         downstream = parents.get(d.get("id"), 0)
         if kind in GATEWAY_TYPES:
-            findings.append(Finding(CRITICAL, name, f"{message} (gateway)"))
+            findings.append(Finding(
+                CRITICAL, name, f"{message} (gateway)", (d.get("macAddress") or "").upper()))
         elif downstream:
             findings.append(Finding(
-                CRITICAL, name, f"{message} ({downstream} device(s) uplink through it)"))
+                CRITICAL, name, f"{message} ({downstream} device(s) uplink through it)",
+                (d.get("macAddress") or "").upper()))
         else:
-            findings.append(Finding(WARNING, name, message))
+            findings.append(Finding(WARNING, name, message, (d.get("macAddress") or "").upper()))
 
     for d in snap.devices:
         st = snap.device_stats.get(d.get("id")) or {}
@@ -385,7 +406,8 @@ def diagnose(snap: Snapshot, settings: Optional[DiagnoseSettings] = None) -> Lis
                 level = CRITICAL if pct >= settings.resource_critical_pct else WARNING
                 findings.append(Finding(
                     level, d.get("name") or d.get("macAddress", "?"),
-                    f"{label} utilization {st[key]:.0f}%"))
+                    f"{label} utilization {st[key]:.0f}%",
+                    (d.get("macAddress") or "").upper()))
 
     findings.extend(_health_findings(snap, settings))
     findings.extend(_client_ip_findings(snap))
@@ -405,12 +427,15 @@ def diagnose(snap: Snapshot, settings: Optional[DiagnoseSettings] = None) -> Lis
             label = f"{name} port {port.get('port_idx')}"
             errors = (port.get("rx_errors") or 0) + (port.get("tx_errors") or 0)
             if errors > 0:
-                findings.append(Finding(WARNING, label, f"{errors} rx/tx errors"))
+                findings.append(Finding(
+                    WARNING, label, f"{errors} rx/tx errors", (sw.get("mac") or "").upper()))
             if port.get("full_duplex") is False:
-                findings.append(Finding(WARNING, label, "link is half duplex"))
+                findings.append(Finding(
+                    WARNING, label, "link is half duplex", (sw.get("mac") or "").upper()))
             if 0 < (port.get("speed") or 0) <= settings.slow_link_mbps:
                 findings.append(Finding(
-                    INFO, label, f"negotiated at {port['speed']} Mbps"))
+                    INFO, label, f"negotiated at {port['speed']} Mbps",
+                    (sw.get("mac") or "").upper()))
 
     findings.extend(_port_health_findings(snap, settings))
     findings.extend(_uplink_speed_findings(snap))
