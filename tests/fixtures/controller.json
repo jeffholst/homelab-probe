@@ -249,7 +249,8 @@
             "tx_dropped": 0,
             "rx_errors": 0,
             "tx_errors": 0,
-            "is_uplink": true
+            "is_uplink": true,
+            "name": "Uplink"
           },
           {
             "port_idx": 2,
@@ -303,7 +304,8 @@
         "model": "U7 Pro",
         "uplink": {
           "uplink_mac": "aa:00:00:00:00:02",
-          "uplink_remote_port": 2
+          "uplink_remote_port": 2,
+          "port_idx": 1
         },
         "radio_table_stats": [
           {
@@ -360,7 +362,23 @@
         "mac": "bb:00:00:00:00:02",
         "name": "phone",
         "ap_mac": "aa:00:00:00:00:03",
-        "is_wired": false
+        "is_wired": false,
+        "hostname": "phone-host",
+        "ip": "10.0.0.20",
+        "oui": "Example Mobile Co",
+        "essid": "HomeNet",
+        "radio": "na",
+        "channel": 36,
+        "signal": -58,
+        "noise": -95,
+        "satisfaction": 96,
+        "tx_rate": 433000,
+        "rx_rate": 390000,
+        "wifi_tx_attempts": 5000,
+        "wifi_tx_retries_percentage": 3.5,
+        "network": "Main",
+        "network_id": "net-1",
+        "vlan": 0
       }
     ],
     "alluser": [
@@ -390,7 +408,9 @@
         "virtual_network_override_enabled": true,
         "virtual_network_override_id": "net-2",
         "last_connection_network_id": "net-1",
-        "first_seen": 1700000000
+        "first_seen": 1700000000,
+        "oui": "Example Printers Inc",
+        "last_uplink_mac": "aa:00:00:00:00:02"
       },
       {
         "mac": "bb:00:00:00:00:04",
@@ -512,7 +532,7 @@
         "channel": 6,
         "signal": -72,
         "rssi": 23,
-        "essid": "Café Guest ☕",
+        "essid": "Caf\u00e9 Guest \u2615",
         "security": "Open",
         "bw": 20,
         "center_freq": 2437,

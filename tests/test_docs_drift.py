@@ -20,6 +20,7 @@ import shlex
 from pathlib import Path
 
 import pytest
+import record_fixture
 from golden_support import CASES, GOLDEN, normalise, run_command
 
 from unifi_sentinel import cli
@@ -190,8 +191,19 @@ def test_every_long_option_is_documented(command, option):
         f"{option} ({command or 'global'}) is not mentioned in the README")
 
 
+def recorder_options():
+    """The long options of tools/record_fixture.py, which the README's Development section documents."""
+    return {o for action in record_fixture.build_parser()._actions for o in action.option_strings
+            if o.startswith("--")} - {"--help"}
+
+
+@pytest.mark.parametrize("option", sorted(recorder_options()))
+def test_every_recorder_option_is_documented(option):
+    assert re.search(re.escape(option) + r"(?![\w-])", section_text(read(), "Development")), option
+
+
 def test_every_option_the_readme_shows_exists():
-    known = {o for _, o in all_long_options()} | {"--help", "--version"}
+    known = {o for _, o in all_long_options()} | {"--help", "--version"} | recorder_options()
     spans = [line for line in re.findall(r"`([^`\n]+)`", read()) if line.startswith("--")]
     shown = set(re.findall(r"(?<![\w-])(--[a-z][a-z-]*[a-z])(?![\w*-])", "\n".join(spans)))
     for argv in examples():

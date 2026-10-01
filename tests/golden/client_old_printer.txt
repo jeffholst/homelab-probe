@@ -1,5 +1,5 @@
 old-printer
-  MAC:  BB:00:00:00:00:03
+  MAC:  BB:00:00:00:00:03  (Example Printers Inc)
   Status:  Offline
   Connection: Wired
   IP:  10.0.0.50  (reserved 10.0.0.50, client offline)

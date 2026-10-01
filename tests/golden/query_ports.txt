@@ -1,6 +1,6 @@
 Switch  Port  Status  Speed  Full Duplex  PoE Power (W)  Connected Name  Connected MAC  RX Errors  TX Errors
 ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
-Office Switch  Port 1  Up  1000 Mbps  Yes  Gateway  AA:00:00:00:00:01  0  0
+Office Switch  Uplink  Up  1000 Mbps  Yes  Gateway  AA:00:00:00:00:01  0  0
 Office Switch  Port 2  Up  100 Mbps  No  Office AP  AA:00:00:00:00:03  4  0
 Office Switch  Port 3  Up  1000 Mbps  Yes  desktop  BB:00:00:00:00:01  0  0
 Office Switch  Port 4  Down  Yes  0  0

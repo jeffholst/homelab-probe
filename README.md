@@ -574,13 +574,13 @@ example.com  icmp  100.0%        20 ms
 example.org  icmp  100.0%        24 ms
 
 Speedtests, last 30 days (11 runs), 12 stored
-  Last: 2026-10-01 10:13 (6h ago): download 880 Mbps, upload 40 Mbps, latency 25 ms
+  Last: 2026-10-01 16:11 (6h ago): download 880 Mbps, upload 40 Mbps, latency 25 ms
   Download: min 500 Mbps, median 925 Mbps, max 940 Mbps
   Upload: min 31 Mbps, median 40 Mbps, max 41 Mbps
   Latency: min 23 ms, median 24 ms, max 41 ms
 
   Download below 70% of the median (1):
-    2026-09-23 16:13  download 500 Mbps, upload 31 Mbps, latency 41 ms
+    2026-09-23 22:11  download 500 Mbps, upload 31 Mbps, latency 41 ms
 ```
 
 - **Now:** the WAN and internet subsystems of the controller's health (status, ISP, WAN IP, latency, drops) and the gateway's WAN link: its negotiated speed against what the port supports (a 1 Gbps plan on a 2.5 Gbps port is normal, so that is only shown, never flagged) and the live traffic rate.
@@ -599,11 +599,11 @@ Speedtests, last 30 days (11 runs), 12 stored
 uv run unifi-sentinel.py events --client phone --since 6h
 Time                 Severity  Category        Event                         Message
 -------------------  --------  --------------  ----------------------------  --------------------------------------------------
-2026-10-01 16:03:05  Low       CLIENT_DEVICES  CLIENT_DISCONNECTED_WIRELESS  phone disconnected from Home. Time Connected: 25s.
-2026-10-01 15:48:05  Low       CLIENT_DEVICES  CLIENT_CONNECTED_WIRELESS     phone connected to Home on Office AP.
-2026-10-01 15:33:05  Low       CLIENT_DEVICES  CLIENT_DISCONNECTED_WIRELESS  phone disconnected from Home. Time Connected: 2m.
-2026-10-01 15:23:05  Low       CLIENT_DEVICES  CLIENT_ROAMED                 phone roamed from Garage AP to Office AP.
-2026-10-01 15:13:05  Low       CLIENT_DEVICES  CLIENT_DISCONNECTED_WIRELESS  phone disconnected from Home. Time Connected: 1h.
+2026-10-01 22:01:55  Low       CLIENT_DEVICES  CLIENT_DISCONNECTED_WIRELESS  phone disconnected from Home. Time Connected: 25s.
+2026-10-01 21:46:55  Low       CLIENT_DEVICES  CLIENT_CONNECTED_WIRELESS     phone connected to Home on Office AP.
+2026-10-01 21:31:55  Low       CLIENT_DEVICES  CLIENT_DISCONNECTED_WIRELESS  phone disconnected from Home. Time Connected: 2m.
+2026-10-01 21:21:55  Low       CLIENT_DEVICES  CLIENT_ROAMED                 phone roamed from Garage AP to Office AP.
+2026-10-01 21:11:55  Low       CLIENT_DEVICES  CLIENT_DISCONNECTED_WIRELESS  phone disconnected from Home. Time Connected: 1h.
 
 5 event(s)
 ```
@@ -646,7 +646,7 @@ Attached: desktop -> Office Switch port 3 (1000 Mbps) -> Gateway port 2 (100 Mbp
 Link:     1000 Mbps, full duplex, 0 errors, 60 dropped packets on its port
 
 Recent events (last 24h, newest first):
-  2026-10-01 14:43:05  CLIENT_CONNECTED_WIRED: desktop connected to Main on Office Switch Port 3.
+  2026-10-01 20:41:55  CLIENT_CONNECTED_WIRED: desktop connected to Main on Office Switch Port 3.
 
 Related findings:
 [WARNING ] Office Switch: CPU utilization 95%
@@ -749,10 +749,10 @@ Sample from synthetic data with `diagnose --no-events` (text labels are used whe
 ### new-clients
 
 ```text
-Name         MAC Address        IP Address  Vendor  Connection Type  Where                        First Seen           Last Seen            Status   Private MAC
------------  -----------------  ----------  ------  ---------------  ---------------------------  -------------------  -------------------  -------  -----------
-old-tablet   BB:00:00:00:00:04  10.0.0.51           Wireless                                      2025-06-15 15:06:40  2025-12-06 05:46:40  Offline
-old-printer  BB:00:00:00:00:03  10.0.0.50           Wired            Wired, Office Switch port 6  2023-11-14 22:13:20  2026-10-01 13:13:05  Offline
+Name         MAC Address        IP Address  Vendor                Connection Type  Where                        First Seen           Last Seen            Status   Private MAC
+-----------  -----------------  ----------  --------------------  ---------------  ---------------------------  -------------------  -------------------  -------  -----------
+old-tablet   BB:00:00:00:00:04  10.0.0.51                         Wireless                                      2025-06-15 15:06:40  2025-12-06 05:46:40  Offline
+old-printer  BB:00:00:00:00:03  10.0.0.50   Example Printers Inc  Wired            Wired, Office Switch port 6  2023-11-14 22:13:20  2026-10-01 19:11:55  Offline
 
 2 client(s) in no group
 ```
@@ -831,9 +831,15 @@ unifi_sentinel/
 tests/
   conftest.py            FakeSession: a fake controller served from the fixture
   fixtures/controller.json   synthetic, sanitized controller data
+  contract.py            the fields the code reads from each endpoint (the table behind the shape and live checks)
+  field_tracking.py      finds those fields by recording which keys each command touches
+  test_live_contract.py  opt-in (pytest -m live): the same table against a real controller, GET only
+tools/                   development scripts, not part of the package
+  record_fixture.py      records a controller into a sanitised fixture
+  sanitize.py            the deterministic sanitiser and its leak check
 ```
 
-New features are new subcommands (a section and a registry row in `commands.py`) backed by modules that take a `Snapshot` (fetching stays in `snapshot.py` and `client.py`). Dependencies are declared once, in `pyproject.toml` (lockfile: `uv.lock`; regenerate with `uv lock`). Run the tests with `uv run pytest`; they use a synthetic fixture in `tests/fixtures/` and never contact a controller.
+New features are new subcommands (a section and a registry row in `commands.py`) backed by modules that take a `Snapshot` (fetching stays in `snapshot.py` and `client.py`). Dependencies are declared once, in `pyproject.toml` (lockfile: `uv.lock`; regenerate with `uv lock`). Run the tests with `uv run pytest`; they use a synthetic fixture in `tests/fixtures/` and never contact a controller (except the opt-in `-m live` tests described below).
 
 Checks (the same ones CI runs on every push and pull request, in `.github/workflows/ci.yml`):
 
@@ -850,6 +856,12 @@ uv lock --check           # uv.lock must match pyproject.toml; run `uv lock` aft
 - `tests/test_docs_drift.py` checks this README against the program: every example command parses with the real argument parser, every command has a row in the Commands table, every long option is mentioned (and every option the README shows exists), and the sample output blocks (topology, wifi, wan, client, diagnose, new-clients, events) equal what the commands print. After an intended output change, `UPDATE_README_SAMPLES=1 uv run pytest tests/test_docs_drift.py` rewrites those blocks. The `diff` sample is illustrative on purpose and is not checked.
 - `tests/test_entry_points.py` runs the launcher, the installed `unifi-sentinel` script and `python -m unifi_sentinel.cli` in subprocesses, and `tests/test_exit_codes.py` produces every documented exit code (0, 1, 2, 3, 4 and 64) from a real scenario and checks the table above.
 - Coverage: `COVERAGE_FILE=/tmp/.coverage uv run --with coverage coverage run --branch --source=unifi_sentinel -m pytest` then `COVERAGE_FILE=/tmp/.coverage uv run --with coverage coverage report -m`. It is at 100% of lines and branches; the few `pragma: no cover`/`no branch` comments say why a line cannot run (for example the Python 3.10-only `tomli` import, which CI covers).
+
+**Does a real controller still return what the code reads?** Almost every endpoint the tool uses is undocumented, and the synthetic fixture is written by hand, so the tests alone prove consistency, not that a controller still answers with these fields. `tests/contract.py` is the one table of the fields the code reads from each endpoint (per endpoint: fields in every record, fields in at least one record, and optional ones). It is used three ways:
+
+- `tests/test_contract_fixture.py` fails when the fixture lacks a field of the table, when the code reads a field the table does not list (every command is run against the fixture with a wrapper that records each key it touches) and when the table lists a field no command reads. When you read a new field, add it to the table and to the fixture.
+- `uv run pytest -m live` reads the real controller once (settings from the environment or `./.env`, like the program) and checks each endpoint against the table. It is skipped by default and in CI, only makes GET requests and the one read-only event log query (anything else raises), and its failures name the endpoint and field, never a value. Without credentials it skips.
+- `uv run tools/record_fixture.py` records a controller into `tools/recorded/controller.json` (git-ignored, readable only by you; `--output FILE` chooses another place, `--event-days N` how many days of events, `--env-file FILE` the settings). It keeps only the fields in the table and replaces every MAC, IP address, id, device, client and network name, SSID and ISP name with a synthetic one, the same way every time and the same everywhere (one real MAC is one synthetic MAC in every record; a private address stays private and in the same /24, a randomized MAC stays randomized), then checks that nothing real is left and writes nothing if it is. Use it to reproduce a problem on realistic data or to see what changed in a new controller version; the recording does not replace the hand-written fixture, which the tests depend on name by name.
 
 `uv run ruff check . --fix` applies the safe fixes (import order, unused imports). The `List[...]` and `Optional[...]` annotation style is not enforced yet, and there is no code formatter. See [CLAUDE.md](CLAUDE.md) for contributor and AI-assistant guidelines.
 

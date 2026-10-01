@@ -57,6 +57,10 @@ include = ["unifi_sentinel*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["tests", "tools"]
+# Tests marked live read a real controller; they run only when asked for: uv run pytest -m live
+addopts = "-m 'not live'"
+markers = ["live: reads a real controller (GET only; credentials from the environment or ./.env); opt in with -m live"]
 
 [tool.ruff]
 target-version = "py310"

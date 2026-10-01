@@ -16,3 +16,6 @@ build/
 unifi-sentinel.toml
 # Saved inventories hold real MACs and IPs
 snapshots/
+
+# Recorded (sanitised) controller fixtures
+tools/recorded/
