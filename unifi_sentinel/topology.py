@@ -10,19 +10,12 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from .client_view import DeviceIndex
 from .diagnose import EMOJI, INFO, SEVERITY_ORDER, Finding, apply_ignores, diagnose, uplink_speeds
-from .export import _mac
 from .settings import DiagnoseSettings
 from .snapshot import Snapshot
-from .util import clean_data
+from .util import clean_data, normalize_mac, number
 
 GATEWAY_KINDS = {"Gateway", "Dream Machine"}
 Node = Dict[str, Any]
-
-
-def _num(value: Any) -> Optional[float]:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    return float(value)
 
 
 def _link(snap: Snapshot, idx: DeviceIndex, mac: str) -> Tuple[str, Optional[int], Optional[int], Optional[float]]:
@@ -39,7 +32,7 @@ def _link(snap: Snapshot, idx: DeviceIndex, mac: str) -> Tuple[str, Optional[int
         wanted = (detail.get("uplink") or {}).get("deviceId")
         parent = next((m for m, d in idx.integration.items() if wanted and d.get("id") == wanted), "")
     port, own = up.get("uplink_remote_port"), up.get("port_idx")
-    return parent, port, own, _num(up.get("speed"))
+    return parent, port, own, number(up.get("speed"))
 
 
 def _assign_findings(findings: List[Finding], names: Dict[str, str]) -> Dict[str, List[Finding]]:
@@ -63,7 +56,7 @@ def _client_info(snap: Snapshot) -> Tuple[Optional[Dict[str, Counter]], Dict[str
             mac = (c["sw_mac"] or "").upper()
             counts.setdefault(mac, Counter())["wired"] += 1
             wired.setdefault(mac, []).append({
-                "name": c.get("name") or c.get("hostname") or _mac(c.get("mac")),
+                "name": c.get("name") or c.get("hostname") or normalize_mac(c.get("mac")),
                 "ip": c.get("ip") or "", "port": c.get("sw_port")})
         elif not c.get("is_wired") and c.get("ap_mac"):
             counts.setdefault((c["ap_mac"] or "").upper(), Counter())["wireless"] += 1

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from .snapshot import Snapshot
-from .util import csv_safe, printable
+from .util import csv_safe, format_time, normalize_mac, printable
 
 INVENTORY_COLUMNS = [
     "Type", "Name", "MAC Address", "IP Address", "Model", "Connection Type",
@@ -58,22 +58,6 @@ def device_type_label(device: Dict[str, Any], legacy_type: str = "") -> str:
     return legacy_type.upper() or "Unknown"
 
 
-def _mac(value: Optional[str]) -> str:
-    return (value or "").upper()
-
-
-def _fmt_time(value: Optional[str]) -> str:
-    """Format an ISO-8601 timestamp from the Integration API."""
-    if not value:
-        return ""
-    try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone().strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
-    except ValueError:
-        return value
-
-
 def _write_csv(path: Path, columns: List[str], rows: List[Dict[str, Any]]) -> None:
     with path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=columns)
@@ -91,21 +75,21 @@ def build_inventory(
 ) -> List[Dict[str, Any]]:
     device_details = device_details or {}
     device_stats = device_stats or {}
-    names_by_mac = {_mac(d.get("macAddress")): d.get("name") or d.get("macAddress") for d in devices}
+    names_by_mac = {normalize_mac(d.get("macAddress")): d.get("name") or d.get("macAddress") for d in devices}
     names_by_id = {d.get("id"): d.get("name") or d.get("macAddress") for d in devices}
-    legacy_client_by_mac = {_mac(c.get("mac")): c for c in legacy_clients}
-    legacy_device_by_mac = {_mac(d.get("mac")): d for d in legacy_devices}
+    legacy_client_by_mac = {normalize_mac(c.get("mac")): c for c in legacy_clients}
+    legacy_device_by_mac = {normalize_mac(d.get("mac")): d for d in legacy_devices}
 
     rows: List[Dict[str, Any]] = []
 
     for c in clients:
-        mac = _mac(c.get("macAddress"))
+        mac = normalize_mac(c.get("macAddress"))
         wired = c.get("type") == "WIRED"
         switch = names_by_id.get(c.get("uplinkDeviceId"), "")
         port = ""
         legacy = legacy_client_by_mac.get(mac)
         if wired and legacy:
-            switch = names_by_mac.get(_mac(legacy.get("sw_mac")), switch)
+            switch = names_by_mac.get(normalize_mac(legacy.get("sw_mac")), switch)
             if legacy.get("sw_port") is not None:
                 port = str(legacy["sw_port"])
         rows.append({
@@ -117,17 +101,17 @@ def build_inventory(
             "Connection Type": "Wired" if wired else "Wireless",
             "Switch": switch if wired else "",
             "Port": port,
-            "Last Seen": _fmt_time(c.get("connectedAt")),
+            "Last Seen": format_time(c.get("connectedAt")),
             # The clients endpoint lists only currently connected clients.
             "Status": "Online",
         })
 
     for d in devices:
-        mac = _mac(d.get("macAddress"))
+        mac = normalize_mac(d.get("macAddress"))
         switch, port = "", ""
         uplink = (legacy_device_by_mac.get(mac) or {}).get("uplink") or {}
         if uplink.get("uplink_mac"):
-            switch = names_by_mac.get(_mac(uplink["uplink_mac"]), _mac(uplink["uplink_mac"]))
+            switch = names_by_mac.get(normalize_mac(uplink["uplink_mac"]), normalize_mac(uplink["uplink_mac"]))
         if uplink.get("uplink_remote_port") is not None:
             port = str(uplink["uplink_remote_port"])
         if not switch:
@@ -144,7 +128,7 @@ def build_inventory(
             "Connection Type": "Wired",
             "Switch": switch,
             "Port": port,
-            "Last Seen": _fmt_time((device_stats.get(d.get("id")) or {}).get("lastHeartbeatAt")),
+            "Last Seen": format_time((device_stats.get(d.get("id")) or {}).get("lastHeartbeatAt")),
             "Status": "Online" if d.get("state") == "ONLINE" else "Offline",
         })
     return rows
@@ -179,11 +163,11 @@ def build_offline_clients(
     ``all_users`` comes from legacy ``stat/alluser``, which lists every client
     the controller has ever seen.
     """
-    connected = {_mac(c.get("macAddress")) for c in known_clients}
-    device_macs = {_mac(d.get("macAddress")) for d in devices}
+    connected = {normalize_mac(c.get("macAddress")) for c in known_clients}
+    device_macs = {normalize_mac(d.get("macAddress")) for d in devices}
     rows: List[Dict[str, Any]] = []
     for u in all_users:
-        mac = _mac(u.get("mac"))
+        mac = normalize_mac(u.get("mac"))
         if not mac or mac in connected or mac in device_macs:
             continue
         last_seen = u.get("last_seen")
@@ -217,43 +201,43 @@ def build_switch_ports(
     client_by_port: Dict[Tuple[str, Any], Dict[str, Any]] = {}
     for c in legacy_clients:
         if c.get("sw_mac") and c.get("sw_port") is not None:
-            client_by_port.setdefault((_mac(c["sw_mac"]), c["sw_port"]), c)
+            client_by_port.setdefault((normalize_mac(c["sw_mac"]), c["sw_port"]), c)
 
     device_by_uplink: Dict[Tuple[str, Any], Dict[str, Any]] = {}
     for dev in legacy_devices:
         up = dev.get("uplink") or {}
         if up.get("uplink_mac") and up.get("uplink_remote_port") is not None:
-            device_by_uplink.setdefault((_mac(up["uplink_mac"]), up["uplink_remote_port"]), dev)
+            device_by_uplink.setdefault((normalize_mac(up["uplink_mac"]), up["uplink_remote_port"]), dev)
 
-    device_by_mac = {_mac(d.get("mac")): d for d in legacy_devices}
+    device_by_mac = {normalize_mac(d.get("mac")): d for d in legacy_devices}
 
     result: Dict[str, Tuple[str, List[Dict[str, Any]]]] = {}
     for sw in legacy_devices:
         if sw.get("type") != "usw" or not sw.get("port_table"):
             continue
-        sw_mac = _mac(sw.get("mac"))
+        sw_mac = normalize_mac(sw.get("mac"))
         rows = []
         for port in sw["port_table"]:
             key = (sw_mac, port.get("port_idx"))
             ctype = cname = cmac = cmodel = ""
             # mac_table_count is null on some models (e.g. USW Ultra), so match on link state.
-            uplink_dev = device_by_mac.get(_mac((sw.get("uplink") or {}).get("uplink_mac")))
+            uplink_dev = device_by_mac.get(normalize_mac((sw.get("uplink") or {}).get("uplink_mac")))
             if port.get("up"):
                 if port.get("is_uplink") and uplink_dev:
                     dev = uplink_dev
                     friendly = DEVICE_TYPE_MAP.get(dev.get("type", ""), dev.get("type", "").upper())
                     ctype = f"Device - {friendly}"
                     cname = dev.get("name") or dev.get("hostname") or ""
-                    cmac, cmodel = _mac(dev.get("mac")), dev.get("model", "")
+                    cmac, cmodel = normalize_mac(dev.get("mac")), dev.get("model", "")
                 elif key in client_by_port:
                     c = client_by_port[key]
-                    ctype, cname, cmac = "Client", c.get("name") or c.get("hostname") or "", _mac(c.get("mac"))
+                    ctype, cname, cmac = "Client", c.get("name") or c.get("hostname") or "", normalize_mac(c.get("mac"))
                 elif key in device_by_uplink:
                     dev = device_by_uplink[key]
                     friendly = DEVICE_TYPE_MAP.get(dev.get("type", ""), dev.get("type", "").upper())
                     ctype = f"Device - {friendly}"
                     cname = dev.get("name") or dev.get("hostname") or ""
-                    cmac, cmodel = _mac(dev.get("mac")), dev.get("model", "")
+                    cmac, cmodel = normalize_mac(dev.get("mac")), dev.get("model", "")
             rows.append({
                 "Port": port.get("name") or f"Port {port.get('port_idx', '')}",
                 "Port Index": port.get("port_idx", ""),

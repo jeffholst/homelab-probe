@@ -5,9 +5,8 @@ import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
-from .export import _fmt_time, _mac
 from .snapshot import Snapshot
-from .util import describe_age
+from .util import describe_age, format_time, normalize_mac
 
 RESERVATION_COLUMNS = ["Name", "MAC Address", "Reserved IP", "Network", "VLAN",
                        "Current IP", "Status", "Last Seen"]
@@ -66,18 +65,18 @@ def reservation_records(snap: Snapshot) -> List[Tuple[Dict[str, Any], Dict[str, 
 
 def build_reservations(snap: Snapshot) -> List[Dict[str, Any]]:
     """One row per enabled reservation, connected or not."""
-    connected = {_mac(c.get("macAddress")): c for c in snap.clients}
+    connected = {normalize_mac(c.get("macAddress")): c for c in snap.clients}
 
     rows: List[Dict[str, Any]] = []
     for u, net in reservation_records(snap):
-        mac = _mac(u.get("mac"))
+        mac = normalize_mac(u.get("mac"))
         live = connected.get(mac)
 
         # Networks without VLAN tagging are on the default untagged VLAN 1.
         vlan = (net.get("vlan") if net.get("vlan_enabled") else 1) if net else ""
 
         if live:
-            last_seen = _fmt_time(live.get("connectedAt"))
+            last_seen = format_time(live.get("connectedAt"))
         elif u.get("last_seen"):
             last_seen = datetime.fromtimestamp(u["last_seen"]).strftime("%Y-%m-%d %H:%M:%S")
         else:
@@ -106,11 +105,11 @@ def offline_reservations(snap: Snapshot, min_days: float, now: Optional[float] =
     what the check reports.
     """
     now = time.time() if now is None else now
-    connected = {_mac(c.get("macAddress")).replace("-", ":") for c in snap.clients}
-    devices = {_mac(d.get("macAddress")).replace("-", ":") for d in snap.devices}
+    connected = {normalize_mac(c.get("macAddress")).replace("-", ":") for c in snap.clients}
+    devices = {normalize_mac(d.get("macAddress")).replace("-", ":") for d in snap.devices}
     found = []
     for user, net in reservation_records(snap):
-        mac = _mac(user.get("mac"))
+        mac = normalize_mac(user.get("mac"))
         normalized_mac = mac.replace("-", ":")
         if normalized_mac in connected or normalized_mac in devices:
             continue

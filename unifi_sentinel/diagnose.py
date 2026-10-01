@@ -13,9 +13,8 @@ from .query import format_uptime
 from .reservations import dhcp_pool, offline_reservations, reservation_records
 from .settings import DiagnoseSettings, IgnoreRule
 from .snapshot import Snapshot
-from .util import describe_age as _age_text
-from .util import is_randomized_mac, printable
-from .wan import SPEEDTEST_BASELINE_DAYS, describe_age, median_download, monitoring, nat_status, speedtests_for_baseline
+from .util import describe_age, is_randomized_mac, known_percent, number_or_zero, plural, printable
+from .wan import SPEEDTEST_BASELINE_DAYS, median_download, monitoring, nat_status, speedtests_for_baseline
 
 CRITICAL, WARNING, INFO = "critical", "warning", "info"
 SEVERITY_ORDER = {CRITICAL: 0, WARNING: 1, INFO: 2}
@@ -299,7 +298,7 @@ def _offline_reservation_findings(snap: Snapshot, settings: DiagnoseSettings,
         when = datetime.fromtimestamp(r["last_seen"]).strftime("%Y-%m-%d %H:%M")
         findings.append(Finding(
             level, name,
-            f"reserved IP {user['fixed_ip']}{where} is offline: last seen {_age_text(int(seconds))} ago ({when})",
+            f"reserved IP {user['fixed_ip']}{where} is offline: last seen {describe_age(int(seconds))} ago ({when})",
             code="reservation.offline"))
     return findings
 
@@ -333,10 +332,6 @@ def _private_mac_findings(snap: Snapshot) -> List[Finding]:
     return findings
 
 
-def _number(value: Any) -> float:
-    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else 0.0
-
-
 def _health_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]:
     """Findings from the controller's own subsystem health (``stat/health``).
 
@@ -351,10 +346,10 @@ def _health_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding
     for h in snap.health:
         name = h.get("subsystem") or "?"
         status = h.get("status")
-        pending += int(_number(h.get("num_pending")))
+        pending += int(number_or_zero(h.get("num_pending")))
 
         if status in severity_of:
-            disconnected = int(_number(h.get("num_disconnected")))
+            disconnected = int(number_or_zero(h.get("num_disconnected")))
             if name in DEVICE_SUBSYSTEMS and disconnected:
                 findings.append(Finding(
                     INFO, name, f"{name} subsystem reports {status}: {disconnected} "
@@ -367,7 +362,7 @@ def _health_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding
                     code="health.subsystem"))
 
         if name == "www":
-            latency, drops = _number(h.get("latency")), _number(h.get("drops"))
+            latency, drops = number_or_zero(h.get("latency")), number_or_zero(h.get("drops"))
             if latency and latency >= settings.wan_latency_warn_ms:
                 findings.append(Finding(WARNING, name, f"internet latency {latency:.0f} ms", code="internet.latency"))
             if drops and drops >= settings.wan_drops_warn:
@@ -409,7 +404,7 @@ def _port_health_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Fi
 
         for port in sw.get("port_table") or []:
             label = f"{name} port {port.get('port_idx')}"
-            flaps = int(_number(port.get("link_down_count")))
+            flaps = int(number_or_zero(port.get("link_down_count")))
             if flaps >= settings.link_flap_count:
                 since = f", switch up {uptime}" if uptime else ""
                 findings.append(Finding(
@@ -419,8 +414,8 @@ def _port_health_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Fi
             if not port.get("up"):
                 continue
             for direction in ("rx", "tx"):
-                packets = _number(port.get(f"{direction}_packets"))
-                dropped = _number(port.get(f"{direction}_dropped"))
+                packets = number_or_zero(port.get(f"{direction}_packets"))
+                dropped = number_or_zero(port.get(f"{direction}_dropped"))
                 if packets >= settings.min_packets_for_drop_pct and dropped:
                     pct = dropped / packets * 100
                     if pct >= settings.port_drop_pct:
@@ -435,7 +430,7 @@ def _port_health_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Fi
                     WARNING, label, f"STP state is {stp}, not forwarding",
                     (sw.get("mac") or "").upper(), code="port.stp"))
 
-        budget, used = _number(sw.get("total_max_power")), _number(sw.get("total_used_power"))
+        budget, used = number_or_zero(sw.get("total_max_power")), number_or_zero(sw.get("total_used_power"))
         if budget > 0:
             pct = used / budget * 100
             if pct >= settings.poe_warn_pct:
@@ -448,10 +443,6 @@ def _port_health_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Fi
 
 
 BANDS = {"ng": "2.4 GHz", "na": "5 GHz", "6e": "6 GHz"}
-
-
-def _times(n: int) -> str:
-    return f"{n} time" + ("" if n == 1 else "s")
 
 
 def _conflict_devices(events: List[Dict[str, Any]]) -> Tuple[List[Dict[str, str]], str]:
@@ -499,7 +490,7 @@ def _conflict_findings(conflicts: Dict[str, List[Dict[str, Any]]], snap: Snapsho
         # across a long window, how many separate days it happened on says "recurring"
         spread = (f" on {len(days)} different days"
                   if len(events) > 1 and len(days) > 1 and snap.event_window_seconds >= 2 * 86400 else "")
-        text = f"IP conflict reported {_times(len(events))}{spread} in the last {window}"
+        text = f"IP conflict reported {plural(len(events), 'time')}{spread} in the last {window}"
         if devices:
             text += f" between {_join([d['name'] for d in devices])}"
         if network:
@@ -568,12 +559,12 @@ def _event_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]
     findings.extend(_conflict_findings(conflicts, snap, window))
     for name, n in sorted(disconnects.values()):
         if n >= threshold:
-            findings.append(Finding(WARNING, name, f"disconnected {_times(n)} in the last {window}",
+            findings.append(Finding(WARNING, name, f"disconnected {plural(n, 'time')} in the last {window}",
                                     code="event.client_disconnects"))
     for name, n in sorted(roams.values()):
         if n >= threshold:
             findings.append(Finding(
-                INFO, name, f"roamed {_times(n)} in the last {window} (normal for a mobile device)",
+                INFO, name, f"roamed {plural(n, 'time')} in the last {window} (normal for a mobile device)",
                 code="event.client_roams"))
 
     for _identity, (device, event_name, n) in sorted(unreachable.items()):
@@ -583,18 +574,18 @@ def _event_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]
         target_mac = (device or {}).get("macAddress")
         target_mac = target_mac.upper() if target_mac else None
         if n >= threshold:
-            findings.append(Finding(WARNING, name, f"was unreachable {_times(n)} in the last {window}",
+            findings.append(Finding(WARNING, name, f"was unreachable {plural(n, 'time')} in the last {window}",
                                     target_mac, code="event.device_unreachable"))
         elif device and device.get("state") == "ONLINE":
             findings.append(Finding(
-                INFO, name, f"was unreachable {_times(n)} in the last {window}; online now",
+                INFO, name, f"was unreachable {plural(n, 'time')} in the last {window}; online now",
                 target_mac, code="event.device_unreachable"))
         else:
-            findings.append(Finding(INFO, name, f"was unreachable {_times(n)} in the last {window}", target_mac,
+            findings.append(Finding(INFO, name, f"was unreachable {plural(n, 'time')} in the last {window}", target_mac,
                                     code="event.device_unreachable"))
     if latency:
         findings.append(Finding(
-            INFO, "internet", f"high latency was reported {_times(latency)} in the last {window}",
+            INFO, "internet", f"high latency was reported {plural(latency, 'time')} in the last {window}",
             code="event.internet_latency"))
     if snap.events_truncated:
         findings.append(Finding(
@@ -650,13 +641,6 @@ def _wan_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]:
     return findings
 
 
-def _known_percent(value: Any) -> Optional[float]:
-    """A 0-100 quality value, or None when missing or unknown (the controller uses -1)."""
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
-        return None
-    return float(value)
-
-
 def _wifi_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]:
     """Weak signal, retries and low satisfaction for Wi-Fi clients, and busy or
     retry-heavy AP radios.
@@ -680,19 +664,19 @@ def _wifi_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]:
         place = ", ".join(x for x in (BANDS.get(c.get("radio"), ""), f"on {ap}" if ap else "") if x)
         where = f" ({place})" if place else ""
 
-        signal = _number(c.get("signal"))
+        signal = number_or_zero(c.get("signal"))
         if signal < 0 and signal <= settings.wifi_weak_signal_dbm:
             findings.append(Finding(WARNING, name, f"weak Wi-Fi signal {signal:.0f} dBm{where}",
                                     code="wifi.weak_signal"))
 
-        attempts = _number(c.get("wifi_tx_attempts"))
-        retries = _known_percent(c.get("wifi_tx_retries_percentage"))
+        attempts = number_or_zero(c.get("wifi_tx_attempts"))
+        retries = known_percent(c.get("wifi_tx_retries_percentage"))
         if (attempts >= settings.wifi_min_attempts and retries is not None
                 and retries >= settings.wifi_retry_pct):
             findings.append(Finding(
                 WARNING, name, f"{retries:.0f}% of Wi-Fi transmissions retried{where}", code="wifi.client_retries"))
 
-        satisfaction = _known_percent(c.get("satisfaction"))
+        satisfaction = known_percent(c.get("satisfaction"))
         if satisfaction is not None and satisfaction < settings.wifi_satisfaction_warn:
             findings.append(Finding(WARNING, name, f"Wi-Fi satisfaction {satisfaction:.0f}%{where}",
                                     code="wifi.client_satisfaction"))
@@ -706,18 +690,18 @@ def _wifi_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]:
             channel = radio.get("channel")
             on = f" (channel {channel})" if channel not in (None, "") else ""
 
-            util = _known_percent(radio.get("cu_total"))
+            util = known_percent(radio.get("cu_total"))
             if util is not None and util >= settings.radio_util_warn_pct:
                 level = CRITICAL if util >= settings.radio_util_critical_pct else WARNING
                 findings.append(Finding(
                     level, label, f"channel utilization {util:.0f}%{on}",
                     (ap.get("mac") or "").upper(), code="wifi.radio_utilization"))
-            retries = _number(radio.get("tx_retries_pct"))
+            retries = number_or_zero(radio.get("tx_retries_pct"))
             if retries >= settings.wifi_retry_pct:
                 findings.append(Finding(
                     WARNING, label, f"{retries:.0f}% of transmissions retried{on}",
                     (ap.get("mac") or "").upper(), code="wifi.radio_retries"))
-            satisfaction = _known_percent(radio.get("satisfaction"))
+            satisfaction = known_percent(radio.get("satisfaction"))
             if satisfaction is not None and satisfaction < settings.wifi_satisfaction_warn:
                 findings.append(Finding(
                     WARNING, label, f"satisfaction {satisfaction:.0f}%{on}",
@@ -735,13 +719,13 @@ def uplink_speeds(snap: Snapshot, device: Dict[str, Any]) -> Optional[Tuple[floa
     """
     up = device.get("uplink") or {}
     parent_mac = (up.get("uplink_mac") or "").upper()
-    speed, child_max = _number(up.get("speed")), _number(up.get("max_speed"))
+    speed, child_max = number_or_zero(up.get("speed")), number_or_zero(up.get("max_speed"))
     if not (up.get("up") and parent_mac and speed and child_max):
         return None
     id_by_mac = {(d.get("macAddress") or "").upper(): d.get("id") for d in snap.devices}
     parent_ports = ((snap.device_details.get(id_by_mac.get(parent_mac)) or {})
                     .get("interfaces") or {}).get("ports") or []
-    parent_max = next((_number(p.get("maxSpeedMbps")) for p in parent_ports
+    parent_max = next((number_or_zero(p.get("maxSpeedMbps")) for p in parent_ports
                        if p.get("idx") == up.get("uplink_remote_port")), 0.0)
     if not parent_max:
         return None

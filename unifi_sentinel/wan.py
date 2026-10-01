@@ -18,7 +18,7 @@ from .events import describe_duration
 from .query import format_table
 from .settings import DiagnoseSettings
 from .snapshot import Snapshot
-from .util import clean_data, describe_age
+from .util import clean_data, describe_age, number
 
 DEFAULT_DAYS = 30
 SPEEDTEST_BASELINE_DAYS = 30   # `diagnose` compares the last speedtest with this many days
@@ -100,12 +100,6 @@ def nat_status(snap: Snapshot) -> Dict[str, Any]:
     return {"wan_ip": ip, "kind": kind, "message": _NAT_MESSAGES.get(kind, "").format(ip=ip)}
 
 
-def _num(value: Any) -> Optional[float]:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    return float(value)
-
-
 def _health(snap: Snapshot, subsystem: str) -> Dict[str, Any]:
     return next((h for h in snap.health if h.get("subsystem") == subsystem), {})
 
@@ -144,12 +138,12 @@ def speedtests_for_baseline(tests: List[Dict[str, Any]], days: int, now_ms: int)
 
 
 def median_download(tests: List[Dict[str, Any]]) -> Optional[float]:
-    values = [d for d in (_num(t.get("download_mbps")) for t in tests) if d is not None]
+    values = [d for d in (number(t.get("download_mbps")) for t in tests) if d is not None]
     return statistics.median(values) if len(values) >= MIN_SPEEDTESTS else None
 
 
 def _spread(tests: List[Dict[str, Any]], key: str) -> Optional[Dict[str, float]]:
-    values = [v for v in (_num(t.get(key)) for t in tests) if v is not None]
+    values = [v for v in (number(t.get(key)) for t in tests) if v is not None]
     if not values:
         return None
     return {"min": min(values), "median": statistics.median(values), "max": max(values)}
@@ -163,19 +157,19 @@ def _speedtest_section(snap: Snapshot, days: int, settings: DiagnoseSettings, no
     limit = median * settings.wan_speed_drop_pct / 100 if median else None
     slow = [t for t in recent
             if limit is not None
-            and (download := _num(t.get("download_mbps"))) is not None
+            and (download := number(t.get("download_mbps"))) is not None
             and download < limit]
     return {
         "days": days, "count": len(recent), "total_stored": len(stored),
         "last": None if last is None else {
             "time": last.get("time"), "when": _when(last.get("time")), "age": _age(last.get("time"), now_ms),
-            "download_mbps": _num(last.get("download_mbps")), "upload_mbps": _num(last.get("upload_mbps")),
-            "latency_ms": _num(last.get("latency_ms")), "interface": last.get("interface_name") or ""},
+            "download_mbps": number(last.get("download_mbps")), "upload_mbps": number(last.get("upload_mbps")),
+            "latency_ms": number(last.get("latency_ms")), "interface": last.get("interface_name") or ""},
         "download": _spread(recent, "download_mbps"), "upload": _spread(recent, "upload_mbps"),
         "latency": _spread(recent, "latency_ms"),
         "slow_threshold_pct": settings.wan_speed_drop_pct,
-        "slow_runs": [{"when": _when(t.get("time")), "download_mbps": _num(t.get("download_mbps")),
-                       "upload_mbps": _num(t.get("upload_mbps")), "latency_ms": _num(t.get("latency_ms"))}
+        "slow_runs": [{"when": _when(t.get("time")), "download_mbps": number(t.get("download_mbps")),
+                       "upload_mbps": number(t.get("upload_mbps")), "latency_ms": number(t.get("latency_ms"))}
                       for t in reversed(slow)],            # newest first
     }
 
@@ -187,11 +181,11 @@ def _links(snap: Snapshot) -> List[Dict[str, Any]]:
     links = []
     for key in sorted(k for k in (gateway or {}) if re.fullmatch(r"wan\d+", k)):
         w = gateway[key] if isinstance(gateway[key], dict) else {}
-        tx, rx = _num(w.get("tx_bytes-r")), _num(w.get("rx_bytes-r"))
+        tx, rx = number(w.get("tx_bytes-r")), number(w.get("rx_bytes-r"))
         links.append({
             "port": key, "interface": w.get("name") or "", "up": w.get("up"),
-            "speed_mbps": _num(w.get("speed")), "max_speed_mbps": _num(w.get("max_speed")),
-            "full_duplex": w.get("full_duplex"), "latency_ms": _num(w.get("latency")),
+            "speed_mbps": number(w.get("speed")), "max_speed_mbps": number(w.get("max_speed")),
+            "full_duplex": w.get("full_duplex"), "latency_ms": number(w.get("latency")),
             "tx_mbps": None if tx is None else tx * 8 / 1e6, "rx_mbps": None if rx is None else rx * 8 / 1e6,
         })
     return links
@@ -210,12 +204,12 @@ def monitoring(snap: Snapshot) -> List[Dict[str, Any]]:
                 if isinstance(m, dict):
                     entry = targets.setdefault((m.get("target"), m.get("type")), {
                         "target": m.get("target") or "?", "type": m.get("type") or "",
-                        "availability": _num(m.get("availability")),
-                        "latency_ms": _num(m.get("latency_average")), "alerts": False})
+                        "availability": number(m.get("availability")),
+                        "latency_ms": number(m.get("latency_average")), "alerts": False})
                     entry["alerts"] = entry["alerts"] or alerting       # configured to raise alerts
         result.append({
-            "name": name, "availability": _num(st.get("availability")),
-            "latency_ms": _num(st.get("latency_average")), "period_s": int(_num(st.get("time_period")) or 0),
+            "name": name, "availability": number(st.get("availability")),
+            "latency_ms": number(st.get("latency_average")), "period_s": int(number(st.get("time_period")) or 0),
             "targets": sorted(targets.values(), key=lambda t: (str(t["target"]), t["type"]))})
     return result
 
@@ -230,7 +224,7 @@ def build_wan(snap: Snapshot, days: int = DEFAULT_DAYS, settings: Optional[Diagn
             "status": wan.get("status") or "unknown", "isp": wan.get("isp_name") or "",
             "wan_ip": wan.get("wan_ip") or "", "gateway": wan.get("gw_name") or "",
             "internet_status": www.get("status") or "unknown",
-            "latency_ms": _num(www.get("latency")), "drops": _num(www.get("drops")),
+            "latency_ms": number(www.get("latency")), "drops": number(www.get("drops")),
             "speedtest_status": www.get("speedtest_status") or ""},
         "nat": nat_status(snap),
         "links": _links(snap),
