@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from unifi_sentinel import cli
+from unifi_sentinel import cli, commands
 from unifi_sentinel.client_view import DeviceIndex, known_clients
 from unifi_sentinel.config import ConfigError
 from unifi_sentinel.history import (
@@ -493,14 +493,14 @@ def test_cli_diff_of_two_files_by_name_by_last_two_and_as_json(fake_client, monk
 def test_cli_diff_loads_each_snapshot_once(fake_client, monkeypatch, capsys, tmp_path, record):
     first = save_snapshot(record, tmp_path / "first.json")
     second = save_snapshot(record, tmp_path / "second.json")
-    original_load = cli.load_snapshot
+    original_load = commands.load_snapshot
     loaded = []
 
     def track_load(path):
         loaded.append(path)
         return original_load(path)
 
-    monkeypatch.setattr(cli, "load_snapshot", track_load)
+    monkeypatch.setattr(commands, "load_snapshot", track_load)
     assert _run(fake_client, monkeypatch, ["diff", str(first), str(second)]) == 0
     assert loaded == [first, second]
     assert "No changes." in capsys.readouterr().out

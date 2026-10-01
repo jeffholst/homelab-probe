@@ -10,7 +10,7 @@ import sys
 
 import pytest
 
-from unifi_sentinel import cli
+from unifi_sentinel import cli, commands
 from unifi_sentinel import wan as wan_module
 from unifi_sentinel.client import UniFiAPIError
 from unifi_sentinel.client_view import _link_text, build_client_detail, find_clients, known_clients, render_detail
@@ -78,7 +78,7 @@ def test_a_quiet_run_whose_state_cannot_be_updated_is_a_config_error(fake_client
     def refuse(path, new_state):
         raise PermissionError(13, "Permission denied")
 
-    monkeypatch.setattr(cli, "save_state", refuse)
+    monkeypatch.setattr(commands, "save_state", refuse)
     capsys.readouterr()
     assert run(fake_client, monkeypatch, base) == cli.EXIT_ERROR
     assert "the notification state could not be saved" in capsys.readouterr().err

@@ -817,13 +817,14 @@ unifi_sentinel/
   notify.py              notifications: what changed since the last run, ntfy/webhook sending, state file
   settings.py            diagnose thresholds and ignore list (TOML)
   util.py                shared helpers: output safety (printable names, CSV formulas), numbers, MACs, times, plurals
-  cli.py                 argparse subcommands
+  cli.py                 argument parser and main: loads the configuration, builds the client, runs a command
+  commands.py            the commands: each one's arguments, checks and handler, and the registry
 tests/
   conftest.py            FakeSession: a fake controller served from the fixture
   fixtures/controller.json   synthetic, sanitized controller data
 ```
 
-New features are new subcommands in `cli.py` backed by modules that take a `Snapshot` (fetching stays in `snapshot.py` and `client.py`). Dependencies are declared once, in `pyproject.toml` (lockfile: `uv.lock`; regenerate with `uv lock`). Run the tests with `uv run pytest`; they use a synthetic fixture in `tests/fixtures/` and never contact a controller.
+New features are new subcommands (a section and a registry row in `commands.py`) backed by modules that take a `Snapshot` (fetching stays in `snapshot.py` and `client.py`). Dependencies are declared once, in `pyproject.toml` (lockfile: `uv.lock`; regenerate with `uv lock`). Run the tests with `uv run pytest`; they use a synthetic fixture in `tests/fixtures/` and never contact a controller.
 
 Checks (the same ones CI runs on every push and pull request, in `.github/workflows/ci.yml`):
 
