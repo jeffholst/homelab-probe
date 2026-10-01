@@ -204,7 +204,7 @@ def test_text_rendering_has_the_issue_example_shape(snap):
 def test_json_shape_and_candidates(snap):
     parsed = json.loads(to_json(detail_for(snap, "desktop")))
     assert set(parsed) == {"identity", "addressing", "attachment", "link", "findings", "events_available",
-                           "events_window", "events", "device_events", "events_omitted"}
+                           "events_window", "events_truncated", "events", "device_events", "events_omitted"}
     assert parsed["identity"]["mac"] == "BB:00:00:00:00:01"
     rows = candidate_rows(find_clients(snap, "bb0000"))
     assert {r["Status"] for r in rows} == {"Online", "Offline"}
@@ -264,15 +264,16 @@ def ev(kind, ts, category="CLIENT_DEVICES", **params):
             "category": category, "parameters": params}
 
 
-def snap_with(events, window=86400, available=True, extra_clients=()):
+def snap_with(events, window=86400, available=True, extra_clients=(), truncated=False):
     users = [{"mac": "cc:01", "name": "pc"}, *extra_clients]
     return Snapshot(
         site={}, all_users=users, clients=[],
         devices=[{"id": "ap", "macAddress": "aa:03", "name": "Office AP", "state": "ONLINE"},
+                 {"id": "duplicate-ap", "macAddress": "aa:04", "name": "Office AP", "state": "ONLINE"},
                  {"id": "sw", "macAddress": "aa:02", "name": "Other AP", "state": "ONLINE"}],
         legacy_devices=[{"mac": "AA:03", "type": "uap", "name": "Office AP", "port_table": []}],
         legacy_clients=[{"mac": "cc:01", "name": "pc", "is_wired": False, "ap_mac": "aa:03"}],
-        events=events, event_window_seconds=window, events_available=available)
+        events=events, event_window_seconds=window, events_available=available, events_truncated=truncated)
 
 
 def test_events_are_matched_by_mac_not_by_a_similar_name():
@@ -301,7 +302,11 @@ def test_events_about_the_devices_it_depends_on_are_separate_and_exact():
     events = [
         ev("DEVICE_UNREACHABLE", 9000, "UNIFI_DEVICES", DEVICE={"name": "Office AP"}),   # the AP itself: shown
         ev("DEVICE_UNREACHABLE", 8000, "UNIFI_DEVICES", DEVICE={"name": "office ap"}),   # name case is ignored
-        ev("ISP_HIGH_LATENCY", 7500, "INTERNET_AND_WAN", DEVICE={"name": "Office AP"}),  # internet, not why a client dropped
+        ev("DEVICE_UNREACHABLE", 7500, "UNIFI_DEVICES",
+           DEVICE={"id": "ap", "name": "Office AP"}),                                  # stable ID matches
+        ev("DEVICE_UNREACHABLE", 7400, "UNIFI_DEVICES",
+           DEVICE={"id": "duplicate-ap", "name": "Office AP"}),                       # same name, other device
+        ev("ISP_HIGH_LATENCY", 7300, "INTERNET_AND_WAN", DEVICE={"name": "Office AP"}),  # internet, not why a client dropped
         ev("CLIENT_CONNECTED_WIRELESS", 7000, CLIENT={"id": "cc:77", "name": "tv"},
            DEVICE={"name": "Office AP"}),                                        # someone else on the AP: not shown
         ev("CLIENT_ROAMED", 6000, CLIENT=mine, DEVICE_FROM={"name": "Other AP"},
@@ -311,13 +316,13 @@ def test_events_about_the_devices_it_depends_on_are_separate_and_exact():
         ev("MADE_CHANGES", 3000, "AUDIT", OBJECT={"name": "Office AP"}),                 # an admin change: not shown
     ]
     d = detail_for(snap_with(events), "pc")
-    assert [e["timestamp"] for e in d["device_events"]] == [9000, 8000]
+    assert [e["timestamp"] for e in d["device_events"]] == [9000, 8000, 7500]
     assert [e["timestamp"] for e in d["events"]] == [6000]
     text = render_detail(d, emoji=False)
     assert "Events about the devices it depends on:" in text
     assert text.index("Recent events") < text.index("Events about the devices")
     section = text.split("Events about the devices it depends on:")[1].split("Related findings")[0]
-    assert section.count("DEVICE_UNREACHABLE") == 2                                  # the two about Office AP, no more
+    assert section.count("DEVICE_UNREACHABLE") == 3                                  # matching ID and name fallback only
     assert "CLIENT_CONNECTED_WIRELESS" not in section and "CLIENT_ROAMED" not in section
     assert "ISP_HIGH_LATENCY" not in section and "MADE_CHANGES" not in section
 
@@ -330,14 +335,34 @@ def test_device_events_are_capped():
     assert "... and 2 more" in render_detail(d, emoji=False)
 
 
+def test_truncated_event_log_marks_omission_counts_incomplete():
+    mine = {"id": "cc:01", "name": "pc"}
+    events = [ev("CLIENT_CONNECTED_WIRELESS", 10_000 - i, CLIENT=mine)
+              for i in range(MAX_CLIENT_EVENTS + 2)]
+    detail = detail_for(snap_with(events, truncated=True), "pc")
+
+    assert detail["events_truncated"] is True
+    assert detail["events_omitted"]["client"] == 2
+    assert json.loads(to_json(detail))["events_truncated"] is True
+    text = render_detail(detail, emoji=False)
+    assert "... and at least 2 more" in text
+    assert "omission counts are incomplete" in text
+
+    empty = detail_for(snap_with([], truncated=True), "pc")
+    text = render_detail(empty, emoji=False)
+    assert "no matching events found before the 20,000-event read cap" in text
+    assert "none about this client" not in text
+
+
 def test_skipped_and_unavailable_events_are_different():
     skipped = detail_for(snap_with([], window=0, available=False), "pc")        # --no-events
-    assert skipped["events_available"] is None and skipped["events"] == [] and skipped["events_window"] == ""
+    assert skipped["events_available"] is None and skipped["events_truncated"] is None
+    assert skipped["events"] == [] and skipped["events_window"] == ""
     text = render_detail(skipped, emoji=False)
     assert "Recent events" not in text and "unavailable" not in text
 
     unreadable = detail_for(snap_with([], window=86400, available=False), "pc")  # the log could not be read
-    assert unreadable["events_available"] is False
+    assert unreadable["events_available"] is False and unreadable["events_truncated"] is None
     text = render_detail(unreadable, emoji=False)
     assert "Recent events: unavailable (the event log could not be read)" in text
     assert "Attached:" in text                                                       # the rest of the view remains

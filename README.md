@@ -344,12 +344,7 @@ Attached: desktop -> Office Switch port 3 (1000 Mbps) -> Gateway port 2 (100 Mbp
 Link:     1000 Mbps, full duplex, 0 errors, 60 dropped packets on its port
 
 Recent events (last 24h, newest first):
-  2026-01-01 10:10:00  CLIENT_DISCONNECTED_WIRELESS: phone disconnected from Home. Time Connected: 25s.
-  2026-01-01 09:55:00  CLIENT_CONNECTED_WIRELESS: phone connected to Home on Office AP.
-  ... and 12 more; run: unifi-sentinel events --client AA:BB:CC:DD:EE:02 --since 24h
-
-Events about the devices it depends on:
-  2026-01-01 08:30:00  DEVICE_UNREACHABLE: Office AP went offline.
+  2026-10-01 01:31:49  CLIENT_CONNECTED_WIRED: desktop connected to Main on Office Switch Port 3.
 
 Related findings:
 [WARNING ] Office Switch: CPU utilization 95%
@@ -364,9 +359,9 @@ Related findings:
 - **Link:** for a wired client, its port's speed, duplex, errors and dropped packets; for Wi-Fi, signal, noise, rates, retries and satisfaction. Offline clients have none.
 - **Addressing:** the DHCP reservation and whether it matches the current IP, the network and VLAN, and the client groups by name (or that it is in none).
 - **Related findings:** the `diagnose` findings about this client, its IP, or the devices and ports on its path (not unrelated ports on the same switch). It uses the same thresholds and ignore list as `diagnose` (`--config FILE`, or `./unifi-sentinel.toml`).
-- **Recent events:** the client's events from the controller's event log (the last 24 hours by default; `--since DURATION` changes it, for example `12h` or `7d`), newest first, up to 10, then how to see the rest with `events --client MAC`. The client is matched by its MAC address, so a similarly named device never mixes in. A second list shows events about the devices on its path, but only device-state events (a switch or AP going unreachable or reconnecting), up to 5: not other clients connecting to the same AP, and not internet-latency events, which also name the gateway but do not explain why one client dropped. That is how a client's disconnect lines up with the switch outage that caused it.
+- **Recent events:** the client's events from the controller's event log (the last 24 hours by default; `--since DURATION` changes it, for example `12h` or `7d`), newest first, up to 10, then how to see the rest with `events --client MAC`. The client is matched by its MAC address, so a similarly named device never mixes in. A second list shows events about the devices on its path, matched by device ID (name only when an ID is unavailable), but only device-state events (a switch or AP going unreachable or reconnecting), up to 5: not other clients connecting to the same AP, and not internet-latency events, which also name the gateway but do not explain why one client dropped. That is how a client's disconnect lines up with the switch outage that caused it.
 - `--no-events` skips this section and the request it needs (the one approved read-only event-log query, see [Event history](#event-history)); with it, `client` sends no POST at all. If the log cannot be read, the rest of the view is shown with "Recent events: unavailable".
-- `--json` prints the same data as JSON, with `events`, `device_events`, `events_window`, `events_omitted` (how many were left out) and `events_available` (`true`, `false` when the log could not be read, or `null` with `--no-events`). `--no-emoji` forces text severity labels.
+- `--json` prints the same data as JSON, with `events`, `device_events`, `events_window`, `events_omitted` (how many were left out), `events_truncated` (`true` if the 20,000-event read cap was reached; omission counts may then be incomplete, or `null` when events are unavailable/not requested) and `events_available` (`true`, `false` when the log could not be read, or `null` with `--no-events`). Text output says "at least" for omission counts and notes when counts are incomplete; it avoids claiming there were no matches when the log was truncated. `--no-emoji` forces text severity labels.
 
 ### New clients
 

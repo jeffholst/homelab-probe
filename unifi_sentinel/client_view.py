@@ -132,7 +132,8 @@ class DeviceIndex:
 
 
 def _hop(net: DeviceIndex, mac: str, port: Any = None, speed: Any = None, detail: str = "") -> Dict[str, Any]:
-    return {"device": net.name(mac), "type": net.kind(mac), "port": port,
+    return {"id": (net.integration.get(mac) or {}).get("id"), "device": net.name(mac),
+            "type": net.kind(mac), "port": port,
             "speed_mbps": _num(speed) or None, "detail": detail, "offline": net.offline(mac)}
 
 
@@ -277,22 +278,32 @@ def _recent_events(snap: Snapshot, rec: Dict[str, Any], hops: List[Dict[str, Any
     going unreachable or reconnecting) with no CLIENT in them, so never another client's
     connect on the same access point, and never internet-latency events, which also name the
     gateway but say nothing about why a client dropped. A device is matched by its exact
-    name. ``available`` is None when events were not requested.
+    name. Device events use stable IDs when available, then exact names as a fallback.
+    ``available`` is None when events were not requested.
     """
     requested = snap.event_window_seconds > 0
     result: Dict[str, Any] = {
         "available": snap.events_available if requested else None,
         "window": describe_duration(snap.event_window_seconds) if requested else "",
+        "truncated": snap.events_truncated if requested and snap.events_available else None,
         "client": [], "client_more": 0, "devices": [], "devices_more": 0}
     if not (requested and snap.events_available):
         return result
 
     mine = make_filter(client=rec["mac"])
     own = [e for e in snap.events if mine(e)]
-    names = {h["device"].lower() for h in hops}
+    path = [(h.get("id"), h["device"].lower()) for h in hops]
+
+    def on_path(device: Dict[str, Any]) -> bool:
+        name = str(device.get("name") or "").lower()
+        device_id = device.get("id")
+        return any((device_id == path_id if device_id not in (None, "") and path_id not in (None, "")
+                    else name == path_name)
+                   for path_id, path_name in path)
+
     about = [e for e in snap.events if e.get("category") == "UNIFI_DEVICES"
              and not event_subjects(e, "CLIENT") and
-             names & {str(d.get("name") or "").lower() for d in event_subjects(e, "DEVICE")}]
+             any(on_path(d) for d in event_subjects(e, "DEVICE"))]
     result.update(client=own[:MAX_CLIENT_EVENTS], client_more=max(0, len(own) - MAX_CLIENT_EVENTS),
                   devices=about[:MAX_DEVICE_EVENTS], devices_more=max(0, len(about) - MAX_DEVICE_EVENTS))
     return result
@@ -328,6 +339,7 @@ def build_client_detail(snap: Snapshot, rec: Dict[str, Any],
         # null when events were not requested (--no-events), false when the log could not be read
         "events_available": recent["available"],
         "events_window": recent["window"],
+        "events_truncated": recent["truncated"],
         "events": [event_json(e) for e in recent["client"]],
         "device_events": [event_json(e) for e in recent["devices"]],
         "events_omitted": {"client": recent["client_more"], "devices": recent["devices_more"]},
@@ -384,15 +396,25 @@ def _events_text(detail: Dict[str, Any], mac: str) -> List[str]:
         return f"  {e['Time']}  {e['Event']}: {e['Message']}"
 
     lines = ["", f"Recent events (last {window}, newest first):"]
-    lines += [line(e) for e in detail["events"]] or [f"  none about this client in the last {window}"]
+    if detail["events"]:
+        lines += [line(e) for e in detail["events"]]
+    elif detail["events_truncated"]:
+        lines.append("  no matching events found before the 20,000-event read cap")
+    else:
+        lines.append(f"  none about this client in the last {window}")
     more = detail["events_omitted"]["client"]
     if more:
-        lines.append(f"  ... and {more} more; run: unifi-sentinel events --client {mac} --since {window}")
+        count = f"at least {more}" if detail["events_truncated"] else str(more)
+        lines.append(f"  ... and {count} more; run: unifi-sentinel events --client {mac} --since {window}")
     if detail["device_events"]:
         lines += ["", "Events about the devices it depends on:"]
         lines += [line(e) for e in detail["device_events"]]
         if detail["events_omitted"]["devices"]:
-            lines.append(f"  ... and {detail['events_omitted']['devices']} more")
+            more = detail["events_omitted"]["devices"]
+            count = f"at least {more}" if detail["events_truncated"] else str(more)
+            lines.append(f"  ... and {count} more")
+    if detail["events_truncated"]:
+        lines.append("  (the 20,000-event read cap was reached; omission counts are incomplete)")
     return lines
 
 
