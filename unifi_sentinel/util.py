@@ -74,3 +74,12 @@ def clean_data(value: Any) -> Any:
     if isinstance(value, tuple):
         return tuple(clean_data(v) for v in value)
     return value
+
+
+def describe_age(seconds: int) -> str:
+    """'45m', '18h' or '12d' style text for how long ago something was (no 'ago')."""
+    if seconds < 3600:
+        return f"{max(1, seconds // 60)}m"
+    if seconds < 2 * 86400:
+        return f"{seconds // 3600}h"
+    return f"{seconds // 86400}d"

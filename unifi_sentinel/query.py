@@ -1,10 +1,10 @@
 """Query the inventory: filter and print devices, clients, reservations and switch ports."""
 
 import json
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from .export import INVENTORY_COLUMNS, build_inventory, build_offline_clients, build_switch_ports
-from .reservations import RESERVATION_COLUMNS, build_reservations
+from .reservations import OFFLINE_RESERVATION_COLUMNS, RESERVATION_COLUMNS, build_reservations, offline_reservation_rows
 from .snapshot import Snapshot
 from .util import printable
 
@@ -95,12 +95,15 @@ def query_rows(
     switch: str = "",
     down: bool = False,
     errors: bool = False,
+    offline_days: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
     """Rows for ``kind`` ('devices', 'clients', 'reservations', 'ports' or 'all'),
     optionally filtered by a case-insensitive substring match against any field.
-    ``switch``, ``down`` and ``errors`` apply to 'ports' only."""
+    ``switch``, ``down`` and ``errors`` apply to 'ports' only; ``offline_days`` to
+    'reservations' only (keep the reservations ``diagnose`` reports as offline)."""
     if kind == "reservations":
-        return _search(build_reservations(snap), search)
+        rows = build_reservations(snap) if offline_days is None else offline_reservation_rows(snap, offline_days)
+        return _search(rows, search)
     if kind == "ports":
         return _search(port_rows(snap, switch, down, errors), search)
     rows = build_inventory(snap.devices, snap.clients, snap.legacy_devices, snap.legacy_clients,
@@ -129,16 +132,17 @@ def format_table(rows: List[Dict[str, Any]], columns: List[str] = TABLE_COLUMNS)
     return "\n".join(out)
 
 
-def render(rows: List[Dict[str, Any]], as_json: bool, kind: str = "all") -> str:
+def render(rows: List[Dict[str, Any]], as_json: bool, kind: str = "all", offline: bool = False) -> str:
     if as_json:
         if kind == "ports":  # every port column, not just the table subset
             return json.dumps(rows, indent=2)
-        columns = RESERVATION_COLUMNS if kind == "reservations" else INVENTORY_COLUMNS
+        columns = (OFFLINE_RESERVATION_COLUMNS if offline else RESERVATION_COLUMNS) if kind == "reservations" \
+            else INVENTORY_COLUMNS
         if kind == "devices":
             columns = INVENTORY_COLUMNS + DEVICE_EXTRA_COLUMNS
         return json.dumps([{c: r.get(c, "") for c in columns} for r in rows], indent=2)
     columns = {
-        "reservations": RESERVATION_COLUMNS,
+        "reservations": OFFLINE_RESERVATION_COLUMNS if offline else RESERVATION_COLUMNS,
         "ports": PORT_TABLE_COLUMNS,
         "devices": TABLE_COLUMNS + DEVICE_EXTRA_COLUMNS[:3],
     }.get(kind, TABLE_COLUMNS)

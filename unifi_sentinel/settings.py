@@ -57,6 +57,8 @@ class DiagnoseSettings:
     wifi_satisfaction_warn: float = 50   # client or radio satisfaction below: warning
     radio_util_warn_pct: float = 70      # radio channel utilization at or above: warning
     radio_util_critical_pct: float = 90  # radio channel utilization at or above: critical
+    reserved_offline_warn_days: float = 1       # a reserved client offline this many days: warning
+    reserved_offline_critical_days: float = 7   # a reserved client offline this many days: critical
     ignore: Tuple[IgnoreRule, ...] = ()
 
 
@@ -86,7 +88,8 @@ def _parse(data: Dict[str, Any]) -> DiagnoseSettings:
              "wan_speed_drop_pct", "link_flap_count", "port_drop_pct",
              "min_packets_for_drop_pct", "poe_warn_pct", "poe_critical_pct",
              "event_flap_count", "wifi_weak_signal_dbm", "wifi_retry_pct", "wifi_min_attempts",
-             "wifi_satisfaction_warn", "radio_util_warn_pct", "radio_util_critical_pct"}
+             "wifi_satisfaction_warn", "radio_util_warn_pct", "radio_util_critical_pct",
+             "reserved_offline_warn_days", "reserved_offline_critical_days"}
     if set(thresholds) - known:
         raise ConfigError(f"unknown [thresholds] key(s): {', '.join(sorted(set(thresholds) - known))} "
                           f"(valid: {', '.join(sorted(known))})")
@@ -128,6 +131,13 @@ def _parse(data: Dict[str, Any]) -> DiagnoseSettings:
                             thresholds.get("radio_util_critical_pct", defaults.radio_util_critical_pct), 0, 100)
     if util_warn > util_critical:
         raise ConfigError("[thresholds] radio_util_warn_pct must not exceed radio_util_critical_pct")
+    offline_warn = _number("reserved_offline_warn_days",
+                           thresholds.get("reserved_offline_warn_days", defaults.reserved_offline_warn_days), 0)
+    offline_critical = _number(
+        "reserved_offline_critical_days",
+        thresholds.get("reserved_offline_critical_days", defaults.reserved_offline_critical_days), 0)
+    if offline_warn > offline_critical:
+        raise ConfigError("[thresholds] reserved_offline_warn_days must not exceed reserved_offline_critical_days")
     for name, value in (("wan_drops_warn", drops), ("link_flap_count", flaps),
                         ("min_packets_for_drop_pct", min_packets), ("wifi_min_attempts", min_attempts),
                         ("event_flap_count", event_flaps)):
@@ -159,6 +169,7 @@ def _parse(data: Dict[str, Any]) -> DiagnoseSettings:
         poe_critical_pct=poe_critical, wifi_weak_signal_dbm=weak, wifi_retry_pct=retry,
         wifi_min_attempts=int(min_attempts), wifi_satisfaction_warn=satisfaction,
         radio_util_warn_pct=util_warn, radio_util_critical_pct=util_critical,
+        reserved_offline_warn_days=offline_warn, reserved_offline_critical_days=offline_critical,
         ignore=tuple(rules))
 
 

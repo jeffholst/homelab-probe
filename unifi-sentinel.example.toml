@@ -22,6 +22,8 @@ wifi_min_attempts = 1000     # client TX attempts needed before its retries are 
 wifi_satisfaction_warn = 50  # client or radio satisfaction below this (%): warning
 radio_util_warn_pct = 70     # AP radio channel utilization at or above this: warning
 radio_util_critical_pct = 90 # AP radio channel utilization at or above this: critical
+reserved_offline_warn_days = 1      # a client with a DHCP reservation offline this many days: warning
+reserved_offline_critical_days = 7  # ... and this many days: critical
 
 # Suppress findings you have accepted. Each rule needs a reason, plus a subject
 # and/or a message. subject: case-insensitive name, * and ? wildcards.

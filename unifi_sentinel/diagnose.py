@@ -10,9 +10,10 @@ from typing import Any, Dict, List, Optional, Tuple
 from .events import describe_duration, first_name, local_time, subjects
 from .export import client_location, device_type_label
 from .query import format_uptime
-from .reservations import reservation_records
+from .reservations import offline_reservations, reservation_records
 from .settings import DiagnoseSettings, IgnoreRule
 from .snapshot import Snapshot
+from .util import describe_age as _age_text
 from .util import printable
 from .wan import SPEEDTEST_BASELINE_DAYS, describe_age, median_download, monitoring, speedtests_for_baseline
 
@@ -52,6 +53,8 @@ CODES = {
     "reservation.outside_subnet": "a reserved IP is outside its network's subnet",
     "reservation.duplicate": "the same IP is reserved for several clients",
     "reservation.ip_in_use": "a reserved IP is in use by a different client or device",
+    "reservation.offline": "a client with a reservation has been offline longer than the threshold",
+    "reservation.never_seen": "a reservation whose client has no last-seen time",
     "port.link_flaps": "a switch port's link has gone down repeatedly since boot",
     "port.drops": "a switch port is dropping packets above the threshold",
     "port.stp": "an up port is not in the STP forwarding state",
@@ -210,6 +213,35 @@ def _reservation_findings(snap: Snapshot) -> List[Finding]:
             findings.append(Finding(
                 WARNING, ip, f"reserved for {len(names)} clients: {', '.join(sorted(names))}",
                 code="reservation.duplicate"))
+    return findings
+
+
+def _offline_reservation_findings(snap: Snapshot, settings: DiagnoseSettings,
+                                  now: Optional[float] = None) -> List[Finding]:
+    """A reserved client that is offline is usually a server or appliance that went quiet.
+
+    Warning after ``reserved_offline_warn_days``, critical after ``reserved_offline_critical_days``;
+    a reservation with no last-seen time is reported once as info. Devices meant to be off go in
+    the ignore list.
+    """
+    findings: List[Finding] = []
+    for r in offline_reservations(snap, settings.reserved_offline_warn_days, now):
+        user, net = r["user"], r["net"]
+        name = user.get("name") or user.get("hostname") or r["mac"]
+        network = net.get("name") or user.get("last_connection_network_name") or ""
+        where = f" ({network})" if network else ""
+        seconds = r["offline_seconds"]
+        if seconds is None:
+            findings.append(Finding(
+                INFO, name, f"reserved IP {user['fixed_ip']}{where} has no last-seen time (never connected?)",
+                code="reservation.never_seen"))
+            continue
+        level = CRITICAL if seconds >= settings.reserved_offline_critical_days * 86400 else WARNING
+        when = datetime.fromtimestamp(r["last_seen"]).strftime("%Y-%m-%d %H:%M")
+        findings.append(Finding(
+            level, name,
+            f"reserved IP {user['fixed_ip']}{where} is offline: last seen {_age_text(int(seconds))} ago ({when})",
+            code="reservation.offline"))
     return findings
 
 
@@ -638,7 +670,8 @@ def _uplink_speed_findings(snap: Snapshot) -> List[Finding]:
     return findings
 
 
-def diagnose(snap: Snapshot, settings: Optional[DiagnoseSettings] = None) -> List[Finding]:
+def diagnose(snap: Snapshot, settings: Optional[DiagnoseSettings] = None,
+             now: Optional[float] = None) -> List[Finding]:
     settings = settings or DiagnoseSettings()
     findings: List[Finding] = []
 
@@ -680,6 +713,7 @@ def diagnose(snap: Snapshot, settings: Optional[DiagnoseSettings] = None) -> Lis
     findings.extend(_wan_findings(snap, settings))
     findings.extend(_client_ip_findings(snap))
     findings.extend(_reservation_findings(snap))
+    findings.extend(_offline_reservation_findings(snap, settings, now))
     findings.extend(_duplicate_ip_findings(snap))
 
     if not snap.legacy_devices:

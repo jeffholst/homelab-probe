@@ -143,6 +143,12 @@ def build_parser() -> argparse.ArgumentParser:
     query.add_argument("--down", action="store_true", help="ports only: only ports that are down")
     query.add_argument("--errors", action="store_true",
                        help="ports only: only ports with rx/tx errors")
+    query.add_argument("--offline", action="store_true",
+                       help="reservations only: only clients offline long enough for `diagnose` to report "
+                            "them (reserved_offline_warn_days), or never seen")
+    query.add_argument("--config", type=Path, metavar="FILE",
+                       help="reservations --offline only: TOML file with the threshold "
+                            "(default: ./unifi-sentinel.toml if present)")
 
     new = sub.add_parser(
         "new-clients", help="List clients that are in no client group (all known clients)")
@@ -325,12 +331,18 @@ def main(argv: Optional[List[str]] = None) -> int:
         args.switch is not None or args.down or args.errors
     ):
         parser.error("--switch, --down and --errors only apply to 'query ports'")
+    if args.command == "query" and args.kind != "reservations" and (args.offline or args.config is not None):
+        parser.error("--offline and --config only apply to 'query reservations'")
+    if args.command == "query" and args.config is not None and not args.offline:
+        parser.error("--config only applies with --offline")
     try:
         config = load_config(args.env_file)
         for message in config.warnings:
             warn(message)
         # Load diagnose settings first so a bad config file fails before any API call.
-        settings = load_settings(args.config) if args.command in ("diagnose", "client", "topology", "wan") else None
+        needs_settings = args.command in ("diagnose", "client", "topology", "wan") or (
+            args.command == "query" and args.offline)
+        settings = load_settings(args.config) if needs_settings else None
         client = UniFiClient.from_config(config)
         if args.command == "info":
             _say(f"Application: {client.info()}")
@@ -344,8 +356,9 @@ def main(argv: Optional[List[str]] = None) -> int:
                 client, config.site, args.include_offline,
                 include_reservations=args.kind == "reservations")
             rows = query_rows(snap, args.kind, args.search, args.include_offline,
-                              args.switch or "", args.down, args.errors)
-            _say(render(rows, args.json, args.kind))
+                              args.switch or "", args.down, args.errors,
+                              settings.reserved_offline_warn_days if args.offline else None)
+            _say(render(rows, args.json, args.kind, args.offline))
         elif args.command == "new-clients":
             snap = collect_snapshot(client, config.site, include_groups=True)
             _say(render_new_clients(new_clients_report(snap, args.search), args.json))
