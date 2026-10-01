@@ -117,7 +117,12 @@ def _notify(findings: List[Any], config: Any, settings: Any, args: argparse.Name
     events, new_state = plan(findings, state, now, minimum, settings.notify_repeat_hours)
     if not events:
         if new_state != state:
-            save_state(state_path, new_state)          # e.g. a finding improved but is still reported
+            try:
+                save_state(state_path, new_state)          # e.g. a finding improved but is still reported
+            except OSError as e:
+                raise ConfigError(
+                    f"the notification state could not be saved to {state_path}: {e.strerror or e}"
+                ) from e
         _say("Notification: nothing new, worse or fixed since the last notified run", file=sys.stderr)
         return False
     if args.notify_dry_run:
