@@ -37,7 +37,8 @@ PAGE_SIZE = 200
 
 def _segment(value: str) -> str:
     """A value placed in a URL path, percent-encoded so it cannot add path parts or a query."""
-    return quote(str(value), safe="")
+    encoded = quote(str(value), safe="")
+    return encoded.replace(".", "%2E") if encoded in {".", ".."} else encoded
 
 
 class UniFiAPIError(Exception):
