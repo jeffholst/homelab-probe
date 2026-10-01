@@ -8,6 +8,11 @@ resource_critical_pct = 98   # CPU or memory at or above this: critical
 slow_link_mbps = 100         # ports negotiated at or below this speed: info
 wan_latency_warn_ms = 100    # internet latency at or above this: warning
 wan_drops_warn = 10          # internet drops at or above this: warning (heuristic)
+link_flap_count = 5          # port link-down count since boot at or above this: warning
+port_drop_pct = 0.1          # dropped packets, % of a port's packets, at or above this: warning
+min_packets_for_drop_pct = 1000 # minimum packets before evaluating drop percentage
+poe_warn_pct = 80            # switch PoE budget used at or above this: warning
+poe_critical_pct = 95        # switch PoE budget used at or above this: critical
 
 # Suppress findings you have accepted. Each rule needs a reason, plus a subject
 # and/or a message. subject: case-insensitive name, * and ? wildcards.
