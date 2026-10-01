@@ -98,7 +98,9 @@ def is_randomized_mac(mac: Any) -> bool:
     containers, bridges and some IoT devices also use locally administered addresses.
     Anything that is not 12 hex digits (any usual separator or case) is False.
     """
-    digits = _MAC_SEPARATORS.sub("", "" if mac is None else str(mac))
+    if not isinstance(mac, str):
+        return False
+    digits = _MAC_SEPARATORS.sub("", mac)
     if len(digits) != 12 or any(c not in "0123456789abcdefABCDEF" for c in digits):
         return False
     return int(digits[:2], 16) & 0x03 == 0x02
