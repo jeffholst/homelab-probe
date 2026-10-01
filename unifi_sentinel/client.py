@@ -153,13 +153,13 @@ class UniFiClient:
         self.attempts_made += 1
         self.seconds_waiting += elapsed
         if self.trace is not None:
-            self.trace(f"{label} -> {outcome} ({elapsed * 1000:.0f} ms)")
+            self.trace(self._redact(f"{label} -> {outcome} ({elapsed * 1000:.0f} ms)"))
 
     def _back_off(self, label: str, attempt: int, attempts: int) -> None:
         pause = RETRY_BACKOFF_S * 2 ** (attempt - 1)
         self.attempts_retried += 1
         if self.trace is not None:
-            self.trace(f"{label} -> retrying in {pause:g} s (attempt {attempt + 1} of {attempts})")
+            self.trace(self._redact(f"{label} -> retrying in {pause:g} s (attempt {attempt + 1} of {attempts})"))
         self._sleep(pause)
 
     def summary(self) -> str:
