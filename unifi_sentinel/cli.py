@@ -18,6 +18,7 @@ from .export import run_export
 from .new_clients import render as render_new_clients, report as new_clients_report
 from .query import query_rows, render
 from .settings import load_settings
+from .topology import build_topology, render_text as render_topology, to_json as topology_json
 from .snapshot import collect_event_snapshot, collect_snapshot
 
 
@@ -116,6 +117,18 @@ def build_parser() -> argparse.ArgumentParser:
     cview.add_argument("--no-emoji", action="store_true",
                        help="Use text severity labels (automatic when output is not a UTF-8 terminal)")
 
+    topo = sub.add_parser(
+        "topology", help="Draw the uplink tree: gateway, switches and APs with ports, speeds and problems")
+    topo.add_argument("--clients", action="store_true",
+                      help="Also list the wired clients under each device")
+    topo.add_argument("--json", action="store_true", help="Output nested JSON instead of a tree")
+    topo.add_argument("--config", type=Path, metavar="FILE",
+                      help="TOML file with diagnose thresholds and ignore list "
+                           "(default: ./unifi-sentinel.toml if present)")
+    topo.add_argument("--no-emoji", action="store_true",
+                      help="Use ASCII drawing and text severity labels (automatic when output is "
+                           "not a UTF-8 terminal)")
+
     diag = sub.add_parser("diagnose", help="Run read-only health checks (offline devices, port errors, ...)")
     diag.add_argument("--fail-on", choices=[INFO, WARNING, CRITICAL], default=WARNING,
                       help="Lowest severity that gives a non-zero exit code (default: warning); "
@@ -142,7 +155,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     try:
         config = load_config()
         # Load diagnose settings first so a bad config file fails before any API call.
-        settings = load_settings(args.config) if args.command in ("diagnose", "client") else None
+        settings = load_settings(args.config) if args.command in ("diagnose", "client", "topology") else None
         client = UniFiClient.from_config(config)
         if args.command == "info":
             print(f"Application: {client.info()}")
@@ -168,6 +181,11 @@ def main(argv: Optional[List[str]] = None) -> int:
                 snap, predicate=make_filter(args.client, args.device, args.event),
                 limit=0 if args.summary else args.limit)  # a summary counts the whole window
             print(render_events(events, more, args.json, args.summary, snap.events_truncated))
+        elif args.command == "topology":
+            snap = collect_snapshot(client, config.site)
+            tree = build_topology(snap, settings, with_clients=args.clients)
+            emoji = not args.no_emoji and stream_supports_emoji(sys.stdout)
+            print(topology_json(tree) if args.json else render_topology(tree, emoji, args.clients))
         elif args.command == "client":
             snap = collect_snapshot(client, config.site, include_reservations=True,
                                     include_groups=True)

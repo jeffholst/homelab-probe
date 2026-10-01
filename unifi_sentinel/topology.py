@@ -1,0 +1,277 @@
+"""Uplink topology: how the gateway, switches and access points are wired together.
+
+`unifi-sentinel topology` draws the tree from the gateway down, with the port each device
+plugs into, the negotiated link speed, client counts and anything `diagnose` flags.
+"""
+
+import json
+from collections import Counter
+from typing import Any, Dict, List, Optional, Set, Tuple
+
+from .client_view import DeviceIndex
+from .diagnose import (EMOJI, INFO, SEVERITY_ORDER, WARNING, CRITICAL, Finding, apply_ignores,
+                       diagnose, uplink_speeds)
+from .export import _mac
+from .settings import DiagnoseSettings
+from .snapshot import Snapshot
+
+GATEWAY_KINDS = {"Gateway", "Dream Machine"}
+Node = Dict[str, Any]
+
+
+def _num(value: Any) -> Optional[float]:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
+
+
+def _link(snap: Snapshot, idx: DeviceIndex, mac: str) -> Tuple[str, Optional[int], Optional[int], Optional[float]]:
+    """(parent MAC, parent's port, this device's own uplink port, negotiated Mbps).
+
+    The legacy uplink has the ports and speed; the Integration API's ``uplink.deviceId``
+    names the parent when the legacy data does not.
+    """
+    legacy = idx.legacy.get(mac) or {}
+    up = legacy.get("uplink") or {}
+    parent = (up.get("uplink_mac") or "").upper()
+    if not parent:
+        detail = snap.device_details.get((idx.integration.get(mac) or {}).get("id")) or {}
+        wanted = (detail.get("uplink") or {}).get("deviceId")
+        parent = next((m for m, d in idx.integration.items() if wanted and d.get("id") == wanted), "")
+    port, own = up.get("uplink_remote_port"), up.get("port_idx")
+    return parent, port, own, _num(up.get("speed"))
+
+
+def _assign_findings(findings: List[Finding], names: Dict[str, str]) -> Dict[str, List[Finding]]:
+    """Give each finding to the device it is about. A subject is a device name or starts
+    with one followed by a space (``Switch port 3``, ``AP 5 GHz radio``). The longest
+    matching name wins so ``SW 2 port 1`` is not credited to a device named ``SW``."""
+    by_len = sorted(names.items(), key=lambda item: -len(item[1]))
+    result: Dict[str, List[Finding]] = {}
+    for f in findings:
+        subject = f.subject.lower()
+        for mac, name in by_len:
+            lowered = name.lower()
+            if subject == lowered or subject.startswith(lowered + " "):
+                result.setdefault(mac, []).append(f)
+                break
+    return result
+
+
+def _client_info(snap: Snapshot) -> Tuple[Optional[Dict[str, Counter]], Dict[str, List[Dict[str, Any]]]]:
+    """(counts per device MAC as {'wired': n, 'wireless': n}, wired clients per device MAC).
+    The counts are None when the connected-client data is unavailable."""
+    if not snap.legacy_clients:
+        return None, {}
+    counts: Dict[str, Counter] = {}
+    wired: Dict[str, List[Dict[str, Any]]] = {}
+    for c in snap.legacy_clients:
+        if c.get("is_wired") and c.get("sw_mac"):
+            mac = (c["sw_mac"] or "").upper()
+            counts.setdefault(mac, Counter())["wired"] += 1
+            wired.setdefault(mac, []).append({
+                "name": c.get("name") or c.get("hostname") or _mac(c.get("mac")),
+                "ip": c.get("ip") or "", "port": c.get("sw_port")})
+        elif not c.get("is_wired") and c.get("ap_mac"):
+            counts.setdefault((c["ap_mac"] or "").upper(), Counter())["wireless"] += 1
+    return counts, wired
+
+
+def build_topology(snap: Snapshot, settings: Optional[DiagnoseSettings] = None,
+                   with_clients: bool = False) -> Dict[str, Any]:
+    """The wiring tree as nested dicts: ``{"roots": [...], "unattached": [...], "summary": {...}}``.
+
+    Roots are gateways. Any device that cannot be reached from a gateway, whether it has
+    no uplink information, an uplink to an unknown device, or sits in an uplink loop,
+    is listed under ``unattached`` with the reason, so nothing silently disappears.
+    """
+    settings = settings or DiagnoseSettings()
+    idx = DeviceIndex(snap)
+    macs = sorted(set(idx.legacy) | set(idx.integration))
+    names = {m: idx.name(m) for m in macs}
+    kept, _ignored = apply_ignores(diagnose(snap, settings), settings.ignore)
+    # Only warnings and criticals flag a device; info findings (such as slow ports) stay in `diagnose`.
+    findings = _assign_findings([f for f in kept if f.severity != INFO], names)
+    counts, wired = _client_info(snap)
+
+    links = {m: _link(snap, idx, m) for m in macs}
+    children: Dict[str, List[str]] = {}
+    for mac, (parent, *_rest) in links.items():
+        if parent and parent in names and parent != mac:
+            children.setdefault(parent, []).append(mac)
+
+    def node(mac: str) -> Node:
+        parent, port, own, speed = links[mac]
+        legacy, integ = idx.legacy.get(mac) or {}, idx.integration.get(mac) or {}
+        in_tree = bool(parent and parent in names and parent != mac)   # the root's uplink is its WAN
+        speeds = uplink_speeds(snap, legacy) if legacy and in_tree else None
+        mine = findings.get(mac, [])
+        count = None if counts is None else dict(counts.get(mac, Counter()))
+        result: Node = {
+            "name": names[mac], "mac": mac, "type": idx.kind(mac),
+            "model": integ.get("model") or legacy.get("model") or "",
+            "online": not idx.offline(mac),
+            "parent": names.get(parent, "") if parent else "",
+            "parent_port": port, "port": own,
+            "speed_mbps": (speed or None) if in_tree else None,
+            "supports_mbps": speeds[1] if speeds and speeds[0] < speeds[1] else None,
+            "clients": None if count is None else {
+                "wired": count.get("wired", 0), "wireless": count.get("wireless", 0),
+                "total": count.get("wired", 0) + count.get("wireless", 0)},
+            "findings": [{"severity": f.severity, "subject": f.subject, "message": f.message}
+                         for f in mine],
+            "children": [],
+        }
+        if with_clients:
+            result["wired_clients"] = sorted(
+                wired.get(mac, []), key=lambda c: (c["port"] is None, c["port"] or 0, c["name"].lower()))
+        return result
+
+    def order(mac: str) -> Tuple[bool, int, str]:
+        port = links[mac][1]
+        return (port is None, port if isinstance(port, int) else 0, names[mac].lower())
+
+    visited: Set[str] = set()
+
+    def grow(mac: str) -> Node:
+        visited.add(mac)
+        result = node(mac)
+        for child in sorted(children.get(mac, []), key=order):
+            if child not in visited:      # a loop can never revisit a device
+                result["children"].append(grow(child))
+        return result
+
+    roots = [grow(m) for m in sorted((m for m in macs if idx.kind(m) in GATEWAY_KINDS
+                                      and not (links[m][0] and links[m][0] in names)),
+                                     key=lambda m: names[m].lower())]
+
+    unattached: List[Node] = []
+    for mac in sorted((m for m in macs if m not in visited), key=lambda m: names[m].lower()):
+        parent = links[mac][0]
+        if not parent:
+            reason = "no uplink information"
+        elif parent not in names:
+            reason = f"uplink to unknown device {parent}"
+        else:
+            reason = "not reachable from a gateway (uplink loop or detached branch)"
+        item = node(mac)
+        item["reason"] = reason
+        unattached.append(item)
+
+    def walk(nodes: List[Node]):
+        for n in nodes:
+            yield n
+            yield from walk(n["children"])
+
+    every = list(walk(roots)) + unattached
+    return {"roots": roots, "unattached": unattached, "summary": {
+        "devices": len(every),
+        "offline": sum(not n["online"] for n in every),
+        "with_findings": sum(bool(n["findings"]) for n in every),
+        "below_max": sum(n["supports_mbps"] is not None for n in every),
+        "unattached": len(unattached),
+        "clients": None if counts is None else sum(c["wired"] + c["wireless"] for c in
+                                                   (n["clients"] for n in every) if c),
+    }}
+
+
+# -- rendering ---------------------------------------------------------------
+
+_UNICODE = {"tee": "├── ", "last": "└── ", "pipe": "│   ", "gap": "    "}
+_ASCII = {"tee": "+-- ", "last": "`-- ", "pipe": "|   ", "gap": "    "}
+
+
+def _worst(findings: List[Dict[str, str]]) -> str:
+    return min((f["severity"] for f in findings), key=lambda s: SEVERITY_ORDER[s], default="")
+
+
+def _marker(severity: str, count: int, emoji: bool) -> str:
+    if emoji:
+        return f"{EMOJI[severity]} {count}"
+    return f"[{severity.upper()}{' x' + str(count) if count > 1 else ''}]"
+
+
+def _line(n: Node, emoji: bool, root: bool) -> str:
+    head = n["name"]
+    if not root and n["parent_port"] is not None:
+        head = f"port {n['parent_port']} -> {n['name']}"
+    if root and n["model"]:
+        head += f" ({n['model']})"
+    if n["speed_mbps"]:
+        speed = f"{n['speed_mbps']:.0f} Mbps"
+        if n["supports_mbps"]:
+            speed += f", supports {n['supports_mbps']:.0f}"
+        head += f" ({speed})"
+    parts = [head]
+    if n["clients"] is not None and n["clients"]["total"]:
+        total = n["clients"]["total"]
+        parts.append(f"{total} client{'s' if total != 1 else ''}")
+    if not n["online"]:
+        parts.append("[OFFLINE]")
+    worst = _worst(n["findings"])
+    if worst:
+        parts.append(_marker(worst, len(n["findings"]), emoji))
+    return "   ".join(parts)
+
+
+def render_text(topology: Dict[str, Any], emoji: bool = True, with_clients: bool = False) -> str:
+    style = _UNICODE if emoji else _ASCII
+    lines: List[str] = []
+
+    def draw(n: Node, prefix: str, connector: str, root: bool) -> None:
+        lines.append(prefix + connector + _line(n, emoji, root))
+        branch = "" if root else (style["gap"] if connector == style["last"] else style["pipe"])
+        inner = prefix + branch
+        if with_clients:  # aligned with the child connectors below
+            for c in n.get("wired_clients", []):
+                where = f"port {c['port']}: " if c["port"] is not None else ""
+                ip = f" ({c['ip']})" if c["ip"] else ""
+                lines.append(f"{inner}- {where}{c['name']}{ip}")
+        for i, child in enumerate(n["children"]):
+            last = i == len(n["children"]) - 1
+            draw(child, inner, style["last"] if last else style["tee"], False)
+
+    for root in topology["roots"]:
+        draw(root, "", "", True)
+    if not topology["roots"]:
+        lines.append("No gateway found.")
+
+    if topology["unattached"]:
+        lines += ["", "Unattached (not reachable from a gateway):"]
+        for n in topology["unattached"]:
+            lines.append(f"  {_line(n, emoji, True)}  ({n['reason']})")
+
+    flagged = [n for n in _flatten(topology) if n["findings"]]
+    if flagged:
+        lines += ["", "Findings on these devices:"]
+        for n in flagged:
+            for f in sorted(n["findings"], key=lambda f: SEVERITY_ORDER[f["severity"]]):
+                label = EMOJI[f["severity"]] if emoji else f"[{f['severity'].upper():8}]"
+                lines.append(f"  {label} {f['subject']}: {f['message']}")
+
+    s = topology["summary"]
+    bits = [f"{s['devices']} device{'s' if s['devices'] != 1 else ''}"]
+    if s["clients"] is not None:
+        bits.append(f"{s['clients']} client{'s' if s['clients'] != 1 else ''}")
+    for key, text in (("offline", "offline"), ("below_max", "link(s) below capability"),
+                      ("with_findings", "with findings"), ("unattached", "unattached")):
+        if s[key]:
+            bits.append(f"{s[key]} {text}")
+    lines += ["", ", ".join(bits)]
+    return "\n".join(lines)
+
+
+def _flatten(topology: Dict[str, Any]) -> List[Node]:
+    out: List[Node] = []
+
+    def walk(nodes: List[Node]) -> None:
+        for n in nodes:
+            out.append(n)
+            walk(n["children"])
+
+    walk(topology["roots"])
+    return out + topology["unattached"]
+
+
+def to_json(topology: Dict[str, Any]) -> str:
+    return json.dumps(topology, indent=2)

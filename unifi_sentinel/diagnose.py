@@ -322,36 +322,41 @@ def _wifi_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]:
     return findings
 
 
-def _uplink_speed_findings(snap: Snapshot) -> List[Finding]:
-    """An uplink negotiated below what both ends of the link support.
+def uplink_speeds(snap: Snapshot, device: Dict[str, Any]) -> Optional[Tuple[float, float]]:
+    """``(negotiated, capability)`` Mbps for a legacy device's uplink, or None when the link
+    is down or either end's maximum is unknown.
 
-    The child's own port capability is the uplink's ``max_speed``; the parent's comes
-    from the Integration API port detail. Access points and end clients are not
-    compared with a port maximum (a gigabit AP on a 2.5G port is normal), so only the
-    child's reported maximum and the parent port's maximum are used.
+    The child's own port capability is the uplink's ``max_speed``; the parent's comes from
+    the Integration API port detail. Access points and end clients are not compared with a
+    port maximum (a gigabit AP on a 2.5G port is normal), so only these two are used.
     """
-    findings: List[Finding] = []
+    up = device.get("uplink") or {}
+    parent_mac = (up.get("uplink_mac") or "").upper()
+    speed, child_max = _number(up.get("speed")), _number(up.get("max_speed"))
+    if not (up.get("up") and parent_mac and speed and child_max):
+        return None
     id_by_mac = {(d.get("macAddress") or "").upper(): d.get("id") for d in snap.devices}
-    name_by_mac = {(d.get("mac") or "").upper(): _switch_name(d) for d in snap.legacy_devices}
+    parent_ports = ((snap.device_details.get(id_by_mac.get(parent_mac)) or {})
+                    .get("interfaces") or {}).get("ports") or []
+    parent_max = next((_number(p.get("maxSpeedMbps")) for p in parent_ports
+                       if p.get("idx") == up.get("uplink_remote_port")), 0.0)
+    if not parent_max:
+        return None
+    return speed, min(child_max, parent_max)
 
+
+def _uplink_speed_findings(snap: Snapshot) -> List[Finding]:
+    """An uplink negotiated below what both ends of the link support."""
+    findings: List[Finding] = []
+    name_by_mac = {(d.get("mac") or "").upper(): _switch_name(d) for d in snap.legacy_devices}
     for d in snap.legacy_devices:
-        up = d.get("uplink") or {}
-        parent_mac = (up.get("uplink_mac") or "").upper()
-        speed, child_max = _number(up.get("speed")), _number(up.get("max_speed"))
-        if not (up.get("up") and parent_mac and speed and child_max):
-            continue
-        parent_ports = ((snap.device_details.get(id_by_mac.get(parent_mac)) or {})
-                        .get("interfaces") or {}).get("ports") or []
-        parent_max = next((_number(p.get("maxSpeedMbps")) for p in parent_ports
-                           if p.get("idx") == up.get("uplink_remote_port")), 0.0)
-        if not parent_max:
-            continue
-        capability = min(child_max, parent_max)
-        if speed < capability:
+        speeds = uplink_speeds(snap, d)
+        if speeds and speeds[0] < speeds[1]:
+            parent_mac = ((d.get("uplink") or {}).get("uplink_mac") or "").upper()
             findings.append(Finding(
                 WARNING, _switch_name(d),
                 f"uplink to {name_by_mac.get(parent_mac, parent_mac)} negotiated at "
-                f"{speed:.0f} Mbps but both ends support {capability:.0f} Mbps"))
+                f"{speeds[0]:.0f} Mbps but both ends support {speeds[1]:.0f} Mbps"))
     return findings
 
 

@@ -104,8 +104,8 @@ def candidate_rows(matches: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 # -- building the view -----------------------------------------------------
 
-class _Network:
-    """Name and uplink lookups over the snapshot's devices."""
+class DeviceIndex:
+    """Name, type and state lookups over the snapshot's devices, keyed by upper-case MAC."""
 
     def __init__(self, snap: Snapshot):
         self.legacy = {(d.get("mac") or "").upper(): d for d in snap.legacy_devices}
@@ -127,12 +127,12 @@ class _Network:
         return bool(integ) and integ.get("state") != "ONLINE"
 
 
-def _hop(net: _Network, mac: str, port: Any = None, speed: Any = None, detail: str = "") -> Dict[str, Any]:
+def _hop(net: DeviceIndex, mac: str, port: Any = None, speed: Any = None, detail: str = "") -> Dict[str, Any]:
     return {"device": net.name(mac), "type": net.kind(mac), "port": port,
             "speed_mbps": _num(speed) or None, "detail": detail, "offline": net.offline(mac)}
 
 
-def _uplink_chain(net: _Network, start_mac: str, subjects: Set[str]) -> List[Dict[str, Any]]:
+def _uplink_chain(net: DeviceIndex, start_mac: str, subjects: Set[str]) -> List[Dict[str, Any]]:
     """Hops from ``start_mac`` up to the gateway: each parent, the parent's port the link
     plugs into, and the negotiated speed. Also records finding subjects on the path."""
     hops: List[Dict[str, Any]] = []
@@ -153,7 +153,7 @@ def _uplink_chain(net: _Network, start_mac: str, subjects: Set[str]) -> List[Dic
         current = parent
 
 
-def _attachment(snap: Snapshot, net: _Network, rec: Dict[str, Any]
+def _attachment(snap: Snapshot, net: DeviceIndex, rec: Dict[str, Any]
                 ) -> Tuple[List[Dict[str, Any]], Optional[Dict[str, Any]], Set[str]]:
     """(hops, link quality, subjects of related findings) for the client."""
     live, sta, user = rec["live"], rec["sta"] or {}, rec["user"] or {}
@@ -268,7 +268,7 @@ def _related(findings: List[Finding], rec: Dict[str, Any], subjects: Set[str]) -
 def build_client_detail(snap: Snapshot, rec: Dict[str, Any],
                         settings: Optional[DiagnoseSettings] = None) -> Dict[str, Any]:
     settings = settings or DiagnoseSettings()
-    net = _Network(snap)
+    net = DeviceIndex(snap)
     live, sta, user = rec["live"], rec["sta"] or {}, rec["user"] or {}
     hops, link, subjects = _attachment(snap, net, rec)
     kept, ignored = apply_ignores(diagnose(snap, settings), settings.ignore)
