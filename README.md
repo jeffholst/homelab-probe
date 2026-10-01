@@ -40,6 +40,7 @@ Planned: richer inventory and troubleshooting reports.
 - **Internet health**: `wan` shows the connection's state, the controller's own 24-hour availability and latency monitoring per target, and the speedtest history with the runs that fell well below normal, to tell an internet problem from a LAN problem
 - **Event history**: what happened and when (disconnects, roams, IP conflicts, device outages, admin changes) from the controller's log, filterable by time, severity, category, client and device, with a summary of the noisiest clients
 - **Single-client troubleshooting**: `client <name|mac|ip>` shows where a client attaches (the full uplink chain to the gateway with port numbers and link speeds), its link quality, addressing and the `diagnose` findings that concern it
+- **Randomized MAC detection**: clients that use a private (locally administered) Wi-Fi MAC address are flagged in `query clients`, `new-clients` and `client`, and `diagnose` notes reservations tied to one, because they stop applying when the device changes its address
 - **New client detection**: list every known client that is in no client group, newest first, to spot new devices
 - **Health checks**: read-only diagnostics with severity levels, exit codes for scripts and cron, `--json` output with a stable code per check, and a TOML file for thresholds and an ignore list
 - **Official API first**: uses the UniFi Network Integration API (`/proxy/network/integration/v1`). Legacy endpoints are used only for data the Integration API does not expose (per-port counters, client-to-port mapping, DHCP reservations, network config and client groups) and degrade gracefully with a warning if unavailable
@@ -155,7 +156,7 @@ uv run unifi-sentinel.py diagnose --json             # the same, as JSON with a 
 | ----- | -------- |
 | 🛑 critical | an AP radio's channel utilization at or above `radio_util_critical_pct` (default 90%); a switch's PoE budget at or above `poe_critical_pct` (default 95%); the controller reports a WAN, internet or VPN subsystem in `error`; a LAN/WLAN `error` with no disconnected device to explain it; gateway offline; an offline switch or device that other devices uplink through; CPU or memory at or above `resource_critical_pct` (default 98%); a client with a DHCP reservation that has been offline for `reserved_offline_critical_days` (default 7) or more |
 | ⚠️ warning | 24-hour internet availability below `wan_availability_warn_pct` (default 99%), overall or for one monitoring target; the last speedtest well below the 30-day median (`wan_speed_drop_pct`, default 70%); an IP conflict reported in the last 24 hours; a client that disconnected `event_flap_count` or more times in that window, or a device that was unreachable that often; a Wi-Fi client with signal at or below `wifi_weak_signal_dbm` (default -75 dBm), `wifi_retry_pct` (default 30%) or more of its transmissions retried, or satisfaction below `wifi_satisfaction_warn` (default 50%); an AP radio with channel utilization at or above `radio_util_warn_pct` (default 70%), or retries or satisfaction past the same limits; a port whose link has gone down `link_flap_count` or more times since boot (default 5); a port dropping `port_drop_pct` or more of its packets (default 0.1%); an up port whose STP state is not forwarding; a switch's PoE budget at or above `poe_warn_pct` (default 80%); an uplink negotiated below what both ends support; a subsystem in `warning` the same way; internet latency at or above `wan_latency_warn_ms` (default 100 ms) or drops at or above `wan_drops_warn` (default 10); other offline devices; port rx/tx errors; half-duplex links; CPU or memory at or above `resource_warn_pct` (default 90%) but below the critical level; connected clients with no IP address or a link-local (169.254.x.x) address, shown with where they attach; DHCP reservation problems: an online client whose current IP differs from its reservation, the same IP reserved for several clients, or a reserved IP outside its network's subnet; the same IP in use by several clients or UniFi devices on any VLAN, or a reserved IP currently used by a different client or UniFi device; a client with a DHCP reservation that has been offline for `reserved_offline_warn_days` (default 1 day) or more |
-| ℹ️ info | a client that roamed `event_flap_count` or more times; a device that was unreachable earlier but is online now; high-latency events from the ISP monitor; the controller's LAN/WLAN status when it is only caused by disconnected devices (they are reported individually); devices waiting to be adopted; a failed speedtest; ports negotiated at or below `slow_link_mbps` (default 100 Mbps); legacy data unavailable (port checks skipped); a reservation whose client has no last-seen time |
+| ℹ️ info | a client that roamed `event_flap_count` or more times; a device that was unreachable earlier but is online now; high-latency events from the ISP monitor; the controller's LAN/WLAN status when it is only caused by disconnected devices (they are reported individually); devices waiting to be adopted; a failed speedtest; ports negotiated at or below `slow_link_mbps` (default 100 Mbps); legacy data unavailable (port checks skipped); a reservation whose client has no last-seen time; a reservation tied to a randomized (private) MAC address, and a count of the connected clients that use one |
 
 The reservation checks read the legacy `stat/alluser` and `rest/networkconf` endpoints (the same data as `query reservations`); offline clients are checked for duplicate and out-of-subnet reservations (a reservation whose network cannot be resolved is skipped for the subnet check) and for **being offline for too long**: a reserved client that is not connected and was last seen `reserved_offline_warn_days` (default 1) days ago or more is a warning, and `reserved_offline_critical_days` (default 7) or more is critical, so a server or appliance that went quiet does not stay invisible. A reservation with no last-seen time is reported once as info. UniFi devices are left to the device checks. A client that is meant to be off (a laptop, a seasonal device) belongs in the ignore list: `subject = "travel-laptop"`, `message = "is offline"`. `query reservations --offline` lists exactly the reservations this check reports, so you can inspect them before relying on the alerts.
 
@@ -288,6 +289,7 @@ Ignored findings are left out of the output, counted in the summary (`3 warnings
 | ---- | --------------- |
 | `client.link_local_ip` | a connected client has a link-local (169.254.x.x) address |
 | `client.no_ip` | a connected client has no IP address |
+| `client.private_mac_summary` | how many connected clients use randomized (private) MAC addresses |
 | `controller.legacy_unavailable` | legacy device data could not be read, so port checks were skipped |
 | `controller.pending_adoption` | devices waiting to be adopted |
 | `device.cpu_high` | device CPU utilization at or above the warning threshold |
@@ -319,6 +321,7 @@ Ignored findings are left out of the output, counted in the summary (`3 warnings
 | `reservation.never_seen` | a reservation whose client has no last-seen time |
 | `reservation.offline` | a client with a reservation has been offline longer than the threshold |
 | `reservation.outside_subnet` | a reserved IP is outside its network's subnet |
+| `reservation.private_mac` | a reservation is tied to a randomized (private) MAC address |
 | `wan.availability` | 24-hour internet availability below the threshold |
 | `wan.monitor_availability` | one monitored internet target below the availability threshold |
 | `wan.speedtest_slow` | the last speedtest download is well below the 30-day median |
@@ -571,9 +574,19 @@ Related findings:
 
 ### New clients
 
-`new-clients` lists every known client, connected or not, that has not been added to at least one client group (Network > Client Groups), so newly seen devices stand out. Add a client to a group in the controller and it drops off the report. Columns: Name, MAC Address, IP Address, Vendor, Connection Type, Where (switch and port, or AP), First Seen, Last Seen, Status. Newest first-seen comes first, with no age cutoff. `-s TEXT` filters and `--json` prints JSON.
+`new-clients` lists every known client, connected or not, that has not been added to at least one client group (Network > Client Groups), so newly seen devices stand out. Add a client to a group in the controller and it drops off the report. Columns: Name, MAC Address, IP Address, Vendor, Connection Type, Where (switch and port, or AP), First Seen, Last Seen, Status, Private MAC (`yes` for a randomized address, see below). Newest first-seen comes first, with no age cutoff. `-s TEXT` filters and `--json` prints JSON.
 
 Group membership comes from the legacy `stat/alluser` client records and the legacy v2 `network-members-groups` definitions; the Integration API has no client groups. A group that has been deleted does not count as membership. If the group definitions cannot be read, the tool warns and trusts each client's own group list.
+
+### Randomized MAC addresses
+
+Phones, tablets and laptops often use a **private (randomized) Wi-Fi MAC address**, frequently a different one for each network, and some rotate it. That makes one device look like several, defeats "new client" detection, makes `snapshot`/`diff` noisy, and breaks DHCP reservations, which are tied to one MAC. A MAC address is **randomized** here when it is a locally administered unicast address: the second hex digit is `2`, `6`, `A` or `E` (the second-lowest bit of the first byte is set and the lowest is clear). This is read from the address itself, so it needs no extra request.
+
+- `query clients` (table and `--json`) and `new-clients` have a **Private MAC** column: `yes` for a randomized address, empty otherwise. The CSV export and `query devices` are unchanged.
+- `client` adds `[randomized MAC: reservations and history may not hold]` after the MAC, and `client --json` has `identity.private_mac` (`true` or `false`).
+- `diagnose` adds two **info** findings, never a warning, because it is normal for phones: `reservation.private_mac` for each reservation whose MAC is randomized (it stops applying if the device changes its address), and one `client.private_mac_summary` finding with the count of connected clients that use randomized addresses. Silence either with the ignore list, for example `subject = "clients"` with `message = "randomized"`.
+
+It is a hint, not proof: virtual machines, containers, bridges, VPNs and some IoT devices also use locally administered addresses, and for them the vendor (OUI) lookup is empty. A device that turned the feature off keeps its old random MAC until it reconnects.
 
 ### Switch ports
 
@@ -637,10 +650,10 @@ Sample from synthetic data with `diagnose --no-events` (text labels are used whe
 ### new-clients
 
 ```text
-Name         MAC Address        IP Address  Vendor  Connection Type  Where                        First Seen           Last Seen            Status
------------  -----------------  ----------  ------  ---------------  ---------------------------  -------------------  -------------------  -------
+Name         MAC Address        IP Address  Vendor  Connection Type  Where                        First Seen           Last Seen            Status   Private MAC
+-----------  -----------------  ----------  ------  ---------------  ---------------------------  -------------------  -------------------  -------  -----------
 old-tablet   BB:00:00:00:00:04  10.0.0.51           Wireless                                      2025-06-15 10:06:40  2025-12-05 23:46:40  Offline
-old-printer  BB:00:00:00:00:03  10.0.0.50           Wired            Wired, Office Switch port 6  2023-11-14 16:13:20  2025-12-17 13:33:20  Offline
+old-printer  BB:00:00:00:00:03  10.0.0.50           Wired            Wired, Office Switch port 6  2023-11-14 16:13:20  2026-10-01 05:12:43  Offline
 
 2 client(s) in no group
 ```

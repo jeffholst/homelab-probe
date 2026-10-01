@@ -83,3 +83,22 @@ def describe_age(seconds: int) -> str:
     if seconds < 2 * 86400:
         return f"{seconds // 3600}h"
     return f"{seconds // 86400}d"
+
+
+_MAC_SEPARATORS = re.compile(r"[:\-.\s]")
+
+
+def is_randomized_mac(mac: Any) -> bool:
+    """True for a locally administered unicast MAC address, the kind phones, tablets and laptops
+    generate for "private" or "randomized" Wi-Fi addresses.
+
+    The second-lowest bit of the first octet (0x02) marks an address as locally administered;
+    the lowest bit (0x01) must be clear, because a set bit means multicast, which no client
+    uses. In hex the second digit is 2, 6, A or E. It is a hint, not proof: virtual machines,
+    containers, bridges and some IoT devices also use locally administered addresses.
+    Anything that is not 12 hex digits (any usual separator or case) is False.
+    """
+    digits = _MAC_SEPARATORS.sub("", "" if mac is None else str(mac))
+    if len(digits) != 12 or any(c not in "0123456789abcdefABCDEF" for c in digits):
+        return False
+    return int(digits[:2], 16) & 0x03 == 0x02

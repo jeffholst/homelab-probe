@@ -14,7 +14,7 @@ from .reservations import offline_reservations, reservation_records
 from .settings import DiagnoseSettings, IgnoreRule
 from .snapshot import Snapshot
 from .util import describe_age as _age_text
-from .util import printable
+from .util import is_randomized_mac, printable
 from .wan import SPEEDTEST_BASELINE_DAYS, describe_age, median_download, monitoring, speedtests_for_baseline
 
 CRITICAL, WARNING, INFO = "critical", "warning", "info"
@@ -54,6 +54,8 @@ CODES = {
     "reservation.duplicate": "the same IP is reserved for several clients",
     "reservation.ip_in_use": "a reserved IP is in use by a different client or device",
     "reservation.offline": "a client with a reservation has been offline longer than the threshold",
+    "reservation.private_mac": "a reservation is tied to a randomized (private) MAC address",
+    "client.private_mac_summary": "how many connected clients use randomized (private) MAC addresses",
     "reservation.never_seen": "a reservation whose client has no last-seen time",
     "port.link_flaps": "a switch port's link has gone down repeatedly since boot",
     "port.drops": "a switch port is dropping packets above the threshold",
@@ -242,6 +244,35 @@ def _offline_reservation_findings(snap: Snapshot, settings: DiagnoseSettings,
             level, name,
             f"reserved IP {user['fixed_ip']}{where} is offline: last seen {_age_text(int(seconds))} ago ({when})",
             code="reservation.offline"))
+    return findings
+
+
+def _private_mac_findings(snap: Snapshot) -> List[Finding]:
+    """Randomized (private) MAC addresses, as information only: they are normal for phones.
+
+    A reservation is tied to one MAC, so a device that rotates its address stops matching it;
+    that is reported per reservation. The connected clients that use one are counted once.
+    Locally administered addresses are also used by virtual machines, containers and bridges,
+    so this is a hint. The ignore list can silence either finding.
+    """
+    findings: List[Finding] = []
+    for user, _net in reservation_records(snap):
+        mac = (user.get("mac") or "").upper()
+        if is_randomized_mac(mac):
+            name = user.get("name") or user.get("hostname") or mac
+            findings.append(Finding(
+                INFO, name,
+                f"reserved IP {user['fixed_ip']} is tied to a randomized (private) MAC address; "
+                "if the device changes its address the reservation stops applying",
+                code="reservation.private_mac"))
+    clients = [c for c in snap.clients if c.get("macAddress")]
+    private = sum(is_randomized_mac(c["macAddress"]) for c in clients)
+    if private:
+        findings.append(Finding(
+            INFO, "clients",
+            f"{private} of {len(clients)} connected clients use randomized (private) MAC addresses "
+            "(normal for phones; reservations and history may not hold for them)",
+            code="client.private_mac_summary"))
     return findings
 
 
@@ -714,6 +745,7 @@ def diagnose(snap: Snapshot, settings: Optional[DiagnoseSettings] = None,
     findings.extend(_client_ip_findings(snap))
     findings.extend(_reservation_findings(snap))
     findings.extend(_offline_reservation_findings(snap, settings, now))
+    findings.extend(_private_mac_findings(snap))
     findings.extend(_duplicate_ip_findings(snap))
 
     if not snap.legacy_devices:

@@ -74,7 +74,7 @@ def test_codes_have_the_documented_shape_and_a_description():
 def test_the_published_codes_are_pinned():
     """A code is an interface for scripts: changing or removing one must be a deliberate edit here."""
     assert sorted(CODES) == [
-        "client.link_local_ip", "client.no_ip", "controller.legacy_unavailable", "controller.pending_adoption",
+        "client.link_local_ip", "client.no_ip", "client.private_mac_summary", "controller.legacy_unavailable", "controller.pending_adoption",
         "device.cpu_high", "device.memory_high", "device.offline", "event.client_disconnects",
         "event.client_roams", "event.device_unreachable", "event.internet_latency", "event.ip_conflict",
         "event.log_truncated", "health.device_subsystem", "health.subsystem", "internet.drops",
@@ -82,7 +82,7 @@ def test_the_published_codes_are_pinned():
         "port.drops", "port.errors", "port.half_duplex", "port.link_flaps", "port.poe_budget",
         "port.slow_link", "port.stp", "reservation.duplicate", "reservation.ip_in_use",
         "reservation.ip_mismatch", "reservation.never_seen", "reservation.offline",
-        "reservation.outside_subnet", "wan.availability",
+        "reservation.outside_subnet", "reservation.private_mac", "wan.availability",
         "wan.monitor_availability", "wan.speedtest_slow", "wifi.client_retries",
         "wifi.client_satisfaction", "wifi.radio_retries", "wifi.radio_satisfaction",
         "wifi.radio_utilization", "wifi.weak_signal"]

@@ -14,7 +14,7 @@ from .query import format_table
 from .reservations import reservation_records
 from .settings import DiagnoseSettings
 from .snapshot import Snapshot
-from .util import clean_data, printable
+from .util import clean_data, is_randomized_mac, printable
 
 MAX_CLIENT_EVENTS = 10      # the client's own events listed before "... and N more"
 MAX_DEVICE_EVENTS = 5       # events about the devices it depends on
@@ -327,7 +327,8 @@ def build_client_detail(snap: Snapshot, rec: Dict[str, Any],
     recent = _recent_events(snap, rec, hops)
     return {
         "identity": {"name": rec["name"], "hostname": sta.get("hostname") or user.get("hostname") or "",
-                     "mac": rec["mac"], "vendor": user.get("oui") or sta.get("oui") or "",
+                     "mac": rec["mac"], "private_mac": is_randomized_mac(rec["mac"]),
+                     "vendor": user.get("oui") or sta.get("oui") or "",
                      "ip": rec["ip"], "connection": "Wired" if rec["wired"] else "Wireless",
                      "status": "Online" if rec["online"] else "Offline",
                      "connected_since": since, "first_seen": _epoch(user.get("first_seen")),
@@ -423,7 +424,8 @@ def render_detail(detail: Dict[str, Any], emoji: bool = True) -> str:
     detail = clean_data(detail)
     i, a = detail["identity"], detail["addressing"]
     lines = [f"{i['name']}" + (f" ({i['hostname']})" if i["hostname"] and i["hostname"] != i["name"] else ""),
-             f"  MAC:        {i['mac']}" + (f"  ({i['vendor']})" if i["vendor"] else ""),
+             f"  MAC:        {i['mac']}" + (f"  ({i['vendor']})" if i["vendor"] else "")
+             + ("  [randomized MAC: reservations and history may not hold]" if i.get("private_mac") else ""),
              f"  Status:     {i['status']}" + (f", connected since {i['connected_since']}"
                                                if i["connected_since"] else ""),
              f"  Connection: {i['connection']}"]

@@ -88,7 +88,7 @@ def test_search_json_and_table_rendering():
     assert "2 client(s) in no group" in render(rows, False)
     assert set(json.loads(render(rows, True))[0]) == {
         "Name", "MAC Address", "IP Address", "Vendor", "Connection Type", "Where",
-        "First Seen", "Last Seen", "Status"}
+        "First Seen", "Last Seen", "Status", "Private MAC"}
 
 
 def test_fixture_report_from_fake_controller(fake_client):
