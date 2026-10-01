@@ -59,7 +59,10 @@ def validate_site(text: Optional[str]) -> str:
     site = (text or "").strip() or DEFAULT_SITE
     if len(site) > MAX_SITE_LENGTH:
         raise ConfigError(f"SITE_ID is too long ({len(site)} characters, at most {MAX_SITE_LENGTH})")
-    bad = sorted({c for c in site if c in _UNSAFE_SITE_CHARACTERS or ord(c) < 32 or ord(c) == 127})
+    bad = sorted({
+        c for c in site
+        if c in _UNSAFE_SITE_CHARACTERS or ord(c) < 32 or 127 <= ord(c) <= 159
+    })
     if bad:
         shown = ", ".join(repr(c) for c in bad)
         raise ConfigError(f"SITE_ID {site!r} contains {shown}, which cannot be part of a site name")
