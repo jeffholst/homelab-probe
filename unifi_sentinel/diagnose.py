@@ -272,7 +272,11 @@ def _wifi_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]:
     ``anomalies`` field is deliberately not used: it is present on nearly every client.
     """
     findings: List[Finding] = []
-    ap_name = {(d.get("mac") or "").upper(): _switch_name(d) for d in snap.legacy_devices}
+    ap_name = {
+        (d.get("macAddress") or "").upper(): d.get("name") or d.get("macAddress") or "?"
+        for d in snap.devices
+    }
+    ap_name.update({(d.get("mac") or "").upper(): _switch_name(d) for d in snap.legacy_devices})
 
     for c in snap.legacy_clients:
         if c.get("is_wired"):
