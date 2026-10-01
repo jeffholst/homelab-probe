@@ -45,6 +45,7 @@ class DiagnoseSettings:
     wan_drops_warn: int = 10             # internet drops at or above: warning (heuristic)
     link_flap_count: int = 5             # port link-down count (since boot) at or above: warning
     port_drop_pct: float = 0.1           # dropped/total packets (%) at or above: warning
+    min_packets_for_drop_pct: int = 1000 # minimum packet count before evaluating drop percentage
     poe_warn_pct: float = 80             # switch PoE budget used at or above: warning
     poe_critical_pct: float = 95         # switch PoE budget used at or above: critical
     ignore: Tuple[IgnoreRule, ...] = ()
@@ -73,7 +74,7 @@ def _parse(data: Dict[str, Any]) -> DiagnoseSettings:
         raise ConfigError("[thresholds] must be a table")
     known = {"resource_warn_pct", "resource_critical_pct", "slow_link_mbps",
              "wan_latency_warn_ms", "wan_drops_warn", "link_flap_count", "port_drop_pct",
-             "poe_warn_pct", "poe_critical_pct"}
+             "min_packets_for_drop_pct", "poe_warn_pct", "poe_critical_pct"}
     if set(thresholds) - known:
         raise ConfigError(f"unknown [thresholds] key(s): {', '.join(sorted(set(thresholds) - known))} "
                           f"(valid: {', '.join(sorted(known))})")
@@ -89,13 +90,18 @@ def _parse(data: Dict[str, Any]) -> DiagnoseSettings:
     drops = _number("wan_drops_warn", thresholds.get("wan_drops_warn", defaults.wan_drops_warn), 0)
     flaps = _number("link_flap_count", thresholds.get("link_flap_count", defaults.link_flap_count), 1)
     drop_pct = _number("port_drop_pct", thresholds.get("port_drop_pct", defaults.port_drop_pct), 0, 100)
+    min_packets = _number(
+        "min_packets_for_drop_pct",
+        thresholds.get("min_packets_for_drop_pct", defaults.min_packets_for_drop_pct), 1)
     poe_warn = _number("poe_warn_pct", thresholds.get("poe_warn_pct", defaults.poe_warn_pct), 0, 100)
     poe_critical = _number("poe_critical_pct",
                            thresholds.get("poe_critical_pct", defaults.poe_critical_pct), 0, 100)
     if poe_warn > poe_critical:
         raise ConfigError("[thresholds] poe_warn_pct must not exceed poe_critical_pct")
-    if drops != int(drops):
-        raise ConfigError("[thresholds] wan_drops_warn must be a whole number")
+    for name, value in (("wan_drops_warn", drops), ("link_flap_count", flaps),
+                        ("min_packets_for_drop_pct", min_packets)):
+        if value != int(value):
+            raise ConfigError(f"[thresholds] {name} must be a whole number")
 
     raw_rules = data.get("ignore", [])
     if not isinstance(raw_rules, list):
@@ -116,7 +122,8 @@ def _parse(data: Dict[str, Any]) -> DiagnoseSettings:
     return DiagnoseSettings(
         resource_warn_pct=warn, resource_critical_pct=critical, slow_link_mbps=int(slow),
         wan_latency_warn_ms=latency, wan_drops_warn=int(drops),
-        link_flap_count=int(flaps), port_drop_pct=drop_pct, poe_warn_pct=poe_warn,
+        link_flap_count=int(flaps), port_drop_pct=drop_pct,
+        min_packets_for_drop_pct=int(min_packets), poe_warn_pct=poe_warn,
         poe_critical_pct=poe_critical, ignore=tuple(rules))
 
 

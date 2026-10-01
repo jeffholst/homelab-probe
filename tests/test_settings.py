@@ -222,7 +222,7 @@ def test_cli_threshold_override_changes_findings(fake_client, monkeypatch, capsy
                           "slow_link_mbps = 0\n")
     _run(fake_client, monkeypatch, ["diagnose", "--no-emoji", "--config", str(cfg)])
     out = capsys.readouterr().out
-    assert "CPU utilization" not in out and "negotiated at" not in out  # fixture: 95% CPU, 100 Mbps
+    assert "CPU utilization" not in out and "Office Switch port 2: negotiated at" not in out
 
 
 def test_cli_bad_config_fails_before_contacting_the_controller(fake_client, monkeypatch, capsys, tmp_path):

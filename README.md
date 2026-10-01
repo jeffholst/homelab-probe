@@ -133,7 +133,7 @@ Emoji labels are used on a UTF-8 terminal. When output is piped or redirected, o
 
 For each switch port `diagnose` also checks the controller's port counters (the legacy `stat/device` port tables; skipped with a warning if unavailable):
 - **Flapping links:** `link_down_count` is cumulative since the switch booted, so the finding says how long the switch has been up. Several ports sharing one count usually mean a single switch-wide event, such as a reboot or power loss, not a bad cable on each.
-- **Dropped packets:** judged as a percentage of the port's packets in that direction (and only with at least 1,000 packets), because a raw count means little on a busy port. Only ports that are up are checked.
+- **Dropped packets:** judged as a percentage of the port's packets in that direction (and only with at least `min_packets_for_drop_pct` packets, default 1,000), because a raw count means little on a busy port. Only ports that are up are checked.
 - **STP:** an up port whose state is not `forwarding` (for example `blocking`).
 - **PoE budget:** used power as a percentage of the switch's total PoE budget; switches without PoE are skipped. The per-port `poe_good` flag is deliberately not used: it is false on every PoE-capable port that simply has no PoE device attached.
 - **Uplink speed:** an uplink negotiated below what both ends support (the device's own maximum and the parent's port maximum). A gigabit device on a 2.5G port is at its own maximum and is not flagged.
@@ -151,6 +151,7 @@ wan_latency_warn_ms = 100    # internet latency at or above this: warning
 wan_drops_warn = 10          # internet drops at or above this: warning (heuristic)
 link_flap_count = 5          # port link-down count since boot at or above this: warning
 port_drop_pct = 0.1          # dropped packets, % of a port's packets, at or above this: warning
+min_packets_for_drop_pct = 1000 # minimum packets before evaluating drop percentage
 poe_warn_pct = 80            # switch PoE budget used at or above this: warning
 poe_critical_pct = 95        # switch PoE budget used at or above this: critical
 

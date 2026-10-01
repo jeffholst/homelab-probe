@@ -21,10 +21,6 @@ LINK_LOCAL_PREFIX = "169.254."
 GATEWAY_TYPES = {"Gateway", "Dream Machine"}
 # Subsystems whose controller status just reflects disconnected devices we already report.
 DEVICE_SUBSYSTEMS = {"lan", "wlan"}
-# Packet counters below this are too small for a drop percentage to mean anything.
-MIN_PACKETS_FOR_DROP_PCT = 1000
-
-
 @dataclass(frozen=True)
 class Finding:
     severity: str  # CRITICAL, WARNING or INFO
@@ -235,7 +231,7 @@ def _port_health_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Fi
             for direction in ("rx", "tx"):
                 packets = _number(port.get(f"{direction}_packets"))
                 dropped = _number(port.get(f"{direction}_dropped"))
-                if packets >= MIN_PACKETS_FOR_DROP_PCT and dropped:
+                if packets >= settings.min_packets_for_drop_pct and dropped:
                     pct = dropped / packets * 100
                     if pct >= settings.port_drop_pct:
                         findings.append(Finding(
@@ -252,7 +248,8 @@ def _port_health_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Fi
             if pct >= settings.poe_warn_pct:
                 level = CRITICAL if pct >= settings.poe_critical_pct else WARNING
                 findings.append(Finding(
-                    level, name, f"PoE budget {used:.1f} W of {budget:.0f} W used ({pct:.0f}%)"))
+                    level, name,
+                    f"PoE budget {used:.1f} W of {budget:.0f} W used ({int(pct)}%)"))
     return findings
 
 
@@ -278,7 +275,9 @@ def _uplink_speed_findings(snap: Snapshot) -> List[Finding]:
                         .get("interfaces") or {}).get("ports") or []
         parent_max = next((_number(p.get("maxSpeedMbps")) for p in parent_ports
                            if p.get("idx") == up.get("uplink_remote_port")), 0.0)
-        capability = min(child_max, parent_max) if parent_max else child_max
+        if not parent_max:
+            continue
+        capability = min(child_max, parent_max)
         if speed < capability:
             findings.append(Finding(
                 WARNING, _switch_name(d),

@@ -90,9 +90,14 @@
       "features": [
         "switching"
       ],
-      "interfaces": [
-        "ports"
-      ],
+      "interfaces": {
+        "ports": [
+          {
+            "idx": 2,
+            "maxSpeedMbps": 1000
+          }
+        ]
+      },
       "firmwareUpdatable": false
     },
     "sw1": {
@@ -209,17 +214,28 @@
         "model": "USW-Lite-8-PoE",
         "uplink": {
           "uplink_mac": "aa:00:00:00:00:01",
-          "uplink_remote_port": 2
+          "uplink_remote_port": 2,
+          "up": true,
+          "speed": 100,
+          "max_speed": 1000
         },
+        "uptime": 11520,
+        "total_max_power": 52,
+        "total_used_power": 41.6,
         "port_table": [
           {
             "port_idx": 1,
             "up": true,
             "speed": 1000,
             "full_duplex": true,
+            "link_down_count": 5,
             "poe_enable": false,
             "rx_bytes": 100,
             "tx_bytes": 200,
+            "rx_packets": 100000,
+            "rx_dropped": 0,
+            "tx_packets": 100000,
+            "tx_dropped": 0,
             "rx_errors": 0,
             "tx_errors": 0,
             "is_uplink": true
@@ -229,6 +245,12 @@
             "up": true,
             "speed": 100,
             "full_duplex": false,
+            "link_down_count": 0,
+            "rx_packets": 10000,
+            "rx_dropped": 75,
+            "tx_packets": 10000,
+            "tx_dropped": 0,
+            "stp_state": "blocking",
             "poe_enable": false,
             "rx_bytes": 200,
             "tx_bytes": 400,
@@ -240,6 +262,10 @@
             "up": true,
             "speed": 1000,
             "full_duplex": true,
+            "rx_packets": 2500000,
+            "rx_dropped": 0,
+            "tx_packets": 2500000,
+            "tx_dropped": 60,
             "poe_enable": false,
             "rx_bytes": 300,
             "tx_bytes": 600,
