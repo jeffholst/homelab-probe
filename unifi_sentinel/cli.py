@@ -355,9 +355,9 @@ def main(argv: Optional[List[str]] = None) -> int:
             snap = collect_snapshot(
                 client, config.site, args.include_offline,
                 include_reservations=args.kind == "reservations")
+            offline_days = settings.reserved_offline_warn_days if settings is not None and args.offline else None
             rows = query_rows(snap, args.kind, args.search, args.include_offline,
-                              args.switch or "", args.down, args.errors,
-                              settings.reserved_offline_warn_days if args.offline else None)
+                              args.switch or "", args.down, args.errors, offline_days)
             _say(render(rows, args.json, args.kind, args.offline))
         elif args.command == "new-clients":
             snap = collect_snapshot(client, config.site, include_groups=True)
