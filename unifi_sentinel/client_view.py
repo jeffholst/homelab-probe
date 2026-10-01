@@ -3,18 +3,17 @@
 import ipaddress
 import json
 import re
-from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from .diagnose import BANDS, Finding, apply_ignores, diagnose, format_findings
 from .events import describe_duration, event_json, make_filter
 from .events import subjects as event_subjects
-from .export import _fmt_time, _mac, device_type_label
+from .export import device_type_label
 from .query import format_table
 from .reservations import reservation_records
 from .settings import DiagnoseSettings
 from .snapshot import Snapshot
-from .util import clean_data, is_randomized_mac, printable
+from .util import clean_data, epoch_text, format_time, hex_digits, is_randomized_mac, normalize_mac, number, printable
 
 MAX_CLIENT_EVENTS = 10      # the client's own events listed before "... and N more"
 MAX_DEVICE_EVENTS = 5       # events about the devices it depends on
@@ -22,22 +21,12 @@ CANDIDATE_COLUMNS = ["Name", "MAC Address", "IP Address", "Status"]
 MAX_CANDIDATES_SHOWN = 20
 
 
-def _epoch(value: Any) -> str:
-    return datetime.fromtimestamp(value).strftime("%Y-%m-%d %H:%M:%S") if value else ""
-
-
-def _num(value: Any) -> Optional[float]:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    return float(value)
-
-
 # -- finding the client ----------------------------------------------------
 
 def known_clients(snap: Snapshot) -> List[Dict[str, Any]]:
     """Every client the controller knows, merged by MAC from the connected-client list
     (Integration API), ``stat/sta`` and the full history (``stat/alluser``)."""
-    device_macs = {_mac(d.get("macAddress")) for d in snap.devices}
+    device_macs = {normalize_mac(d.get("macAddress")) for d in snap.devices}
     by_mac: Dict[str, Dict[str, Any]] = {}
 
     def entry(mac: str) -> Dict[str, Any]:
@@ -47,7 +36,7 @@ def known_clients(snap: Snapshot) -> List[Dict[str, Any]]:
                                   ("sta", snap.legacy_clients, "mac"),
                                   ("live", snap.clients, "macAddress")):
         for record in records:
-            mac = _mac(record.get(mac_key))
+            mac = normalize_mac(record.get(mac_key))
             if mac and mac not in device_macs:
                 entry(mac)[key] = record
 
@@ -66,21 +55,17 @@ def known_clients(snap: Snapshot) -> List[Dict[str, Any]]:
     return result
 
 
-def _hex(text: str) -> str:
-    return re.sub(r"[:\-.\s]", "", text).lower()
-
-
 def find_clients(snap: Snapshot, query: str) -> List[Dict[str, Any]]:
     """Clients matching ``query``. Precedence: exact MAC (any separator or case), exact IP,
     a single exact name, then a case-insensitive substring of a name or hostname (or a
     MAC fragment of six or more hex digits). More than one result means it is ambiguous."""
     q = query.strip()
     records = known_clients(snap)
-    hexq = _hex(q)
+    hexq = hex_digits(q)
     is_hex = bool(re.fullmatch(r"[0-9a-f]+", hexq))
 
     if is_hex and len(hexq) == 12:
-        exact = [r for r in records if _hex(r["mac"]) == hexq]
+        exact = [r for r in records if hex_digits(r["mac"]) == hexq]
         if exact:
             return exact
     try:
@@ -98,7 +83,7 @@ def find_clients(snap: Snapshot, query: str) -> List[Dict[str, Any]]:
     needle = q.lower()
     matches = [r for r in records
                if (needle and any(needle in n.lower() for n in r["names"]))
-               or (is_hex and len(hexq) >= 6 and hexq in _hex(r["mac"]))]
+               or (is_hex and len(hexq) >= 6 and hexq in hex_digits(r["mac"]))]
     return sorted(matches, key=lambda r: (r["name"].lower(), r["mac"]))
 
 
@@ -135,7 +120,7 @@ class DeviceIndex:
 def _hop(net: DeviceIndex, mac: str, port: Any = None, speed: Any = None, detail: str = "") -> Dict[str, Any]:
     return {"id": (net.integration.get(mac) or {}).get("id"), "device": net.name(mac),
             "type": net.kind(mac), "port": port,
-            "speed_mbps": _num(speed) or None, "detail": detail, "offline": net.offline(mac)}
+            "speed_mbps": number(speed) or None, "detail": detail, "offline": net.offline(mac)}
 
 
 def _uplink_chain(net: DeviceIndex, start_mac: str, subjects: Set[str]) -> List[Dict[str, Any]]:
@@ -179,14 +164,14 @@ def _attachment(snap: Snapshot, net: DeviceIndex, rec: Dict[str, Any]
             hops.append(_hop(net, ap_mac, detail=detail))
             subjects.update({net.name(ap_mac), f"{net.name(ap_mac)} {band} radio"})
             hops += _uplink_chain(net, ap_mac, subjects)
-        retries, attempts = _num(sta.get("wifi_tx_retries_percentage")), _num(sta.get("wifi_tx_attempts"))
-        satisfaction = _num(sta.get("satisfaction"))
+        retries, attempts = number(sta.get("wifi_tx_retries_percentage")), number(sta.get("wifi_tx_attempts"))
+        satisfaction = number(sta.get("satisfaction"))
         if satisfaction is not None and satisfaction < 0:
             satisfaction = None
         link = {"kind": "wireless", "band": band, "channel": sta.get("channel"), "ssid": ssid,
-                "signal_dbm": _num(sta.get("signal")), "noise_dbm": _num(sta.get("noise")),
-                "tx_rate_mbps": (_num(sta.get("tx_rate")) or 0) / 1000 or None,
-                "rx_rate_mbps": (_num(sta.get("rx_rate")) or 0) / 1000 or None,
+                "signal_dbm": number(sta.get("signal")), "noise_dbm": number(sta.get("noise")),
+                "tx_rate_mbps": (number(sta.get("tx_rate")) or 0) / 1000 or None,
+                "rx_rate_mbps": (number(sta.get("rx_rate")) or 0) / 1000 or None,
                 "retries_pct": retries, "tx_attempts": attempts,
                 "satisfaction": satisfaction}
         return hops, link, subjects
@@ -213,12 +198,12 @@ def _attachment(snap: Snapshot, net: DeviceIndex, rec: Dict[str, Any]
 
     link = None
     if rec["online"] and port:
-        link = {"kind": "wired", "speed_mbps": _num(port.get("speed")) or None,
+        link = {"kind": "wired", "speed_mbps": number(port.get("speed")) or None,
                 "full_duplex": port.get("full_duplex"),
-                "rx_errors": int(_num(port.get("rx_errors")) or 0),
-                "tx_errors": int(_num(port.get("tx_errors")) or 0),
-                "rx_dropped": int(_num(port.get("rx_dropped")) or 0),
-                "tx_dropped": int(_num(port.get("tx_dropped")) or 0)}
+                "rx_errors": int(number(port.get("rx_errors")) or 0),
+                "tx_errors": int(number(port.get("tx_errors")) or 0),
+                "rx_dropped": int(number(port.get("rx_dropped")) or 0),
+                "tx_dropped": int(number(port.get("tx_dropped")) or 0)}
     return hops, link, subjects
 
 
@@ -228,7 +213,7 @@ def addressing(snap: Snapshot, rec: Dict[str, Any]) -> Dict[str, Any]:
 
     reservation = None
     for u, net in reservation_records(snap):
-        if _mac(u.get("mac")) == mac:
+        if normalize_mac(u.get("mac")) == mac:
             current = rec["ip"] if rec["online"] else ""
             reservation = {"reserved_ip": u["fixed_ip"], "network": net.get("name") or "",
                            "matches_current": (current == u["fixed_ip"]) if current else None}
@@ -264,7 +249,7 @@ def _related(findings: List[Finding], rec: Dict[str, Any], subjects: Set[str]) -
     for f in findings:
         subject = f.subject.lower()
         by_subject = (subject in lowered or subject in names
-                      or (mac and _mac(f.subject) == mac) or f.subject in ips)
+                      or (mac and normalize_mac(f.subject) == mac) or f.subject in ips)
         by_message = any(len(alias) >= 3 and alias in f.message.lower() for alias in names)
         if by_subject or by_message:
             related.append(f)
@@ -320,9 +305,9 @@ def build_client_detail(snap: Snapshot, rec: Dict[str, Any],
 
     if rec["online"]:
         last_seen = "connected now"
-        since = _fmt_time((live or {}).get("connectedAt"))
+        since = format_time((live or {}).get("connectedAt"))
     else:
-        last_seen, since = _epoch(user.get("last_seen")), ""
+        last_seen, since = epoch_text(user.get("last_seen")), ""
 
     recent = _recent_events(snap, rec, hops)
     return {
@@ -331,7 +316,7 @@ def build_client_detail(snap: Snapshot, rec: Dict[str, Any],
                      "vendor": user.get("oui") or sta.get("oui") or "",
                      "ip": rec["ip"], "connection": "Wired" if rec["wired"] else "Wireless",
                      "status": "Online" if rec["online"] else "Offline",
-                     "connected_since": since, "first_seen": _epoch(user.get("first_seen")),
+                     "connected_since": since, "first_seen": epoch_text(user.get("first_seen")),
                      "last_seen": last_seen},
         "addressing": addressing(snap, rec),
         "attachment": hops,

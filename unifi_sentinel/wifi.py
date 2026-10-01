@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from .client_view import DeviceIndex
 from .query import format_table
 from .snapshot import Snapshot
-from .util import clean_data, printable
+from .util import clean_data, number, plural, printable
 
 BANDS = {"ng": "2.4 GHz", "na": "5 GHz", "6e": "6 GHz"}
 BAND_ALIASES = {"2.4": "ng", "2": "ng", "24": "ng", "5": "na", "6": "6e"}
@@ -30,12 +30,6 @@ _BLOCKS_5G = {
     40: [(36, 40), (44, 48), (52, 56), (60, 64), (100, 104), (108, 112), (116, 120),
          (124, 128), (132, 136), (140, 144), (149, 153), (157, 161)],
 }
-
-
-def _num(value: Any) -> Optional[float]:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    return float(value)
 
 
 def parse_band(text: str) -> str:
@@ -57,20 +51,20 @@ def span_mhz(
     """The frequency range (MHz) a transmitter on ``channel`` with ``width`` occupies, or None
     when the channel is unknown. 2.4 GHz channels are 5 MHz apart but about 22 MHz wide,
     which is why a neighbor on channel 4 disturbs channels 1 and 6."""
-    ch, bw = _num(channel), int(_num(width) or 20)
+    ch, bw = number(channel), int(number(width) or 20)
     if ch is None:
         return None
     ch = int(ch)
     if band == "ng":
-        centre = _num(center_freq)
+        centre = number(center_freq)
         if centre is not None and centre <= 0:
             centre = None
         if centre is None and bw > 20:
-            centre_ch = _num(center_channel)
+            centre_ch = number(center_channel)
             if centre_ch is not None and centre_ch > 0:
                 centre = 2407 + 5 * centre_ch
             else:
-                secondary = _num(extension_channel)
+                secondary = number(extension_channel)
                 if secondary is not None and secondary > 0:
                     centre = ((2407 + 5 * ch) + (2407 + 5 * secondary)) / 2
                 elif isinstance(extension_channel, str):
@@ -86,7 +80,7 @@ def span_mhz(
             centre = 2407 + 5 * ch
         half = 11 if bw <= 20 else bw / 2
         return centre - half, centre + half
-    centre = _num(center_freq)
+    centre = number(center_freq)
     if centre is not None and centre > 0:
         half = 11 if band == "ng" and bw <= 20 else max(bw, 20) / 2
         return centre - half, centre + half
@@ -133,7 +127,7 @@ def unique_neighbors(snap: Snapshot, ap_macs: Optional[set] = None) -> List[Neig
     best: Dict[str, Neighbor] = {}
     for row in snap.neighbors:
         bssid = str(row.get("bssid") or "").lower()
-        signal = _num(row.get("signal"))
+        signal = number(row.get("signal"))
         ap_mac = str(row.get("ap_mac") or "").lower()
         if (not bssid or bssid in ours or signal is None
                 or (ap_macs is not None and ap_mac not in ap_macs)):
@@ -145,23 +139,18 @@ def unique_neighbors(snap: Snapshot, ap_macs: Optional[set] = None) -> List[Neig
     result = []
     for bssid, info in best.items():
         row, band = info["row"], info["row"].get("band") or info["row"].get("radio") or ""
-        width = _num(row.get("bw")) or 20
+        width = number(row.get("bw")) or 20
         span = span_mhz(
             band, row.get("channel"), width, row.get("center_freq"), row.get("center_channel"),
             row.get("extension_channel", row.get("secondary_channel", row.get("ext_channel"))),
         )
         result.append({
-            "bssid": bssid, "name": _clean(row.get("essid")), "band": band,
-            "channel": int(_num(row.get("channel")) or 0) or None, "width": int(width),
+            "bssid": bssid, "name": printable(row.get("essid"), 40), "band": band,
+            "channel": int(number(row.get("channel")) or 0) or None, "width": int(width),
             "signal": info["signal"], "security": str(row.get("security") or ""),
             "open": str(row.get("security") or "").strip().lower() == "open",
             "vendor": str(row.get("oui") or ""), "seen_by": sorted(info["seen_by"]), "span": span})
     return result
-
-
-def _clean(name: Any, limit: int = 40) -> str:
-    """A network name safe to print: control characters removed and long names cut."""
-    return printable(name, limit)
 
 
 def radios(snap: Snapshot, idx: DeviceIndex) -> List[Radio]:
@@ -178,15 +167,15 @@ def radios(snap: Snapshot, idx: DeviceIndex) -> List[Radio]:
                          "retries": None, "satisfaction": None, "span": None})
             continue
         for r in sorted(stats, key=lambda r: list(BANDS).index(r.get("radio")) if r.get("radio") in BANDS else 9):
-            sat = _num(r.get("satisfaction"))
-            channel = _num(r.get("channel"))
+            sat = number(r.get("satisfaction"))
+            channel = number(r.get("channel"))
             rows.append({
                 "ap": idx.name(mac), "mac": mac, "band": r.get("radio") or "",
                 "channel": None if channel is None else int(channel), "online": not idx.offline(mac),
-                "width": None if _num(r.get("bw")) is None else int(_num(r.get("bw"))),
-                "tx_power": _num(r.get("tx_power")),
-                "clients": None if _num(r.get("num_sta")) is None else int(_num(r.get("num_sta"))),
-                "utilization": _num(r.get("cu_total")), "retries": _num(r.get("tx_retries_pct")),
+                "width": None if number(r.get("bw")) is None else int(number(r.get("bw"))),
+                "tx_power": number(r.get("tx_power")),
+                "clients": None if number(r.get("num_sta")) is None else int(number(r.get("num_sta"))),
+                "utilization": number(r.get("cu_total")), "retries": number(r.get("tx_retries_pct")),
                 "satisfaction": sat if sat is not None and sat >= 0 else None,      # -1 means unknown
                 "span": span_mhz(
                     r.get("radio") or "", channel, r.get("bw"), r.get("center_freq"),
@@ -197,9 +186,6 @@ def radios(snap: Snapshot, idx: DeviceIndex) -> List[Radio]:
 
 
 # -- the report ---------------------------------------------------------------------
-
-def _plural(n: int, word: str) -> str:
-    return f"{n} {word}" + ("" if n == 1 else "s")
 
 
 def build_wifi(snap: Snapshot, min_signal: float = DEFAULT_MIN_SIGNAL, band: str = "", ap: str = "") -> Dict[str, Any]:
@@ -268,7 +254,7 @@ def _observations(
             near = [n for n in strong if n["band"] == r["band"] and n["channel"] != r["channel"]
                     and overlaps(r["span"], n["span"])]
             if same or near:
-                out.append(f"{label}: {_plural(len(same), 'neighbor')} {limit} on the same channel, "
+                out.append(f"{label}: {plural(len(same), 'neighbor')} {limit} on the same channel, "
                            f"{len(near)} overlapping it")
             else:
                 quiet_radios.append(label)

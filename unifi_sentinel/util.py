@@ -1,4 +1,6 @@
-"""Output safety helpers shared by every renderer.
+"""Helpers shared by the analysis and rendering modules.
+
+Output safety comes first. It is used by every renderer.
 
 Names on a network (client hostnames, device names, SSIDs, event text) are chosen by whoever
 owns the device, so they are untrusted when printed or exported:
@@ -10,10 +12,14 @@ owns the device, so they are untrusted when printed or exported:
 ``printable`` cleans one value, ``safe_output`` is a backstop for a whole block of text, and
 ``csv_safe`` protects one CSV cell. JSON output is not touched: ``json`` already escapes
 control characters.
+
+The value helpers further down (``number``, ``plural``, ``normalize_mac``, ``format_time``, ...) used to be
+copied into several modules; they live here once.
 """
 
 import re
-from typing import Any
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 # Controls that are never wanted in a name: C0 (except tab, newline, CR, handled separately),
 # DEL and C1. Also removed: bidirectional overrides and isolates (they reorder text to disguise
@@ -104,3 +110,63 @@ def is_randomized_mac(mac: Any) -> bool:
     if len(digits) != 12 or any(c not in "0123456789abcdefABCDEF" for c in digits):
         return False
     return int(digits[:2], 16) & 0x03 == 0x02
+
+
+# -- small value helpers shared by the analysis and rendering modules --------------------------
+
+def number(value: Any) -> Optional[float]:
+    """``value`` as a float when it is a real number (not a bool, not text), else None."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
+
+
+def number_or_zero(value: Any) -> float:
+    """Like ``number`` but a missing or non-numeric value counts as 0."""
+    found = number(value)
+    return 0.0 if found is None else found
+
+
+def known_percent(value: Any) -> Optional[float]:
+    """A 0-100 quality value, or None when missing or unknown (the controller uses -1)."""
+    found = number(value)
+    return None if found is None or found < 0 else found
+
+
+def plural(n: int, word: str) -> str:
+    """'1 time', '2 times': the count with the word, pluralised with an s."""
+    return f"{n} {word}" + ("" if n == 1 else "s")
+
+
+def normalize_mac(value: Optional[str]) -> str:
+    """A MAC address as the upper-case text used to match records from different sources."""
+    return (value or "").upper()
+
+
+def hex_digits(text: Any) -> str:
+    """Only the hex digits of a MAC address or fragment, lower case, whatever the separators."""
+    return re.sub(r"[:\-.\s]", "", str(text)).lower()
+
+
+def epoch_text(value: Any) -> str:
+    """A Unix timestamp in seconds as local 'YYYY-MM-DD HH:MM:SS', or '' when it is missing or zero."""
+    return datetime.fromtimestamp(value).strftime("%Y-%m-%d %H:%M:%S") if value else ""
+
+
+def format_time(value: Optional[str]) -> str:
+    """An ISO-8601 timestamp (the Integration API's form) as local 'YYYY-MM-DD HH:MM:SS'; text that is
+    not a timestamp is returned as it came, and nothing gives ''."""
+    if not value:
+        return ""
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone().strftime("%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return value
+
+
+def search_rows(rows: List[Dict[str, Any]], search: str) -> List[Dict[str, Any]]:
+    """The rows with a field that contains ``search`` (case-insensitive); all rows when it is empty."""
+    if not search:
+        return rows
+    needle = search.lower()
+    return [r for r in rows if any(needle in str(v).lower() for v in r.values())]

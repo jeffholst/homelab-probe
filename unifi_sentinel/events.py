@@ -11,7 +11,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from .query import format_table
 from .snapshot import Snapshot
-from .util import printable
+from .util import hex_digits, printable
 
 DEFAULT_SINCE = "24h"
 DEFAULT_LIMIT = 100
@@ -65,13 +65,9 @@ def subjects(event: Dict[str, Any], prefix: str) -> List[Dict[str, Any]]:
     return [v for k, v in params.items() if k.startswith(prefix) and isinstance(v, dict)]
 
 
-def _norm_hex(text: str) -> str:
-    return re.sub(r"[:\-.\s]", "", str(text)).lower()
-
-
 def _matches(objects: List[Dict[str, Any]], query: str, fields: Sequence[str]) -> bool:
     needle = query.strip().lower()
-    hexq = _norm_hex(query)
+    hexq = hex_digits(query)
     for obj in objects:
         for field in fields:
             value = obj.get(field)
@@ -79,7 +75,7 @@ def _matches(objects: List[Dict[str, Any]], query: str, fields: Sequence[str]) -
                 continue
             if needle in str(value).lower():
                 return True
-            if len(hexq) >= 6 and re.fullmatch(r"[0-9a-f]+", hexq) and hexq in _norm_hex(value):
+            if len(hexq) >= 6 and re.fullmatch(r"[0-9a-f]+", hexq) and hexq in hex_digits(value):
                 return True
     return False
 

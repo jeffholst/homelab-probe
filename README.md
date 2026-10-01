@@ -816,7 +816,7 @@ unifi_sentinel/
   diagnose.py            read-only health checks
   notify.py              notifications: what changed since the last run, ntfy/webhook sending, state file
   settings.py            diagnose thresholds and ignore list (TOML)
-  util.py                output safety: printable text for names, CSV formula neutralizing
+  util.py                shared helpers: output safety (printable names, CSV formulas), numbers, MACs, times, plurals
   cli.py                 argparse subcommands
 tests/
   conftest.py            FakeSession: a fake controller served from the fixture

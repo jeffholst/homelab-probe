@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 from .export import INVENTORY_COLUMNS, build_inventory, build_offline_clients, build_switch_ports
 from .reservations import OFFLINE_RESERVATION_COLUMNS, RESERVATION_COLUMNS, build_reservations, offline_reservation_rows
 from .snapshot import Snapshot
-from .util import is_randomized_mac, printable
+from .util import is_randomized_mac, printable, search_rows
 
 TABLE_COLUMNS = ["Name", "MAC Address", "IP Address", "Model", "Connection Type",
                  "Switch", "Port", "Status"]
@@ -55,13 +55,6 @@ def _add_device_details(rows: List[Dict[str, Any]], snap: Snapshot) -> None:
             )
 
 
-def _search(rows: List[Dict[str, Any]], search: str) -> List[Dict[str, Any]]:
-    if not search:
-        return rows
-    needle = search.lower()
-    return [r for r in rows if any(needle in str(v).lower() for v in r.values())]
-
-
 def _errors(row: Dict[str, Any]) -> int:
     return sum(int(row.get(k) or 0) for k in ("RX Errors", "TX Errors"))
 
@@ -104,9 +97,9 @@ def query_rows(
     'reservations' only (keep the reservations ``diagnose`` reports as offline)."""
     if kind == "reservations":
         rows = build_reservations(snap) if offline_days is None else offline_reservation_rows(snap, offline_days)
-        return _search(rows, search)
+        return search_rows(rows, search)
     if kind == "ports":
-        return _search(port_rows(snap, switch, down, errors), search)
+        return search_rows(port_rows(snap, switch, down, errors), search)
     rows = build_inventory(snap.devices, snap.clients, snap.legacy_devices, snap.legacy_clients,
                            snap.device_details, snap.device_stats)
     if include_offline:
@@ -117,7 +110,7 @@ def query_rows(
     elif kind == "clients":
         rows = [{**r, "Private MAC": "yes" if is_randomized_mac(r["MAC Address"]) else ""}
                 for r in rows if r["Type"] == "Client"]
-    return _search(rows, search)
+    return search_rows(rows, search)
 
 
 def format_table(rows: List[Dict[str, Any]], columns: List[str] = TABLE_COLUMNS) -> str:

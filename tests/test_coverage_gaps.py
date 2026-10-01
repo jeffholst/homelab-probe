@@ -17,11 +17,12 @@ from unifi_sentinel.client_view import _link_text, build_client_detail, find_cli
 from unifi_sentinel.config import ConfigError
 from unifi_sentinel.diagnose import _event_findings
 from unifi_sentinel.events import local_time
-from unifi_sentinel.export import _fmt_time, device_type_label
+from unifi_sentinel.export import device_type_label
 from unifi_sentinel.notify import Event, _priority, empty_state, plan
 from unifi_sentinel.reservations import build_reservations
 from unifi_sentinel.settings import DiagnoseSettings, load_settings
 from unifi_sentinel.snapshot import collect_snapshot
+from unifi_sentinel.util import format_time
 from unifi_sentinel.wifi import span_mhz
 
 
@@ -92,7 +93,7 @@ def test_unreadable_timestamps_render_as_blank(value):
 
 
 def test_an_unparsable_connection_time_is_shown_as_it_came():
-    assert _fmt_time("not a date") == "not a date" and _fmt_time(None) == "" and _fmt_time("") == ""
+    assert format_time("not a date") == "not a date" and format_time(None) == "" and format_time("") == ""
 
 
 def test_a_device_with_an_unknown_model_is_typed_by_its_features_then_its_legacy_type():
