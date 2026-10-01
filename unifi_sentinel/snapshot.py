@@ -40,6 +40,8 @@ class Snapshot:
     event_window_seconds: int = 0     # how far back the events reach (0: events not collected)
     # Speedtest history (v2 speedtest), oldest first: time (ms), download_mbps, upload_mbps, latency_ms.
     speedtests: List[Dict[str, Any]] = field(default_factory=list)
+    # Neighboring Wi-Fi networks seen by our APs (legacy stat/rogueap): one row per (BSSID, observing AP).
+    neighbors: List[Dict[str, Any]] = field(default_factory=list)
     events_available: bool = False    # True when the event log was requested and could be read
 
 
@@ -70,6 +72,14 @@ def _speedtests_or_empty(client: UniFiClient, site_ref: str) -> List[Dict[str, A
         return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else 0.0
 
     return sorted((t for t in tests if isinstance(t, dict)), key=sort_time)
+
+
+def _neighbors_or_empty(client: UniFiClient, site_ref: str) -> List[Dict[str, Any]]:
+    try:
+        return [n for n in client.legacy_stat(site_ref, "rogueap") if isinstance(n, dict)]
+    except UniFiAPIError as e:
+        warn(f"neighboring networks unavailable, the channel plan was skipped: {e}")
+        return []
 
 
 def _device_extras(client: UniFiClient, site_id: str, devices: List[Dict[str, Any]]):
@@ -157,6 +167,7 @@ def collect_snapshot(
     include_groups: bool = False,
     include_health: bool = False,
     include_speedtests: bool = False,
+    include_neighbors: bool = False,
     include_events: bool = False,
     event_since_seconds: int = 86400,
     event_categories: Optional[List[str]] = None,
@@ -195,6 +206,7 @@ def collect_snapshot(
         ),
         health=_legacy_health_or_empty(client, site_ref) if include_health else [],
         speedtests=_speedtests_or_empty(client, site_ref) if include_speedtests else [],
+        neighbors=_neighbors_or_empty(client, site_ref) if include_neighbors else [],
         client_groups=(
             _legacy_v2_or_empty(client, site_ref, "network-members-groups") if include_groups else []
         ),

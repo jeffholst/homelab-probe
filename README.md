@@ -17,6 +17,7 @@ UniFi Sentinel is a fork of [ericfitz/unifi-clients-export](https://github.com/e
 | `snapshot` | Save the current inventory to a local JSON file, to compare later |
 | `diff` | What changed: compare saved snapshots, or a snapshot against the live network |
 | `topology` | Draw the uplink tree from the gateway down: ports, link speeds, client counts and problems |
+| `wifi` | Wireless report: each AP's radios and a channel plan from the neighboring networks |
 | `wan` | Internet health: current state, 24-hour monitoring and speedtest history |
 | `events` | Event history from the controller log: disconnects, roams, IP conflicts, device outages |
 | `client` | Troubleshoot one client by name, MAC or IP: where it attaches, link quality and related findings |
@@ -35,6 +36,7 @@ Planned: richer inventory and troubleshooting reports.
 - **Querying**: list and filter devices, clients, DHCP reservations and switch ports from the command line (table or JSON)
 - **Snapshots and diff**: save the inventory to a file and see exactly what changed since: new or missing devices and clients, IP, firmware, state, location, reservation and group changes
 - **Topology**: the uplink tree from the gateway down, with the port each device plugs into, negotiated link speeds (and links below what both ends support), client counts, and offline or flagged devices
+- **Wireless report**: each AP's radios (channel, width, power, clients, utilization, retries) and a channel plan from the neighboring networks your APs hear, with overlap-aware counts and plain observations
 - **Internet health**: `wan` shows the connection's state, the controller's own 24-hour availability and latency monitoring per target, and the speedtest history with the runs that fell well below normal, to tell an internet problem from a LAN problem
 - **Event history**: what happened and when (disconnects, roams, IP conflicts, device outages, admin changes) from the controller's log, filterable by time, severity, category, client and device, with a summary of the noisiest clients
 - **Single-client troubleshooting**: `client <name|mac|ip>` shows where a client attaches (the full uplink chain to the gateway with port numbers and link speeds), its link quality, addressing and the `diagnose` findings that concern it
@@ -120,6 +122,8 @@ uv run unifi-sentinel.py snapshot                    # save the inventory to ./s
 uv run unifi-sentinel.py diff                        # what changed since the newest snapshot?
 uv run unifi-sentinel.py topology                    # how the gateway, switches and APs are wired
 uv run unifi-sentinel.py topology --clients          # ...with the wired clients under each device
+uv run unifi-sentinel.py wifi                        # radios and a channel plan from the neighbors
+uv run unifi-sentinel.py wifi --band 2.4 --ap hall   # one band, one AP
 uv run unifi-sentinel.py wan                         # is it my internet or my LAN?
 uv run unifi-sentinel.py wan --days 90               # a longer speedtest history
 uv run unifi-sentinel.py events                      # the last 24 hours, newest first
@@ -299,6 +303,56 @@ Each line is `port N -> device`, where N is the **parent's** port the device plu
 - `--clients` lists the wired clients under each device with their port. `--json` prints the nested tree (and `--clients` adds `wired_clients`). `--no-emoji` forces plain ASCII drawing and text labels, which is also used automatically when output is not a UTF-8 terminal.
 
 The uplink and port data comes from the legacy `stat/device` and `stat/sta` data and the Integration API device detail, which is used for the parent when the legacy data has none (then no port number is shown).
+
+### Wi-Fi
+
+`wifi` describes your wireless side: each AP's radios, and who else is on the air near them.
+
+```text
+Access points
+AP         Band     Channel  Width   Power   Clients  Utilization  Retries  Satisfaction
+---------  -------  -------  ------  ------  -------  -----------  -------  ------------
+Office AP  2.4 GHz  6        20 MHz  22 dBm  4        30%          5%       99%
+Office AP  5 GHz    36       80 MHz  26 dBm  6        10%          3%
+  Garage AP (offline): no radio data
+
+Neighboring networks: 9 seen by your APs (8 stronger than -80 dBm, 1 open, 1 with a hidden name)
+
+2.4 GHz
+Channel  Neighbors  Strong  Your radios
+-------  ---------  ------  -----------
+1        1          0
+4        1          1
+6        3          3       Office AP
+11       2          2
+
+  Channel 4: strongest of 1 stronger than -80 dBm
+    Adjacent Net  (-60 dBm, WPA2-Personal (AES/CCMP))
+
+  Channel 6: strongest of 3 stronger than -80 dBm
+    Neighbor One  (-45 dBm, WPA2-Personal (AES/CCMP), heard by 2 APs)
+    (hidden, Acme Corp)  (-66 dBm, WPA2-Personal (AES/CCMP))
+    Café Guest ☕  (-72 dBm, Open)  [OPEN]
+
+  Channel 11: strongest of 2 stronger than -80 dBm
+    Eleven Net  (-50 dBm, WPA2-Personal (AES/CCMP))
+    LineBreak xxxxxxxxxxxxxxxxxxxxxxxxxxxxx…  (-70 dBm, WPA2-Personal (AES/CCMP))
+
+...
+
+Observations
+  - Office AP 2.4 GHz (channel 6): 3 neighbors stronger than -80 dBm on the same channel, 1 overlapping it
+  - Office AP 5 GHz (channel 36): 0 neighbors stronger than -80 dBm on the same channel, 1 overlapping it
+  - Of the usual 2.4 GHz channels, channel 1 overlaps the fewest neighbors (channel 1: 1, channel 6: 4, channel 11: 2), stronger than -80 dBm
+```
+
+- **Access points:** one row per radio with the channel it is actually using (even when set to auto), width, transmit power, connected clients, channel utilization, retry rate and the controller's satisfaction score (blank when the controller reports it as unknown). An AP with no radio data, such as an offline one, is listed so it does not vanish.
+- **Neighbors are counted once per network.** The controller's scan returns one row for every AP that hears a network, so counting rows would count one neighbor several times; `wifi` merges them by BSSID, keeps the strongest reading and says how many of your APs heard it. Your own networks never count as neighbors (they are recognized by their BSSIDs, which the AP data lists).
+- **Strong:** neighbors at or above `--min-signal` (default -80 dBm). Weaker ones are still counted in the totals but are not named or compared, which is what keeps a list of dozens readable. At most 5 strong neighbors are named per channel; `--all` names every one. Hidden networks show as `(hidden)` with the equipment vendor when known, and open networks are marked `[OPEN]`.
+- **Overlap, not just the channel number.** 2.4 GHz channels are 5 MHz apart but about 22 MHz wide, so a neighbor on channel 4 disturbs both channel 1 and channel 6; a 5 GHz radio with an 80 MHz width occupies a block of channels. The observations count neighbors on your radio's channel and neighbors that merely overlap it. The observations also point out your own radios that compete with each other and which of the usual 2.4 GHz channels (1, 6, 11) overlaps the fewest strong neighbors. They only describe; they never tell you what to change.
+- `--band 2.4|5|6` and `--ap NAME` filter (`--ap` also limits the neighbors to those that AP hears); `--json` prints everything.
+- **6 GHz:** the controller's neighbor scan reports no 6 GHz networks, so those cells say `n/a` and no claim is made about that band.
+- **Neighbor names are shown, as the controller reports them.** They identify other households' networks, so check the output before pasting it into an issue or sharing it. The names above are synthetic.
 
 ### WAN
 
@@ -499,6 +553,7 @@ The official documentation covers the Integration API only. The legacy `stat/*`,
   - `legacy rest/... unavailable`: network names and VLANs are missing (reservations, subnet checks)
   - `legacy v2 ... unavailable`: group names are missing; `new-clients` trusts each client's own group list
   - `legacy stat/health unavailable`: `diagnose` skips the controller health and WAN checks
+  - `neighboring networks unavailable`: `wifi` shows the radios but no channel plan
   - `speedtest history unavailable`: `wan` shows no speedtests and `diagnose` skips the speedtest check
   - `event log unavailable`: `events` shows nothing, and `diagnose` and `client` skip their event parts
   - `detail/statistics unavailable for N device(s)`: no uptime, heartbeat or CPU/memory for those devices (normal for offline devices)
@@ -518,6 +573,7 @@ unifi_sentinel/
   client_view.py         single-client troubleshooting view
   events.py              event history from the controller's system log
   wan.py                 internet health: state, 24h monitoring, speedtests
+  wifi.py                wireless report: radios and a channel plan from neighbors
   topology.py            uplink tree: wiring, link speeds, client counts, flags
   history.py             saved inventories (snapshot) and the diff between them
   diagnose.py            read-only health checks
