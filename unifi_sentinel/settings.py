@@ -43,6 +43,8 @@ class DiagnoseSettings:
     slow_link_mbps: int = 100            # ports negotiated at or below: info
     wan_latency_warn_ms: float = 100     # internet latency at or above: warning
     wan_drops_warn: int = 10             # internet drops at or above: warning (heuristic)
+    wan_availability_warn_pct: float = 99   # 24h internet availability below: warning
+    wan_speed_drop_pct: float = 70       # last speedtest download below this % of the 30-day median: warning
     link_flap_count: int = 5             # port link-down count (since boot) at or above: warning
     port_drop_pct: float = 0.1           # dropped/total packets (%) at or above: warning
     min_packets_for_drop_pct: int = 1000 # minimum packet count before evaluating drop percentage
@@ -80,7 +82,8 @@ def _parse(data: Dict[str, Any]) -> DiagnoseSettings:
     if not isinstance(thresholds, dict):
         raise ConfigError("[thresholds] must be a table")
     known = {"resource_warn_pct", "resource_critical_pct", "slow_link_mbps",
-             "wan_latency_warn_ms", "wan_drops_warn", "link_flap_count", "port_drop_pct",
+             "wan_latency_warn_ms", "wan_drops_warn", "wan_availability_warn_pct",
+             "wan_speed_drop_pct", "link_flap_count", "port_drop_pct",
              "min_packets_for_drop_pct", "poe_warn_pct", "poe_critical_pct",
              "event_flap_count", "wifi_weak_signal_dbm", "wifi_retry_pct", "wifi_min_attempts",
              "wifi_satisfaction_warn", "radio_util_warn_pct", "radio_util_critical_pct"}
@@ -96,6 +99,10 @@ def _parse(data: Dict[str, Any]) -> DiagnoseSettings:
     slow = _number("slow_link_mbps", thresholds.get("slow_link_mbps", defaults.slow_link_mbps), 0)
     latency = _number("wan_latency_warn_ms",
                       thresholds.get("wan_latency_warn_ms", defaults.wan_latency_warn_ms), 0)
+    availability = _number("wan_availability_warn_pct",
+                           thresholds.get("wan_availability_warn_pct", defaults.wan_availability_warn_pct), 0, 100)
+    speed_drop = _number("wan_speed_drop_pct",
+                         thresholds.get("wan_speed_drop_pct", defaults.wan_speed_drop_pct), 0, 100)
     drops = _number("wan_drops_warn", thresholds.get("wan_drops_warn", defaults.wan_drops_warn), 0)
     flaps = _number("link_flap_count", thresholds.get("link_flap_count", defaults.link_flap_count), 1)
     drop_pct = _number("port_drop_pct", thresholds.get("port_drop_pct", defaults.port_drop_pct), 0, 100)
@@ -145,7 +152,8 @@ def _parse(data: Dict[str, Any]) -> DiagnoseSettings:
 
     return DiagnoseSettings(
         resource_warn_pct=warn, resource_critical_pct=critical, slow_link_mbps=int(slow),
-        wan_latency_warn_ms=latency, wan_drops_warn=int(drops), event_flap_count=int(event_flaps),
+        wan_latency_warn_ms=latency, wan_drops_warn=int(drops), wan_availability_warn_pct=availability,
+        wan_speed_drop_pct=speed_drop, event_flap_count=int(event_flaps),
         link_flap_count=int(flaps), port_drop_pct=drop_pct,
         min_packets_for_drop_pct=int(min_packets), poe_warn_pct=poe_warn,
         poe_critical_pct=poe_critical, wifi_weak_signal_dbm=weak, wifi_retry_pct=retry,
