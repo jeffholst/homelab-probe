@@ -289,7 +289,7 @@ Ignored findings are left out of the output, counted in the summary (`3 warnings
 | `controller.pending_adoption` | devices waiting to be adopted |
 | `device.cpu_high` | device CPU utilization at or above the warning threshold |
 | `device.memory_high` | device memory utilization at or above the warning threshold |
-| `device.offline` | a UniFi device is not online (critical for a gateway or one others uplink through) |
+| `device.offline` | a UniFi device is not online (critical for a gateway or a device that others uplink through) |
 | `event.client_disconnects` | a client disconnected repeatedly in the event window |
 | `event.client_roams` | a client roamed repeatedly in the event window |
 | `event.device_unreachable` | a device was reported unreachable in the event window |

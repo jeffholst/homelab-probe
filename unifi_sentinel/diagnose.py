@@ -32,7 +32,7 @@ DEVICE_SUBSYSTEMS = {"lan", "wlan"}
 # tests/test_diagnose_json.py checks that every Finding in this module uses a code from this table
 # and that every code here is used.
 CODES = {
-    "device.offline": "a UniFi device is not online (critical for a gateway or one others uplink through)",
+    "device.offline": "a UniFi device is not online (critical for a gateway or a device that others uplink through)",
     "device.cpu_high": "device CPU utilization at or above the warning threshold",
     "device.memory_high": "device memory utilization at or above the warning threshold",
     "controller.pending_adoption": "devices waiting to be adopted",
@@ -460,15 +460,17 @@ def _event_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]
         if device and device.get("state") != "ONLINE":
             continue                              # the offline finding already reports it
         name = (device or {}).get("name") or event_name or "?"
+        target_mac = (device or {}).get("macAddress")
+        target_mac = target_mac.upper() if target_mac else None
         if n >= threshold:
             findings.append(Finding(WARNING, name, f"was unreachable {_times(n)} in the last {window}",
-                                    code="event.device_unreachable"))
+                                    target_mac, code="event.device_unreachable"))
         elif device and device.get("state") == "ONLINE":
             findings.append(Finding(
                 INFO, name, f"was unreachable {_times(n)} in the last {window}; online now",
-                code="event.device_unreachable"))
+                target_mac, code="event.device_unreachable"))
         else:
-            findings.append(Finding(INFO, name, f"was unreachable {_times(n)} in the last {window}",
+            findings.append(Finding(INFO, name, f"was unreachable {_times(n)} in the last {window}", target_mac,
                                     code="event.device_unreachable"))
     if latency:
         findings.append(Finding(
