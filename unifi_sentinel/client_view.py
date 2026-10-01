@@ -174,12 +174,15 @@ def _attachment(snap: Snapshot, net: _Network, rec: Dict[str, Any]
             subjects.update({net.name(ap_mac), f"{net.name(ap_mac)} {band} radio"})
             hops += _uplink_chain(net, ap_mac, subjects)
         retries, attempts = _num(sta.get("wifi_tx_retries_percentage")), _num(sta.get("wifi_tx_attempts"))
+        satisfaction = _num(sta.get("satisfaction"))
+        if satisfaction is not None and satisfaction < 0:
+            satisfaction = None
         link = {"kind": "wireless", "band": band, "channel": sta.get("channel"), "ssid": ssid,
                 "signal_dbm": _num(sta.get("signal")), "noise_dbm": _num(sta.get("noise")),
                 "tx_rate_mbps": (_num(sta.get("tx_rate")) or 0) / 1000 or None,
                 "rx_rate_mbps": (_num(sta.get("rx_rate")) or 0) / 1000 or None,
                 "retries_pct": retries, "tx_attempts": attempts,
-                "satisfaction": _num(sta.get("satisfaction"))}
+                "satisfaction": satisfaction}
         return hops, link, subjects
 
     sw_mac, port_idx = (sta.get("sw_mac") or "").upper(), sta.get("sw_port")
@@ -249,13 +252,14 @@ def _addressing(snap: Snapshot, rec: Dict[str, Any]) -> Dict[str, Any]:
 def _related(findings: List[Finding], rec: Dict[str, Any], subjects: Set[str]) -> List[Finding]:
     """Findings that concern this client, its IP, or the devices and ports it depends on."""
     lowered = {s.lower() for s in subjects}
-    name, mac, ips = rec["name"], rec["mac"], rec["ips"]
+    names = {name.lower() for name in rec["names"]}
+    mac, ips = rec["mac"], rec["ips"]
     related = []
     for f in findings:
         subject = f.subject.lower()
-        by_subject = (subject in lowered or subject == name.lower() or f.subject == mac
-                      or f.subject in ips)
-        by_message = name != "Unknown" and len(name) >= 3 and name.lower() in f.message.lower()
+        by_subject = (subject in lowered or subject in names
+                      or (mac and _mac(f.subject) == mac) or f.subject in ips)
+        by_message = any(len(alias) >= 3 and alias in f.message.lower() for alias in names)
         if by_subject or by_message:
             related.append(f)
     return related

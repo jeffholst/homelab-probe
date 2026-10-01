@@ -3,8 +3,9 @@ import json
 import pytest
 
 from unifi_sentinel import cli
-from unifi_sentinel.client_view import (build_client_detail, candidate_rows, find_clients,
-                                         known_clients, render_candidates, render_detail, to_json)
+from unifi_sentinel.client_view import (_related, build_client_detail, candidate_rows, find_clients,
+                                        known_clients, render_candidates, render_detail, to_json)
+from unifi_sentinel.diagnose import Finding
 from unifi_sentinel.settings import DiagnoseSettings, IgnoreRule
 from unifi_sentinel.snapshot import Snapshot, collect_snapshot
 
@@ -89,6 +90,13 @@ def test_wireless_client_chain_and_quality(snap):
     assert d["addressing"]["reservation"] is None and d["addressing"]["ungrouped"]
 
 
+def test_negative_wireless_satisfaction_is_unknown(snap):
+    snap.legacy_clients[1]["satisfaction"] = -1
+    d = detail_for(snap, "phone")
+    assert d["link"]["satisfaction"] is None
+    assert "satisfaction" not in render_detail(d, emoji=False)
+
+
 def test_offline_client_uses_its_last_uplink_and_has_no_link_quality(snap):
     d = detail_for(snap, "old-printer")
     assert d["identity"]["status"] == "Offline" and d["identity"]["last_seen"] != "connected now"
@@ -142,6 +150,19 @@ def test_related_findings_include_the_clients_dependencies_only(snap):
     assert not any(s == "Office Switch port 2" for s, _ in got)               # another port, not related
     assert ("Office Switch", "CPU utilization 95%") in got                     # a device on its path
     assert not any(s == "Garage AP" for s, _ in got)                          # offline AP, unrelated
+
+
+def test_related_findings_match_client_aliases_and_mac_case():
+    rec = {"name": "integration-name", "names": ["integration-name", "legacy-name", "legacy-host"],
+           "mac": "CC:01", "ips": set()}
+    findings = [
+        Finding("warning", "legacy-name", "legacy client finding"),
+        Finding("warning", "cc:01", "MAC finding"),
+        Finding("warning", "other", "finding mentions legacy-host"),
+        Finding("warning", "other", "unrelated finding"),
+    ]
+    related = _related(findings, rec, set())
+    assert related == findings[:3]
 
 
 def test_findings_naming_the_client_or_its_ip_are_related():

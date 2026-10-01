@@ -212,20 +212,24 @@ Tool errors used to exit 1 for every command; they now exit 3 so that 1 and 2 on
 
 ```text
 desktop
-  MAC:        AA:BB:CC:DD:EE:FF  (Vendor Inc.)
-  Status:     Online, connected since 2026-01-01 10:00:00
+  MAC:        BB:00:00:00:00:01
+  Status:     Online, connected since 2026-01-01 09:00:00
   Connection: Wired
   IP:         10.0.0.10  (reserved 10.0.0.10, matches)
   Network:    Main (VLAN 1)
   Groups:     Desktops
-  First seen: ...
+  First seen: 2020-09-13 12:26:40
   Last seen:  connected now
 
-Attached: desktop -> Office Switch port 3 (1000 Mbps) -> Gateway port 2 (1000 Mbps)
-Link:     1000 Mbps, full duplex, 0 errors, 0 dropped packets on its port
+Attached: desktop -> Office Switch port 3 (1000 Mbps) -> Gateway port 2 (100 Mbps)
+Link:     1000 Mbps, full duplex, 0 errors, 60 dropped packets on its port
 
 Related findings:
-...
+[WARNING ] Office Switch: CPU utilization 95%
+[WARNING ] Office Switch: PoE budget 41.6 W of 52 W used (80%)
+[WARNING ] Office Switch: uplink to Gateway negotiated at 100 Mbps but both ends support 1000 Mbps
+
+3 warnings
 ```
 
 - **Finding the client:** an exact MAC (any separator or case), an exact IP, a single exact name, then a case-insensitive part of a name or hostname (or a MAC fragment of six or more hex digits). It looks across every client the controller knows, connected or not, but never UniFi devices. If several clients match it lists up to 20 of them and exits with code 4 instead of guessing; no match also exits 4.
