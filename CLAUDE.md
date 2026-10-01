@@ -32,6 +32,7 @@ Fork of [ericfitz/unifi-clients-export](https://github.com/ericfitz/unifi-client
 - Prefer the Integration API (`/proxy/network/integration/v1`): paginated, site IDs are UUIDs. `Config.site` may be a name, internal reference (`default`) or UUID; use `resolve_site`.
 - Legacy `/proxy/network/api/s/{ref}/stat/...` takes the internal reference, not the UUID. It is used only for data the Integration API lacks (per-port counters, client-to-switch-port, DHCP reservations, network config).
 - Legacy client records reference networks by legacy ids (from `rest/networkconf`), which do not match Integration API network UUIDs. A reservation is `use_fixedip` true; `fixed_ip` alone is stale-prone.
+- Controller health is legacy `stat/health` (subsystems `wlan`, `lan`, `wan`, `www`, `vpn`). `lan`/`wlan` turn `error`/`warning` merely because devices are disconnected, so `diagnose` only trusts them when `num_disconnected` is 0. `Snapshot.health` is collected with `include_health`.
 - Client group membership is `network_members_group_ids` on legacy client records; group names/ids come from legacy v2 `/proxy/network/v2/api/site/{ref}/network-members-groups` (`client.legacy_v2`).
 - Integration API and legacy fields were checked against one live controller (Network 10.6.106). Other versions and hardware may differ, and some fields vary by model (e.g. `mac_table_count` is null on some switches). Verify a new field against real data before relying on it.
 

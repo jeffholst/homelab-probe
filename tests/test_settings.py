@@ -200,6 +200,9 @@ reason = "known noisy switch"
 [[ignore]]
 subject = "old-printer"
 reason = "moved to IoT later"
+[[ignore]]
+subject = "wlan"
+reason = "explained by the offline spare AP"
 ''')
     code = _run(fake_client, monkeypatch, ["diagnose", "--no-emoji", "--config", str(cfg)])
     out = capsys.readouterr().out

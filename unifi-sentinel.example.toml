@@ -6,6 +6,8 @@
 resource_warn_pct = 90       # CPU or memory at or above this: warning
 resource_critical_pct = 98   # CPU or memory at or above this: critical
 slow_link_mbps = 100         # ports negotiated at or below this speed: info
+wan_latency_warn_ms = 100    # internet latency at or above this: warning
+wan_drops_warn = 10          # internet drops at or above this: warning (heuristic)
 
 # Suppress findings you have accepted. Each rule needs a reason, plus a subject
 # and/or a message. subject: case-insensitive name, * and ? wildcards.

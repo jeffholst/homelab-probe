@@ -41,6 +41,8 @@ class DiagnoseSettings:
     resource_warn_pct: float = 90        # CPU/memory at or above: warning
     resource_critical_pct: float = 98    # CPU/memory at or above: critical
     slow_link_mbps: int = 100            # ports negotiated at or below: info
+    wan_latency_warn_ms: float = 100     # internet latency at or above: warning
+    wan_drops_warn: int = 10             # internet drops at or above: warning (heuristic)
     ignore: Tuple[IgnoreRule, ...] = ()
 
 
@@ -65,7 +67,8 @@ def _parse(data: Dict[str, Any]) -> DiagnoseSettings:
     thresholds = data.get("thresholds", {})
     if not isinstance(thresholds, dict):
         raise ConfigError("[thresholds] must be a table")
-    known = {"resource_warn_pct", "resource_critical_pct", "slow_link_mbps"}
+    known = {"resource_warn_pct", "resource_critical_pct", "slow_link_mbps",
+             "wan_latency_warn_ms", "wan_drops_warn"}
     if set(thresholds) - known:
         raise ConfigError(f"unknown [thresholds] key(s): {', '.join(sorted(set(thresholds) - known))} "
                           f"(valid: {', '.join(sorted(known))})")
@@ -76,6 +79,11 @@ def _parse(data: Dict[str, Any]) -> DiagnoseSettings:
     if warn > critical:
         raise ConfigError("[thresholds] resource_warn_pct must not exceed resource_critical_pct")
     slow = _number("slow_link_mbps", thresholds.get("slow_link_mbps", defaults.slow_link_mbps), 0)
+    latency = _number("wan_latency_warn_ms",
+                      thresholds.get("wan_latency_warn_ms", defaults.wan_latency_warn_ms), 0)
+    drops = _number("wan_drops_warn", thresholds.get("wan_drops_warn", defaults.wan_drops_warn), 0)
+    if drops != int(drops):
+        raise ConfigError("[thresholds] wan_drops_warn must be a whole number")
 
     raw_rules = data.get("ignore", [])
     if not isinstance(raw_rules, list):
@@ -93,7 +101,9 @@ def _parse(data: Dict[str, Any]) -> DiagnoseSettings:
             raise ConfigError(f"[[ignore]] #{i}: a reason is required")
         rules.append(rule)
 
-    return DiagnoseSettings(warn, critical, int(slow), tuple(rules))
+    return DiagnoseSettings(
+        resource_warn_pct=warn, resource_critical_pct=critical, slow_link_mbps=int(slow),
+        wan_latency_warn_ms=latency, wan_drops_warn=int(drops), ignore=tuple(rules))
 
 
 def load_settings(path: Optional[Path] = None) -> DiagnoseSettings:

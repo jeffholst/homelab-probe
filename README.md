@@ -117,13 +117,17 @@ uv run unifi-sentinel.py diagnose                    # health checks
 
 | Level | Examples |
 | ----- | -------- |
-| 🛑 critical | gateway offline; an offline switch or device that other devices uplink through; CPU or memory at or above `resource_critical_pct` (default 98%) |
-| ⚠️ warning | other offline devices; port rx/tx errors; half-duplex links; CPU or memory at or above `resource_warn_pct` (default 90%) but below the critical level; connected clients with no IP address or a link-local (169.254.x.x) address, shown with where they attach; DHCP reservation problems: an online client whose current IP differs from its reservation, the same IP reserved for several clients, or a reserved IP outside its network's subnet; the same IP in use by several clients or UniFi devices on any VLAN, or a reserved IP currently used by a different client or UniFi device |
-| ℹ️ info | ports negotiated at or below `slow_link_mbps` (default 100 Mbps); legacy data unavailable (port checks skipped) |
+| 🛑 critical | the controller reports a WAN, internet or VPN subsystem in `error`; a LAN/WLAN `error` with no disconnected device to explain it; gateway offline; an offline switch or device that other devices uplink through; CPU or memory at or above `resource_critical_pct` (default 98%) |
+| ⚠️ warning | a subsystem in `warning` the same way; internet latency at or above `wan_latency_warn_ms` (default 100 ms) or drops at or above `wan_drops_warn` (default 10); other offline devices; port rx/tx errors; half-duplex links; CPU or memory at or above `resource_warn_pct` (default 90%) but below the critical level; connected clients with no IP address or a link-local (169.254.x.x) address, shown with where they attach; DHCP reservation problems: an online client whose current IP differs from its reservation, the same IP reserved for several clients, or a reserved IP outside its network's subnet; the same IP in use by several clients or UniFi devices on any VLAN, or a reserved IP currently used by a different client or UniFi device |
+| ℹ️ info | the controller's LAN/WLAN status when it is only caused by disconnected devices (they are reported individually); devices waiting to be adopted; a failed speedtest; ports negotiated at or below `slow_link_mbps` (default 100 Mbps); legacy data unavailable (port checks skipped) |
 
 The reservation checks read the legacy `stat/alluser` and `rest/networkconf` endpoints (the same data as `query reservations`); offline clients are only checked for duplicate and out-of-subnet reservations, and a reservation whose network cannot be resolved is skipped for the subnet check.
 
 Emoji labels are used on a UTF-8 terminal. When output is piped or redirected, or with `--no-emoji`, it prints text labels (`[CRITICAL]`, `[WARNING ]`, `[INFO    ]`) instead.
+
+#### Controller health
+
+`diagnose` also reads the controller's own subsystem health (`stat/health`: `wlan`, `lan`, `wan`, `www`, `vpn`) so it agrees with the UniFi dashboard. The controller sets `lan`/`wlan` to `error` or `warning` whenever any device is disconnected, which the per-device findings already report, so that case is a single info line and does not raise severity or the exit code. A `lan`/`wlan` status with no disconnected device to explain it, and any `wan`, `www` or `vpn` status, use the controller's severity (`error` is critical, `warning` is warning). The `www` subsystem also gives internet latency and drops; the drops default is a heuristic because the controller does not document whether the counter is cumulative, so tune `wan_drops_warn`. If `stat/health` cannot be read, the tool warns and skips these checks.
 
 #### Configuration: thresholds and ignore list
 
@@ -134,6 +138,8 @@ Thresholds and an ignore list live in an optional TOML file, read from `./unifi-
 resource_warn_pct = 90       # CPU or memory: warning
 resource_critical_pct = 98   # CPU or memory: critical
 slow_link_mbps = 100         # ports negotiated at or below this: info
+wan_latency_warn_ms = 100    # internet latency at or above this: warning
+wan_drops_warn = 10          # internet drops at or above this: warning (heuristic)
 
 [[ignore]]
 subject = "Garage AP"        # case-insensitive name; * and ? wildcards
@@ -258,6 +264,7 @@ The official documentation covers the Integration API only. The legacy `stat/*`,
   - `legacy stat/... unavailable`: switch port mapping, port counters and offline clients are incomplete
   - `legacy rest/... unavailable`: network names and VLANs are missing (reservations, subnet checks)
   - `legacy v2 ... unavailable`: group names are missing; `new-clients` trusts each client's own group list
+  - `legacy stat/health unavailable`: `diagnose` skips the controller health and WAN checks
   - `detail/statistics unavailable for N device(s)`: no uptime, heartbeat or CPU/memory for those devices (normal for offline devices)
 
 ## Development

@@ -18,6 +18,8 @@ EXIT_OK, EXIT_WARNING, EXIT_CRITICAL = 0, 1, 2
 
 LINK_LOCAL_PREFIX = "169.254."
 GATEWAY_TYPES = {"Gateway", "Dream Machine"}
+# Subsystems whose controller status just reflects disconnected devices we already report.
+DEVICE_SUBSYSTEMS = {"lan", "wlan"}
 
 
 @dataclass(frozen=True)
@@ -146,6 +148,52 @@ def _reservation_findings(snap: Snapshot) -> List[Finding]:
     return findings
 
 
+def _number(value: Any) -> float:
+    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else 0.0
+
+
+def _health_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]:
+    """Findings from the controller's own subsystem health (``stat/health``).
+
+    lan/wlan go "error"/"warning" merely because devices are disconnected, which the
+    device checks already report, so that case is a single info line; an unexplained
+    status keeps the controller's severity. Other subsystems map error to critical.
+    """
+    findings: List[Finding] = []
+    severity_of = {"error": CRITICAL, "warning": WARNING}
+    pending = 0
+
+    for h in snap.health:
+        name = h.get("subsystem") or "?"
+        status = h.get("status")
+        pending += int(_number(h.get("num_pending")))
+
+        if status in severity_of:
+            disconnected = int(_number(h.get("num_disconnected")))
+            if name in DEVICE_SUBSYSTEMS and disconnected:
+                findings.append(Finding(
+                    INFO, name, f"{name} subsystem reports {status}: {disconnected} "
+                                "device(s) disconnected (see the device findings)"))
+            else:
+                gateway = f" (gateway {h['gw_name']})" if h.get("gw_name") else ""
+                findings.append(Finding(
+                    severity_of[status], name, f"{name} subsystem is in {status} state{gateway}"))
+
+        if name == "www":
+            latency, drops = _number(h.get("latency")), _number(h.get("drops"))
+            if latency and latency >= settings.wan_latency_warn_ms:
+                findings.append(Finding(WARNING, name, f"internet latency {latency:.0f} ms"))
+            if drops and drops >= settings.wan_drops_warn:
+                findings.append(Finding(WARNING, name, f"internet reports {drops:.0f} drops"))
+            speedtest = str(h.get("speedtest_status") or "")
+            if any(word in speedtest.lower() for word in ("fail", "error")):
+                findings.append(Finding(INFO, name, f"last speedtest: {speedtest}"))
+
+    if pending:
+        findings.append(Finding(INFO, "controller", f"{pending} device(s) waiting to be adopted"))
+    return findings
+
+
 def diagnose(snap: Snapshot, settings: Optional[DiagnoseSettings] = None) -> List[Finding]:
     settings = settings or DiagnoseSettings()
     findings: List[Finding] = []
@@ -178,6 +226,7 @@ def diagnose(snap: Snapshot, settings: Optional[DiagnoseSettings] = None) -> Lis
                     level, d.get("name") or d.get("macAddress", "?"),
                     f"{label} utilization {st[key]:.0f}%"))
 
+    findings.extend(_health_findings(snap, settings))
     findings.extend(_client_ip_findings(snap))
     findings.extend(_reservation_findings(snap))
     findings.extend(_duplicate_ip_findings(snap))
