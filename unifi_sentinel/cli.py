@@ -367,7 +367,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         if args.timeout is not None:
             config = replace(config, timeout=args.timeout)      # the command line beats .env
         if args.verbose:
-            _verbose(f"unifi-sentinel {__version__}: {_describe_connection(config)}")
+            message = f"unifi-sentinel {__version__}: {_describe_connection(config)}"
+            _verbose(message.replace(config.api_key, "***"))
         for message in config.warnings:
             warn(message)
         # Load diagnose settings first so a bad config file fails before any API call.
