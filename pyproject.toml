@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "unifi-sentinel"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Query, troubleshoot and inventory a UniFi Network controller"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -13,7 +13,7 @@ authors = [
     {name = "Jeff Holst"},
     {name = "Eric Fitzgerald"}
 ]
-keywords = ["unifi", "network", "export", "csv", "ubiquiti"]
+keywords = ["unifi", "ubiquiti", "network", "monitoring", "troubleshooting", "inventory", "diagnostics"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: System Administrators",
@@ -24,6 +24,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: System :: Networking",
+    "Topic :: System :: Networking :: Monitoring",
     "Topic :: Utilities",
 ]
 
@@ -47,6 +48,9 @@ Issues = "https://github.com/jeffholst/unifi-sentinel/issues"
 
 [project.scripts]
 unifi-sentinel = "unifi_sentinel.cli:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "unifi_sentinel.__version__"}   # the one place the version is written
 
 [tool.setuptools.packages.find]
 include = ["unifi_sentinel*"]

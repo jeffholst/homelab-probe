@@ -46,7 +46,8 @@ def test_5_ghz_widths_occupy_whole_blocks():
     assert span_mhz("na", 100, 160) == (5490, 5650)
     assert overlaps(span_mhz("na", 36, 80), span_mhz("na", 44, 20))             # inside our block
     assert not overlaps(span_mhz("na", 36, 80), span_mhz("na", 52, 20))         # the next block
-    assert span_mhz("na", 165, 80) == (5785, 5865)                              # not in a table: centred fallback
+    assert span_mhz("na", 165, 80) == (5815, 5895)                              # U-NII-4 is its own 80 MHz block
+    assert span_mhz("na", 183, 80) == (5875, 5955)                              # in no table: centred fallback
 
 
 def test_6_ghz_blocks_and_unknowns():

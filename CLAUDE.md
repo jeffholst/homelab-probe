@@ -34,6 +34,7 @@ Fork of [ericfitz/unifi-clients-export](https://github.com/ericfitz/unifi-client
 - Degradation policy: required data (devices, connected clients) fails the command; every legacy read is optional and warns, except `stat/alluser` for `new-clients` and `snapshot`/`diff`, which pass `users_required=True` because their output would be wrong without it.
 - Raise `UniFiAPIError`/`ConfigError`; only `cli.main` turns them into messages and exit codes.
 - Exit codes: 0 success, 1 and 2 are reserved for `diagnose` findings (warning, critical), 3 is a config/connection error, 4 is `client` finding no single match, 64 is a usage error. Do not reuse 1 or 2 for errors.
+- The version is written once, as `unifi_sentinel.__version__`; `pyproject.toml` reads it (`dynamic = ["version"]` with `[tool.setuptools.dynamic]`), so bump it only there (`tests/test_accuracy.py` checks the wheel, `--version` and that nothing else repeats it). The README says only Network 10.6.106 was tested: do not widen that claim without testing.
 - Dependencies are declared only in `pyproject.toml`; run `uv lock` after changing them and commit `uv.lock`.
 
 ## UniFi API notes

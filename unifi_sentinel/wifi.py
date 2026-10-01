@@ -42,11 +42,14 @@ Neighbor = Dict[str, Any]
 
 # 5 GHz channel blocks for a given width (first and last 20 MHz channel in each block)
 _BLOCKS_5G = {
-    160: [(36, 64), (100, 128)],
-    80: [(36, 48), (52, 64), (100, 112), (116, 128), (132, 144), (149, 161)],
+    160: [(36, 64), (100, 128), (149, 177)],
+    80: [(36, 48), (52, 64), (100, 112), (116, 128), (132, 144), (149, 161), (165, 177)],
     40: [(36, 40), (44, 48), (52, 56), (60, 64), (100, 104), (108, 112), (116, 120),
-         (124, 128), (132, 136), (140, 144), (149, 153), (157, 161)],
+         (124, 128), (132, 136), (140, 144), (149, 153), (157, 161), (165, 169), (173, 177)],
 }
+# Channels 165 to 177 are U-NII-4 (5.825 to 5.885 GHz, mostly the United States); 149 to 177 together is a
+# 160 MHz block. 20 MHz channels there need no table: 5000 + 5 * channel is already their centre.
+CHANNEL_14_CENTRE_MHZ = 2484      # 2.4 GHz channel 14 (Japan, 802.11b only) is 12 MHz above channel 13, not 5
 
 
 def parse_band(text: str) -> str:
@@ -60,6 +63,11 @@ def parse_band(text: str) -> str:
 
 
 # -- spectrum --------------------------------------------------------------------
+
+def _centre_2g(channel: int) -> float:
+    """The centre frequency of a 2.4 GHz channel: 2407 + 5 * channel, except channel 14 (2484 MHz)."""
+    return CHANNEL_14_CENTRE_MHZ if channel == 14 else 2407 + 5 * channel
+
 
 def span_mhz(
     band: str, channel: Any, width: Any, center_freq: Any = None,
@@ -79,22 +87,22 @@ def span_mhz(
         if centre is None and bw > 20:
             centre_ch = number(center_channel)
             if centre_ch is not None and centre_ch > 0:
-                centre = 2407 + 5 * centre_ch
+                centre = _centre_2g(int(centre_ch))
             else:
                 secondary = number(extension_channel)
                 if secondary is not None and secondary > 0:
-                    centre = ((2407 + 5 * ch) + (2407 + 5 * secondary)) / 2
+                    centre = (_centre_2g(ch) + _centre_2g(int(secondary))) / 2
                 elif isinstance(extension_channel, str):
                     extension = extension_channel.strip().lower()
                     offset = 4 if "+" in extension or "above" in extension else (
                         -4 if "-" in extension or "below" in extension else 0
                     )
                     if offset:
-                        centre = ((2407 + 5 * ch) + (2407 + 5 * (ch + offset))) / 2
+                        centre = (_centre_2g(ch) + _centre_2g(ch + offset)) / 2
             if centre is None:
                 return None
         if centre is None:
-            centre = 2407 + 5 * ch
+            centre = _centre_2g(ch)
         half = 11 if bw <= 20 else bw / 2
         return centre - half, centre + half
     centre = number(center_freq)
