@@ -82,12 +82,13 @@ def offline_reservations(snap: Snapshot, min_days: float, now: Optional[float] =
     what the check reports.
     """
     now = time.time() if now is None else now
-    connected = {_mac(c.get("macAddress")) for c in snap.clients}
-    devices = {_mac(d.get("macAddress")) for d in snap.devices}
+    connected = {_mac(c.get("macAddress")).replace("-", ":") for c in snap.clients}
+    devices = {_mac(d.get("macAddress")).replace("-", ":") for d in snap.devices}
     found = []
     for user, net in reservation_records(snap):
         mac = _mac(user.get("mac"))
-        if mac in connected or mac in devices:
+        normalized_mac = mac.replace("-", ":")
+        if normalized_mac in connected or normalized_mac in devices:
             continue
         seen = user.get("last_seen")
         seen = float(seen) if isinstance(seen, (int, float)) and not isinstance(seen, bool) and seen > 0 else None
