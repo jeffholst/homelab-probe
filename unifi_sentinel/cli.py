@@ -105,7 +105,12 @@ def _notify(findings: List[Any], config: Any, settings: Any, args: argparse.Name
     now = time.time()
     if args.notify_baseline:
         saved = baseline(findings, now, minimum)
-        save_state(state_path, saved)
+        try:
+            save_state(state_path, saved)
+        except OSError as e:
+            raise ConfigError(
+                f"the notification baseline could not be saved to {state_path}: {e.strerror or e}"
+            ) from e
         _say(f"Notification baseline saved: {len(saved['active'])} current finding(s) count as already reported",
              file=sys.stderr)
         return False
