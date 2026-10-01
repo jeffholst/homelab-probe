@@ -17,6 +17,7 @@ UniFi Sentinel is a fork of [ericfitz/unifi-clients-export](https://github.com/e
 | `snapshot` | Save the current inventory to a local JSON file, to compare later |
 | `diff` | What changed: compare saved snapshots, or a snapshot against the live network |
 | `topology` | Draw the uplink tree from the gateway down: ports, link speeds, client counts and problems |
+| `wan` | Internet health: current state, 24-hour monitoring and speedtest history |
 | `events` | Event history from the controller log: disconnects, roams, IP conflicts, device outages |
 | `client` | Troubleshoot one client by name, MAC or IP: where it attaches, link quality and related findings |
 | `new-clients` | List clients that are in no client group, to spot new devices |
@@ -34,6 +35,7 @@ Planned: richer inventory and troubleshooting reports.
 - **Querying**: list and filter devices, clients, DHCP reservations and switch ports from the command line (table or JSON)
 - **Snapshots and diff**: save the inventory to a file and see exactly what changed since: new or missing devices and clients, IP, firmware, state, location, reservation and group changes
 - **Topology**: the uplink tree from the gateway down, with the port each device plugs into, negotiated link speeds (and links below what both ends support), client counts, and offline or flagged devices
+- **Internet health**: `wan` shows the connection's state, the controller's own 24-hour availability and latency monitoring per target, and the speedtest history with the runs that fell well below normal, to tell an internet problem from a LAN problem
 - **Event history**: what happened and when (disconnects, roams, IP conflicts, device outages, admin changes) from the controller's log, filterable by time, severity, category, client and device, with a summary of the noisiest clients
 - **Single-client troubleshooting**: `client <name|mac|ip>` shows where a client attaches (the full uplink chain to the gateway with port numbers and link speeds), its link quality, addressing and the `diagnose` findings that concern it
 - **New client detection**: list every known client that is in no client group, newest first, to spot new devices
@@ -118,6 +120,8 @@ uv run unifi-sentinel.py snapshot                    # save the inventory to ./s
 uv run unifi-sentinel.py diff                        # what changed since the newest snapshot?
 uv run unifi-sentinel.py topology                    # how the gateway, switches and APs are wired
 uv run unifi-sentinel.py topology --clients          # ...with the wired clients under each device
+uv run unifi-sentinel.py wan                         # is it my internet or my LAN?
+uv run unifi-sentinel.py wan --days 90               # a longer speedtest history
 uv run unifi-sentinel.py events                      # the last 24 hours, newest first
 uv run unifi-sentinel.py events --since 7d --severity high   # recent serious events
 uv run unifi-sentinel.py events --client phone --event disconnected   # one client's drops
@@ -137,7 +141,7 @@ uv run unifi-sentinel.py diagnose                    # health checks
 | Level | Examples |
 | ----- | -------- |
 | 🛑 critical | an AP radio's channel utilization at or above `radio_util_critical_pct` (default 90%); a switch's PoE budget at or above `poe_critical_pct` (default 95%); the controller reports a WAN, internet or VPN subsystem in `error`; a LAN/WLAN `error` with no disconnected device to explain it; gateway offline; an offline switch or device that other devices uplink through; CPU or memory at or above `resource_critical_pct` (default 98%) |
-| ⚠️ warning | an IP conflict reported in the last 24 hours; a client that disconnected `event_flap_count` or more times in that window, or a device that was unreachable that often; a Wi-Fi client with signal at or below `wifi_weak_signal_dbm` (default -75 dBm), `wifi_retry_pct` (default 30%) or more of its transmissions retried, or satisfaction below `wifi_satisfaction_warn` (default 50%); an AP radio with channel utilization at or above `radio_util_warn_pct` (default 70%), or retries or satisfaction past the same limits; a port whose link has gone down `link_flap_count` or more times since boot (default 5); a port dropping `port_drop_pct` or more of its packets (default 0.1%); an up port whose STP state is not forwarding; a switch's PoE budget at or above `poe_warn_pct` (default 80%); an uplink negotiated below what both ends support; a subsystem in `warning` the same way; internet latency at or above `wan_latency_warn_ms` (default 100 ms) or drops at or above `wan_drops_warn` (default 10); other offline devices; port rx/tx errors; half-duplex links; CPU or memory at or above `resource_warn_pct` (default 90%) but below the critical level; connected clients with no IP address or a link-local (169.254.x.x) address, shown with where they attach; DHCP reservation problems: an online client whose current IP differs from its reservation, the same IP reserved for several clients, or a reserved IP outside its network's subnet; the same IP in use by several clients or UniFi devices on any VLAN, or a reserved IP currently used by a different client or UniFi device |
+| ⚠️ warning | 24-hour internet availability below `wan_availability_warn_pct` (default 99%), overall or for one monitoring target; the last speedtest well below the 30-day median (`wan_speed_drop_pct`, default 70%); an IP conflict reported in the last 24 hours; a client that disconnected `event_flap_count` or more times in that window, or a device that was unreachable that often; a Wi-Fi client with signal at or below `wifi_weak_signal_dbm` (default -75 dBm), `wifi_retry_pct` (default 30%) or more of its transmissions retried, or satisfaction below `wifi_satisfaction_warn` (default 50%); an AP radio with channel utilization at or above `radio_util_warn_pct` (default 70%), or retries or satisfaction past the same limits; a port whose link has gone down `link_flap_count` or more times since boot (default 5); a port dropping `port_drop_pct` or more of its packets (default 0.1%); an up port whose STP state is not forwarding; a switch's PoE budget at or above `poe_warn_pct` (default 80%); an uplink negotiated below what both ends support; a subsystem in `warning` the same way; internet latency at or above `wan_latency_warn_ms` (default 100 ms) or drops at or above `wan_drops_warn` (default 10); other offline devices; port rx/tx errors; half-duplex links; CPU or memory at or above `resource_warn_pct` (default 90%) but below the critical level; connected clients with no IP address or a link-local (169.254.x.x) address, shown with where they attach; DHCP reservation problems: an online client whose current IP differs from its reservation, the same IP reserved for several clients, or a reserved IP outside its network's subnet; the same IP in use by several clients or UniFi devices on any VLAN, or a reserved IP currently used by a different client or UniFi device |
 | ℹ️ info | a client that roamed `event_flap_count` or more times; a device that was unreachable earlier but is online now; high-latency events from the ISP monitor; the controller's LAN/WLAN status when it is only caused by disconnected devices (they are reported individually); devices waiting to be adopted; a failed speedtest; ports negotiated at or below `slow_link_mbps` (default 100 Mbps); legacy data unavailable (port checks skipped) |
 
 The reservation checks read the legacy `stat/alluser` and `rest/networkconf` endpoints (the same data as `query reservations`); offline clients are only checked for duplicate and out-of-subnet reservations, and a reservation whose network cannot be resolved is skipped for the subnet check.
@@ -194,6 +198,8 @@ port_drop_pct = 0.1          # dropped packets, % of a port's packets, at or abo
 min_packets_for_drop_pct = 1000 # minimum packets before evaluating drop percentage
 poe_warn_pct = 80            # switch PoE budget used at or above this: warning
 poe_critical_pct = 95        # switch PoE budget used at or above this: critical
+wan_availability_warn_pct = 99   # 24h internet availability below this (%): warning
+wan_speed_drop_pct = 70      # last speedtest download below this % of the 30-day median: warning
 event_flap_count = 10        # disconnects (or unreachable events) in the window at or above this: warning
 wifi_weak_signal_dbm = -75   # Wi-Fi client signal at or below this (dBm): warning
 wifi_retry_pct = 30          # client or radio TX retries at or above this (%): warning
@@ -293,6 +299,42 @@ Each line is `port N -> device`, where N is the **parent's** port the device plu
 - `--clients` lists the wired clients under each device with their port. `--json` prints the nested tree (and `--clients` adds `wired_clients`). `--no-emoji` forces plain ASCII drawing and text labels, which is also used automatically when output is not a UTF-8 terminal.
 
 The uplink and port data comes from the legacy `stat/device` and `stat/sta` data and the Integration API device detail, which is used for the parent when the legacy data has none (then no port number is shown).
+
+### WAN
+
+`wan` answers "is it my internet or my LAN?" from data the controller already keeps (all read with GET):
+
+```text
+Internet: ok (Example ISP)
+  WAN IP: 192.0.2.10
+  Gateway: Gateway
+  Now: latency 20 ms, 0 drops, status ok
+  Link wan1: eth4 up, 1000 Mbps full duplex (port supports 2500 Mbps)
+    live: 1.0 Mbps up, 2.0 Mbps down
+
+Last 24h (controller monitoring, WAN): availability 100.0%, average latency 23 ms
+Target       Type  Availability  Latency  Alerts
+-----------  ----  ------------  -------  ------
+192.0.2.53   dns   100.0%        22 ms    yes
+example.com  icmp  100.0%        20 ms
+example.org  icmp  100.0%        24 ms
+
+Speedtests, last 30 days (11 runs), 12 stored
+  Last: 2026-09-30 16:10 (6h ago): download 880 Mbps, upload 40 Mbps, latency 25 ms
+  Download: min 500 Mbps, median 925 Mbps, max 940 Mbps
+  Upload: min 31 Mbps, median 40 Mbps, max 41 Mbps
+  Latency: min 23 ms, median 24 ms, max 41 ms
+
+  Download below 70% of the median (1):
+    2026-09-22 22:10  download 500 Mbps, upload 31 Mbps, latency 41 ms
+```
+
+- **Now:** the WAN and internet subsystems of the controller's health (status, ISP, WAN IP, latency, drops) and the gateway's WAN link: its negotiated speed against what the port supports (a 1 Gbps plan on a 2.5 Gbps port is normal, so that is only shown, never flagged) and the live traffic rate.
+- **Last 24 hours:** the controller's own monitoring of the connection: overall availability and average latency, and each monitoring target (`icmp` ping or `dns`) with its availability and latency. `Alerts: yes` marks a target the controller is configured to alert on; it does not mean the target is failing.
+- **Speedtests:** every stored result (the controller runs them on a schedule) over `--days N` (default 30), using the latest run's `wan_networkgroup` or `interface_name` so dual-WAN links are not mixed: the last one and how old it is, the minimum, median and maximum of download, upload and latency, and the runs whose download fell below `wan_speed_drop_pct` (default 70%) of the median, with their dates. That is where a degradation window shows up; try `--days 90`. At least 5 runs are needed before the median means anything.
+- `--json` prints the same data, and `--config FILE` (or `./unifi-sentinel.toml`) sets the threshold. A missing piece (no speedtests stored, no monitoring data, a gateway with no WAN link data) is simply left out.
+- **`diagnose` uses the same data:** a warning when 24-hour availability, overall or for any single monitoring target, is below `wan_availability_warn_pct` (default 99%), and a warning when the last speedtest (within 30 days) is below `wan_speed_drop_pct` of the 30-day median, with its age.
+- **Not included:** an hourly traffic and latency history. The controller only returns that from a POST to its report endpoint, which is outside the one approved POST (the event log); a plain GET returns empty rows.
 
 ### Event history
 
@@ -457,6 +499,7 @@ The official documentation covers the Integration API only. The legacy `stat/*`,
   - `legacy rest/... unavailable`: network names and VLANs are missing (reservations, subnet checks)
   - `legacy v2 ... unavailable`: group names are missing; `new-clients` trusts each client's own group list
   - `legacy stat/health unavailable`: `diagnose` skips the controller health and WAN checks
+  - `speedtest history unavailable`: `wan` shows no speedtests and `diagnose` skips the speedtest check
   - `event log unavailable`: `events` shows nothing, and `diagnose` and `client` skip their event parts
   - `detail/statistics unavailable for N device(s)`: no uptime, heartbeat or CPU/memory for those devices (normal for offline devices)
 
@@ -474,6 +517,7 @@ unifi_sentinel/
   new_clients.py         clients in no client group
   client_view.py         single-client troubleshooting view
   events.py              event history from the controller's system log
+  wan.py                 internet health: state, 24h monitoring, speedtests
   topology.py            uplink tree: wiring, link speeds, client counts, flags
   history.py             saved inventories (snapshot) and the diff between them
   diagnose.py            read-only health checks

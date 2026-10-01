@@ -19,6 +19,7 @@ from .export import run_export
 from .new_clients import render as render_new_clients, report as new_clients_report
 from .query import query_rows, render
 from .settings import load_settings
+from .wan import DEFAULT_DAYS, build_wan, render_text as render_wan, to_json as wan_json
 from .topology import build_topology, render_text as render_topology, to_json as topology_json
 from .history import (DEFAULT_DIR, capture, diff_snapshots, label_for, list_snapshots, load_snapshot,
                       prune, render_diff, resolve, save_snapshot)
@@ -171,6 +172,14 @@ def build_parser() -> argparse.ArgumentParser:
                               f"few")
     diffcmd.add_argument("--json", action="store_true", help="Output JSON instead of text")
 
+    wancmd = sub.add_parser(
+        "wan", help="Internet health: current state, 24-hour monitoring and speedtest history")
+    wancmd.add_argument("--days", type=_positive, default=DEFAULT_DAYS, metavar="N",
+                        help=f"How many days of speedtests to summarize (default: {DEFAULT_DAYS})")
+    wancmd.add_argument("--json", action="store_true", help="Output JSON instead of text")
+    wancmd.add_argument("--config", type=Path, metavar="FILE",
+                        help="TOML file with the thresholds (default: ./unifi-sentinel.toml if present)")
+
     diag = sub.add_parser("diagnose", help="Run read-only health checks (offline devices, port errors, ...)")
     diag.add_argument("--fail-on", choices=[INFO, WARNING, CRITICAL], default=WARNING,
                       help="Lowest severity that gives a non-zero exit code (default: warning); "
@@ -253,7 +262,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     try:
         config = load_config()
         # Load diagnose settings first so a bad config file fails before any API call.
-        settings = load_settings(args.config) if args.command in ("diagnose", "client", "topology") else None
+        settings = load_settings(args.config) if args.command in ("diagnose", "client", "topology", "wan") else None
         client = UniFiClient.from_config(config)
         if args.command == "info":
             print(f"Application: {client.info()}")
@@ -281,6 +290,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(render_events(events, more, args.json, args.summary, snap.events_truncated))
         elif args.command in ("snapshot", "diff"):
             return _run_history(client, config, args)
+        elif args.command == "wan":
+            snap = collect_snapshot(client, config.site, include_health=True, include_speedtests=True)
+            report = build_wan(snap, args.days, settings)
+            print(wan_json(report) if args.json else render_wan(report))
         elif args.command == "topology":
             snap = collect_snapshot(client, config.site)
             tree = build_topology(snap, settings, with_clients=args.clients)
@@ -300,7 +313,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         elif args.command == "diagnose":
             findings, ignored = apply_ignores(
                 diagnose(collect_snapshot(client, config.site, include_reservations=True,
-                                          include_health=True, include_events=not args.no_events,
+                                          include_health=True, include_speedtests=True,
+                                          include_events=not args.no_events,
                                           event_since_seconds=args.since), settings),
                 settings.ignore)
             emoji = not args.no_emoji and stream_supports_emoji(sys.stdout)

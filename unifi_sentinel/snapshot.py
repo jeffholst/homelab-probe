@@ -38,6 +38,8 @@ class Snapshot:
     events: List[Dict[str, Any]] = field(default_factory=list)
     events_truncated: bool = False
     event_window_seconds: int = 0     # how far back the events reach (0: events not collected)
+    # Speedtest history (v2 speedtest), oldest first: time (ms), download_mbps, upload_mbps, latency_ms.
+    speedtests: List[Dict[str, Any]] = field(default_factory=list)
     events_available: bool = False    # True when the event log was requested and could be read
 
 
@@ -55,6 +57,19 @@ def _legacy_health_or_empty(client: UniFiClient, site_ref: str) -> List[Dict[str
     except UniFiAPIError as e:
         warn(f"legacy stat/health unavailable, controller health and WAN checks were skipped: {e}")
         return []
+
+
+def _speedtests_or_empty(client: UniFiClient, site_ref: str) -> List[Dict[str, Any]]:
+    try:
+        tests = client.legacy_v2(site_ref, "speedtest")
+    except UniFiAPIError as e:
+        warn(f"speedtest history unavailable, speedtest results were skipped: {e}")
+        return []
+    def sort_time(test: Dict[str, Any]) -> float:
+        value = test.get("time")
+        return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else 0.0
+
+    return sorted((t for t in tests if isinstance(t, dict)), key=sort_time)
 
 
 def _device_extras(client: UniFiClient, site_id: str, devices: List[Dict[str, Any]]):
@@ -141,6 +156,7 @@ def collect_snapshot(
     include_reservations: bool = False,
     include_groups: bool = False,
     include_health: bool = False,
+    include_speedtests: bool = False,
     include_events: bool = False,
     event_since_seconds: int = 86400,
     event_categories: Optional[List[str]] = None,
@@ -178,6 +194,7 @@ def collect_snapshot(
             _legacy_rest_or_empty(client, site_ref, "networkconf") if include_reservations else []
         ),
         health=_legacy_health_or_empty(client, site_ref) if include_health else [],
+        speedtests=_speedtests_or_empty(client, site_ref) if include_speedtests else [],
         client_groups=(
             _legacy_v2_or_empty(client, site_ref, "network-members-groups") if include_groups else []
         ),

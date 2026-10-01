@@ -2,12 +2,15 @@
 
 from dataclasses import dataclass
 import ipaddress
+import time
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from .events import describe_duration, first_name, local_time, subjects
 from .export import client_location, device_type_label
 from .query import format_uptime
 from .reservations import reservation_records
+from .wan import (SPEEDTEST_BASELINE_DAYS, describe_age, median_download, monitoring,
+                  speedtests_for_baseline)
 from .settings import DiagnoseSettings, IgnoreRule
 from .snapshot import Snapshot
 
@@ -347,6 +350,44 @@ def _event_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]
     return findings
 
 
+def _wan_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]:
+    """The controller's own 24-hour internet monitoring, and the last speedtest.
+
+    ``alerting_monitors`` is the list of monitors configured to raise alerts, not the ones
+    currently alerting (on a healthy network every one of them reads 100%), so each
+    monitor is judged by its own availability.
+    """
+    findings: List[Finding] = []
+    all_wans = monitoring(snap)
+    for m in all_wans:
+        which = f" ({m['name']})" if len(all_wans) > 1 else ""
+        window = describe_duration(m["period_s"]) if m["period_s"] else "24h"
+        if m["availability"] is not None and m["availability"] < settings.wan_availability_warn_pct:
+            findings.append(Finding(
+                WARNING, "wan", f"internet availability{which} {m['availability']:.1f}% over the last {window}"))
+        for t in m["targets"]:
+            if t["availability"] is not None and t["availability"] < settings.wan_availability_warn_pct:
+                latency = f", latency {t['latency_ms']:.0f} ms" if t["latency_ms"] is not None else ""
+                findings.append(Finding(
+                    WARNING, "wan",
+                    f"monitor {t['target']} ({t['type']}) availability {t['availability']:.1f}% "
+                    f"over the last {window}{latency}"))
+
+    now_ms = int(time.time() * 1000)
+    recent = speedtests_for_baseline(snap.speedtests, SPEEDTEST_BASELINE_DAYS, now_ms)
+    median = median_download(recent)
+    last = recent[-1] if recent else {}
+    download = last.get("download_mbps")
+    if (median and isinstance(download, (int, float)) and not isinstance(download, bool)
+            and download < median * settings.wan_speed_drop_pct / 100):
+        age = describe_age(max(0, int((now_ms - last["time"]) / 1000)))
+        findings.append(Finding(
+            WARNING, "wan",
+            f"last speedtest download {download:.0f} Mbps ({age} ago) is {download / median * 100:.0f}% "
+            f"of the {SPEEDTEST_BASELINE_DAYS}-day median ({median:.0f} Mbps)"))
+    return findings
+
+
 def _known_percent(value: Any) -> Optional[float]:
     """A 0-100 quality value, or None when missing or unknown (the controller uses -1)."""
     if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
@@ -495,6 +536,7 @@ def diagnose(snap: Snapshot, settings: Optional[DiagnoseSettings] = None) -> Lis
                     (d.get("macAddress") or "").upper()))
 
     findings.extend(_health_findings(snap, settings))
+    findings.extend(_wan_findings(snap, settings))
     findings.extend(_client_ip_findings(snap))
     findings.extend(_reservation_findings(snap))
     findings.extend(_duplicate_ip_findings(snap))

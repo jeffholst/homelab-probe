@@ -44,6 +44,8 @@ class FakeSession:
         self.calls = []
         self.posts = []   # (path, body) of every POST, so tests can prove what was sent
         now = time.time() * 1000
+        for t in self.fx.get("legacy_v2", {}).get("speedtest", {}).get("data", []):
+            t["time"] = int(now - t.pop("age_s") * 1000)          # the fixture stores ages, not dates
         self.events = [
             {**{k: v for k, v in e.items() if k != "age_s"}, "timestamp": int(now - e["age_s"] * 1000)}
             for e in self.fx.get("system_log", [])]

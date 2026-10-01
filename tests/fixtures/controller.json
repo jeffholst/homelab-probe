@@ -205,7 +205,18 @@
         "mac": "aa:00:00:00:00:01",
         "type": "udm",
         "name": "Gateway",
-        "model": "UCG Max"
+        "model": "UCG Max",
+        "wan1": {
+          "name": "eth4",
+          "up": true,
+          "speed": 1000,
+          "max_speed": 2500,
+          "full_duplex": true,
+          "latency": 22,
+          "tx_bytes-r": 125000,
+          "rx_bytes-r": 250000,
+          "type": "ethernet"
+        }
       },
       {
         "mac": "aa:00:00:00:00:02",
@@ -384,7 +395,38 @@
         "status": "ok",
         "gw_name": "Gateway",
         "num_gw": 1,
-        "num_pending": 0
+        "num_pending": 0,
+        "isp_name": "Example ISP",
+        "wan_ip": "192.0.2.10",
+        "uptime_stats": {
+          "WAN": {
+            "availability": 100.0,
+            "latency_average": 23,
+            "time_period": 86400,
+            "monitors": [
+              {
+                "availability": 100.0,
+                "latency_average": 20,
+                "target": "example.com",
+                "type": "icmp"
+              },
+              {
+                "availability": 100.0,
+                "latency_average": 24,
+                "target": "example.org",
+                "type": "icmp"
+              }
+            ],
+            "alerting_monitors": [
+              {
+                "availability": 100.0,
+                "latency_average": 22,
+                "target": "192.0.2.53",
+                "type": "dns"
+              }
+            ]
+          }
+        }
       },
       {
         "subsystem": "www",
@@ -434,7 +476,119 @@
         "type": "CLIENTS",
         "members": []
       }
-    ]
+    ],
+    "speedtest": {
+      "data": [
+        {
+          "id": "st0",
+          "age_s": 21600,
+          "download_mbps": 880,
+          "upload_mbps": 40,
+          "latency_ms": 25,
+          "interface_name": "eth4",
+          "wan_networkgroup": "WAN"
+        },
+        {
+          "id": "st1",
+          "age_s": 108000,
+          "download_mbps": 925,
+          "upload_mbps": 41,
+          "latency_ms": 24,
+          "interface_name": "eth4",
+          "wan_networkgroup": "WAN"
+        },
+        {
+          "id": "st2",
+          "age_s": 172800,
+          "download_mbps": 930,
+          "upload_mbps": 40,
+          "latency_ms": 24,
+          "interface_name": "eth4",
+          "wan_networkgroup": "WAN"
+        },
+        {
+          "id": "st3",
+          "age_s": 259200,
+          "download_mbps": 915,
+          "upload_mbps": 40,
+          "latency_ms": 26,
+          "interface_name": "eth4",
+          "wan_networkgroup": "WAN"
+        },
+        {
+          "id": "st4",
+          "age_s": 345600,
+          "download_mbps": 940,
+          "upload_mbps": 41,
+          "latency_ms": 23,
+          "interface_name": "eth4",
+          "wan_networkgroup": "WAN"
+        },
+        {
+          "id": "st5",
+          "age_s": 432000,
+          "download_mbps": 905,
+          "upload_mbps": 39,
+          "latency_ms": 24,
+          "interface_name": "eth4",
+          "wan_networkgroup": "WAN"
+        },
+        {
+          "id": "st6",
+          "age_s": 518400,
+          "download_mbps": 935,
+          "upload_mbps": 40,
+          "latency_ms": 24,
+          "interface_name": "eth4",
+          "wan_networkgroup": "WAN"
+        },
+        {
+          "id": "st7",
+          "age_s": 691200,
+          "download_mbps": 500,
+          "upload_mbps": 31,
+          "latency_ms": 41,
+          "interface_name": "eth4",
+          "wan_networkgroup": "WAN"
+        },
+        {
+          "id": "st8",
+          "age_s": 864000,
+          "download_mbps": 928,
+          "upload_mbps": 40,
+          "latency_ms": 24,
+          "interface_name": "eth4",
+          "wan_networkgroup": "WAN"
+        },
+        {
+          "id": "st9",
+          "age_s": 1209600,
+          "download_mbps": 921,
+          "upload_mbps": 40,
+          "latency_ms": 25,
+          "interface_name": "eth4",
+          "wan_networkgroup": "WAN"
+        },
+        {
+          "id": "st10",
+          "age_s": 1728000,
+          "download_mbps": 938,
+          "upload_mbps": 41,
+          "latency_ms": 24,
+          "interface_name": "eth4",
+          "wan_networkgroup": "WAN"
+        },
+        {
+          "id": "st11",
+          "age_s": 3456000,
+          "download_mbps": 930,
+          "upload_mbps": 40,
+          "latency_ms": 24,
+          "interface_name": "eth4",
+          "wan_networkgroup": "WAN"
+        }
+      ]
+    }
   },
   "system_log": [
     {

@@ -5,12 +5,12 @@ Fork of [ericfitz/unifi-clients-export](https://github.com/ericfitz/unifi-client
 ## Layout
 
 - `unifi-sentinel.py`: thin launcher; all logic lives in `unifi_sentinel/`.
-- `unifi_sentinel/config.py`: env/`.env` loading. `client.py`: `UniFiClient`, the only place that makes HTTP calls. `snapshot.py`: `collect_snapshot`, the one read of the controller. `export.py`, `query.py`, `reservations.py`, `new_clients.py`, `client_view.py`, `events.py`, `topology.py`, `history.py`, `diagnose.py`: pure functions over a `Snapshot`. `settings.py`: `diagnose` thresholds and ignore rules from an optional TOML file; new checks take their thresholds from `DiagnoseSettings`, never module constants. `cli.py`: argparse subcommands.
+- `unifi_sentinel/config.py`: env/`.env` loading. `client.py`: `UniFiClient`, the only place that makes HTTP calls. `snapshot.py`: `collect_snapshot`, the one read of the controller. `export.py`, `query.py`, `reservations.py`, `new_clients.py`, `client_view.py`, `events.py`, `wan.py`, `topology.py`, `history.py`, `diagnose.py`: pure functions over a `Snapshot`. `settings.py`: `diagnose` thresholds and ignore rules from an optional TOML file; new checks take their thresholds from `DiagnoseSettings`, never module constants. `cli.py`: argparse subcommands.
 - New features are new subcommands in `cli.py` backed by modules that take a `Snapshot`; keep fetching (snapshot), analysis and output separate.
 
 ## Commands
 
-- Run: `uv run unifi-sentinel.py <export|query|client|new-clients|diagnose|events|topology|snapshot|diff|info>`
+- Run: `uv run unifi-sentinel.py <export|query|client|new-clients|diagnose|events|wan|topology|snapshot|diff|info>`
 - Tests: `uv run pytest`
 
 ## Documentation
@@ -35,6 +35,7 @@ Fork of [ericfitz/unifi-clients-export](https://github.com/ericfitz/unifi-client
 - Controller health is legacy `stat/health` (subsystems `wlan`, `lan`, `wan`, `www`, `vpn`). `lan`/`wlan` turn `error`/`warning` merely because devices are disconnected, so `diagnose` only trusts them when `num_disconnected` is 0. `Snapshot.health` is collected with `include_health`.
 - Switch port health comes from legacy `stat/device` `port_table`: `link_down_count` is cumulative since boot, drops must be judged as a percentage of packets, and `poe_good` is false on any PoE-capable port without a PoE device (do not use it). A device's `uplink` dict carries `speed`/`max_speed` for its own uplink port.
 - Wi-Fi quality comes from legacy `stat/sta` (`signal` in dBm, `satisfaction`, `wifi_tx_retries_percentage`, `wifi_tx_attempts`, `radio` ng/na/6e) and each AP's `radio_table_stats` (`cu_total`, `tx_retries_pct`, `satisfaction`). Many clients lack these fields, radio `satisfaction` is -1 when unknown, and `anomalies` is on nearly every client (do not use it). Retry percentages need a minimum attempt count to mean anything.
+- Internet health (`wan.py`): the `wan` health entry has `uptime_stats.WAN` (24h `availability`, `latency_average`, `monitors` and `alerting_monitors`); `alerting_monitors` lists monitors configured to alert, not failing ones (all read 100% when healthy), so judge each monitor by its own availability. The gateway's `wan1`/`wan2` dicts have link speed, `max_speed` and live `tx_bytes-r`/`rx_bytes-r` (bytes per second). Speedtest history is a GET: `v2/api/site/{ref}/speedtest` (`Snapshot.speedtests`, oldest first). `stat/report/*` returns only ids over GET (the data needs a POST, which is not approved), so do not build on it.
 - Event checks in `diagnose` read `snap.events` (collected with `include_events`, window in `snap.event_window_seconds`); roaming is normal for phones, so it is info only. Use the snapshot's device names in findings so ignore rules match.
 - The `client` view lists the client's events (matched by MAC, never by name) from `snap.events`, plus device-state events (`category == "UNIFI_DEVICES"`, no CLIENT parameter) for the devices on its path; internet-latency events also name the gateway but are not shown. `Snapshot.events_available` tells "log unreadable" from "no events".
 - Event log: POST `/proxy/network/v2/api/site/{ref}/system-log/all` with `timestampFrom`/`timestampTo` (ms), `pageNumber`, `pageSize` and the server filters `categories`, `severities`, `keys`, `searchText`. Singular names (`category`, `severity`, `types`) are silently ignored, so test a filter by checking the total changes. Records are newest first with `{PLACEHOLDER}` messages filled from `parameters[X].name`; some audit events leave placeholders unresolved. Reading does not change event status.
