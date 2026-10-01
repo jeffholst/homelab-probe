@@ -6,6 +6,7 @@ from typing import Any, Dict, List
 from .export import INVENTORY_COLUMNS, build_inventory, build_offline_clients, build_switch_ports
 from .reservations import RESERVATION_COLUMNS, build_reservations
 from .snapshot import Snapshot
+from .util import printable
 
 TABLE_COLUMNS = ["Name", "MAC Address", "IP Address", "Model", "Connection Type",
                  "Switch", "Port", "Status"]
@@ -115,10 +116,13 @@ def query_rows(
 
 
 def format_table(rows: List[Dict[str, Any]], columns: List[str] = TABLE_COLUMNS) -> str:
-    widths = {c: max([len(c)] + [len(str(r.get(c, ""))) for r in rows]) for c in columns}
+    """A text table. Cells are cleaned with ``printable`` so a name cannot break the layout
+    or smuggle in terminal control characters."""
+    cells = [{c: printable(r.get(c, "")) for c in columns} for r in rows]
+    widths = {c: max([len(c)] + [len(r[c]) for r in cells]) for c in columns}
     line = lambda vals: "  ".join(str(v).ljust(widths[c]) for c, v in zip(columns, vals)).rstrip()
     out = [line(columns), line(["-" * widths[c] for c in columns])]
-    out += [line([r.get(c, "") for c in columns]) for r in rows]
+    out += [line([r[c] for c in columns]) for r in cells]
     return "\n".join(out)
 
 

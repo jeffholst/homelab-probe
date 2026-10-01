@@ -5,7 +5,7 @@ Fork of [ericfitz/unifi-clients-export](https://github.com/ericfitz/unifi-client
 ## Layout
 
 - `unifi-sentinel.py`: thin launcher; all logic lives in `unifi_sentinel/`.
-- `unifi_sentinel/config.py`: env/`.env` loading. `client.py`: `UniFiClient`, the only place that makes HTTP calls. `snapshot.py`: `collect_snapshot`, the one read of the controller. `export.py`, `query.py`, `reservations.py`, `new_clients.py`, `client_view.py`, `events.py`, `wan.py`, `wifi.py`, `topology.py`, `history.py`, `diagnose.py`: pure functions over a `Snapshot`. `settings.py`: `diagnose` thresholds and ignore rules from an optional TOML file; new checks take their thresholds from `DiagnoseSettings`, never module constants. `cli.py`: argparse subcommands.
+- `unifi_sentinel/config.py`: env/`.env` loading. `client.py`: `UniFiClient`, the only place that makes HTTP calls. `snapshot.py`: `collect_snapshot`, the one read of the controller. `export.py`, `query.py`, `reservations.py`, `new_clients.py`, `client_view.py`, `events.py`, `wan.py`, `wifi.py`, `topology.py`, `history.py`, `diagnose.py`: pure functions over a `Snapshot`. `util.py`: output safety helpers (`printable`, `clean_data`, `safe_output`, `csv_safe`). `settings.py`: `diagnose` thresholds and ignore rules from an optional TOML file; new checks take their thresholds from `DiagnoseSettings`, never module constants. `cli.py`: argparse subcommands.
 - New features are new subcommands in `cli.py` backed by modules that take a `Snapshot`; keep fetching (snapshot), analysis and output separate.
 
 ## Commands
@@ -24,6 +24,7 @@ Fork of [ericfitz/unifi-clients-export](https://github.com/ericfitz/unifi-client
 
 - Stdlib `csv`, not pandas. Match the surrounding style; type-hint public functions.
 - Configuration (`config.py`): the `.env` file comes from `--env-file`, then `UNIFI_SENTINEL_ENV`, then `./.env` in the current directory only (never the package directory or parent directories). Validate every setting (`VERIFY_SSL` words, `SITE_ID` characters) and percent-encode site references in URL paths.
+- Output safety (`util.py`): names (clients, devices, SSIDs, event text) are untrusted. Text renderers call `clean_data` on their report (or `printable` on single values; `format_table` cleans every cell), every CSV cell goes through `csv_safe`, and `cli._say` is the print backstop; never use a bare `print` for data in `cli.py`. JSON output stays raw. A new renderer needs a case in `tests/test_output_safety.py`.
 - Raise `UniFiAPIError`/`ConfigError`; only `cli.main` turns them into messages and exit codes.
 - Exit codes: 0 success, 1 and 2 are reserved for `diagnose` findings (warning, critical), 3 is a config/connection error, 4 is `client` finding no single match, 64 is a usage error. Do not reuse 1 or 2 for errors.
 - Dependencies are declared only in `pyproject.toml`; run `uv lock` after changing them and commit `uv.lock`.

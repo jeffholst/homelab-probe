@@ -14,6 +14,7 @@ from .query import format_table
 from .reservations import reservation_records
 from .settings import DiagnoseSettings
 from .snapshot import Snapshot
+from .util import clean_data, printable
 
 MAX_CLIENT_EVENTS = 10      # the client's own events listed before "... and N more"
 MAX_DEVICE_EVENTS = 5       # events about the devices it depends on
@@ -419,6 +420,7 @@ def _events_text(detail: Dict[str, Any], mac: str) -> List[str]:
 
 
 def render_detail(detail: Dict[str, Any], emoji: bool = True) -> str:
+    detail = clean_data(detail)
     i, a = detail["identity"], detail["addressing"]
     lines = [f"{i['name']}" + (f" ({i['hostname']})" if i["hostname"] and i["hostname"] != i["name"] else ""),
              f"  MAC:        {i['mac']}" + (f"  ({i['vendor']})" if i["vendor"] else ""),
@@ -463,6 +465,7 @@ def render_detail(detail: Dict[str, Any], emoji: bool = True) -> str:
 
 
 def render_candidates(query: str, matches: List[Dict[str, Any]]) -> str:
+    query = printable(query)
     if not matches:
         return f"No client matches '{query}'. Search by name, MAC address or IP address."
     shown = matches[:MAX_CANDIDATES_SHOWN]

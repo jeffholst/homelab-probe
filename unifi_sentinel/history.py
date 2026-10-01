@@ -19,6 +19,7 @@ from .config import ConfigError
 from .query import query_rows
 from .reservations import build_reservations
 from .snapshot import Snapshot
+from .util import clean_data
 
 SCHEMA_VERSION = 1
 DEFAULT_DIR = "snapshots"
@@ -290,6 +291,7 @@ def _section(kind: str, title: str, part: Dict[str, Any], fields: List[Tuple[str
 
 
 def render_diff(diff: Dict[str, Any], old_label: str, new_label: str, show_all: bool = False) -> str:
+    diff, old_label, new_label = clean_data(diff), clean_data(old_label), clean_data(new_label)
     out = [f"Comparing {old_label} -> {new_label}", ""]
     if not diff["same_site"]:
         out += ["Warning: these snapshots are from different sites; most devices will look new or missing.", ""]

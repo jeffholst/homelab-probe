@@ -14,6 +14,7 @@ from .wan import (SPEEDTEST_BASELINE_DAYS, describe_age, median_download, monito
                   speedtests_for_baseline)
 from .settings import DiagnoseSettings, IgnoreRule
 from .snapshot import Snapshot
+from .util import printable
 
 CRITICAL, WARNING, INFO = "critical", "warning", "info"
 SEVERITY_ORDER = {CRITICAL: 0, WARNING: 1, INFO: 2}
@@ -671,7 +672,7 @@ def format_findings(findings: List[Finding], emoji: bool = True, ignored: int = 
     def label(severity: str) -> str:
         return EMOJI[severity] if emoji else f"[{severity.upper():8}]"
 
-    lines = [f"{label(f.severity)} {f.subject}: {f.message}" for f in findings]
+    lines = [f"{label(f.severity)} {printable(f.subject)}: {printable(f.message)}" for f in findings]
     counts = {sev: sum(f.severity == sev for f in findings) for sev in SEVERITY_ORDER}
     words = {CRITICAL: "critical", WARNING: "warning", INFO: "info"}
     parts = []
@@ -685,7 +686,8 @@ def format_findings(findings: List[Finding], emoji: bool = True, ignored: int = 
 
 def format_ignored(ignored: List[Tuple[Finding, IgnoreRule]]) -> str:
     """The findings the ignore list suppressed, with each rule's reason."""
-    lines = [f"  {f.subject}: {f.message}  (ignored: {r.reason})" for f, r in ignored]
+    lines = [f"  {printable(f.subject)}: {printable(f.message)}  (ignored: {printable(r.reason)})"
+             for f, r in ignored]
     return f"Ignored ({len(ignored)}):\n" + "\n".join(lines)
 
 
