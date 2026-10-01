@@ -25,8 +25,9 @@ ENTRY_POINTS = {
     "launcher": [sys.executable, str(LAUNCHER)],
     "module": [sys.executable, "-m", "unifi_sentinel.cli"],
 }
-if console_script():
-    ENTRY_POINTS["console script"] = [str(console_script())]
+installed_console_script = console_script()
+assert installed_console_script is not None, "the installed console script is missing"
+ENTRY_POINTS["console script"] = [str(installed_console_script)]
 
 
 def start(entry, args, cwd, **env):
