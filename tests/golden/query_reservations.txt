@@ -1,0 +1,6 @@
+Name  MAC Address  Reserved IP  Network  VLAN  Current IP  Status  Last Seen
+---  ---  ---  ---  ---  ---  ---  ---
+desktop  BB:00:00:00:00:01  10.0.0.10  Main  1  10.0.0.10  Online  <time>
+old-printer  BB:00:00:00:00:03  10.0.0.50  IoT  20  Offline  <time>
+
+2 row(s)

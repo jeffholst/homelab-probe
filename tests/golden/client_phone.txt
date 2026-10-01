@@ -1,0 +1,31 @@
+phone
+  MAC:  BB:00:00:00:00:02
+  Status:  Online, connected since <time>
+  Connection: Wireless
+  IP:  10.0.0.11  (no DHCP reservation)
+  Network:  unknown
+  Groups:  none (not in any client group)
+  First seen: unknown
+  Last seen:  connected now
+
+Attached: phone -> Office AP -> Office Switch port 2 -> Gateway port 2 (100 Mbps)
+Link:  no Wi-Fi quality data reported
+
+Recent events (last 24h, newest first):
+  <time>  CLIENT_DISCONNECTED_WIRELESS: phone disconnected from Home. Time Connected: 25s.
+  <time>  CLIENT_CONNECTED_WIRELESS: phone connected to Home on Office AP.
+  <time>  CLIENT_DISCONNECTED_WIRELESS: phone disconnected from Home. Time Connected: 2m.
+  <time>  CLIENT_ROAMED: phone roamed from Garage AP to Office AP.
+  <time>  CLIENT_DISCONNECTED_WIRELESS: phone disconnected from Home. Time Connected: 1h.
+
+Related findings:
+[WARNING ] Office Switch: CPU utilization 95%
+[WARNING ] Office Switch: PoE budget 41.6 W of 52 W used (80%)
+[WARNING ] Office Switch: uplink to Gateway negotiated at 100 Mbps but both ends support 1000 Mbps
+[WARNING ] Office Switch port 2: 4 rx/tx errors
+[WARNING ] Office Switch port 2: link is half duplex
+[WARNING ] Office Switch port 2: dropping 0.75% of rx packets (75 of 10000)
+[WARNING ] Office Switch port 2: STP state is blocking, not forwarding
+[INFO  ] Office Switch port 2: negotiated at 100 Mbps
+
+7 warnings, 1 info

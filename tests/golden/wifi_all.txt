@@ -1,0 +1,46 @@
+Access points
+AP  Band  Channel  Width  Power  Clients  Utilization  Retries  Satisfaction
+---  ---  ---  ---  ---  ---  ---  ---  ---
+Office AP  2.4 GHz  6  20 MHz  22 dBm  4  30%  5%  99%
+Office AP  5 GHz  36  80 MHz  26 dBm  6  10%  3%
+  Garage AP (offline): no radio data
+
+Neighboring networks: 9 seen by your APs (8 stronger than -80 dBm, 1 open, 1 with a hidden name)
+
+2.4 GHz
+Channel  Neighbors  Strong  Your radios
+---  ---  ---  ---
+1  1  0
+4  1  1
+6  3  3  Office AP
+11  2  2
+
+  Channel 4: strongest of 1 stronger than -80 dBm
+    Adjacent Net  (-60 dBm, WPA2-Personal (AES/CCMP))
+
+  Channel 6: strongest of 3 stronger than -80 dBm
+    Neighbor One  (-45 dBm, WPA2-Personal (AES/CCMP), heard by 2 APs)
+    (hidden, Acme Corp)  (-66 dBm, WPA2-Personal (AES/CCMP))
+    Café Guest ☕  (-72 dBm, Open)  [OPEN]
+
+  Channel 11: strongest of 2 stronger than -80 dBm
+    Eleven Net  (-50 dBm, WPA2-Personal (AES/CCMP))
+    Line Break xxxxxxxxxxxxxxxxxxxxxxxxxxxx…  (-70 dBm, WPA2-Personal (AES/CCMP))
+
+5 GHz
+Channel  Neighbors  Strong  Your radios
+---  ---  ---  ---
+36  0  0  Office AP
+44  1  1
+149  1  1
+
+  Channel 44: strongest of 1 stronger than -80 dBm
+    Five GHz Neighbor  (-55 dBm, WPA2-Personal (AES/CCMP))
+
+  Channel 149: strongest of 1 stronger than -80 dBm
+    Far Block  (-70 dBm, WPA2-Personal (AES/CCMP))
+
+Observations
+  - Office AP 2.4 GHz (channel 6): 3 neighbors stronger than -80 dBm on the same channel, 1 overlapping it
+  - Office AP 5 GHz (channel 36): 0 neighbors stronger than -80 dBm on the same channel, 1 overlapping it
+  - Of the usual 2.4 GHz channels, channel 1 overlaps the fewest neighbors (channel 1: 1, channel 6: 4, channel 11: 2), stronger than -80 dBm

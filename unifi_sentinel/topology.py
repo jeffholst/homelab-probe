@@ -130,7 +130,7 @@ def build_topology(snap: Snapshot, settings: Optional[DiagnoseSettings] = None,
         visited.add(mac)
         result = node(mac)
         for child in sorted(children.get(mac, []), key=order):
-            if child not in visited:      # a loop can never revisit a device
+            if child not in visited:  # pragma: no branch  (a device has one parent, so a loop cannot reach here)
                 result["children"].append(grow(child))
         return result
 

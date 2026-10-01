@@ -1,0 +1,23 @@
+Internet: ok (Example ISP)
+  WAN IP: 192.0.2.10
+  Gateway: Gateway
+  NAT: none seen (public WAN address; a modem doing NAT in front of the gateway cannot be seen)
+  Now: latency 20 ms, 0 drops, status ok
+  Link wan1: eth4 up, 1000 Mbps full duplex (port supports 2500 Mbps)
+    live: 1.0 Mbps up, 2.0 Mbps down
+
+Last 24h (controller monitoring, WAN): availability 100.0%, average latency 23 ms
+Target  Type  Availability  Latency  Alerts
+---  ---  ---  ---  ---
+192.0.2.53  dns  100.0%  22 ms  yes
+example.com  icmp  100.0%  20 ms
+example.org  icmp  100.0%  24 ms
+
+Speedtests, last 30 days (11 runs), 12 stored
+  Last: <time> (<age> ago): download 880 Mbps, upload 40 Mbps, latency 25 ms
+  Download: min 500 Mbps, median 925 Mbps, max 940 Mbps
+  Upload: min 31 Mbps, median 40 Mbps, max 41 Mbps
+  Latency: min 23 ms, median 24 ms, max 41 ms
+
+  Download below 70% of the median (1):
+    <time>  download 500 Mbps, upload 31 Mbps, latency 41 ms

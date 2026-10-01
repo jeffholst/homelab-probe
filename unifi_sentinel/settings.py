@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple
 if sys.version_info >= (3, 11):
     import tomllib
 else:  # Python 3.10
-    import tomli as tomllib
+    import tomli as tomllib  # pragma: no cover  (only runs on Python 3.10, which CI covers)
 
 from .config import ConfigError
 

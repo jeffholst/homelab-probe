@@ -1,0 +1,9 @@
+Time  Severity  Category  Event  Message
+---  ---  ---  ---  ---
+<time>  Low  CLIENT_DEVICES  CLIENT_DISCONNECTED_WIRELESS  phone disconnected from Home. Time Connected: 25s.
+<time>  Low  CLIENT_DEVICES  CLIENT_CONNECTED_WIRELESS  phone connected to Home on Office AP.
+<time>  Low  CLIENT_DEVICES  CLIENT_DISCONNECTED_WIRELESS  phone disconnected from Home. Time Connected: 2m.
+<time>  Low  CLIENT_DEVICES  CLIENT_ROAMED  phone roamed from Garage AP to Office AP.
+<time>  Low  CLIENT_DEVICES  CLIENT_DISCONNECTED_WIRELESS  phone disconnected from Home. Time Connected: 1h.
+
+5 event(s)

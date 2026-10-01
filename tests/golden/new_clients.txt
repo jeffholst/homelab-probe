@@ -1,0 +1,6 @@
+Name  MAC Address  IP Address  Vendor  Connection Type  Where  First Seen  Last Seen  Status  Private MAC
+---  ---  ---  ---  ---  ---  ---  ---  ---  ---
+old-tablet  BB:00:00:00:00:04  10.0.0.51  Wireless  <time>  <time>  Offline
+old-printer  BB:00:00:00:00:03  10.0.0.50  Wired  Wired, Office Switch port 6  <time>  <time>  Offline
+
+2 client(s) in no group
