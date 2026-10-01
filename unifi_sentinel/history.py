@@ -104,24 +104,39 @@ def list_snapshots(directory: Path) -> List[Path]:
         return []
 
     try:
-        found = [(key, p) for p in directory.iterdir() if p.is_file() and (key := _age_key(p.name)) is not None]
+        found = [(key, p) for p in directory.iterdir() if p.is_file() and (key := _age_key(p)) is not None]
     except OSError as e:
         raise ConfigError(f"cannot read snapshot directory {directory}: {e.strerror or e}") from e
     return [p for _, p in sorted(found, key=lambda item: item[0])]
 
 
-def _age_key(name: str) -> Optional[Tuple[datetime, int]]:
+def _age_key(path: Path) -> Optional[Tuple[datetime, int]]:
     """When a snapshot file name says it was taken (as a UTC instant), then its collision suffix
     as a number, or None when the name is not one this tool writes (or not a real date).
     Sorting the names as text would put ``...-1.json`` (the newer) before ``....json`` (the
-    older) of the same second, and would order a local-time name against a UTC one wrongly."""
-    match = _FILE_RE.match(name)
+    older) of the same second, and would order a local-time name against a UTC one wrongly.
+    For a legacy local-time name, prefer the offset-bearing ``captured_at`` in its schema-v1
+    record to disambiguate a repeated daylight-saving hour. If the file cannot be read or does
+    not contain a usable timestamp, fall back to interpreting the name in the local time zone."""
+    match = _FILE_RE.match(path.name)
     if not match:
         return None
     stamp, utc, n = match.groups()
     try:
         moment = datetime.strptime(stamp, "%Y%m%d-%H%M%S")
-        moment = moment.replace(tzinfo=timezone.utc) if utc else moment.astimezone()   # old names: local time
+        if utc:
+            moment = moment.replace(tzinfo=timezone.utc)
+        else:
+            fallback = moment.astimezone()  # old names: local time
+            try:
+                record = json.loads(path.read_text(encoding="utf-8"))
+                captured_at = record.get("captured_at") if (
+                    isinstance(record, dict) and record.get("schema_version") == SCHEMA_VERSION
+                ) else None
+                captured = datetime.fromisoformat(captured_at)
+                moment = captured.astimezone(timezone.utc) if captured.tzinfo is not None else fallback
+            except (OSError, TypeError, ValueError, AttributeError, json.JSONDecodeError):
+                moment = fallback
     except (ValueError, OverflowError, OSError):
         return None
     return moment, int(n or 0)

@@ -175,6 +175,16 @@ def test_old_local_time_names_still_sort_among_new_utc_names(new_york, tmp_path)
     assert list_snapshots(tmp_path) == [before, old, after]
 
 
+def test_old_names_use_captured_at_to_disambiguate_repeated_hour(new_york, tmp_path):
+    later = tmp_path / "snapshot-20261101-013000.json"
+    earlier = tmp_path / "snapshot-20261101-013000-1.json"
+    later.write_text(json.dumps(capture_with(datetime(2026, 11, 1, 1, 30,
+                                                   tzinfo=timezone(timedelta(hours=-5))))))
+    earlier.write_text(json.dumps(capture_with(datetime(2026, 11, 1, 1, 30,
+                                                     tzinfo=timezone(timedelta(hours=-4))))))
+    assert list_snapshots(tmp_path) == [earlier, later]
+
+
 def test_names_that_are_not_real_dates_are_ignored(tmp_path):
     for name in ("snapshot-20261399-250000.json", "snapshot-20261399-250000Z.json", "snapshot-00000000-000000Z.json"):
         (tmp_path / name).write_text("{}")
