@@ -102,8 +102,8 @@ def fetch_events(
     for event in snapshot.events:
         if predicate is None or predicate(event):
             found.append(event)
-            if limit and len(found) >= limit:
-                return found, True
+            if limit and len(found) > limit:
+                return found[:limit], True
     return found, snapshot.events_truncated
 
 

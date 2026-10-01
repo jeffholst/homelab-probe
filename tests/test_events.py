@@ -133,7 +133,7 @@ def test_limit_trims_the_collected_events_and_says_more_exist(fake_client, monke
     got, more = fetch_events(snap, limit=3)
     assert names(got) == ["ev1", "ev2", "ev3"] and more
     got, more = fetch_events(snap, limit=10)
-    assert len(got) == 10 and more                                              # stopped exactly at the limit
+    assert len(got) == 10 and not more
     got, more = fetch_events(snap, limit=11)
     assert len(got) == 10 and not more
 
@@ -144,6 +144,8 @@ def test_predicate_is_applied_before_the_limit(fake_client, monkeypatch):
     got, more = fetch_events(snap, predicate=make_filter(client="phone"), limit=2)
     assert names(got) == ["ev1", "ev2"] and more
     got, more = fetch_events(snap, predicate=make_filter(client="phone"), limit=0)
+    assert names(got) == ["ev1", "ev2", "ev3", "ev4", "ev5"] and not more
+    got, more = fetch_events(snap, predicate=make_filter(client="phone"), limit=5)
     assert names(got) == ["ev1", "ev2", "ev3", "ev4", "ev5"] and not more
 
 
@@ -232,8 +234,8 @@ def test_render_modes(fake_client):
     assert render_events([], False) == "No events match."
     text = render_events(fake_client.session.events[:10], False, summary=True)
     assert "By severity:" in text and "Noisiest" in text and "phone" in text
-    parsed = json.loads(render_events(fake_client.session.events[:10], True, as_json=True, summary=True))
-    assert parsed["total"] == 10 and parsed["truncated"] is True and parsed["noisiest"][0]["Count"] == 3
+    parsed = json.loads(render_events(fake_client.session.events[:10], False, as_json=True, summary=True))
+    assert parsed["total"] == 10 and parsed["truncated"] is False and parsed["noisiest"][0]["Count"] == 3
     assert render_events([], False, summary=True) == "No events in this window."
 
 
