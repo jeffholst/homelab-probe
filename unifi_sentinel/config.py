@@ -76,11 +76,11 @@ def parse_verify(text: Optional[str]) -> bool | str:
     value = (text or "").strip()
     if not value or value.lower() in TRUE_WORDS + FALSE_WORDS:
         return parse_bool("VERIFY_SSL", value)
-    if not (any(c in value for c in "/\\~") or value.lower().endswith(_CA_BUNDLE_SUFFIXES)):
-        raise ConfigError(f"VERIFY_SSL must be one of {', '.join(TRUE_WORDS + FALSE_WORDS)}, "
-                          f"or the path of a CA bundle file (got {text!r})")
     path = Path(value).expanduser()
     if not (path.is_file() or path.is_dir()):
+        if not (any(c in value for c in "/\\~") or value.lower().endswith(_CA_BUNDLE_SUFFIXES)):
+            raise ConfigError(f"VERIFY_SSL must be one of {', '.join(TRUE_WORDS + FALSE_WORDS)}, "
+                              f"or the path of a CA bundle file (got {text!r})")
         raise ConfigError(f"VERIFY_SSL names a CA bundle that does not exist: {value}")
     if not os.access(path, os.R_OK):
         raise ConfigError(f"VERIFY_SSL names a CA bundle that cannot be read: {value}")
