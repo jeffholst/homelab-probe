@@ -391,7 +391,7 @@ def test_the_ignore_list_still_matches_the_ip_and_the_finding_is_still_a_warning
 
 def test_cli_names_the_devices_from_the_fixture_event(fake_client, monkeypatch, capsys):
     assert _run(fake_client, monkeypatch, ["diagnose", "--no-emoji"]) == 1
-    line = next(l for l in capsys.readouterr().out.splitlines() if "IP conflict" in l)
+    line = next(text for text in capsys.readouterr().out.splitlines() if "IP conflict" in text)
     assert line.startswith("[WARNING ] 10.0.0.50: IP conflict reported 1 time in the last 24h "
                            "between Guest Laptop and old-printer on Main (most recent ")
     assert line.endswith("; old-printer holds the reservation for 10.0.0.50")

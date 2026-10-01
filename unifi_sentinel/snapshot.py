@@ -8,7 +8,6 @@ from typing import Any, Dict, List, Optional
 from .client import UniFiAPIError, UniFiClient
 from .util import printable
 
-
 EVENT_PAGE_SIZE = 500   # events requested per system-log page
 MAX_EVENTS = 20_000     # never read more than this many events in one run
 
@@ -178,8 +177,9 @@ def collect_snapshot(
     now_ms: Optional[int] = None,
 ) -> Snapshot:
     """``include_offline``, ``include_reservations`` and ``include_groups`` all need the
-    legacy ``stat/alluser`` list (``include_health`` reads ``stat/health`` for ``diagnose``); reservations also need the network configuration
-    (names, VLANs) and groups need the client group definitions."""
+    legacy ``stat/alluser`` list (``include_health`` reads ``stat/health`` for ``diagnose``);
+    reservations also need the network configuration (names, VLANs) and groups need the client
+    group definitions."""
     site_info = client.resolve_site(site)
     site_ref = site_info.get("internalReference") or site
     events, events_truncated, events_available = _events_or_empty(

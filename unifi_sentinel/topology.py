@@ -9,8 +9,7 @@ from collections import Counter
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from .client_view import DeviceIndex
-from .diagnose import (EMOJI, INFO, SEVERITY_ORDER, WARNING, CRITICAL, Finding, apply_ignores,
-                       diagnose, uplink_speeds)
+from .diagnose import EMOJI, INFO, SEVERITY_ORDER, Finding, apply_ignores, diagnose, uplink_speeds
 from .export import _mac
 from .settings import DiagnoseSettings
 from .snapshot import Snapshot

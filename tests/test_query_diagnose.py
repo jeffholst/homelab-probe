@@ -83,6 +83,7 @@ def test_switch_uplink_port_names_upstream_device():
 def test_ssl_error_message_is_actionable(monkeypatch):
     import pytest
     import requests
+
     from unifi_sentinel.client import UniFiAPIError, UniFiClient
 
     client = UniFiClient("https://x", "key", verify_ssl=True)

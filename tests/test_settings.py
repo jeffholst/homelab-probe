@@ -5,8 +5,7 @@ import pytest
 
 from unifi_sentinel import cli
 from unifi_sentinel.config import ConfigError
-from unifi_sentinel.diagnose import (Finding, apply_ignores, diagnose, exit_code,
-                                     format_findings, format_ignored)
+from unifi_sentinel.diagnose import Finding, apply_ignores, diagnose, exit_code, format_findings, format_ignored
 from unifi_sentinel.settings import DEFAULT_FILENAME, DiagnoseSettings, IgnoreRule, load_settings
 from unifi_sentinel.snapshot import Snapshot
 

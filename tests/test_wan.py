@@ -9,8 +9,15 @@ from unifi_sentinel.config import ConfigError
 from unifi_sentinel.diagnose import diagnose
 from unifi_sentinel.settings import DiagnoseSettings, load_settings
 from unifi_sentinel.snapshot import Snapshot, collect_snapshot
-from unifi_sentinel.wan import (MIN_SPEEDTESTS, build_wan, describe_age, median_download, monitoring,
-                                render_text, speedtests_since, to_json)
+from unifi_sentinel.wan import (
+    MIN_SPEEDTESTS,
+    build_wan,
+    describe_age,
+    median_download,
+    render_text,
+    speedtests_since,
+    to_json,
+)
 
 NOW = 1_790_000_000_000
 DAY_MS = 86_400_000

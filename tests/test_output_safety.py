@@ -221,7 +221,7 @@ def read_rows(path):
 
 def test_export_neutralises_formulas_in_every_text_column(fake_client, tmp_path):
     fx = fake_client.session.fx
-    for client, formula in zip(fx["clients"], FORMULAS):
+    for client, formula in zip(fx["clients"], FORMULAS, strict=False):
         client["name"] = formula
     fx["devices"][1]["name"] = FORMULAS[2]
     for sta in fx["legacy"]["sta"]:

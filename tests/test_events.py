@@ -5,11 +5,21 @@ from pathlib import Path
 
 import pytest
 
-from unifi_sentinel import cli, client as client_module, snapshot as snapshot_module
+from unifi_sentinel import cli
+from unifi_sentinel import client as client_module
+from unifi_sentinel import snapshot as snapshot_module
 from unifi_sentinel.client import SYSTEM_LOG_PATH, UniFiAPIError, UniFiClient
+from unifi_sentinel.events import (
+    event_json,
+    event_row,
+    fetch_events,
+    make_filter,
+    parse_duration,
+    render_events,
+    render_message,
+    summarize,
+)
 from unifi_sentinel.snapshot import collect_event_snapshot
-from unifi_sentinel.events import (event_json, event_row, fetch_events, make_filter, parse_duration,
-                                   render_events, render_message, summarize)
 
 SYSTEM_LOG = "/proxy/network/v2/api/site/default/system-log/all"
 DAY = 86400

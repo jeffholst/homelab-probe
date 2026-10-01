@@ -1,20 +1,19 @@
 """Read-only health checks over a snapshot."""
 
-from dataclasses import dataclass
 import ipaddress
-from datetime import datetime
 import time
-from typing import Any, Dict, List, Optional, Set, Tuple
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
 
 from .events import describe_duration, first_name, local_time, subjects
 from .export import client_location, device_type_label
 from .query import format_uptime
 from .reservations import reservation_records
-from .wan import (SPEEDTEST_BASELINE_DAYS, describe_age, median_download, monitoring,
-                  speedtests_for_baseline)
 from .settings import DiagnoseSettings, IgnoreRule
 from .snapshot import Snapshot
 from .util import printable
+from .wan import SPEEDTEST_BASELINE_DAYS, describe_age, median_download, monitoring, speedtests_for_baseline
 
 CRITICAL, WARNING, INFO = "critical", "warning", "info"
 SEVERITY_ORDER = {CRITICAL: 0, WARNING: 1, INFO: 2}
