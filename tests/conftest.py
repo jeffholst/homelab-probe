@@ -111,7 +111,8 @@ def _system_log(events, q):
             "total_element_count": len(chosen), "total_page_count": -(-len(chosen) // size)}
 
 
-CONFIG_VARIABLES = ("CONTROLLER_URL", "API_KEY", "SITE_ID", "VERIFY_SSL", "UNIFI_SENTINEL_ENV")
+CONFIG_VARIABLES = ("CONTROLLER_URL", "API_KEY", "SITE_ID", "VERIFY_SSL", "ALLOW_INSECURE_HTTP",
+                    "UNIFI_SENTINEL_ENV")
 
 
 @pytest.fixture(autouse=True)

@@ -58,6 +58,7 @@ Planned: richer inventory and troubleshooting reports.
 git clone https://github.com/jeffholst/unifi-sentinel
 cd unifi-sentinel
 cp example.env .env
+chmod 600 .env
 ```
 
 ### Configure
@@ -77,9 +78,12 @@ VERIFY_SSL=false
 | `API_KEY`        | Yes      | -         | API key from the controller                                        |
 | `SITE_ID`        | No       | `default` | Site name, internal reference (e.g. `default`) or UUID             |
 | `VERIFY_SSL`     | No       | `true`    | `true`/`yes`/`1`/`on` or `false`/`no`/`0`/`off` (any case)         |
+| `ALLOW_INSECURE_HTTP` | No  | `false`   | Lab-only opt-in to an `http://` controller URL (same words as `VERIFY_SSL`) |
 
 - **Where the `.env` file is found**, first match wins: the file given with `--env-file FILE` (before the command, for example `unifi-sentinel --env-file lab.env diagnose`); the file named by the `UNIFI_SENTINEL_ENV` environment variable; `.env` in the **current directory**. Parent directories and the installed package's directory are not searched, so an installed copy (`pip install .`) works from whichever directory holds your `.env`, an unrelated project's `.env` is never picked up, and running from a subdirectory of the project does not find the project's `.env` (use `--env-file` or run from the project root). A file named with `--env-file` or `UNIFI_SENTINEL_ENV` must exist. Real environment variables always take precedence over values in the file. The `unifi-sentinel.toml` settings file for `diagnose` is likewise read from the current directory.
 - **`VERIFY_SSL`:** an unset or empty value verifies certificates. Any other word than the ones above is an error that lists the accepted words, so a typo such as `off-ish` can never silently mean "verify".
+- **Protecting the API key:** the key is a credential for your controller, so keep `.env` private with `chmod 600 .env`. If the file that was read can be read by your group or by other users (any of the group or other permission bits set), the command prints one warning that names the file and the `chmod 600` fix, and carries on. It is only a warning, and it is skipped on Windows where file modes mean little. A symlink is judged by the file it points to. The key is never printed: error messages, warnings and `repr()` of the configuration leave it out, and if a server or proxy echoes it back in an error body it is replaced with `***`.
+- **`CONTROLLER_URL`:** it needs a scheme and a host (`https://host` or `https://host:port`; a trailing slash is removed). An `http://` URL is refused, because the API key is sent in a header of every request and would travel in clear text; use `https://` (with `VERIFY_SSL=false` for a self-signed certificate). For a lab network you trust you can opt in with `ALLOW_INSECURE_HTTP=true`. A URL containing a user name, password, query (`?`) or fragment (`#`) is refused.
 - **`SITE_ID`:** a site name may contain spaces and non-ASCII letters, but not `/`, `\`, `?`, `#` or control characters, and at most 128 characters; it is also percent-encoded wherever it appears in a URL.
 
 ### Getting an API key
@@ -562,6 +566,8 @@ The official documentation covers the Integration API only. The legacy `stat/*`,
 ## Troubleshooting
 
 - **`CONTROLLER_URL is not set` / `API_KEY is not set`**: copy `example.env` to `.env` and fill it in, in the directory you run the command from, or point to it with `--env-file FILE` or `UNIFI_SENTINEL_ENV`.
+- **`CONTROLLER_URL uses http://`**: use `https://` (the API key would be sent in clear text), or set `ALLOW_INSECURE_HTTP=true` for a trusted lab network.
+- **`... is readable by other users`**: run the `chmod 600` command in the warning; the file holds your API key.
 - **`env file not found`**: the file named with `--env-file` or `UNIFI_SENTINEL_ENV` does not exist.
 - **`VERIFY_SSL must be one of ...` / `SITE_ID ... cannot be part of a site name`**: fix the value in `.env`; the message lists what is accepted.
 - **`401 Unauthorized`**: the API key is invalid or was revoked; create a new one.
