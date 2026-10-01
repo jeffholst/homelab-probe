@@ -1016,6 +1016,28 @@
       "parameters": {
         "IP": {
           "name": "10.0.0.50"
+        },
+        "CLIENTS": {
+          "clients": [
+            {
+              "mac": "bb:00:00:00:00:03",
+              "name": "old-printer",
+              "hostname": "printer",
+              "ip": "10.0.0.50"
+            },
+            {
+              "mac": "cc:00:00:00:00:10",
+              "name": "Guest Laptop",
+              "hostname": "laptop",
+              "ip": "10.0.0.50"
+            }
+          ]
+        },
+        "NETWORK": {
+          "id": "net-1",
+          "name": "Main",
+          "subnet": "10.0.0.0/24",
+          "vlan_id": 1
         }
       }
     },

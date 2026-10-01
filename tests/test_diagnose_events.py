@@ -249,3 +249,149 @@ def test_cli_unreadable_event_log_warns_and_carries_on(fake_client, monkeypatch,
     assert code == 1                                                              # the fixture's other warnings
     assert "event log unavailable; event history was skipped: log down" in captured.err
     assert "IP conflict" not in captured.out and "Garage AP: device is offline" in captured.out
+
+
+# -- naming the devices in an IP conflict ---------------------------------------
+
+def conflict(ip="192.0.2.24", ts=STAMP, clients=None, network="Main", **extra):
+    params = {"IP": {"name": ip, "id": ip}}
+    if clients is not None:
+        params["CLIENTS"] = {"clients": clients}
+    if network:
+        params["NETWORK"] = {"name": network, "subnet": "192.0.2.0/24", "vlan_id": 1}
+    params.update(extra)
+    return {"event": "CLIENT_IP_CONFLICT", "key": "CLIENT_IP_CONFLICT", "timestamp": ts, "parameters": params}
+
+
+def dev_a(**kw):
+    return {"mac": "aa:bb:cc:00:00:0a", "name": "Speaker A", "hostname": "speaker-host", "ip": "192.0.2.24", **kw}
+
+
+def dev_b(**kw):
+    return {"mac": "aa:bb:cc:00:00:0b", "name": "Speaker B", "hostname": "speaker-host", "ip": "192.0.2.24", **kw}
+
+
+def reserved(mac, ip, name="x", enabled=True):
+    return {"mac": mac, "name": name, "use_fixedip": enabled, "fixed_ip": ip, "last_connection_network_id": "n"}
+
+
+def conflict_snap(events, users=(), window=86400):
+    return Snapshot(site={}, devices=[], clients=[], events=list(events), event_window_seconds=window,
+                    all_users=list(users), networks=[{"_id": "n", "name": "Main"}],
+                    legacy_devices=[{"mac": "aa:01", "type": "usw"}])
+
+
+def conflict_message(events, users=(), window=86400):
+    (f,) = [f for f in diagnose(conflict_snap(events, users, window)) if "IP conflict" in f.message]
+    assert f.severity == "warning" and f.subject == events[0]["parameters"]["IP"]["name"]   # still the IP
+    return f.message
+
+
+def test_the_devices_in_the_conflict_are_named_with_their_network():
+    msg = conflict_message([conflict(clients=[dev_b(), dev_a()])])
+    assert msg.startswith("IP conflict reported 1 time in the last 24h between Speaker A and Speaker B on Main (most recent ")
+    assert re.search(r"\(most recent \d{4}-\d\d-\d\d \d\d:\d\d:\d\d\)$", msg)               # sorted, no hints
+
+
+def test_three_devices_read_naturally():
+    clients = [dev_b(), dev_a(), dev_a(mac="aa:bb:cc:00:00:0c", name="Speaker C")]
+    assert " between Speaker A, Speaker B and Speaker C on Main " in conflict_message([conflict(clients=clients)])
+
+
+def test_devices_are_merged_across_events_and_listed_once():
+    events = [conflict(ts=STAMP + 3000, clients=[dev_a(), dev_b()]),
+              conflict(ts=STAMP + 2000, clients=[dev_a(ip="192.0.2.23"), dev_b()]),     # same devices, other ip listed
+              conflict(ts=STAMP + 1000, clients=[dev_b(), dev_a(mac="aa:bb:cc:00:00:0c", name="Speaker C")])]
+    msg = conflict_message(events)
+    assert "reported 3 times in the last 24h between Speaker A, Speaker B and Speaker C on Main" in msg
+    assert msg.count("Speaker A") == 1                                                      # the same MAC, once
+
+
+def test_mac_case_does_not_create_a_second_device():
+    events = [conflict(clients=[dev_a(mac="AA:BB:CC:00:00:0A")]), conflict(clients=[dev_a(mac="aa:bb:cc:00:00:0a")])]
+    assert " between Speaker A on Main " in conflict_message(events)
+
+
+def test_a_reservation_for_the_conflicting_ip_is_named_as_the_holder():
+    users = [reserved("AA:BB:CC:00:00:0A", "192.0.2.24")]
+    msg = conflict_message([conflict(clients=[dev_a(), dev_b()])], users)
+    assert msg.endswith("; Speaker A holds the reservation for 192.0.2.24")
+
+
+def test_a_device_reserved_a_different_address_points_at_a_stale_lease():
+    users = [reserved("aa:bb:cc:00:00:0a", "192.0.2.24"), reserved("aa:bb:cc:00:00:0b", "192.0.2.23")]
+    msg = conflict_message([conflict(clients=[dev_a(), dev_b()])], users)
+    assert msg.endswith("; Speaker A holds the reservation for 192.0.2.24; Speaker B is reserved 192.0.2.23")
+
+
+def test_disabled_and_unrelated_reservations_add_no_hints():
+    users = [reserved("aa:bb:cc:00:00:0a", "192.0.2.24", enabled=False),                   # stale value, not a reservation
+             reserved("aa:bb:cc:00:00:99", "192.0.2.24")]                                   # someone not involved
+    msg = conflict_message([conflict(clients=[dev_a(), dev_b()])], users)
+    assert "reservation" not in msg and "reserved" not in msg
+
+
+def test_two_devices_with_one_name_are_told_apart_by_their_mac():
+    twins = [dev_a(name="iPhone"), dev_b(name="iPhone")]
+    msg = conflict_message([conflict(clients=twins)])
+    assert " between iPhone (00:0A) and iPhone (00:0B) on Main " in msg
+
+
+def test_name_falls_back_to_hostname_then_mac():
+    clients = [{"mac": "aa:bb:cc:00:00:0a", "name": "", "hostname": "host-one"},
+               {"mac": "aa:bb:cc:00:00:0b"}, {"name": "no-mac"}]
+    assert " between AA:BB:CC:00:00:0B, host-one and no-mac on Main " in conflict_message([conflict(clients=clients)])
+
+
+@pytest.mark.parametrize("clients", [None, [], "none", {"clients": []}, [None, 5, "x", {}], [{"ip": "192.0.2.24"}]])
+def test_events_without_usable_devices_keep_the_plain_message(clients):
+    event = conflict(clients=None, network="")
+    if clients is not None:
+        event["parameters"]["CLIENTS"] = {"clients": clients} if not isinstance(clients, dict) else clients
+    msg = conflict_message([event])
+    assert msg.startswith("IP conflict reported 1 time in the last 24h (most recent ")
+
+
+def test_a_missing_or_malformed_network_is_left_out():
+    for network in (None, "text", {}, {"name": ""}):
+        event = conflict(clients=[dev_a()], network="")
+        if network is not None:
+            event["parameters"]["NETWORK"] = network
+        assert " between Speaker A (most recent " in conflict_message([event])
+
+
+def test_conflicts_are_grouped_per_ip_each_with_its_own_devices():
+    events = [conflict(ip="192.0.2.24", clients=[dev_a(), dev_b()]),
+              conflict(ip="192.0.2.30", clients=[dev_a(mac="aa:bb:cc:00:00:0c", name="Camera")])]
+    got = {f.subject: f.message for f in diagnose(conflict_snap(events)) if "IP conflict" in f.message}
+    assert " between Speaker A and Speaker B on Main " in got["192.0.2.24"]
+    assert " between Camera on Main " in got["192.0.2.30"]
+
+
+def test_a_recurring_conflict_over_a_long_window_says_how_many_days():
+    day = 86_400_000
+    events = [conflict(ts=STAMP + i * day, clients=[dev_a(), dev_b()]) for i in (0, 0, 2, 4)]
+    msg = conflict_message(events, window=7 * 86400)
+    assert "reported 4 times on 3 different days in the last 7d between Speaker A and Speaker B" in msg
+    one_day = conflict_message([conflict(ts=STAMP, clients=[dev_a()]), conflict(ts=STAMP + 1000, clients=[dev_a()])],
+                               window=7 * 86400)
+    assert "reported 2 times in the last 7d" in one_day and "different days" not in one_day
+    short = conflict_message([conflict(ts=STAMP, clients=[dev_a()]), conflict(ts=STAMP + day, clients=[dev_a()])])
+    assert "different days" not in short                                                    # a 24h window never says it
+
+
+def test_the_ignore_list_still_matches_the_ip_and_the_finding_is_still_a_warning():
+    from unifi_sentinel.diagnose import apply_ignores
+    from unifi_sentinel.settings import IgnoreRule
+    findings = diagnose(conflict_snap([conflict(clients=[dev_a(), dev_b()])]))
+    kept, ignored = apply_ignores(findings, (IgnoreRule(subject="192.0.2.24", message="IP conflict", reason="known"),))
+    assert not [f for f in kept if "IP conflict" in f.message] and len(ignored) == 1
+    assert exit_code(findings) == 1 and exit_code(findings, "critical") == 0
+
+
+def test_cli_names_the_devices_from_the_fixture_event(fake_client, monkeypatch, capsys):
+    assert _run(fake_client, monkeypatch, ["diagnose", "--no-emoji"]) == 1
+    line = next(l for l in capsys.readouterr().out.splitlines() if "IP conflict" in l)
+    assert line.startswith("[WARNING ] 10.0.0.50: IP conflict reported 1 time in the last 24h "
+                           "between Guest Laptop and old-printer on Main (most recent ")
+    assert line.endswith("; old-printer holds the reservation for 10.0.0.50")
