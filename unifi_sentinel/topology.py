@@ -14,6 +14,7 @@ from .diagnose import (EMOJI, INFO, SEVERITY_ORDER, WARNING, CRITICAL, Finding, 
 from .export import _mac
 from .settings import DiagnoseSettings
 from .snapshot import Snapshot
+from .util import clean_data
 
 GATEWAY_KINDS = {"Gateway", "Dream Machine"}
 Node = Dict[str, Any]
@@ -208,6 +209,7 @@ def _line(n: Node, emoji: bool, root: bool) -> str:
 
 
 def render_text(topology: Dict[str, Any], emoji: bool = True, with_clients: bool = False) -> str:
+    topology = clean_data(topology)
     style = _UNICODE if emoji else _ASCII
     lines: List[str] = []
 

@@ -17,6 +17,7 @@ from .events import describe_duration
 from .query import format_table
 from .settings import DiagnoseSettings
 from .snapshot import Snapshot
+from .util import clean_data
 
 DEFAULT_DAYS = 30
 SPEEDTEST_BASELINE_DAYS = 30   # `diagnose` compares the last speedtest with this many days
@@ -190,6 +191,7 @@ def _ms(value: Optional[float]) -> str:
 
 
 def render_text(wan: Dict[str, Any]) -> str:
+    wan = clean_data(wan)
     n = wan["now"]
     head = f"Internet: {n['status']}"
     if n["isp"]:

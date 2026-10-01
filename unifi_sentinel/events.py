@@ -11,6 +11,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from .query import format_table
 from .snapshot import Snapshot
+from .util import printable
 
 DEFAULT_SINCE = "24h"
 DEFAULT_LIMIT = 100
@@ -179,7 +180,7 @@ def render_events(events: List[Dict[str, Any]], more: bool, as_json: bool = Fals
         out = [f"{s['total']} event(s)" + (
                    " (more events omitted; the 20,000-event read cap was reached)"
                    if cap_truncated else " (limit reached; use --limit 0 for all)" if more else ""), "",
-               "By severity: " + ", ".join(f"{name or '?'} {n}" for name, n in s["by_severity"]), "",
+               "By severity: " + ", ".join(f"{printable(name) or '?'} {n}" for name, n in s["by_severity"]), "",
                "By event:",
                format_table([{"Event": ev or "?", "Count": n} for ev, n in s["by_event"]],
                             ["Event", "Count"]),

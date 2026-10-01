@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from .client import UniFiAPIError, UniFiClient
+from .util import printable
 
 
 EVENT_PAGE_SIZE = 500   # events requested per system-log page
@@ -13,7 +14,7 @@ MAX_EVENTS = 20_000     # never read more than this many events in one run
 
 
 def warn(msg: str) -> None:
-    print(f"Warning: {msg}", file=sys.stderr)
+    print(f"Warning: {printable(msg)}", file=sys.stderr)
 
 
 @dataclass

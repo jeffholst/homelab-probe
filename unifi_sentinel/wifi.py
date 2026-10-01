@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from .client_view import DeviceIndex
 from .query import format_table
 from .snapshot import Snapshot
+from .util import clean_data, printable
 
 BANDS = {"ng": "2.4 GHz", "na": "5 GHz", "6e": "6 GHz"}
 BAND_ALIASES = {"2.4": "ng", "2": "ng", "24": "ng", "5": "na", "6": "6e"}
@@ -160,8 +161,7 @@ def unique_neighbors(snap: Snapshot, ap_macs: Optional[set] = None) -> List[Neig
 
 def _clean(name: Any, limit: int = 40) -> str:
     """A network name safe to print: control characters removed and long names cut."""
-    text = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", str(name or "")).strip()
-    return text if len(text) <= limit else text[:limit - 1] + "…"
+    return printable(name, limit)
 
 
 def radios(snap: Snapshot, idx: DeviceIndex) -> List[Radio]:
@@ -304,6 +304,7 @@ def _opt(value: Optional[float], fmt: str) -> str:
 
 
 def render_text(wifi: Dict[str, Any], show_all: bool = False, ap: str = "") -> str:
+    wifi, ap = clean_data(wifi), printable(ap)
     if not wifi.get("ap_matched", True):
         return f"No access point matches '{ap}'."
     lines = ["Access points"]

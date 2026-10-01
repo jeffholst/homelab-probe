@@ -26,6 +26,7 @@ from .topology import build_topology, render_text as render_topology, to_json as
 from .history import (DEFAULT_DIR, capture, diff_snapshots, label_for, list_snapshots, load_snapshot,
                       prune, render_diff, resolve, save_snapshot)
 from .snapshot import collect_event_snapshot, collect_snapshot
+from .util import printable, safe_output
 
 
 EXIT_ERROR = 3  # config or connection failure; 1 and 2 are reserved for diagnose findings
@@ -38,6 +39,12 @@ class _Parser(argparse.ArgumentParser):
         # argparse defaults to exit code 2, which would look like a critical finding.
         self.print_usage(sys.stderr)
         self.exit(EXIT_USAGE, f"{self.prog}: error: {message}\n")
+
+
+def _say(text: Any = "", file: Any = None) -> None:
+    """Print ``text`` with control characters removed (names come from devices on the network,
+    and an escape sequence in one must not reach the terminal). Line breaks are kept."""
+    print(safe_output(str(text)), file=file)
 
 
 def _duration(text: str) -> int:
@@ -249,11 +256,11 @@ def _run_history(client: UniFiClient, config: Any, args: argparse.Namespace) -> 
     if args.command == "snapshot":
         record = _live_inventory(client, config)
         path = save_snapshot(record, args.output, args.dir, args.force)
-        print(f"Saved {len(record['devices'])} devices, {len(record['clients'])} clients and "
+        _say(f"Saved {len(record['devices'])} devices, {len(record['clients'])} clients and "
               f"{len(record['reservations'])} reservations to {path}")
         if args.keep:
             for gone in prune(args.dir, args.keep, protect=path):
-                print(f"Removed old snapshot {gone}")
+                _say(f"Removed old snapshot {gone}")
         return 0
 
     if args.last_two:
@@ -279,7 +286,7 @@ def _run_history(client: UniFiClient, config: Any, args: argparse.Namespace) -> 
     else:
         new, new_label = _live_inventory(client, config), "the network right now"
     result = diff_snapshots(old, new)
-    print(json.dumps(result, indent=2) if args.json
+    _say(json.dumps(result, indent=2) if args.json
           else render_diff(result, label_for(old, old_path.name), new_label, args.all))
     return 0
 
@@ -299,9 +306,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         settings = load_settings(args.config) if args.command in ("diagnose", "client", "topology", "wan") else None
         client = UniFiClient.from_config(config)
         if args.command == "info":
-            print(f"Application: {client.info()}")
+            _say(f"Application: {client.info()}")
             for s in client.sites():
-                print(f"Site: {s.get('name')} ref={s.get('internalReference')} id={s.get('id')}")
+                _say(f"Site: {printable(s.get('name'))} ref={printable(s.get('internalReference'))} "
+                 f"id={printable(s.get('id'))}")
         elif args.command == "export":
             run_export(collect_snapshot(client, config.site, args.include_offline), args.output_dir)
         elif args.command == "query":
@@ -310,10 +318,10 @@ def main(argv: Optional[List[str]] = None) -> int:
                 include_reservations=args.kind == "reservations")
             rows = query_rows(snap, args.kind, args.search, args.include_offline,
                               args.switch or "", args.down, args.errors)
-            print(render(rows, args.json, args.kind))
+            _say(render(rows, args.json, args.kind))
         elif args.command == "new-clients":
             snap = collect_snapshot(client, config.site, include_groups=True)
-            print(render_new_clients(new_clients_report(snap, args.search), args.json))
+            _say(render_new_clients(new_clients_report(snap, args.search), args.json))
         elif args.command == "events":
             snap = collect_event_snapshot(
                 client, config.site, args.since, categories=args.category,
@@ -321,33 +329,33 @@ def main(argv: Optional[List[str]] = None) -> int:
             events, more = fetch_events(
                 snap, predicate=make_filter(args.client, args.device, args.event),
                 limit=0 if args.summary else args.limit)  # a summary counts the whole window
-            print(render_events(events, more, args.json, args.summary, snap.events_truncated))
+            _say(render_events(events, more, args.json, args.summary, snap.events_truncated))
         elif args.command in ("snapshot", "diff"):
             return _run_history(client, config, args)
         elif args.command == "wifi":
             snap = collect_snapshot(client, config.site, include_neighbors=True)
             report = build_wifi(snap, args.min_signal, args.band or "", args.ap)
-            print(wifi_json(report) if args.json else render_wifi(report, args.all, args.ap))
+            _say(wifi_json(report) if args.json else render_wifi(report, args.all, args.ap))
         elif args.command == "wan":
             snap = collect_snapshot(client, config.site, include_health=True, include_speedtests=True)
             report = build_wan(snap, args.days, settings)
-            print(wan_json(report) if args.json else render_wan(report))
+            _say(wan_json(report) if args.json else render_wan(report))
         elif args.command == "topology":
             snap = collect_snapshot(client, config.site)
             tree = build_topology(snap, settings, with_clients=args.clients)
             emoji = not args.no_emoji and stream_supports_emoji(sys.stdout)
-            print(topology_json(tree) if args.json else render_topology(tree, emoji, args.clients))
+            _say(topology_json(tree) if args.json else render_topology(tree, emoji, args.clients))
         elif args.command == "client":
             snap = collect_snapshot(client, config.site, include_reservations=True,
                                     include_groups=True, include_events=not args.no_events,
                                     event_since_seconds=args.since)
             matches = find_clients(snap, args.query)
             if len(matches) != 1:
-                print(render_candidates(args.query, matches), file=sys.stderr)
+                _say(render_candidates(args.query, matches), file=sys.stderr)
                 return EXIT_NO_MATCH
             detail = build_client_detail(snap, matches[0], settings)
             emoji = not args.no_emoji and stream_supports_emoji(sys.stdout)
-            print(to_json(detail) if args.json else render_detail(detail, emoji))
+            _say(to_json(detail) if args.json else render_detail(detail, emoji))
         elif args.command == "diagnose":
             findings, ignored = apply_ignores(
                 diagnose(collect_snapshot(client, config.site, include_reservations=True,
@@ -356,12 +364,12 @@ def main(argv: Optional[List[str]] = None) -> int:
                                           event_since_seconds=args.since), settings),
                 settings.ignore)
             emoji = not args.no_emoji and stream_supports_emoji(sys.stdout)
-            print(format_findings(findings, emoji, len(ignored)))
+            _say(format_findings(findings, emoji, len(ignored)))
             if args.show_ignored and ignored:
-                print("\n" + format_ignored(ignored))
+                _say("\n" + format_ignored(ignored))
             return exit_code(findings, args.fail_on)
     except (ConfigError, UniFiAPIError) as e:
-        print(f"ERROR: {e}", file=sys.stderr)
+        _say(f"ERROR: {e}", file=sys.stderr)
         return EXIT_ERROR
     return 0
 

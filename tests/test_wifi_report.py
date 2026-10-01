@@ -90,7 +90,7 @@ def test_names_are_cleaned_hidden_names_stay_empty_and_widths_default():
         row(bssid="b1", name="Line\nBreak\x07 "), row(bssid="b2", name=None), row(bssid="b3", name="x" * 60),
         row(bssid="b4", name="Café ☕", bw=None, center_freq=None, security="Open", oui="Acme"),
         row(bssid="b5", ch=None), row(bssid="b6", name="CSI\x9bOSC\x9d")]))}
-    assert got["b1"]["name"] == "LineBreak" and got["b2"]["name"] == ""
+    assert got["b1"]["name"] == "Line Break" and got["b2"]["name"] == ""
     assert len(got["b3"]["name"]) == 40 and got["b3"]["name"].endswith("…")
     assert got["b4"]["name"] == "Café ☕" and got["b4"]["open"] and got["b4"]["vendor"] == "Acme"
     assert got["b4"]["span"] == (2426, 2448)                                      # computed when center_freq is missing

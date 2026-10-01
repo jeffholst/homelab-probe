@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from .snapshot import Snapshot
+from .util import csv_safe, printable
 
 INVENTORY_COLUMNS = [
     "Type", "Name", "MAC Address", "IP Address", "Model", "Connection Type",
@@ -77,7 +78,7 @@ def _write_csv(path: Path, columns: List[str], rows: List[Dict[str, Any]]) -> No
     with path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=columns)
         writer.writeheader()
-        writer.writerows(rows)
+        writer.writerows({k: csv_safe(v) for k, v in row.items()} for row in rows)
 
 
 def build_inventory(
@@ -282,7 +283,7 @@ def build_switch_ports(
 def run_export(snap: Snapshot, output_dir: Path) -> None:
     """Write the inventory and per-switch CSVs. ``snap.all_users`` (if collected)
     adds previously seen, not-connected clients."""
-    print(f"Site: {snap.site.get('name')} ({snap.site.get('id')})")
+    print(f"Site: {printable(snap.site.get('name'))} ({printable(snap.site.get('id'))})")
     print(f"Found {len(snap.devices)} device(s), {len(snap.clients)} connected client(s)")
 
     output_dir.mkdir(parents=True, exist_ok=True)
