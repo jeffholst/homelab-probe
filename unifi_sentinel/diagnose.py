@@ -283,7 +283,7 @@ def _event_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]
     conflicts: Dict[str, List[int]] = {}
     disconnects: Dict[str, List[Any]] = {}       # client id -> [name, count]
     roams: Dict[str, List[Any]] = {}
-    unreachable: Dict[str, List[Any]] = {}       # device name (lower) -> [name, count]
+    unreachable: Dict[str, List[Any]] = {}       # stable device identity -> [device, event name, count]
     latency = 0
     for e in snap.events:
         kind = str(e.get("event") or e.get("key") or "")
@@ -297,9 +297,21 @@ def _event_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]
                 table = roams if kind == "CLIENT_ROAMED" else disconnects
                 table.setdefault(ident, [first_name(e, "CLIENT") or ident, 0])[1] += 1
         elif kind == "DEVICE_UNREACHABLE":
-            name = first_name(e, "DEVICE")
-            if name:
-                unreachable.setdefault(name.lower(), [name, 0])[1] += 1
+            who = (subjects(e, "DEVICE") or [{}])[0]
+            device_id = str(who.get("id") or "")
+            device_ip = str(who.get("ip") or "")
+            device = next((d for d in snap.devices if device_id and d.get("id") == device_id), None)
+            if device is None:
+                device = next((d for d in snap.devices if device_ip and d.get("ipAddress") == device_ip), None)
+            if device and device.get("id"):
+                identity = f"id:{device['id']}"
+            elif device_ip:
+                identity = f"ip:{device_ip}"
+            elif device_id:
+                identity = f"id:{device_id}"
+            else:
+                continue
+            unreachable.setdefault(identity, [device, str(who.get("name") or ""), 0])[2] += 1
         elif kind == "ISP_HIGH_LATENCY":
             latency += 1
 
@@ -315,17 +327,17 @@ def _event_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]
             findings.append(Finding(
                 INFO, name, f"roamed {_times(n)} in the last {window} (normal for a mobile device)"))
 
-    offline_now = {(d.get("name") or "").lower() for d in snap.devices if d.get("state") != "ONLINE"}
-    known = {(d.get("name") or "").lower(): d["name"] for d in snap.devices if d.get("name")}
-    for key, (name, n) in sorted(unreachable.items()):
-        if key in offline_now:
+    for _identity, (device, event_name, n) in sorted(unreachable.items()):
+        if device and device.get("state") != "ONLINE":
             continue                              # the offline finding already reports it
-        name = known.get(key, name)               # the device's own spelling, so ignore rules and topology match
+        name = (device or {}).get("name") or event_name or "?"
         if n >= threshold:
             findings.append(Finding(WARNING, name, f"was unreachable {_times(n)} in the last {window}"))
-        else:
+        elif device and device.get("state") == "ONLINE":
             findings.append(Finding(
                 INFO, name, f"was unreachable {_times(n)} in the last {window}; online now"))
+        else:
+            findings.append(Finding(INFO, name, f"was unreachable {_times(n)} in the last {window}"))
     if latency:
         findings.append(Finding(
             INFO, "internet", f"high latency was reported {_times(latency)} in the last {window}"))

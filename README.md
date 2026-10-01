@@ -400,7 +400,7 @@ Device - Access Point,AP - Media Room,94:2A:6F:2C:85:52,192.168.1.228,U7PROMAX,W
 
 ### diagnose
 
-Sample from synthetic data (text labels are used when output is piped; a UTF-8 terminal shows emojis):
+Sample from synthetic data with `diagnose --no-events` (text labels are used when output is piped; a UTF-8 terminal shows emojis):
 
 ```text
 [WARNING ] Garage AP: device is offline

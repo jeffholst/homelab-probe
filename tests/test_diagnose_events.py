@@ -100,31 +100,46 @@ def test_roaming_is_only_ever_informational():
 
 # -- devices and the internet -----------------------------------------------
 
-AP_ONLINE = {"id": "1", "macAddress": "aa:03", "name": "Office AP", "state": "ONLINE"}
-AP_OFFLINE = {"id": "2", "macAddress": "aa:04", "name": "Garage AP", "state": "OFFLINE"}
+AP_ONLINE = {"id": "1", "ipAddress": "10.0.0.3", "macAddress": "aa:03", "name": "Office AP", "state": "ONLINE"}
+AP_OFFLINE = {"id": "2", "ipAddress": "10.0.0.4", "macAddress": "aa:04", "name": "Garage AP", "state": "OFFLINE"}
 
 
-def unreachable(name, n=1):
-    return [event("DEVICE_UNREACHABLE", DEVICE={"name": name})] * n
+def unreachable(device_id, n=1, ip=None):
+    device = {"id": device_id, "name": device_id}
+    if ip:
+        device["ip"] = ip
+    return [event("DEVICE_UNREACHABLE", DEVICE=device)] * n
 
 
 def test_a_device_unreachable_earlier_but_online_now_is_info():
     assert ("info", "Office AP", "was unreachable 1 time in the last 24h; online now") in found(
-        unreachable("Office AP"), devices=[AP_ONLINE])
+        unreachable("1", ip="10.0.0.3"), devices=[AP_ONLINE])
     assert ("info", "Office AP", "was unreachable 3 times in the last 24h; online now") in found(
-        unreachable("office ap", 3), devices=[AP_ONLINE])                     # name match ignores case
+        [event("DEVICE_UNREACHABLE", DEVICE={"id": "unknown", "name": "office ap", "ip": "10.0.0.3"})] * 3,
+        devices=[AP_ONLINE])
 
 
 def test_a_device_that_is_offline_now_is_left_to_the_offline_finding():
-    got = found(unreachable("Garage AP", 4), devices=[AP_OFFLINE])
+    got = found(unreachable("2", 4), devices=[AP_OFFLINE])
     assert not [f for f in got if "unreachable" in f[2]]
     assert any(f[1] == "Garage AP" and f[2] == "device is offline" for f in got)   # the existing finding
 
 
 def test_a_device_that_keeps_dropping_is_a_warning_and_unknown_devices_still_report():
     assert ("warning", "Office AP", "was unreachable 10 times in the last 24h") in found(
-        unreachable("Office AP", 10), devices=[AP_ONLINE])
-    assert ("info", "Old AP", "was unreachable 1 time in the last 24h; online now") in found(unreachable("Old AP"))
+        unreachable("1", 10), devices=[AP_ONLINE])
+    assert ("info", "Old AP", "was unreachable 1 time in the last 24h") in found(unreachable("Old AP"))
+
+
+def test_duplicate_device_names_keep_unreachable_events_separate():
+    online = {"id": "online", "ipAddress": "10.0.0.3", "name": "Shared AP", "state": "ONLINE"}
+    offline = {"id": "offline", "ipAddress": "10.0.0.4", "name": "Shared AP", "state": "OFFLINE"}
+    events = ([event("DEVICE_UNREACHABLE", DEVICE={"id": "online", "name": "Shared AP", "ip": "10.0.0.3"})] * 6
+              + [event("DEVICE_UNREACHABLE", DEVICE={"id": "offline", "name": "Shared AP", "ip": "10.0.0.4"})] * 6)
+    findings = [f for f in diagnose(snap(events, devices=[online, offline]))
+                if "unreachable" in f.message]
+    assert [(f.severity, f.subject, f.message) for f in findings] == [
+        ("info", "Shared AP", "was unreachable 6 times in the last 24h; online now")]
 
 
 def test_isp_latency_events_are_counted_as_info():
