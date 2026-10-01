@@ -50,7 +50,12 @@ def _legacy_or_empty(client: UniFiClient, site_ref: str, resource: str) -> List[
     try:
         return client.legacy_stat(site_ref, resource)
     except UniFiAPIError as e:
-        warn(f"legacy stat/{resource} unavailable, port mapping will be incomplete: {e}")
+        impact = (
+            "offline clients, reservations, and client-group history were skipped"
+            if resource == "alluser"
+            else "port mapping will be incomplete"
+        )
+        warn(f"legacy stat/{resource} unavailable; {impact}: {e}")
         return []
 
 

@@ -135,7 +135,10 @@ def test_alluser_failure_degrades_with_a_warning_when_it_is_optional(fake_client
     break_alluser(fake_client, monkeypatch)
     snap = collect_snapshot(fake_client, "default", include_groups=True, include_reservations=True)
     assert snap.all_users == [] and len(snap.clients) == 2          # connected clients still work
-    assert "legacy stat/alluser unavailable" in capsys.readouterr().err
+    warning = capsys.readouterr().err
+    assert "legacy stat/alluser unavailable" in warning
+    assert "reservations" in warning
+    assert "port mapping" not in warning
 
 
 def test_cli_new_clients(fake_client, monkeypatch, capsys):
