@@ -129,6 +129,7 @@ COMMANDS = [
     ["topology", "--clients", "--no-emoji"], ["topology", "--clients"],
     ["client", "desktop", "--no-emoji"], ["client", "desktop"],
     ["diagnose", "--no-emoji", "--show-ignored"], ["diagnose"],
+    ["diagnose", "--notify", "--notify-dry-run"],
 ]
 
 

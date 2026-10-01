@@ -128,10 +128,11 @@ def test_events_are_ordered_new_first_then_worst_severity():
 
 def test_damaged_state_entries_are_ignored():
     state = {"version": 1, "active": {"device.offline|A": "junk", "device.offline|B": {"severity": "purple"},
-                                      "device.offline|C": {"severity": WARNING, "last_notified": NOW}}}
-    events, new = plan([finding(WARNING, "A"), finding(WARNING, "B"), finding(WARNING, "C")], state, NOW + HOUR)
-    assert sorted(e.subject for e in events) == ["A", "B"] and set(new["active"]) == {
-        "device.offline|A", "device.offline|B", "device.offline|C"}
+                                      "device.offline|C": {"severity": WARNING, "last_notified": NOW},
+                                      "device.offline|D": {"severity": WARNING, "last_notified": "bad"}}}
+    events, new = plan([finding(WARNING, subject) for subject in "ABCD"], state, NOW + HOUR)
+    assert sorted(e.subject for e in events) == ["A", "B", "D"] and set(new["active"]) == {
+        "device.offline|A", "device.offline|B", "device.offline|C", "device.offline|D"}
 
 
 def test_a_baseline_makes_everything_current_already_reported():

@@ -116,7 +116,8 @@ def _system_log(events, q):
 
 
 CONFIG_VARIABLES = ("CONTROLLER_URL", "API_KEY", "SITE_ID", "VERIFY_SSL", "ALLOW_INSECURE_HTTP", "TIMEOUT",
-                    "UNIFI_SENTINEL_ENV")
+                    "UNIFI_SENTINEL_ENV", "NOTIFY_NTFY_URL", "NOTIFY_NTFY_TOKEN", "NOTIFY_WEBHOOK_URL",
+                    "NOTIFY_WEBHOOK_TOKEN")
 
 
 @pytest.fixture(autouse=True)
