@@ -74,10 +74,8 @@ def test_cli_end_to_end(fake_client, monkeypatch, capsys, tmp_path):
     assert (tmp_path / "unifi_clients.csv").exists()
 
 
-def test_cli_reports_missing_config(monkeypatch, capsys):
-    monkeypatch.delenv("CONTROLLER_URL", raising=False)
-    monkeypatch.delenv("API_KEY", raising=False)
-    monkeypatch.setattr("unifi_sentinel.config.load_dotenv", lambda: None)
+def test_cli_reports_missing_config(capsys):
+    # no patching needed: the autouse fixture runs every test in an empty directory
     assert cli.main(["info"]) == cli.EXIT_ERROR
     assert "CONTROLLER_URL" in capsys.readouterr().err
 

@@ -23,6 +23,7 @@ Fork of [ericfitz/unifi-clients-export](https://github.com/ericfitz/unifi-client
 ## Conventions
 
 - Stdlib `csv`, not pandas. Match the surrounding style; type-hint public functions.
+- Configuration (`config.py`): the `.env` file comes from `--env-file`, then `UNIFI_SENTINEL_ENV`, then `./.env` in the current directory only (never the package directory or parent directories). Validate every setting (`VERIFY_SSL` words, `SITE_ID` characters) and percent-encode site references in URL paths.
 - Raise `UniFiAPIError`/`ConfigError`; only `cli.main` turns them into messages and exit codes.
 - Exit codes: 0 success, 1 and 2 are reserved for `diagnose` findings (warning, critical), 3 is a config/connection error, 4 is `client` finding no single match, 64 is a usage error. Do not reuse 1 or 2 for errors.
 - Dependencies are declared only in `pyproject.toml`; run `uv lock` after changing them and commit `uv.lock`.
@@ -54,6 +55,7 @@ Fork of [ericfitz/unifi-clients-export](https://github.com/ericfitz/unifi-client
 
 ## Testing
 
+- Tests are hermetic: an autouse fixture in `tests/conftest.py` runs every test in an empty working directory with `CONTROLLER_URL`, `API_KEY`, `SITE_ID`, `VERIFY_SSL` and `UNIFI_SENTINEL_ENV` unset, because `.env` and `unifi-sentinel.toml` are read from the current directory. Never rely on, or patch around, the developer's real files; a test that needs a file creates it in the working directory or changes directory itself.
 - `FakeSession` deep-copies the fixture for each test, so tests may mutate the data they get; keep it that way.
 - Tests use the synthetic fixture `tests/fixtures/controller.json` served by `FakeSession` in `tests/conftest.py`; never hit the live controller from tests. Add tests for new features and extend the fixture rather than pasting real data (redact MACs, IPs, names).
 

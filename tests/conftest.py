@@ -111,6 +111,24 @@ def _system_log(events, q):
             "total_element_count": len(chosen), "total_page_count": -(-len(chosen) // size)}
 
 
+CONFIG_VARIABLES = ("CONTROLLER_URL", "API_KEY", "SITE_ID", "VERIFY_SSL", "UNIFI_SENTINEL_ENV")
+
+
+@pytest.fixture(autouse=True)
+def _isolated_environment(tmp_path, monkeypatch):
+    """No test may depend on the developer's real .env, settings file or environment.
+
+    Each test starts in an empty working directory (``.env`` and ``unifi-sentinel.toml``
+    are looked up in the current directory) with the configuration variables unset. A test
+    that needs a file creates it there, or changes directory itself.
+    """
+    workdir = tmp_path / "cwd"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+    for name in CONFIG_VARIABLES:
+        monkeypatch.delenv(name, raising=False)
+
+
 @pytest.fixture
 def fake_client():
     client = UniFiClient("https://controller", "key")

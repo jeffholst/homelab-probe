@@ -90,6 +90,9 @@ def build_parser() -> argparse.ArgumentParser:
         description="Query, troubleshoot and inventory a UniFi Network controller.",
     )
     parser.add_argument("--version", action="version", version=__version__)
+    parser.add_argument("--env-file", type=Path, metavar="FILE",
+                        help="Read settings from this .env file (before the command). Default: "
+                             "$UNIFI_SENTINEL_ENV, else ./.env in the current directory")
     sub = parser.add_subparsers(dest="command", required=True)
 
     export = sub.add_parser("export", help="Export clients, devices and switch ports to CSV")
@@ -291,7 +294,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     ):
         parser.error("--switch, --down and --errors only apply to 'query ports'")
     try:
-        config = load_config()
+        config = load_config(args.env_file)
         # Load diagnose settings first so a bad config file fails before any API call.
         settings = load_settings(args.config) if args.command in ("diagnose", "client", "topology", "wan") else None
         client = UniFiClient.from_config(config)

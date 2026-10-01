@@ -14,6 +14,7 @@ That query changes nothing on the controller, and it is sent only by
 general-purpose POST/PUT/PATCH/DELETE method on this class.
 """
 
+from urllib.parse import quote
 from typing import Any, Dict, Iterator, List, Optional
 
 import requests
@@ -32,6 +33,12 @@ SYSTEM_LOG_QUERY_KEYS = frozenset({
     "categories", "severities", "keys", "searchText",
 })
 PAGE_SIZE = 200
+
+
+def _segment(value: str) -> str:
+    """A value placed in a URL path, percent-encoded so it cannot add path parts or a query."""
+    encoded = quote(str(value), safe="")
+    return encoded.replace(".", "%2E") if encoded in {".", ".."} else encoded
 
 
 class UniFiAPIError(Exception):
@@ -79,7 +86,7 @@ class UniFiClient:
         unexpected = set(query) - SYSTEM_LOG_QUERY_KEYS
         if unexpected:
             raise ValueError(f"unsupported system-log query key(s): {', '.join(sorted(unexpected))}")
-        url = self.base_url + SYSTEM_LOG_PATH.format(site=site_ref)
+        url = self.base_url + SYSTEM_LOG_PATH.format(site=_segment(site_ref))
         try:
             resp = self.session.post(
                 url, json=query, verify=self.verify_ssl, timeout=self.timeout)
@@ -156,17 +163,17 @@ class UniFiClient:
     def legacy_stat(self, site_ref: str, resource: str) -> List[Dict[str, Any]]:
         """GET /api/s/{site}/stat/{resource}. ``site_ref`` is the internal
         reference (e.g. 'default'), not the UUID."""
-        body = self._get(f"{LEGACY_PREFIX}/s/{site_ref}/stat/{resource}")
+        body = self._get(f"{LEGACY_PREFIX}/s/{_segment(site_ref)}/stat/{resource}")
         return body.get("data", [])
 
     def legacy_rest(self, site_ref: str, resource: str) -> List[Dict[str, Any]]:
         """GET /api/s/{site}/rest/{resource} (e.g. 'networkconf')."""
-        body = self._get(f"{LEGACY_PREFIX}/s/{site_ref}/rest/{resource}")
+        body = self._get(f"{LEGACY_PREFIX}/s/{_segment(site_ref)}/rest/{resource}")
         return body.get("data", [])
 
     def legacy_v2(self, site_ref: str, resource: str) -> List[Dict[str, Any]]:
         """GET /v2/api/site/{site}/{resource} (e.g. 'network-members-groups')."""
-        body = self._get(f"{LEGACY_V2_PREFIX}/site/{site_ref}/{resource}")
+        body = self._get(f"{LEGACY_V2_PREFIX}/site/{_segment(site_ref)}/{resource}")
         return body.get("data", []) if isinstance(body, dict) else body
 
     # -- event log (the one approved POST) ----------------------------------
