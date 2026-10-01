@@ -50,7 +50,12 @@ def _legacy_or_empty(client: UniFiClient, site_ref: str, resource: str) -> List[
     try:
         return client.legacy_stat(site_ref, resource)
     except UniFiAPIError as e:
-        warn(f"legacy stat/{resource} unavailable, port mapping will be incomplete: {e}")
+        impact = (
+            "offline clients, reservations, and client-group history were skipped"
+            if resource == "alluser"
+            else "port mapping will be incomplete"
+        )
+        warn(f"legacy stat/{resource} unavailable; {impact}: {e}")
         return []
 
 
@@ -175,11 +180,17 @@ def collect_snapshot(
     event_severities: Optional[List[str]] = None,
     event_search: str = "",
     now_ms: Optional[int] = None,
+    users_required: bool = False,
 ) -> Snapshot:
     """``include_offline``, ``include_reservations`` and ``include_groups`` all need the
     legacy ``stat/alluser`` list (``include_health`` reads ``stat/health`` for ``diagnose``);
     reservations also need the network configuration (names, VLANs) and groups need the client
-    group definitions."""
+    group definitions.
+
+    Degradation policy: required data fails the command, optional data warns and carries on.
+    Optional is every legacy read, including ``alluser``; a command whose answer would be
+    wrong without ``alluser`` (``new-clients``, ``snapshot`` and ``diff``) passes
+    ``users_required=True`` and fails with exit code 3 instead of printing a misleading result."""
     site_info = client.resolve_site(site)
     site_ref = site_info.get("internalReference") or site
     events, events_truncated, events_available = _events_or_empty(
@@ -191,12 +202,12 @@ def collect_snapshot(
     )
     devices = client.devices(site_info["id"])
     details, stats = _device_extras(client, site_info["id"], devices)
-    if include_groups:
+    if not (include_groups or include_offline or include_reservations):
+        all_users: List[Dict[str, Any]] = []
+    elif users_required:
         all_users = client.legacy_stat(site_ref, "alluser")
-    elif include_offline or include_reservations:
-        all_users = _legacy_or_empty(client, site_ref, "alluser")
     else:
-        all_users = []
+        all_users = _legacy_or_empty(client, site_ref, "alluser")
     return Snapshot(
         site=site_info,
         devices=devices,

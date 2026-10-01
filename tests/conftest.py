@@ -115,7 +115,7 @@ def _system_log(events, q):
             "total_element_count": len(chosen), "total_page_count": -(-len(chosen) // size)}
 
 
-CONFIG_VARIABLES = ("CONTROLLER_URL", "API_KEY", "SITE_ID", "VERIFY_SSL", "ALLOW_INSECURE_HTTP",
+CONFIG_VARIABLES = ("CONTROLLER_URL", "API_KEY", "SITE_ID", "VERIFY_SSL", "ALLOW_INSECURE_HTTP", "TIMEOUT",
                     "UNIFI_SENTINEL_ENV")
 
 
@@ -133,6 +133,7 @@ def _isolated_environment(tmp_path, monkeypatch):
     monkeypatch.chdir(workdir)
     for name in CONFIG_VARIABLES:
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr("unifi_sentinel.client.RETRY_BACKOFF_S", 0)    # retries must not make the suite wait
     yield
     os.environ.clear()
     os.environ.update(saved)
