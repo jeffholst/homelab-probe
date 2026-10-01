@@ -113,10 +113,13 @@ class UniFiClient:
                     f"timed out after {self.timeout:g} s{self._tries(attempt)}: {url}; "
                     "a slow gateway may need a longer --timeout")
                 cause: BaseException = e
-            except requests.exceptions.RequestException as e:
+            except requests.exceptions.ConnectionError as e:
                 failure = UniFiAPIError(
                     f"Connection error for {url}{self._tries(attempt)}: {self._redact(str(e))}")
                 cause = e
+            except requests.exceptions.RequestException as e:
+                raise UniFiAPIError(
+                    f"Request error for {url}: {self._redact(str(e))}") from e
             except OSError as e:               # e.g. requests cannot read the CA bundle file
                 raise UniFiAPIError(f"cannot make the request to {url}: {self._redact(str(e))}") from e
             else:
