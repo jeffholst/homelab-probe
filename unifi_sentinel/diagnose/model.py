@@ -16,7 +16,7 @@ GATEWAY_TYPES = {"Gateway", "Dream Machine"}
 DEVICE_SUBSYSTEMS = {"lan", "wlan"}
 # Every check's stable ``code``, with what it reports. Codes are an interface (``diagnose --json``,
 # scripts, and later notifications key on them): never reuse or rename one; add new ones here.
-# tests/test_diagnose_json.py checks that every Finding in this module uses a code from this table
+# tests/test_diagnose_json.py checks that every Finding in this package uses a code from this table
 # and that every code here is used.
 CODES = {
     "device.offline": "a UniFi device is not online (critical for a gateway or a device that others uplink through)",
