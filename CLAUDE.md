@@ -5,7 +5,7 @@ Fork of [ericfitz/unifi-clients-export](https://github.com/ericfitz/unifi-client
 ## Layout
 
 - `unifi-sentinel.py`: thin launcher; all logic lives in `unifi_sentinel/`.
-- `unifi_sentinel/config.py`: env/`.env` loading. `client.py`: `UniFiClient`, the only place that makes HTTP calls. `snapshot.py`: `collect_snapshot`, the one read of the controller. `export.py`, `query.py`, `reservations.py`, `new_clients.py`, `diagnose.py`: pure functions over a `Snapshot`. `settings.py`: `diagnose` thresholds and ignore rules from an optional TOML file; new checks take their thresholds from `DiagnoseSettings`, never module constants. `cli.py`: argparse subcommands.
+- `unifi_sentinel/config.py`: env/`.env` loading. `client.py`: `UniFiClient`, the only place that makes HTTP calls. `snapshot.py`: `collect_snapshot`, the one read of the controller. `export.py`, `query.py`, `reservations.py`, `new_clients.py`, `client_view.py`, `diagnose.py`: pure functions over a `Snapshot`. `settings.py`: `diagnose` thresholds and ignore rules from an optional TOML file; new checks take their thresholds from `DiagnoseSettings`, never module constants. `cli.py`: argparse subcommands.
 - New features are new subcommands in `cli.py` backed by modules that take a `Snapshot`; keep fetching (snapshot), analysis and output separate.
 
 ## Commands
@@ -24,7 +24,7 @@ Fork of [ericfitz/unifi-clients-export](https://github.com/ericfitz/unifi-client
 
 - Stdlib `csv`, not pandas. Match the surrounding style; type-hint public functions.
 - Raise `UniFiAPIError`/`ConfigError`; only `cli.main` turns them into messages and exit codes.
-- Exit codes: 0 success, 1 and 2 are reserved for `diagnose` findings (warning, critical), 3 is a config/connection error, 64 is a usage error. Do not reuse 1 or 2 for errors.
+- Exit codes: 0 success, 1 and 2 are reserved for `diagnose` findings (warning, critical), 3 is a config/connection error, 4 is `client` finding no single match, 64 is a usage error. Do not reuse 1 or 2 for errors.
 - Dependencies are declared only in `pyproject.toml`; run `uv lock` after changing them and commit `uv.lock`.
 
 ## UniFi API notes
@@ -46,6 +46,7 @@ Fork of [ericfitz/unifi-clients-export](https://github.com/ericfitz/unifi-client
 
 ## Testing
 
+- `FakeSession` deep-copies the fixture for each test, so tests may mutate the data they get; keep it that way.
 - Tests use the synthetic fixture `tests/fixtures/controller.json` served by `FakeSession` in `tests/conftest.py`; never hit the live controller from tests. Add tests for new features and extend the fixture rather than pasting real data (redact MACs, IPs, names).
 
 ## Git and GitHub
