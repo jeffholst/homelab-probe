@@ -19,6 +19,8 @@ from .export import run_export
 from .new_clients import render as render_new_clients, report as new_clients_report
 from .query import query_rows, render
 from .settings import load_settings
+from .wifi import (DEFAULT_MIN_SIGNAL, build_wifi, parse_band,
+                   render_text as render_wifi, to_json as wifi_json)
 from .wan import DEFAULT_DAYS, build_wan, render_text as render_wan, to_json as wan_json
 from .topology import build_topology, render_text as render_topology, to_json as topology_json
 from .history import (DEFAULT_DIR, capture, diff_snapshots, label_for, list_snapshots, load_snapshot,
@@ -62,6 +64,23 @@ def _positive(text: str) -> int:
         value = 0
     if value < 1:
         raise argparse.ArgumentTypeError(f"invalid value {text!r}: use a whole number, 1 or more")
+    return value
+
+
+def _band(text: str) -> str:
+    try:
+        return parse_band(text)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(str(e))
+
+
+def _signal(text: str) -> float:
+    try:
+        value = float(text)
+    except ValueError:
+        value = 1.0
+    if not -120 <= value <= 0:
+        raise argparse.ArgumentTypeError(f"invalid signal {text!r}: use dBm between -120 and 0")
     return value
 
 
@@ -171,6 +190,18 @@ def build_parser() -> argparse.ArgumentParser:
                          help="List every client connect/disconnect and IP change instead of the first "
                               f"few")
     diffcmd.add_argument("--json", action="store_true", help="Output JSON instead of text")
+
+    wifi = sub.add_parser(
+        "wifi", help="Wireless report: each AP's radios and a channel plan from the neighboring networks")
+    wifi.add_argument("--band", type=_band, default=None, metavar="2.4|5|6", help="Only this band")
+    wifi.add_argument("--ap", default="", metavar="NAME",
+                      help="Only this AP (name or part of it), and only neighbors it hears")
+    wifi.add_argument("--min-signal", type=_signal, default=DEFAULT_MIN_SIGNAL, metavar="DBM",
+                      help=f"Neighbors weaker than this are counted but not named or compared "
+                           f"(default {DEFAULT_MIN_SIGNAL})")
+    wifi.add_argument("--all", action="store_true",
+                      help="Name every strong neighbor on a channel, not just the first few")
+    wifi.add_argument("--json", action="store_true", help="Output JSON instead of text")
 
     wancmd = sub.add_parser(
         "wan", help="Internet health: current state, 24-hour monitoring and speedtest history")
@@ -290,6 +321,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(render_events(events, more, args.json, args.summary, snap.events_truncated))
         elif args.command in ("snapshot", "diff"):
             return _run_history(client, config, args)
+        elif args.command == "wifi":
+            snap = collect_snapshot(client, config.site, include_neighbors=True)
+            report = build_wifi(snap, args.min_signal, args.band or "", args.ap)
+            print(wifi_json(report) if args.json else render_wifi(report, args.all, args.ap))
         elif args.command == "wan":
             snap = collect_snapshot(client, config.site, include_health=True, include_speedtests=True)
             report = build_wan(snap, args.days, settings)

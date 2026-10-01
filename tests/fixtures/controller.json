@@ -304,7 +304,38 @@
         "uplink": {
           "uplink_mac": "aa:00:00:00:00:02",
           "uplink_remote_port": 2
-        }
+        },
+        "radio_table_stats": [
+          {
+            "radio": "ng",
+            "channel": 6,
+            "bw": 20,
+            "tx_power": 22,
+            "num_sta": 4,
+            "cu_total": 30,
+            "tx_retries_pct": 5.0,
+            "satisfaction": 99,
+            "state": "RUN"
+          },
+          {
+            "radio": "na",
+            "channel": 36,
+            "bw": 80,
+            "tx_power": 26,
+            "num_sta": 6,
+            "cu_total": 10,
+            "tx_retries_pct": 3.0,
+            "satisfaction": -1,
+            "state": "RUN"
+          }
+        ],
+        "vap_table": [
+          {
+            "bssid": "02:00:5e:00:00:01",
+            "essid": "Home",
+            "radio": "ng"
+          }
+        ]
       },
       {
         "mac": "aa:00:00:00:00:04",
@@ -438,6 +469,198 @@
       {
         "subsystem": "vpn",
         "status": "ok"
+      }
+    ],
+    "rogueap": [
+      {
+        "bssid": "02:aa:00:00:00:01",
+        "ap_mac": "aa:00:00:00:00:03",
+        "band": "ng",
+        "radio": "ng",
+        "channel": 6,
+        "signal": -45,
+        "rssi": 50,
+        "essid": "Neighbor One",
+        "security": "WPA2-Personal (AES/CCMP)",
+        "bw": 20,
+        "center_freq": 2437,
+        "oui": "",
+        "is_ubnt": false,
+        "is_rogue": false
+      },
+      {
+        "bssid": "02:aa:00:00:00:01",
+        "ap_mac": "aa:00:00:00:00:04",
+        "band": "ng",
+        "radio": "ng",
+        "channel": 6,
+        "signal": -60,
+        "rssi": 35,
+        "essid": "Neighbor One",
+        "security": "WPA2-Personal (AES/CCMP)",
+        "bw": 20,
+        "center_freq": 2437,
+        "oui": "",
+        "is_ubnt": false,
+        "is_rogue": false
+      },
+      {
+        "bssid": "02:aa:00:00:00:02",
+        "ap_mac": "aa:00:00:00:00:03",
+        "band": "ng",
+        "radio": "ng",
+        "channel": 6,
+        "signal": -72,
+        "rssi": 23,
+        "essid": "Café Guest ☕",
+        "security": "Open",
+        "bw": 20,
+        "center_freq": 2437,
+        "oui": "",
+        "is_ubnt": false,
+        "is_rogue": false
+      },
+      {
+        "bssid": "02:aa:00:00:00:03",
+        "ap_mac": "aa:00:00:00:00:03",
+        "band": "ng",
+        "radio": "ng",
+        "channel": 4,
+        "signal": -60,
+        "rssi": 35,
+        "essid": "Adjacent Net",
+        "security": "WPA2-Personal (AES/CCMP)",
+        "bw": 20,
+        "center_freq": 2427,
+        "oui": "",
+        "is_ubnt": false,
+        "is_rogue": false
+      },
+      {
+        "bssid": "02:aa:00:00:00:04",
+        "ap_mac": "aa:00:00:00:00:04",
+        "band": "ng",
+        "radio": "ng",
+        "channel": 11,
+        "signal": -50,
+        "rssi": 45,
+        "essid": "Eleven Net",
+        "security": "WPA2-Personal (AES/CCMP)",
+        "bw": 20,
+        "center_freq": 2462,
+        "oui": "",
+        "is_ubnt": false,
+        "is_rogue": false
+      },
+      {
+        "bssid": "02:aa:00:00:00:05",
+        "ap_mac": "aa:00:00:00:00:03",
+        "band": "ng",
+        "radio": "ng",
+        "channel": 1,
+        "signal": -90,
+        "rssi": 5,
+        "essid": "Weak Net",
+        "security": "WPA2-Personal (AES/CCMP)",
+        "bw": 20,
+        "center_freq": 2412,
+        "oui": "",
+        "is_ubnt": false,
+        "is_rogue": false
+      },
+      {
+        "bssid": "02:aa:00:00:00:06",
+        "ap_mac": "aa:00:00:00:00:03",
+        "band": "ng",
+        "radio": "ng",
+        "channel": 6,
+        "signal": -66,
+        "rssi": 29,
+        "essid": "",
+        "security": "WPA2-Personal (AES/CCMP)",
+        "bw": 20,
+        "center_freq": 2437,
+        "oui": "Acme Corp",
+        "is_ubnt": false,
+        "is_rogue": false
+      },
+      {
+        "bssid": "02:aa:00:00:00:07",
+        "ap_mac": "aa:00:00:00:00:03",
+        "band": "na",
+        "radio": "na",
+        "channel": 44,
+        "signal": -55,
+        "rssi": 40,
+        "essid": "Five GHz Neighbor",
+        "security": "WPA2-Personal (AES/CCMP)",
+        "bw": 20,
+        "center_freq": 5220,
+        "oui": "",
+        "is_ubnt": false,
+        "is_rogue": false
+      },
+      {
+        "bssid": "02:aa:00:00:00:08",
+        "ap_mac": "aa:00:00:00:00:04",
+        "band": "na",
+        "radio": "na",
+        "channel": 149,
+        "signal": -70,
+        "rssi": 25,
+        "essid": "Far Block",
+        "security": "WPA2-Personal (AES/CCMP)",
+        "bw": 80,
+        "center_freq": 5775,
+        "oui": "",
+        "is_ubnt": false,
+        "is_rogue": false
+      },
+      {
+        "bssid": "02:00:5e:00:00:01",
+        "ap_mac": "aa:00:00:00:00:03",
+        "band": "ng",
+        "radio": "ng",
+        "channel": 6,
+        "signal": -30,
+        "rssi": 65,
+        "essid": "Home",
+        "security": "WPA2-Personal (AES/CCMP)",
+        "bw": 20,
+        "center_freq": 2437,
+        "oui": "",
+        "is_ubnt": false,
+        "is_rogue": false
+      },
+      {
+        "bssid": "02:aa:00:00:00:09",
+        "ap_mac": "aa:00:00:00:00:03",
+        "band": "ng",
+        "radio": "ng",
+        "channel": 11,
+        "signal": -70,
+        "rssi": 25,
+        "essid": "Line\nBreak xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "security": "WPA2-Personal (AES/CCMP)",
+        "bw": 20,
+        "center_freq": 2462,
+        "oui": "",
+        "is_ubnt": false,
+        "is_rogue": false
+      },
+      {
+        "bssid": "02:aa:00:00:00:0a",
+        "ap_mac": "aa:00:00:00:00:03",
+        "band": "ng",
+        "channel": 1,
+        "essid": "No Signal"
+      },
+      {
+        "ap_mac": "aa:00:00:00:00:03",
+        "band": "ng",
+        "channel": 1,
+        "signal": -50,
+        "essid": "No Bssid"
       }
     ]
   },

@@ -40,7 +40,10 @@ class Snapshot:
     event_window_seconds: int = 0     # how far back the events reach (0: events not collected)
     # Speedtest history (v2 speedtest), oldest first: time (ms), download_mbps, upload_mbps, latency_ms.
     speedtests: List[Dict[str, Any]] = field(default_factory=list)
+    # Neighboring Wi-Fi networks seen by our APs (legacy stat/rogueap): one row per (BSSID, observing AP).
+    neighbors: List[Dict[str, Any]] = field(default_factory=list)
     events_available: bool = False    # True when the event log was requested and could be read
+    neighbors_available: bool = True
 
 
 def _legacy_or_empty(client: UniFiClient, site_ref: str, resource: str) -> List[Dict[str, Any]]:
@@ -70,6 +73,14 @@ def _speedtests_or_empty(client: UniFiClient, site_ref: str) -> List[Dict[str, A
         return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else 0.0
 
     return sorted((t for t in tests if isinstance(t, dict)), key=sort_time)
+
+
+def _neighbors_or_empty(client: UniFiClient, site_ref: str) -> tuple[List[Dict[str, Any]], bool]:
+    try:
+        return [n for n in client.legacy_stat(site_ref, "rogueap") if isinstance(n, dict)], True
+    except UniFiAPIError as e:
+        warn(f"neighboring networks unavailable; neighbor-based channel comparisons were skipped: {e}")
+        return [], False
 
 
 def _device_extras(client: UniFiClient, site_id: str, devices: List[Dict[str, Any]]):
@@ -157,6 +168,7 @@ def collect_snapshot(
     include_groups: bool = False,
     include_health: bool = False,
     include_speedtests: bool = False,
+    include_neighbors: bool = False,
     include_events: bool = False,
     event_since_seconds: int = 86400,
     event_categories: Optional[List[str]] = None,
@@ -173,6 +185,9 @@ def collect_snapshot(
         client, site_ref, event_since_seconds, event_categories or [],
         event_severities or [], event_search, now_ms
     ) if include_events else ([], False, False)
+    neighbors, neighbors_available = (
+        _neighbors_or_empty(client, site_ref) if include_neighbors else ([], False)
+    )
     devices = client.devices(site_info["id"])
     details, stats = _device_extras(client, site_info["id"], devices)
     if include_groups:
@@ -195,6 +210,8 @@ def collect_snapshot(
         ),
         health=_legacy_health_or_empty(client, site_ref) if include_health else [],
         speedtests=_speedtests_or_empty(client, site_ref) if include_speedtests else [],
+        neighbors=neighbors,
+        neighbors_available=neighbors_available,
         client_groups=(
             _legacy_v2_or_empty(client, site_ref, "network-members-groups") if include_groups else []
         ),
