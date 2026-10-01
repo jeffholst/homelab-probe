@@ -173,6 +173,11 @@ def build_parser() -> argparse.ArgumentParser:
     diag.add_argument("--config", type=Path, metavar="FILE",
                       help="TOML file with thresholds and an ignore list "
                            "(default: ./unifi-sentinel.toml if present)")
+    diag.add_argument("--no-events", action="store_true",
+                      help="Skip the event-log checks (repeated disconnects, IP conflicts, ...), "
+                           "which otherwise send the one approved read-only POST")
+    diag.add_argument("--since", type=_duration, default=_duration(DEFAULT_SINCE), metavar="DURATION",
+                      help=f"How far back the event checks look, e.g. 12h, 7d (default: {DEFAULT_SINCE})")
     diag.add_argument("--show-ignored", action="store_true",
                       help="Also list the findings suppressed by the ignore list")
     diag.add_argument("--no-emoji", action="store_true",
@@ -289,7 +294,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         elif args.command == "diagnose":
             findings, ignored = apply_ignores(
                 diagnose(collect_snapshot(client, config.site, include_reservations=True,
-                                          include_health=True), settings),
+                                          include_health=True, include_events=not args.no_events,
+                                          event_since_seconds=args.since), settings),
                 settings.ignore)
             emoji = not args.no_emoji and stream_supports_emoji(sys.stdout)
             print(format_findings(findings, emoji, len(ignored)))

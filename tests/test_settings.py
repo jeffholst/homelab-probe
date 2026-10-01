@@ -203,6 +203,9 @@ reason = "moved to IoT later"
 [[ignore]]
 subject = "wlan"
 reason = "explained by the offline spare AP"
+[[ignore]]
+subject = "10.0.0.50"
+reason = "known IP conflict from the event log"
 ''')
     code = _run(fake_client, monkeypatch, ["diagnose", "--no-emoji", "--config", str(cfg)])
     out = capsys.readouterr().out

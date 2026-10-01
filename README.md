@@ -1,6 +1,6 @@
 # UniFi Sentinel
 
-A command-line tool for querying, troubleshooting and inventorying a UniFi Network controller. It is **read-only**: it never changes anything on the controller. Every request is a GET, with one exception: the event log can only be queried with a POST, so `events` sends a read-only query to that one endpoint (see [Event history](#event-history)).
+A command-line tool for querying, troubleshooting and inventorying a UniFi Network controller. It is **read-only**: it never changes anything on the controller. Every request is a GET, with one exception: the event log can only be queried with a POST, so `events`, and `diagnose` by default (`--no-events` skips it), send a read-only query to that one endpoint (see [Event history](#event-history)).
 
 > **Status: early development.** Tested against one live controller (Network 10.6.106); other versions and hardware may differ. See [open issues](https://github.com/jeffholst/unifi-sentinel/issues) for the roadmap.
 
@@ -137,8 +137,8 @@ uv run unifi-sentinel.py diagnose                    # health checks
 | Level | Examples |
 | ----- | -------- |
 | 🛑 critical | an AP radio's channel utilization at or above `radio_util_critical_pct` (default 90%); a switch's PoE budget at or above `poe_critical_pct` (default 95%); the controller reports a WAN, internet or VPN subsystem in `error`; a LAN/WLAN `error` with no disconnected device to explain it; gateway offline; an offline switch or device that other devices uplink through; CPU or memory at or above `resource_critical_pct` (default 98%) |
-| ⚠️ warning | a Wi-Fi client with signal at or below `wifi_weak_signal_dbm` (default -75 dBm), `wifi_retry_pct` (default 30%) or more of its transmissions retried, or satisfaction below `wifi_satisfaction_warn` (default 50%); an AP radio with channel utilization at or above `radio_util_warn_pct` (default 70%), or retries or satisfaction past the same limits; a port whose link has gone down `link_flap_count` or more times since boot (default 5); a port dropping `port_drop_pct` or more of its packets (default 0.1%); an up port whose STP state is not forwarding; a switch's PoE budget at or above `poe_warn_pct` (default 80%); an uplink negotiated below what both ends support; a subsystem in `warning` the same way; internet latency at or above `wan_latency_warn_ms` (default 100 ms) or drops at or above `wan_drops_warn` (default 10); other offline devices; port rx/tx errors; half-duplex links; CPU or memory at or above `resource_warn_pct` (default 90%) but below the critical level; connected clients with no IP address or a link-local (169.254.x.x) address, shown with where they attach; DHCP reservation problems: an online client whose current IP differs from its reservation, the same IP reserved for several clients, or a reserved IP outside its network's subnet; the same IP in use by several clients or UniFi devices on any VLAN, or a reserved IP currently used by a different client or UniFi device |
-| ℹ️ info | the controller's LAN/WLAN status when it is only caused by disconnected devices (they are reported individually); devices waiting to be adopted; a failed speedtest; ports negotiated at or below `slow_link_mbps` (default 100 Mbps); legacy data unavailable (port checks skipped) |
+| ⚠️ warning | an IP conflict reported in the last 24 hours; a client that disconnected `event_flap_count` or more times in that window, or a device that was unreachable that often; a Wi-Fi client with signal at or below `wifi_weak_signal_dbm` (default -75 dBm), `wifi_retry_pct` (default 30%) or more of its transmissions retried, or satisfaction below `wifi_satisfaction_warn` (default 50%); an AP radio with channel utilization at or above `radio_util_warn_pct` (default 70%), or retries or satisfaction past the same limits; a port whose link has gone down `link_flap_count` or more times since boot (default 5); a port dropping `port_drop_pct` or more of its packets (default 0.1%); an up port whose STP state is not forwarding; a switch's PoE budget at or above `poe_warn_pct` (default 80%); an uplink negotiated below what both ends support; a subsystem in `warning` the same way; internet latency at or above `wan_latency_warn_ms` (default 100 ms) or drops at or above `wan_drops_warn` (default 10); other offline devices; port rx/tx errors; half-duplex links; CPU or memory at or above `resource_warn_pct` (default 90%) but below the critical level; connected clients with no IP address or a link-local (169.254.x.x) address, shown with where they attach; DHCP reservation problems: an online client whose current IP differs from its reservation, the same IP reserved for several clients, or a reserved IP outside its network's subnet; the same IP in use by several clients or UniFi devices on any VLAN, or a reserved IP currently used by a different client or UniFi device |
+| ℹ️ info | a client that roamed `event_flap_count` or more times; a device that was unreachable earlier but is online now; high-latency events from the ISP monitor; the controller's LAN/WLAN status when it is only caused by disconnected devices (they are reported individually); devices waiting to be adopted; a failed speedtest; ports negotiated at or below `slow_link_mbps` (default 100 Mbps); legacy data unavailable (port checks skipped) |
 
 The reservation checks read the legacy `stat/alluser` and `rest/networkconf` endpoints (the same data as `query reservations`); offline clients are only checked for duplicate and out-of-subnet reservations, and a reservation whose network cannot be resolved is skipped for the subnet check.
 
@@ -156,6 +156,17 @@ For each switch port `diagnose` also checks the controller's port counters (the 
 - **STP:** an up port whose state is not `forwarding` (for example `blocking`).
 - **PoE budget:** used power as a percentage of the switch's total PoE budget; switches without PoE are skipped. The per-port `poe_good` flag is deliberately not used: it is false on every PoE-capable port that simply has no PoE device attached.
 - **Uplink speed:** an uplink negotiated below what both ends support (the device's own maximum and the parent's port maximum). A gigabit device on a 2.5G port is at its own maximum and is not flagged.
+
+#### Recent events
+
+`diagnose` also reads the controller's event log (the last 24 hours by default) so it notices things that **happened and went away**, which a snapshot of the network right now cannot see (an IP conflict is usually over by the time `diagnose` runs):
+- **IP conflicts:** a warning per IP, with how many times it was reported and when last.
+- **Flapping:** a client that disconnected `event_flap_count` (default 10) or more times in the window, wired and wireless together, is a warning. A device that was unreachable that often is a warning too.
+- **Roaming** is normal for phones (one phone here roams about 30 times a day), so a client that roamed `event_flap_count` or more times is only info.
+- **Unreachable earlier, online now:** info. A device that is offline right now is left to the existing offline finding.
+- **ISP high latency** events: info with the count.
+
+`--since DURATION` changes the window (for example `12h` or `7d`), and `--no-events` skips these checks and the request they need. If the log cannot be read, `diagnose` warns and carries on without them. An event-based warning stays in the output until its event leaves the window, so it keeps `diagnose` at exit code 1 for that long; use a shorter `--since` or `--no-events` for a cron job that should only react to what is wrong right now.
 
 #### Wi-Fi quality
 
@@ -183,6 +194,7 @@ port_drop_pct = 0.1          # dropped packets, % of a port's packets, at or abo
 min_packets_for_drop_pct = 1000 # minimum packets before evaluating drop percentage
 poe_warn_pct = 80            # switch PoE budget used at or above this: warning
 poe_critical_pct = 95        # switch PoE budget used at or above this: critical
+event_flap_count = 10        # disconnects (or unreachable events) in the window at or above this: warning
 wifi_weak_signal_dbm = -75   # Wi-Fi client signal at or below this (dBm): warning
 wifi_retry_pct = 30          # client or radio TX retries at or above this (%): warning
 wifi_min_attempts = 1000     # client TX attempts needed before its retries are judged
@@ -214,6 +226,8 @@ Ignored findings are left out of the output, counted in the summary (`3 warnings
 ```bash
 */15 * * * * cd /path/to/unifi-sentinel && uv run unifi-sentinel.py diagnose --fail-on critical || notify-me
 ```
+
+Event-based warnings (above) count towards exit code 1 like any other warning.
 
 Tool errors used to exit 1 for every command; they now exit 3 so that 1 and 2 only ever mean findings.
 
@@ -307,7 +321,7 @@ Some audit events have no value for part of their message; those parts show as `
 #### The one POST, and why it is safe
 
 The event log has no GET endpoint. The controller only answers a POST that carries the time range and filters, and the request only *reads*: it returns events and changes nothing (reading does not mark events as read, and two identical queries return identical data). To keep the read-only promise checkable:
-- the POST is sent only by `UniFiClient.system_log`, to the one fixed `system-log/all` path, and the request body may only contain the documented query keys (anything else is rejected before anything is sent);
+- the POST is sent only by `UniFiClient.system_log` (used by `events`, and by `diagnose` unless `--no-events`), to the one fixed `system-log/all` path, and the request body may only contain the documented query keys (anything else is rejected before anything is sent);
 - `UniFiClient` has no general-purpose POST, PUT, PATCH or DELETE method;
 - the test suite fails if any other code sends a POST, PUT, PATCH or DELETE, or if a second POST appears in `client.py`.
 
@@ -438,6 +452,7 @@ The official documentation covers the Integration API only. The legacy `stat/*`,
   - `legacy rest/... unavailable`: network names and VLANs are missing (reservations, subnet checks)
   - `legacy v2 ... unavailable`: group names are missing; `new-clients` trusts each client's own group list
   - `legacy stat/health unavailable`: `diagnose` skips the controller health and WAN checks
+  - `event log unavailable`: `events` shows nothing and `diagnose` skips the event checks
   - `detail/statistics unavailable for N device(s)`: no uptime, heartbeat or CPU/memory for those devices (normal for offline devices)
 
 ## Development

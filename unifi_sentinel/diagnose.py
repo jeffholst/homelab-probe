@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import ipaddress
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+from .events import describe_duration, first_name, local_time, subjects
 from .export import client_location, device_type_label
 from .query import format_uptime
 from .reservations import reservation_records
@@ -262,6 +263,78 @@ def _port_health_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Fi
 BANDS = {"ng": "2.4 GHz", "na": "5 GHz", "6e": "6 GHz"}
 
 
+def _times(n: int) -> str:
+    return f"{n} time" + ("" if n == 1 else "s")
+
+
+def _event_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]:
+    """Findings from the recent event log: things that happened and may have gone away.
+
+    Only the types listed here are read, so other events (admin access, settings changes,
+    ordinary connects) never matter. Roaming is normal for phones (one roams about 30 times
+    a day), so frequent roaming is only informational; repeated disconnects are the warning.
+    """
+    if not snap.events:
+        return []
+    window = describe_duration(snap.event_window_seconds or 86400)
+    threshold = settings.event_flap_count
+    findings: List[Finding] = []
+
+    conflicts: Dict[str, List[int]] = {}
+    disconnects: Dict[str, List[Any]] = {}       # client id -> [name, count]
+    roams: Dict[str, List[Any]] = {}
+    unreachable: Dict[str, List[Any]] = {}       # device name (lower) -> [name, count]
+    latency = 0
+    for e in snap.events:
+        kind = str(e.get("event") or e.get("key") or "")
+        if kind == "CLIENT_IP_CONFLICT":
+            ip = str((((e.get("parameters") or {}).get("IP") or {}).get("name")) or "unknown IP")
+            conflicts.setdefault(ip, []).append(e.get("timestamp") or 0)
+        elif kind.startswith("CLIENT_DISCONNECTED") or kind == "CLIENT_ROAMED":
+            who = (subjects(e, "CLIENT") or [{}])[0]
+            ident = str(who.get("id") or who.get("name") or "")
+            if ident:
+                table = roams if kind == "CLIENT_ROAMED" else disconnects
+                table.setdefault(ident, [first_name(e, "CLIENT") or ident, 0])[1] += 1
+        elif kind == "DEVICE_UNREACHABLE":
+            name = first_name(e, "DEVICE")
+            if name:
+                unreachable.setdefault(name.lower(), [name, 0])[1] += 1
+        elif kind == "ISP_HIGH_LATENCY":
+            latency += 1
+
+    for ip, stamps in sorted(conflicts.items()):
+        findings.append(Finding(
+            WARNING, ip, f"IP conflict reported {_times(len(stamps))} in the last {window} "
+                         f"(most recent {local_time(max(stamps))})"))
+    for name, n in sorted(disconnects.values()):
+        if n >= threshold:
+            findings.append(Finding(WARNING, name, f"disconnected {_times(n)} in the last {window}"))
+    for name, n in sorted(roams.values()):
+        if n >= threshold:
+            findings.append(Finding(
+                INFO, name, f"roamed {_times(n)} in the last {window} (normal for a mobile device)"))
+
+    offline_now = {(d.get("name") or "").lower() for d in snap.devices if d.get("state") != "ONLINE"}
+    known = {(d.get("name") or "").lower(): d["name"] for d in snap.devices if d.get("name")}
+    for key, (name, n) in sorted(unreachable.items()):
+        if key in offline_now:
+            continue                              # the offline finding already reports it
+        name = known.get(key, name)               # the device's own spelling, so ignore rules and topology match
+        if n >= threshold:
+            findings.append(Finding(WARNING, name, f"was unreachable {_times(n)} in the last {window}"))
+        else:
+            findings.append(Finding(
+                INFO, name, f"was unreachable {_times(n)} in the last {window}; online now"))
+    if latency:
+        findings.append(Finding(
+            INFO, "internet", f"high latency was reported {_times(latency)} in the last {window}"))
+    if snap.events_truncated:
+        findings.append(Finding(
+            INFO, "controller", "the event log read was cut off at its cap; event counts may be low"))
+    return findings
+
+
 def _known_percent(value: Any) -> Optional[float]:
     """A 0-100 quality value, or None when missing or unknown (the controller uses -1)."""
     if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
@@ -440,6 +513,7 @@ def diagnose(snap: Snapshot, settings: Optional[DiagnoseSettings] = None) -> Lis
     findings.extend(_port_health_findings(snap, settings))
     findings.extend(_uplink_speed_findings(snap))
     findings.extend(_wifi_findings(snap, settings))
+    findings.extend(_event_findings(snap, settings))
 
     return sorted(findings, key=lambda f: (SEVERITY_ORDER[f.severity], f.subject))
 
