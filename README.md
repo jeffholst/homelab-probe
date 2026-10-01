@@ -1,6 +1,6 @@
 # UniFi Sentinel
 
-A command-line tool for querying, troubleshooting and inventorying a UniFi Network controller. It is **read-only**: it never changes anything on the controller. Every request is a GET, with one exception: the event log can only be queried with a POST, so `events`, and `diagnose` by default (`--no-events` skips it), send a read-only query to that one endpoint (see [Event history](#event-history)).
+A command-line tool for querying, troubleshooting and inventorying a UniFi Network controller. It is **read-only**: it never changes anything on the controller. Every request is a GET, with one exception: the event log can only be queried with a POST, so `events`, and `diagnose` and `client` by default (`--no-events` skips it), send a read-only query to that one endpoint (see [Event history](#event-history)).
 
 > **Status: early development.** Tested against one live controller (Network 10.6.106); other versions and hardware may differ. See [open issues](https://github.com/jeffholst/unifi-sentinel/issues) for the roadmap.
 
@@ -321,7 +321,7 @@ Some audit events have no value for part of their message; those parts show as `
 #### The one POST, and why it is safe
 
 The event log has no GET endpoint. The controller only answers a POST that carries the time range and filters, and the request only *reads*: it returns events and changes nothing (reading does not mark events as read, and two identical queries return identical data). To keep the read-only promise checkable:
-- the POST is sent only by `UniFiClient.system_log` (used by `events`, and by `diagnose` unless `--no-events`), to the one fixed `system-log/all` path, and the request body may only contain the documented query keys (anything else is rejected before anything is sent);
+- the POST is sent only by `UniFiClient.system_log` (used by `events`, and by `diagnose` and `client` unless `--no-events`), to the one fixed `system-log/all` path, and the request body may only contain the documented query keys (anything else is rejected before anything is sent);
 - `UniFiClient` has no general-purpose POST, PUT, PATCH or DELETE method;
 - the test suite fails if any other code sends a POST, PUT, PATCH or DELETE, or if a second POST appears in `client.py`.
 
@@ -343,6 +343,14 @@ desktop
 Attached: desktop -> Office Switch port 3 (1000 Mbps) -> Gateway port 2 (100 Mbps)
 Link:     1000 Mbps, full duplex, 0 errors, 60 dropped packets on its port
 
+Recent events (last 24h, newest first):
+  2026-01-01 10:10:00  CLIENT_DISCONNECTED_WIRELESS: phone disconnected from Home. Time Connected: 25s.
+  2026-01-01 09:55:00  CLIENT_CONNECTED_WIRELESS: phone connected to Home on Office AP.
+  ... and 12 more; run: unifi-sentinel events --client AA:BB:CC:DD:EE:02 --since 24h
+
+Events about the devices it depends on:
+  2026-01-01 08:30:00  DEVICE_UNREACHABLE: Office AP went offline.
+
 Related findings:
 [WARNING ] Office Switch: CPU utilization 95%
 [WARNING ] Office Switch: PoE budget 41.6 W of 52 W used (80%)
@@ -356,7 +364,9 @@ Related findings:
 - **Link:** for a wired client, its port's speed, duplex, errors and dropped packets; for Wi-Fi, signal, noise, rates, retries and satisfaction. Offline clients have none.
 - **Addressing:** the DHCP reservation and whether it matches the current IP, the network and VLAN, and the client groups by name (or that it is in none).
 - **Related findings:** the `diagnose` findings about this client, its IP, or the devices and ports on its path (not unrelated ports on the same switch). It uses the same thresholds and ignore list as `diagnose` (`--config FILE`, or `./unifi-sentinel.toml`).
-- `--json` prints the same data as JSON, and `--no-emoji` forces text severity labels.
+- **Recent events:** the client's events from the controller's event log (the last 24 hours by default; `--since DURATION` changes it, for example `12h` or `7d`), newest first, up to 10, then how to see the rest with `events --client MAC`. The client is matched by its MAC address, so a similarly named device never mixes in. A second list shows events about the devices on its path, but only device-state events (a switch or AP going unreachable or reconnecting), up to 5: not other clients connecting to the same AP, and not internet-latency events, which also name the gateway but do not explain why one client dropped. That is how a client's disconnect lines up with the switch outage that caused it.
+- `--no-events` skips this section and the request it needs (the one approved read-only event-log query, see [Event history](#event-history)); with it, `client` sends no POST at all. If the log cannot be read, the rest of the view is shown with "Recent events: unavailable".
+- `--json` prints the same data as JSON, with `events`, `device_events`, `events_window`, `events_omitted` (how many were left out) and `events_available` (`true`, `false` when the log could not be read, or `null` with `--no-events`). `--no-emoji` forces text severity labels.
 
 ### New clients
 
@@ -452,7 +462,7 @@ The official documentation covers the Integration API only. The legacy `stat/*`,
   - `legacy rest/... unavailable`: network names and VLANs are missing (reservations, subnet checks)
   - `legacy v2 ... unavailable`: group names are missing; `new-clients` trusts each client's own group list
   - `legacy stat/health unavailable`: `diagnose` skips the controller health and WAN checks
-  - `event log unavailable`: `events` shows nothing and `diagnose` skips the event checks
+  - `event log unavailable`: `events` shows nothing, and `diagnose` and `client` skip their event parts
   - `detail/statistics unavailable for N device(s)`: no uptime, heartbeat or CPU/memory for those devices (normal for offline devices)
 
 ## Development
