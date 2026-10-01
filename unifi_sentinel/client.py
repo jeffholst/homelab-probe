@@ -14,15 +14,18 @@ That query changes nothing on the controller, and it is sent only by
 general-purpose POST/PUT/PATCH/DELETE method on this class.
 """
 
+import threading
 import time
 import warnings
 from collections.abc import Callable, Iterator
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote, urlencode
 
 import requests
 import urllib3
+from requests.adapters import HTTPAdapter
 
 from .config import DEFAULT_TIMEOUT, Config
 
@@ -60,6 +63,7 @@ class UniFiClient:
         verify_ssl: bool | str = True,
         timeout: float = DEFAULT_TIMEOUT,
         retries: int = GET_RETRIES,
+        workers: int = 1,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.verify_ssl = verify_ssl           # True, False, or the path of a CA bundle
@@ -72,14 +76,46 @@ class UniFiClient:
         self.attempts_made = 0
         self.attempts_retried = 0
         self.seconds_waiting = 0.0
+        self.workers = max(1, workers)         # requests in flight at once during a parallel read (1: one by one)
+        self._lock = threading.Lock()          # guards the counters and the trace output across threads
+        self._in_parallel = False
         self.session = requests.Session()
+        if self.workers > 1:
+            adapter = HTTPAdapter(pool_connections=self.workers, pool_maxsize=self.workers)
+            self.session.mount("https://", adapter)
+            self.session.mount("http://", adapter)
         self.session.headers.update(
             {"X-API-KEY": api_key, "Accept": "application/json"}
         )
 
     @classmethod
     def from_config(cls, config: Config) -> "UniFiClient":
-        return cls(config.controller_url, config.api_key, config.verify_ssl, config.timeout)
+        return cls(config.controller_url, config.api_key, config.verify_ssl, config.timeout,
+                   workers=config.parallel)
+
+    @contextmanager
+    def parallel(self) -> Iterator[Optional[ThreadPoolExecutor]]:
+        """A section in which independent reads may run at the same time, on a pool of ``workers`` threads
+        (``None`` when ``workers`` is 1, meaning: do them one by one). Only GETs and the event-log query are
+        ever submitted, one request per call, exactly as in the sequential case.
+
+        Sharing one ``requests.Session`` between threads is safe here because nothing mutates it while the
+        section runs (no cookies, no changed headers); the connection pool is sized for the workers. The
+        "unverified HTTPS request" warning is hidden once for the whole section (``warnings.catch_warnings``
+        changes global state, so it must not be entered by several threads at once) and then restored.
+        """
+        if self.workers <= 1:
+            yield None
+            return
+        with warnings.catch_warnings():
+            if self.verify_ssl is False:
+                warnings.simplefilter("ignore", urllib3.exceptions.InsecureRequestWarning)
+            self._in_parallel = True
+            try:
+                with ThreadPoolExecutor(max_workers=self.workers, thread_name_prefix="unifi") as pool:
+                    yield pool
+            finally:
+                self._in_parallel = False
 
     # -- transport ---------------------------------------------------------
 
@@ -150,22 +186,25 @@ class UniFiClient:
     def _note(self, label: str, started: float, outcome: str) -> None:
         """Count one attempt and, with --verbose, say how it went and how long it took."""
         elapsed = time.perf_counter() - started
-        self.attempts_made += 1
-        self.seconds_waiting += elapsed
-        if self.trace is not None:
-            self.trace(self._redact(f"{label} -> {outcome} ({elapsed * 1000:.0f} ms)"))
+        with self._lock:
+            self.attempts_made += 1
+            self.seconds_waiting += elapsed
+            if self.trace is not None:
+                self.trace(self._redact(f"{label} -> {outcome} ({elapsed * 1000:.0f} ms)"))
 
     def _back_off(self, label: str, attempt: int, attempts: int) -> None:
         pause = RETRY_BACKOFF_S * 2 ** (attempt - 1)
-        self.attempts_retried += 1
-        if self.trace is not None:
-            self.trace(self._redact(f"{label} -> retrying in {pause:g} s (attempt {attempt + 1} of {attempts})"))
+        with self._lock:
+            self.attempts_retried += 1
+            if self.trace is not None:
+                self.trace(self._redact(f"{label} -> retrying in {pause:g} s (attempt {attempt + 1} of {attempts})"))
         self._sleep(pause)
 
     def summary(self) -> str:
         """One line for the end of a --verbose run."""
         retried = f", {self.attempts_retried} retried" if self.attempts_retried else ""
-        return f"{self.attempts_made} request(s){retried}, {self.seconds_waiting:.1f} s waiting for the controller"
+        return (f"{self.attempts_made} request(s){retried}, {self.seconds_waiting:.1f} s in requests "
+                "(added up over all of them, so more than the wall time when they overlap)")
 
     @staticmethod
     def _tries(attempt: int) -> str:
@@ -180,7 +219,7 @@ class UniFiClient:
         ``warnings.catch_warnings`` is not thread-safe, so a future parallel fetch must set the
         filter once up front instead of per request.
         """
-        if self.verify_ssl is False:
+        if self.verify_ssl is False and not self._in_parallel:       # a parallel section did it once already
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", urllib3.exceptions.InsecureRequestWarning)
                 yield

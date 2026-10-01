@@ -209,19 +209,33 @@ def _attachment(snap: Snapshot, net: DeviceIndex, rec: Dict[str, Any]
     return hops, link, subjects
 
 
-def addressing(snap: Snapshot, rec: Dict[str, Any]) -> Dict[str, Any]:
+class AddressingIndex:
+    """The lookups ``addressing`` needs, built once per snapshot: each MAC's reservation, the networks by id and
+    the client group names. A caller that describes many clients (``history.capture``) builds one and passes it
+    in; rebuilding them per client made the work quadratic."""
+
+    def __init__(self, snap: Snapshot) -> None:
+        self.reservations: Dict[str, Tuple[Dict[str, Any], Dict[str, Any]]] = {}
+        for u, net in reservation_records(snap):
+            self.reservations.setdefault(normalize_mac(u.get("mac")), (u, net))      # the first one, as before
+        self.networks = {n.get("_id"): n for n in snap.networks}
+        self.group_names: Optional[Dict[Any, Any]] = (
+            None if snap.client_groups is None else {g.get("id"): g.get("name") for g in snap.client_groups})
+
+
+def addressing(snap: Snapshot, rec: Dict[str, Any], index: Optional[AddressingIndex] = None) -> Dict[str, Any]:
+    index = index or AddressingIndex(snap)
     sta, user = rec["sta"] or {}, rec["user"] or {}
     mac = rec["mac"]
 
     reservation = None
-    for u, net in reservation_records(snap):
-        if normalize_mac(u.get("mac")) == mac:
-            current = rec["ip"] if rec["online"] else ""
-            reservation = {"reserved_ip": u["fixed_ip"], "network": net.get("name") or "",
-                           "matches_current": (current == u["fixed_ip"]) if current else None}
-            break
+    if mac in index.reservations:
+        u, net = index.reservations[mac]
+        current = rec["ip"] if rec["online"] else ""
+        reservation = {"reserved_ip": u["fixed_ip"], "network": net.get("name") or "",
+                       "matches_current": (current == u["fixed_ip"]) if current else None}
 
-    networks = {n.get("_id"): n for n in snap.networks}
+    networks = index.networks
     # Same rule as reservation_records: a network override wins over the last connection.
     override = user.get("virtual_network_override_id") if user.get("virtual_network_override_enabled") else None
     net_id = sta.get("network_id") or override or user.get("last_connection_network_id")
@@ -232,11 +246,10 @@ def addressing(snap: Snapshot, rec: Dict[str, Any]) -> Dict[str, Any]:
     network = sta.get("network") or net.get("name") or user.get("last_connection_network_name") or ""
 
     ids = user.get("network_members_group_ids") or sta.get("network_members_group_ids") or []
-    if snap.client_groups is None:
+    if index.group_names is None:
         groups, unresolved = [], len(ids)
     else:
-        names = {g.get("id"): g.get("name") for g in snap.client_groups}
-        groups = [names[i] for i in ids if i in names]
+        groups = [index.group_names[i] for i in ids if i in index.group_names]
         unresolved = 0
     return {"network": network, "vlan": vlan, "reservation": reservation, "groups": groups,
             "group_ids_unresolved": unresolved, "ungrouped": not groups and not unresolved}

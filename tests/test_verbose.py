@@ -116,7 +116,7 @@ def test_counters_and_the_summary():
     client.info()
     client.info()
     assert (client.attempts_made, client.attempts_retried) == (3, 1)
-    assert re.fullmatch(r"3 request\(s\), 1 retried, \d+\.\d s waiting for the controller", client.summary())
+    assert re.fullmatch(r"3 request\(s\), 1 retried, \d+\.\d s in requests \(added up over all of them, so more than the wall time when they overlap\)", client.summary())
     fresh, _ = traced(Resp(200))
     fresh.info()
     assert "retried" not in fresh.summary()
@@ -177,7 +177,7 @@ def test_verbose_writes_to_stderr_and_leaves_stdout_alone(fake_client, monkeypat
     lines = verbose_lines(loud.err)
     assert any(re.search(r"GET /proxy/network/integration/v1/sites\?offset=0&limit=200 -> 200 \(\d+ ms\)", line)
                for line in lines)
-    assert re.search(r"\[verbose\] \d+ request\(s\), [\d.]+ s waiting for the controller$", lines[-1])
+    assert re.search(r"\[verbose\] \d+ request\(s\), [\d.]+ s in requests \(added up .*\)$", lines[-1])
     assert KEY not in loud.err and KEY not in loud.out
 
 
@@ -217,7 +217,7 @@ def test_the_summary_is_printed_when_a_request_fails(fake_client, monkeypatch, c
     fake_client.session.status = 500
     assert run(fake_client, monkeypatch, ["--verbose", "info"]) == cli.EXIT_ERROR
     err = capsys.readouterr().err
-    assert "ERROR: HTTP 500" in err and "-> 500" in err and verbose_lines(err)[-1].endswith("waiting for the controller")
+    assert "ERROR: HTTP 500" in err and "-> 500" in err and verbose_lines(err)[-1].endswith("when they overlap)")
 
 
 def test_a_config_error_prints_no_summary(fake_client, monkeypatch, capsys):

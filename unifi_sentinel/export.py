@@ -135,23 +135,39 @@ def build_inventory(
     return rows
 
 
-def client_location(snap: Snapshot, client: Dict[str, Any]) -> str:
-    """Where a client attaches: 'Wired, Switch port 3' or 'Wireless, via AP'."""
-    names_by_id = {d.get("id"): d.get("name") or d.get("macAddress") for d in snap.devices}
-    names_by_mac = {(d.get("macAddress") or "").upper(): d.get("name") or d.get("macAddress")
-                    for d in snap.devices}
-    mac = (client.get("macAddress") or "").upper()
-    legacy = next((c for c in snap.legacy_clients if (c.get("mac") or "").upper() == mac), {})
-    uplink = names_by_id.get(client.get("uplinkDeviceId"))
+class LocationIndex:
+    """Where clients attach, with the device names and the legacy client records indexed once.
 
-    if client.get("type") == "WIRED":
-        switch = names_by_mac.get((legacy.get("sw_mac") or "").upper()) or uplink
-        port = legacy.get("sw_port")
-        if switch and port is not None:
-            return f"Wired, {switch} port {port}"
-        return f"Wired, {switch}" if switch else "Wired"
-    ap = uplink or names_by_mac.get((legacy.get("ap_mac") or "").upper())
-    return f"Wireless, via {ap}" if ap else "Wireless"
+    A caller that locates many clients builds one index and calls ``of`` for each; building the lookups
+    per client made the analysis quadratic (8,000 clients took seconds). ``client_location`` is the
+    one-off form.
+    """
+
+    def __init__(self, snap: Snapshot) -> None:
+        self._names_by_id = {d.get("id"): d.get("name") or d.get("macAddress") for d in snap.devices}
+        self._names_by_mac = {(d.get("macAddress") or "").upper(): d.get("name") or d.get("macAddress")
+                              for d in snap.devices}
+        self._legacy: Dict[str, Dict[str, Any]] = {}
+        for c in snap.legacy_clients:
+            self._legacy.setdefault((c.get("mac") or "").upper(), c)      # the first record of a MAC, as before
+
+    def of(self, client: Dict[str, Any]) -> str:
+        """Where a client attaches: 'Wired, Switch port 3' or 'Wireless, via AP'."""
+        legacy = self._legacy.get((client.get("macAddress") or "").upper(), {})
+        uplink = self._names_by_id.get(client.get("uplinkDeviceId"))
+        if client.get("type") == "WIRED":
+            switch = self._names_by_mac.get((legacy.get("sw_mac") or "").upper()) or uplink
+            port = legacy.get("sw_port")
+            if switch and port is not None:
+                return f"Wired, {switch} port {port}"
+            return f"Wired, {switch}" if switch else "Wired"
+        ap = uplink or self._names_by_mac.get((legacy.get("ap_mac") or "").upper())
+        return f"Wireless, via {ap}" if ap else "Wireless"
+
+
+def client_location(snap: Snapshot, client: Dict[str, Any]) -> str:
+    """Where one client attaches (builds the index; use ``LocationIndex`` to locate many)."""
+    return LocationIndex(snap).of(client)
 
 
 def build_offline_clients(

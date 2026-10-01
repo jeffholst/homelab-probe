@@ -3,7 +3,7 @@
 import json
 from typing import Any, Dict, List
 
-from .export import client_location
+from .export import LocationIndex
 from .query import format_table
 from .snapshot import Snapshot
 from .util import epoch_text, format_time, is_randomized_mac, normalize_mac, search_rows
@@ -25,6 +25,7 @@ def ungrouped_clients(snap: Snapshot) -> List[Dict[str, Any]]:
     connected = {normalize_mac(c.get("macAddress")): c for c in snap.clients}
     device_macs = {normalize_mac(d.get("macAddress")) for d in snap.devices}
 
+    locate = LocationIndex(snap).of
     found = []
     for u in snap.all_users:
         mac = normalize_mac(u.get("mac"))
@@ -34,7 +35,7 @@ def ungrouped_clients(snap: Snapshot) -> List[Dict[str, Any]]:
         wired = u.get("is_wired")
 
         if live:
-            where = client_location(snap, live)
+            where = locate(live)
             last_seen = format_time(live.get("connectedAt"))
         else:
             where = ""

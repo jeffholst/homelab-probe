@@ -137,6 +137,7 @@ COMMANDS = {
     "events": (["events"], {"events"}),
     "client without events": (["client", "desktop", "--no-events"], BASE | {"alluser", "networkconf", "groups"}),
     "client": (["client", "desktop"], BASE | {"alluser", "networkconf", "groups", "events"}),
+    "client no match": (["client", "nobody-has-this-name"], BASE - {"legacy-devices"} | {"alluser"}),
     "diagnose without events": (["diagnose", "--no-events"],
                                 BASE | {"alluser", "networkconf", "health", "speedtests"}),
     "diagnose": (["diagnose"], BASE | {"alluser", "networkconf", "health", "speedtests", "events"}),
@@ -151,9 +152,22 @@ def test_each_command_reads_exactly_what_it_declares(fake_client, monkeypatch, t
         argv = ["snapshot", "--dir", str(tmp_path / "snaps")]
     if argv[0] == "export":
         argv = [*argv, "-o", str(tmp_path)]
-    assert run(fake_client, monkeypatch, argv) in (0, 1, 2)
+    assert run(fake_client, monkeypatch, argv) in (0, 1, 2, 4)
     kinds = reads(fake_client)
     if argv[0] == "info":
         assert kinds == set() and fake_client.session.posts == []
     else:
         assert kinds == expected, f"{name} read {sorted(kinds ^ expected)} differently from its declaration"
+
+
+def test_client_defers_device_reads_until_a_unique_match(fake_client, monkeypatch, capsys):
+    assert run(fake_client, monkeypatch, ["client", "nobody-has-this-name"]) == 4
+    capsys.readouterr()
+    assert not any(path.endswith("/stat/device") or
+                   ("/devices/" in path and not path.endswith("/devices")) for path in fake_client.session.calls)
+
+    fake_client.session.calls.clear()
+    assert run(fake_client, monkeypatch, ["client", "desktop", "--no-events"]) == 0
+    assert any(path.endswith("/stat/device") for path in fake_client.session.calls)
+    assert len([path for path in fake_client.session.calls
+                if "/devices/" in path and not path.endswith("/devices")]) == 8
