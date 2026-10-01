@@ -64,27 +64,40 @@ class UniFiClient:
     # -- transport ---------------------------------------------------------
 
     def _get(self, path: str, params: Optional[Dict[str, Any]] = None) -> Any:
-        return self._send("GET", f"{self.base_url}{path}", params=params)
-
-    def _send(self, method: str, url: str, **kwargs: Any) -> Any:
-        """Shared request and error handling. Private: GET goes through ``_get`` and the
-        one approved POST through ``system_log``; nothing else calls this with a body."""
+        url = f"{self.base_url}{path}"
         try:
-            if method == "GET":
-                resp = self.session.get(
-                    url, params=kwargs.get("params"), verify=self.verify_ssl, timeout=self.timeout)
-            else:  # only reachable from system_log (see _post_system_log)
-                resp = self.session.post(
-                    url, json=kwargs.get("json"), verify=self.verify_ssl, timeout=self.timeout)
+            resp = self.session.get(
+                url, params=params, verify=self.verify_ssl, timeout=self.timeout)
         except requests.exceptions.SSLError as e:
-            raise UniFiAPIError(
-                f"TLS certificate verification failed for {self.base_url}. Install a "
-                "trusted certificate on the controller, or set VERIFY_SSL=false in .env "
-                "if it uses a self-signed one."
-            ) from e
+            raise self._tls_error() from e
         except requests.exceptions.RequestException as e:
             raise UniFiAPIError(f"Connection error for {url}: {e}") from e
+        return self._decode_response(resp, url)
 
+    def _post_system_log(self, site_ref: str, query: Dict[str, Any]) -> Any:
+        """POST a read-only query to the fixed system-log path. Never takes a path."""
+        unexpected = set(query) - SYSTEM_LOG_QUERY_KEYS
+        if unexpected:
+            raise ValueError(f"unsupported system-log query key(s): {', '.join(sorted(unexpected))}")
+        url = self.base_url + SYSTEM_LOG_PATH.format(site=site_ref)
+        try:
+            resp = self.session.post(
+                url, json=query, verify=self.verify_ssl, timeout=self.timeout)
+        except requests.exceptions.SSLError as e:
+            raise self._tls_error() from e
+        except requests.exceptions.RequestException as e:
+            raise UniFiAPIError(f"Connection error for {url}: {e}") from e
+        return self._decode_response(resp, url)
+
+    def _tls_error(self) -> UniFiAPIError:
+        return UniFiAPIError(
+            f"TLS certificate verification failed for {self.base_url}. Install a "
+            f"trusted certificate on the controller, or set VERIFY_SSL=false in .env "
+            f"if it uses a self-signed one."
+        )
+
+    @staticmethod
+    def _decode_response(resp: requests.Response, url: str) -> Any:
         if resp.status_code == 401:
             raise UniFiAPIError(f"401 Unauthorized for {url}: invalid API key.")
         if not resp.ok:
@@ -157,14 +170,6 @@ class UniFiClient:
         return body.get("data", []) if isinstance(body, dict) else body
 
     # -- event log (the one approved POST) ----------------------------------
-
-    def _post_system_log(self, site_ref: str, query: Dict[str, Any]) -> Any:
-        """POST a read-only query to the fixed system-log path. Never takes a path."""
-        unexpected = set(query) - SYSTEM_LOG_QUERY_KEYS
-        if unexpected:
-            raise ValueError(f"unsupported system-log query key(s): {', '.join(sorted(unexpected))}")
-        url = self.base_url + SYSTEM_LOG_PATH.format(site=site_ref)
-        return self._send("POST", url, json=query)
 
     def system_log(self, site_ref: str, query: Dict[str, Any]) -> Dict[str, Any]:
         """One page of the controller's event log (newest first).

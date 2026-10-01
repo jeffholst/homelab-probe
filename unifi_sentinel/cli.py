@@ -18,7 +18,7 @@ from .export import run_export
 from .new_clients import render as render_new_clients, report as new_clients_report
 from .query import query_rows, render
 from .settings import load_settings
-from .snapshot import collect_snapshot
+from .snapshot import collect_event_snapshot, collect_snapshot
 
 
 EXIT_ERROR = 3  # config or connection failure; 1 and 2 are reserved for diagnose findings
@@ -161,13 +161,13 @@ def main(argv: Optional[List[str]] = None) -> int:
             snap = collect_snapshot(client, config.site, include_groups=True)
             print(render_new_clients(new_clients_report(snap, args.search), args.json))
         elif args.command == "events":
-            site = client.resolve_site(config.site)
+            snap = collect_event_snapshot(
+                client, config.site, args.since, categories=args.category,
+                severities=args.severity, search=args.search)
             events, more = fetch_events(
-                client, site.get("internalReference") or config.site, args.since,
-                categories=args.category, severities=args.severity, search=args.search,
-                predicate=make_filter(args.client, args.device, args.event),
+                snap, predicate=make_filter(args.client, args.device, args.event),
                 limit=0 if args.summary else args.limit)  # a summary counts the whole window
-            print(render_events(events, more, args.json, args.summary))
+            print(render_events(events, more, args.json, args.summary, snap.events_truncated))
         elif args.command == "client":
             snap = collect_snapshot(client, config.site, include_reservations=True,
                                     include_groups=True)

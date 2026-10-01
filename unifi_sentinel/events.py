@@ -1,21 +1,19 @@
 """Event history from the controller's system log: `unifi-sentinel events`.
 
-The log is read with ``UniFiClient.system_log``, the one approved read-only POST.
+The log is collected into a ``Snapshot``; this module only filters and renders it.
 """
 
 import json
 import re
-import time
 from collections import Counter
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
-from .client import UniFiClient
 from .query import format_table
+from .snapshot import Snapshot
 
 DEFAULT_SINCE = "24h"
 DEFAULT_LIMIT = 100
-PAGE_SIZE = 500          # events requested per page
 MAX_EVENTS = 20_000      # never read more than this many events in one run
 SEVERITIES = ["low", "medium", "high"]
 EVENT_COLUMNS = ["Time", "Severity", "Category", "Event", "Message"]
@@ -96,43 +94,18 @@ def make_filter(client: str = "", device: str = "", event: str = "") -> Optional
 
 
 def fetch_events(
-    client: UniFiClient,
-    site_ref: str,
-    since_seconds: int,
-    categories: Sequence[str] = (),
-    severities: Sequence[str] = (),
-    search: str = "",
+    snapshot: Snapshot,
     predicate: Optional[Callable[[Dict[str, Any]], bool]] = None,
     limit: int = DEFAULT_LIMIT,
-    now_ms: Optional[int] = None,
 ) -> Tuple[List[Dict[str, Any]], bool]:
-    """Newest-first events in the window. Returns ``(events, more)``, where ``more`` means
-    the ``limit`` stopped the search (``limit=0`` means no limit). At most ``MAX_EVENTS``
-    events are read from the controller in one call."""
-    now = int(time.time() * 1000) if now_ms is None else now_ms
-    query: Dict[str, Any] = {"timestampFrom": now - since_seconds * 1000, "timestampTo": now,
-                             "pageSize": PAGE_SIZE}
-    if categories:
-        query["categories"] = [c.upper() for c in categories]
-    if severities:
-        query["severities"] = [s.upper() for s in severities]
-    if search:
-        query["searchText"] = search
-
+    """Filter newest-first events already collected in a Snapshot."""
     found: List[Dict[str, Any]] = []
-    read, page = 0, 0
-    while True:
-        body = client.system_log(site_ref, {**query, "pageNumber": page})
-        data = body["data"]
-        read += len(data)
-        for event in data:
-            if predicate is None or predicate(event):
-                found.append(event)
-                if limit and len(found) >= limit:
-                    return found, True
-        page += 1
-        if not data or page >= int(body.get("total_page_count") or 0) or read >= MAX_EVENTS:
-            return found, False
+    for event in snapshot.events:
+        if predicate is None or predicate(event):
+            found.append(event)
+            if limit and len(found) >= limit:
+                return found, True
+    return found, snapshot.events_truncated
 
 
 # -- presenting ------------------------------------------------------------
@@ -186,7 +159,7 @@ def summarize(events: List[Dict[str, Any]], top: int = 10) -> Dict[str, Any]:
 
 
 def render_events(events: List[Dict[str, Any]], more: bool, as_json: bool = False,
-                  summary: bool = False) -> str:
+                  summary: bool = False, cap_truncated: bool = False) -> str:
     if summary:
         s = summarize(events)
         if as_json:
@@ -195,7 +168,9 @@ def render_events(events: List[Dict[str, Any]], more: bool, as_json: bool = Fals
                 "by_event": dict(s["by_event"]), "noisiest": s["noisiest"], "truncated": more}, indent=2)
         if not events:
             return "No events in this window."
-        out = [f"{s['total']} event(s)" + (" (limit reached; use --limit 0 for all)" if more else ""), "",
+        out = [f"{s['total']} event(s)" + (
+                   " (more events omitted; the 20,000-event read cap was reached)"
+                   if cap_truncated else " (limit reached; use --limit 0 for all)" if more else ""), "",
                "By severity: " + ", ".join(f"{name or '?'} {n}" for name, n in s["by_severity"]), "",
                "By event:",
                format_table([{"Event": ev or "?", "Count": n} for ev, n in s["by_event"]],
@@ -209,5 +184,7 @@ def render_events(events: List[Dict[str, Any]], more: bool, as_json: bool = Fals
     if not events:
         return "No events match."
     rows = [event_row(e) for e in events]
-    note = "\n(showing the newest events only; use --limit 0 for all)" if more else ""
+    note = ("\n(more events omitted; the 20,000-event read cap was reached)"
+            if cap_truncated else
+            "\n(showing the newest events only; use --limit 0 for all)" if more else "")
     return format_table(rows, EVENT_COLUMNS) + f"\n\n{len(rows)} event(s)" + note
