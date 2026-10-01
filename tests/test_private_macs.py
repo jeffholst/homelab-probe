@@ -9,7 +9,7 @@ from unifi_sentinel.client_view import build_client_detail, find_clients, render
 from unifi_sentinel.diagnose import INFO, WARNING, _private_mac_findings, apply_ignores, diagnose
 from unifi_sentinel.new_clients import report
 from unifi_sentinel.query import query_rows, render
-from unifi_sentinel.snapshot import collect_snapshot
+from unifi_sentinel.snapshot import Needs, collect_snapshot
 from unifi_sentinel.util import is_randomized_mac
 
 PRIVATE = "02:00:00:00:00:21"      # locally administered unicast (second digit 2)
@@ -78,7 +78,7 @@ def test_query_clients_flags_private_macs(fake_client):
 
 def test_query_clients_flags_offline_private_macs_too(fake_client):
     add_client(fake_client, name="old-pixel", connected=False)
-    snap = collect_snapshot(fake_client, "default", include_offline=True)
+    snap = collect_snapshot(fake_client, "default", Needs(offline=True))
     assert {r["Name"]: r["Private MAC"] for r in query_rows(snap, "clients", include_offline=True)}["old-pixel"] == "yes"
 
 
@@ -93,14 +93,14 @@ def test_devices_and_the_csv_export_do_not_change(fake_client):
 def test_new_clients_shows_the_flag(fake_client):
     add_client(fake_client, name="stray-pixel", mac="06:00:00:00:00:30", connected=False)
     add_client(fake_client, name="stray-laptop", mac="dc:00:00:00:00:31", connected=False)
-    snap = collect_snapshot(fake_client, "default", include_groups=True)
+    snap = collect_snapshot(fake_client, "default", Needs(groups=True))
     rows = {r["Name"]: r["Private MAC"] for r in report(snap)}
     assert rows["stray-pixel"] == "yes" and rows["stray-laptop"] == ""
 
 
 def test_the_client_view_notes_a_randomized_mac(fake_client):
     add_client(fake_client)
-    snap = collect_snapshot(fake_client, "default", include_reservations=True, include_groups=True)
+    snap = collect_snapshot(fake_client, "default", Needs(reservations=True, groups=True))
     detail = build_client_detail(snap, find_clients(snap, "pixel")[0])
     assert detail["identity"]["private_mac"] is True
     assert "[randomized MAC: reservations and history may not hold]" in render_detail(detail, emoji=False)
@@ -112,7 +112,7 @@ def test_the_client_view_notes_a_randomized_mac(fake_client):
 # -- diagnose -----------------------------------------------------------------------------------
 
 def snapshot(fake_client):
-    return collect_snapshot(fake_client, "default", include_reservations=True)
+    return collect_snapshot(fake_client, "default", Needs(reservations=True))
 
 
 def test_a_reservation_on_a_private_mac_is_an_info_finding(fake_client):

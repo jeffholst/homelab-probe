@@ -7,7 +7,7 @@ import pytest
 from unifi_sentinel import cli
 from unifi_sentinel.diagnose import WARNING, apply_ignores, diagnose
 from unifi_sentinel.settings import IgnoreRule
-from unifi_sentinel.snapshot import collect_snapshot
+from unifi_sentinel.snapshot import Needs, collect_snapshot
 from unifi_sentinel.wan import build_wan, classify_wan_address, nat_status, render_text, to_json
 
 # -- the classifier --------------------------------------------------------------------------
@@ -53,7 +53,7 @@ def snap_with(fake_client, wan_ip, **extra):
             else:
                 entry["wan_ip"] = wan_ip
             entry.update(extra)
-    return collect_snapshot(fake_client, "default", include_health=True, include_speedtests=True)
+    return collect_snapshot(fake_client, "default", Needs(health=True, speedtests=True))
 
 
 def test_the_fixture_has_a_public_address_and_nothing_to_say(fake_client):

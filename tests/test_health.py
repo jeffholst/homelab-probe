@@ -7,7 +7,7 @@ from unifi_sentinel.client import UniFiAPIError
 from unifi_sentinel.config import ConfigError
 from unifi_sentinel.diagnose import diagnose, exit_code
 from unifi_sentinel.settings import DiagnoseSettings, load_settings
-from unifi_sentinel.snapshot import Snapshot, collect_snapshot
+from unifi_sentinel.snapshot import Needs, Snapshot, collect_snapshot
 
 
 def snap(*health):
@@ -108,7 +108,7 @@ def test_new_thresholds_load_validate_and_default(tmp_path):
 
 def test_snapshot_collects_health_only_when_asked(fake_client):
     assert collect_snapshot(fake_client, "default").health == []
-    health = collect_snapshot(fake_client, "default", include_health=True).health
+    health = collect_snapshot(fake_client, "default", Needs(health=True)).health
     assert {h["subsystem"] for h in health} == {"wlan", "lan", "wan", "www", "vpn"}
 
 
@@ -121,7 +121,7 @@ def test_health_endpoint_failure_degrades_with_a_warning(fake_client, monkeypatc
         return real(site_ref, resource)
 
     monkeypatch.setattr(fake_client, "legacy_stat", flaky)
-    snapshot = collect_snapshot(fake_client, "default", include_health=True)
+    snapshot = collect_snapshot(fake_client, "default", Needs(health=True))
     assert snapshot.health == []
     assert "controller health and WAN checks were skipped" in capsys.readouterr().err
     diagnose(snapshot)  # still works without health data

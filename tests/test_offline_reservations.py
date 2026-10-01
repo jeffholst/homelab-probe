@@ -11,7 +11,7 @@ from unifi_sentinel.diagnose import CRITICAL, INFO, WARNING, _offline_reservatio
 from unifi_sentinel.query import query_rows, render
 from unifi_sentinel.reservations import offline_reservation_rows, offline_reservations
 from unifi_sentinel.settings import DiagnoseSettings, IgnoreRule, load_settings
-from unifi_sentinel.snapshot import collect_snapshot
+from unifi_sentinel.snapshot import Needs, collect_snapshot
 from unifi_sentinel.util import describe_age
 
 DAY = 86400
@@ -28,7 +28,7 @@ def reserved(mac, name, ip, seen, **extra):
 
 
 def snapshot_with(fake_client, *users):
-    snap = collect_snapshot(fake_client, "default", include_reservations=True)
+    snap = collect_snapshot(fake_client, "default", Needs(reservations=True))
     snap.all_users = list(snap.all_users) + list(users)
     return snap
 
@@ -41,7 +41,7 @@ def findings(snap, settings=None):
 
 def test_the_fixture_has_no_offline_reservation_over_the_threshold(fake_client):
     """old-printer is reserved and offline, but was last seen hours ago."""
-    snap = collect_snapshot(fake_client, "default", include_reservations=True)
+    snap = collect_snapshot(fake_client, "default", Needs(reservations=True))
     assert offline_reservations(snap, 1) == []
     assert [f for f in diagnose(snap) if f.code.startswith("reservation.offline")] == []
     assert [r["mac"] for r in offline_reservations(snap, 0)] == ["BB:00:00:00:00:03"]   # offline, just not for long

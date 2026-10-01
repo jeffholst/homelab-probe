@@ -18,12 +18,12 @@ from unifi_sentinel.client_view import (
 )
 from unifi_sentinel.diagnose import Finding
 from unifi_sentinel.settings import DiagnoseSettings, IgnoreRule
-from unifi_sentinel.snapshot import Snapshot, collect_snapshot
+from unifi_sentinel.snapshot import EventQuery, Needs, Snapshot, collect_snapshot
 
 
 @pytest.fixture
 def snap(fake_client):
-    return collect_snapshot(fake_client, "default", include_reservations=True, include_groups=True)
+    return collect_snapshot(fake_client, "default", Needs(reservations=True, groups=True))
 
 
 def detail_for(snap, query, settings=None):
@@ -235,8 +235,7 @@ def test_candidates_are_sorted_and_capped():
 # -- recent events -----------------------------------------------------------
 
 def ev_snap(fake_client, since=86400):
-    return collect_snapshot(fake_client, "default", include_reservations=True, include_groups=True,
-                            include_events=True, event_since_seconds=since)
+    return collect_snapshot(fake_client, "default", Needs(reservations=True, groups=True, events=EventQuery(since)))
 
 
 def test_a_clients_recent_events_are_listed_newest_first_with_the_snapshot_window(fake_client):

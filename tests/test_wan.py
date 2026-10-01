@@ -8,7 +8,7 @@ from unifi_sentinel.client import UniFiAPIError
 from unifi_sentinel.config import ConfigError
 from unifi_sentinel.diagnose import diagnose
 from unifi_sentinel.settings import DiagnoseSettings, load_settings
-from unifi_sentinel.snapshot import Snapshot, collect_snapshot
+from unifi_sentinel.snapshot import Needs, Snapshot, collect_snapshot
 from unifi_sentinel.wan import (
     MIN_SPEEDTESTS,
     build_wan,
@@ -87,7 +87,7 @@ def test_zero_speed_is_a_slow_run():
 
 @pytest.fixture
 def fixture_wan(fake_client):
-    snapshot = collect_snapshot(fake_client, "default", include_health=True, include_speedtests=True)
+    snapshot = collect_snapshot(fake_client, "default", Needs(health=True, speedtests=True))
     return build_wan(snapshot, 30)
 
 
@@ -111,14 +111,14 @@ def test_speedtest_summary_follows_the_window(fixture_wan, fake_client):
     assert s["last"]["download_mbps"] == 880 and s["last"]["age"] == "6h"
     assert s["download"] == {"min": 500, "median": 925, "max": 940}
     assert [r["download_mbps"] for r in s["slow_runs"]] == [500]                      # below 70% of 925
-    snapshot = collect_snapshot(fake_client, "default", include_health=True, include_speedtests=True)
+    snapshot = collect_snapshot(fake_client, "default", Needs(health=True, speedtests=True))
     assert build_wan(snapshot, 7)["speedtests"]["slow_runs"] == []                    # the slow run is 8 days old
     wide = build_wan(snapshot, 90)["speedtests"]
     assert wide["count"] == 12 and wide["download"]["max"] == 940
 
 
 def test_slow_runs_follow_the_threshold_setting(fake_client):
-    snapshot = collect_snapshot(fake_client, "default", include_health=True, include_speedtests=True)
+    snapshot = collect_snapshot(fake_client, "default", Needs(health=True, speedtests=True))
     strict = build_wan(snapshot, 30, DiagnoseSettings(wan_speed_drop_pct=96))
     assert len(strict["speedtests"]["slow_runs"]) > 1 and strict["speedtests"]["slow_threshold_pct"] == 96
     assert strict["speedtests"]["slow_runs"][0]["download_mbps"] == 880              # newest first
@@ -258,7 +258,7 @@ def test_new_thresholds_default_load_and_validate(tmp_path):
 
 def test_speedtests_are_collected_oldest_first_and_only_when_asked(fake_client, monkeypatch, capsys):
     assert collect_snapshot(fake_client, "default").speedtests == []
-    tests = collect_snapshot(fake_client, "default", include_speedtests=True).speedtests
+    tests = collect_snapshot(fake_client, "default", Needs(speedtests=True)).speedtests
     assert len(tests) == 12 and [t["time"] for t in tests] == sorted(t["time"] for t in tests)
     assert "age_s" not in tests[0] and tests[0]["download_mbps"] == 930                # the 40-day-old run
 
@@ -266,14 +266,14 @@ def test_speedtests_are_collected_oldest_first_and_only_when_asked(fake_client, 
         raise UniFiAPIError("nope")
 
     monkeypatch.setattr(fake_client, "legacy_v2", boom)
-    assert collect_snapshot(fake_client, "default", include_speedtests=True).speedtests == []
+    assert collect_snapshot(fake_client, "default", Needs(speedtests=True)).speedtests == []
     assert "speedtest history unavailable" in capsys.readouterr().err
 
 
 def test_malformed_speedtest_time_is_sorted_last_without_crashing(fake_client, monkeypatch):
     monkeypatch.setattr(fake_client, "legacy_v2", lambda site_ref, resource: [
         {"time": "bad", "download_mbps": 1}, {"time": 2, "download_mbps": 2}])
-    tests = collect_snapshot(fake_client, "default", include_speedtests=True).speedtests
+    tests = collect_snapshot(fake_client, "default", Needs(speedtests=True)).speedtests
     assert [test["time"] for test in tests] == ["bad", 2]
 
 

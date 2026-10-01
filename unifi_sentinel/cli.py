@@ -52,7 +52,7 @@ from .notify import (
 )
 from .query import query_rows, render
 from .settings import load_settings
-from .snapshot import collect_event_snapshot, collect_snapshot, warn
+from .snapshot import EventQuery, Needs, collect_event_snapshot, collect_snapshot, warn
 from .topology import build_topology
 from .topology import render_text as render_topology
 from .topology import to_json as topology_json
@@ -374,14 +374,18 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+# `snapshot` and `diff` record offline clients, reservations and groups, and must not save or compare a
+# record that silently lacks them, so the client history is required.
+INVENTORY_NEEDS = Needs(reservations=True, groups=True, users_required=True)
+
+
 def _live_inventory(client: UniFiClient, config: Any) -> dict:
     """The network as it is right now, as a snapshot record."""
     try:
         version = str(client.info().get("applicationVersion") or "")
     except UniFiAPIError:
         version = ""
-    return capture(collect_snapshot(client, config.site, include_reservations=True, include_groups=True,
-                                    users_required=True), version)
+    return capture(collect_snapshot(client, config.site, INVENTORY_NEEDS), version)
 
 
 def _run_history(client: UniFiClient, config: Any, args: argparse.Namespace) -> int:
@@ -469,22 +473,22 @@ def main(argv: Optional[List[str]] = None) -> int:
                 _say(f"Site: {printable(s.get('name'))} ref={printable(s.get('internalReference'))} "
                  f"id={printable(s.get('id'))}")
         elif args.command == "export":
-            run_export(collect_snapshot(client, config.site, args.include_offline), args.output_dir)
+            run_export(collect_snapshot(client, config.site, Needs(offline=args.include_offline)), args.output_dir)
         elif args.command == "query":
             snap = collect_snapshot(
-                client, config.site, args.include_offline,
-                include_reservations=args.kind == "reservations")
+                client, config.site,
+                Needs(offline=args.include_offline, reservations=args.kind == "reservations"))
             offline_days = settings.reserved_offline_warn_days if settings is not None and args.offline else None
             rows = query_rows(snap, args.kind, args.search, args.include_offline,
                               args.switch or "", args.down, args.errors, offline_days)
             _say(render(rows, args.json, args.kind, args.offline))
         elif args.command == "new-clients":
-            snap = collect_snapshot(client, config.site, include_groups=True, users_required=True)
+            snap = collect_snapshot(client, config.site, Needs(groups=True, users_required=True))
             _say(render_new_clients(new_clients_report(snap, args.search), args.json))
         elif args.command == "events":
             snap = collect_event_snapshot(
-                client, config.site, args.since, categories=args.category,
-                severities=args.severity, search=args.search)
+                client, config.site,
+                EventQuery(args.since, tuple(args.category or ()), tuple(args.severity or ()), args.search))
             events, more = fetch_events(
                 snap, predicate=make_filter(args.client, args.device, args.event),
                 limit=0 if args.summary else args.limit)  # a summary counts the whole window
@@ -492,22 +496,22 @@ def main(argv: Optional[List[str]] = None) -> int:
         elif args.command in ("snapshot", "diff"):
             return _run_history(client, config, args)
         elif args.command == "wifi":
-            snap = collect_snapshot(client, config.site, include_neighbors=True)
+            snap = collect_snapshot(client, config.site, Needs(neighbors=True))
             report = build_wifi(snap, args.min_signal, args.band or "", args.ap)
             _say(wifi_json(report) if args.json else render_wifi(report, args.all, args.ap))
         elif args.command == "wan":
-            snap = collect_snapshot(client, config.site, include_health=True, include_speedtests=True)
+            snap = collect_snapshot(client, config.site, Needs(health=True, speedtests=True))
             report = build_wan(snap, args.days, settings)
             _say(wan_json(report) if args.json else render_wan(report))
         elif args.command == "topology":
-            snap = collect_snapshot(client, config.site)
+            snap = collect_snapshot(client, config.site, Needs())
             tree = build_topology(snap, settings, with_clients=args.clients)
             emoji = not args.no_emoji and stream_supports_emoji(sys.stdout)
             _say(topology_json(tree) if args.json else render_topology(tree, emoji, args.clients))
         elif args.command == "client":
-            snap = collect_snapshot(client, config.site, include_reservations=True,
-                                    include_groups=True, include_events=not args.no_events,
-                                    event_since_seconds=args.since)
+            snap = collect_snapshot(
+                client, config.site,
+                Needs(reservations=True, groups=True, events=None if args.no_events else EventQuery(args.since)))
             matches = find_clients(snap, args.query)
             if len(matches) != 1:
                 _say(render_candidates(args.query, matches), file=sys.stderr)
@@ -517,10 +521,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             _say(to_json(detail) if args.json else render_detail(detail, emoji))
         elif args.command == "diagnose":  # pragma: no branch  (the last command; argparse rejects any other)
             findings, ignored = apply_ignores(
-                diagnose(collect_snapshot(client, config.site, include_reservations=True,
-                                          include_health=True, include_speedtests=True,
-                                          include_events=not args.no_events,
-                                          event_since_seconds=args.since), settings),
+                diagnose(collect_snapshot(
+                    client, config.site,
+                    Needs(reservations=True, health=True, speedtests=True,
+                          events=None if args.no_events else EventQuery(args.since))), settings),
                 settings.ignore)
             if args.json:
                 _say(findings_json(findings, ignored, args.show_ignored))

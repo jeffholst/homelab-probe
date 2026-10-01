@@ -11,7 +11,7 @@ from unifi_sentinel.diagnose import Finding, format_findings, format_ignored
 from unifi_sentinel.export import run_export
 from unifi_sentinel.query import format_table
 from unifi_sentinel.settings import IgnoreRule
-from unifi_sentinel.snapshot import collect_snapshot
+from unifi_sentinel.snapshot import Needs, collect_snapshot
 from unifi_sentinel.util import clean_data, csv_safe, printable, safe_output
 
 # An escape sequence, a bell, a line break that forges a finding, and a bidi override.
@@ -227,7 +227,7 @@ def test_export_neutralises_formulas_in_every_text_column(fake_client, tmp_path)
     fx["devices"][1]["name"] = FORMULAS[2]
     for sta in fx["legacy"]["sta"]:
         sta["name"] = FORMULAS[3]
-    run_export(collect_snapshot(fake_client, "default", True), tmp_path)
+    run_export(collect_snapshot(fake_client, "default", Needs(offline=True)), tmp_path)
 
     files = sorted(tmp_path.glob("*.csv"))
     assert len(files) >= 2
@@ -240,7 +240,7 @@ def test_export_neutralises_formulas_in_every_text_column(fake_client, tmp_path)
 
 
 def test_export_leaves_ordinary_cells_unchanged(fake_client, tmp_path):
-    run_export(collect_snapshot(fake_client, "default", True), tmp_path)
+    run_export(collect_snapshot(fake_client, "default", Needs(offline=True)), tmp_path)
     rows = {r["Name"]: r for r in read_rows(tmp_path / "unifi_clients.csv")}
     assert rows["desktop"]["Switch"] == "Office Switch" and rows["desktop"]["Port"] == "3"
     assert not any(cell.startswith("'") for r in rows.values() for cell in r.values())
@@ -248,5 +248,5 @@ def test_export_leaves_ordinary_cells_unchanged(fake_client, tmp_path):
 
 def test_export_prints_a_clean_site_name(fake_client, tmp_path, capsys):
     fake_client.session.fx["sites"][0]["name"] = "Home" + HOSTILE
-    run_export(collect_snapshot(fake_client, "default", True), tmp_path)
+    run_export(collect_snapshot(fake_client, "default", Needs(offline=True)), tmp_path)
     assert_clean(capsys.readouterr().out, "export")

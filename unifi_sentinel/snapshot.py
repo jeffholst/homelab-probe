@@ -3,7 +3,7 @@
 import sys
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from .client import UniFiAPIError, UniFiClient
 from .util import printable
@@ -124,28 +124,65 @@ def _legacy_v2_or_empty(
         return None
 
 
+DEFAULT_EVENT_SECONDS = 86400
+
+
+@dataclass(frozen=True)
+class EventQuery:
+    """What to read from the event log: how far back, and the filters the server applies."""
+
+    since_seconds: int = DEFAULT_EVENT_SECONDS
+    categories: Tuple[str, ...] = ()
+    severities: Tuple[str, ...] = ()
+    search: str = ""
+
+
+@dataclass(frozen=True)
+class Needs:
+    """What a command needs from the controller. A command declares exactly this, so nothing is read
+    that its output does not use (the event log, in particular, is a POST and is never read unless asked).
+
+    ``offline``, ``reservations`` and ``groups`` all need the legacy ``stat/alluser`` list;
+    ``reservations`` also reads the network configuration (names, VLANs) and ``groups`` the client
+    group definitions. ``health`` is ``stat/health`` (for ``diagnose`` and ``wan``), ``speedtests``
+    the speedtest history, ``neighbors`` the neighboring Wi-Fi networks, ``events`` the event log
+    (None: not read).
+
+    Degradation policy: required data fails the command, optional data warns and carries on.
+    Optional is every legacy read, including ``alluser``; a command whose answer would be wrong
+    without ``alluser`` (``new-clients``, ``snapshot`` and ``diff``) sets ``users_required`` and
+    fails with exit code 3 instead of printing a misleading result.
+    """
+
+    offline: bool = False
+    reservations: bool = False
+    groups: bool = False
+    health: bool = False
+    speedtests: bool = False
+    neighbors: bool = False
+    events: Optional[EventQuery] = None
+    users_required: bool = False
+
+
 def _events_or_empty(
     client: UniFiClient,
     site_ref: str,
-    since_seconds: int,
-    categories: List[str],
-    severities: List[str],
-    search: str,
+    wanted: EventQuery,
     now_ms: Optional[int] = None,
 ) -> tuple[List[Dict[str, Any]], bool, bool]:
     """``(events, truncated, available)``; ``available`` is False when the log could not be read."""
     now = int(time.time() * 1000) if now_ms is None else now_ms
     query: Dict[str, Any] = {
-        "timestampFrom": now - since_seconds * 1000,
+        "timestampFrom": now - wanted.since_seconds * 1000,
         "timestampTo": now,
         "pageSize": EVENT_PAGE_SIZE,
     }
-    if categories:
-        query["categories"] = [c.upper() for c in categories]
-    if severities:
-        query["severities"] = [s.upper() for s in severities]
-    if search:
-        query["searchText"] = search
+    if wanted.categories:
+        query["categories"] = [c.upper() for c in wanted.categories]
+    if wanted.severities:
+        query["severities"] = [s.upper() for s in wanted.severities]
+    if wanted.search:
+        query["searchText"] = wanted.search
 
     events: List[Dict[str, Any]] = []
     page = 0
@@ -180,43 +217,24 @@ def describe_snapshot(snap: "Snapshot") -> str:
 def collect_snapshot(
     client: UniFiClient,
     site: str,
-    include_offline: bool = False,
-    include_reservations: bool = False,
-    include_groups: bool = False,
-    include_health: bool = False,
-    include_speedtests: bool = False,
-    include_neighbors: bool = False,
-    include_events: bool = False,
-    event_since_seconds: int = 86400,
-    event_categories: Optional[List[str]] = None,
-    event_severities: Optional[List[str]] = None,
-    event_search: str = "",
+    needs: Needs = Needs(),  # noqa: B008  (frozen, so one shared default is safe)
     now_ms: Optional[int] = None,
-    users_required: bool = False,
 ) -> Snapshot:
-    """``include_offline``, ``include_reservations`` and ``include_groups`` all need the
-    legacy ``stat/alluser`` list (``include_health`` reads ``stat/health`` for ``diagnose``);
-    reservations also need the network configuration (names, VLANs) and groups need the client
-    group definitions.
-
-    Degradation policy: required data fails the command, optional data warns and carries on.
-    Optional is every legacy read, including ``alluser``; a command whose answer would be
-    wrong without ``alluser`` (``new-clients``, ``snapshot`` and ``diff``) passes
-    ``users_required=True`` and fails with exit code 3 instead of printing a misleading result."""
+    """One read of the controller: the devices and connected clients always, and whatever ``needs``
+    adds (see ``Needs``). ``now_ms`` fixes the clock of the event window, for tests."""
     site_info = client.resolve_site(site)
     site_ref = site_info.get("internalReference") or site
     events, events_truncated, events_available = _events_or_empty(
-        client, site_ref, event_since_seconds, event_categories or [],
-        event_severities or [], event_search, now_ms
-    ) if include_events else ([], False, False)
+        client, site_ref, needs.events, now_ms
+    ) if needs.events is not None else ([], False, False)
     neighbors, neighbors_available = (
-        _neighbors_or_empty(client, site_ref) if include_neighbors else ([], False)
+        _neighbors_or_empty(client, site_ref) if needs.neighbors else ([], False)
     )
     devices = client.devices(site_info["id"])
     details, stats = _device_extras(client, site_info["id"], devices)
-    if not (include_groups or include_offline or include_reservations):
+    if not (needs.groups or needs.offline or needs.reservations):
         all_users: List[Dict[str, Any]] = []
-    elif users_required:
+    elif needs.users_required:
         all_users = client.legacy_stat(site_ref, "alluser")
     else:
         all_users = _legacy_or_empty(client, site_ref, "alluser")
@@ -230,18 +248,18 @@ def collect_snapshot(
         legacy_clients=_legacy_or_empty(client, site_ref, "sta"),
         all_users=all_users,
         networks=(
-            _legacy_rest_or_empty(client, site_ref, "networkconf") if include_reservations else []
+            _legacy_rest_or_empty(client, site_ref, "networkconf") if needs.reservations else []
         ),
-        health=_legacy_health_or_empty(client, site_ref) if include_health else [],
-        speedtests=_speedtests_or_empty(client, site_ref) if include_speedtests else [],
+        health=_legacy_health_or_empty(client, site_ref) if needs.health else [],
+        speedtests=_speedtests_or_empty(client, site_ref) if needs.speedtests else [],
         neighbors=neighbors,
         neighbors_available=neighbors_available,
         client_groups=(
-            _legacy_v2_or_empty(client, site_ref, "network-members-groups") if include_groups else []
+            _legacy_v2_or_empty(client, site_ref, "network-members-groups") if needs.groups else []
         ),
         events=events,
         events_truncated=events_truncated,
-        event_window_seconds=event_since_seconds if include_events else 0,
+        event_window_seconds=needs.events.since_seconds if needs.events is not None else 0,
         events_available=events_available,
     )
     if client.trace is not None:
@@ -252,24 +270,20 @@ def collect_snapshot(
 def collect_event_snapshot(
     client: UniFiClient,
     site: str,
-    since_seconds: int,
-    categories: Optional[List[str]] = None,
-    severities: Optional[List[str]] = None,
-    search: str = "",
+    wanted: EventQuery,
     now_ms: Optional[int] = None,
 ) -> Snapshot:
+    """Only the event log (no devices or clients), for the `events` command."""
     site_info = client.resolve_site(site)
     site_ref = site_info.get("internalReference") or site
-    events, truncated, available = _events_or_empty(
-        client, site_ref, since_seconds, categories or [], severities or [], search, now_ms
-    )
+    events, truncated, available = _events_or_empty(client, site_ref, wanted, now_ms)
     snap = Snapshot(
         site=site_info,
         devices=[],
         clients=[],
         events=events,
         events_truncated=truncated,
-        event_window_seconds=since_seconds,
+        event_window_seconds=wanted.since_seconds,
         events_available=available,
     )
     if client.trace is not None:

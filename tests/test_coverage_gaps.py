@@ -21,7 +21,7 @@ from unifi_sentinel.export import device_type_label
 from unifi_sentinel.notify import Event, _priority, empty_state, plan
 from unifi_sentinel.reservations import build_reservations
 from unifi_sentinel.settings import DiagnoseSettings, load_settings
-from unifi_sentinel.snapshot import collect_snapshot
+from unifi_sentinel.snapshot import Needs, collect_snapshot
 from unifi_sentinel.util import format_time
 from unifi_sentinel.wifi import span_mhz
 
@@ -117,7 +117,7 @@ def test_reservations_sort_a_value_that_is_not_an_ip_after_the_real_ones(fake_cl
     fx = fake_client.session.fx["legacy"]["alluser"]
     fx.append({"mac": "cc:00:00:00:00:01", "name": "typo", "use_fixedip": True, "fixed_ip": "not-an-ip",
                "last_connection_network_id": "net-1"})
-    snap = collect_snapshot(fake_client, "default", include_reservations=True)
+    snap = collect_snapshot(fake_client, "default", Needs(reservations=True))
     ips = [r["Reserved IP"] for r in build_reservations(snap)]
     assert ips[-1] == "not-an-ip" and ips[:-1] == sorted(ips[:-1], key=lambda ip: tuple(map(int, ip.split("."))))
 
@@ -126,7 +126,7 @@ def test_a_reservation_with_no_last_seen_has_a_blank_last_seen(fake_client):
     fake_client.session.fx["legacy"]["alluser"].append(
         {"mac": "cc:00:00:00:00:02", "name": "never", "use_fixedip": True, "fixed_ip": "10.0.0.88",
          "last_connection_network_id": "net-1"})
-    snap = collect_snapshot(fake_client, "default", include_reservations=True)
+    snap = collect_snapshot(fake_client, "default", Needs(reservations=True))
     assert {r["Name"]: r["Last Seen"] for r in build_reservations(snap)}["never"] == ""
 
 
@@ -144,7 +144,7 @@ def test_a_failed_network_config_read_warns_and_carries_on(fake_client, monkeypa
         raise UniFiAPIError("rest unavailable")
 
     monkeypatch.setattr(fake_client, "legacy_rest", broken)
-    snap = collect_snapshot(fake_client, "default", include_reservations=True)
+    snap = collect_snapshot(fake_client, "default", Needs(reservations=True))
     assert snap.networks == [] and "legacy rest/networkconf unavailable" in capsys.readouterr().err
 
 
@@ -205,7 +205,7 @@ def test_wifi_link_text_lists_each_quality_measure_that_exists():
 
 
 def test_group_ids_are_shown_unresolved_when_the_definitions_could_not_be_read(fake_client):
-    snap = collect_snapshot(fake_client, "default", include_reservations=True, include_groups=True)
+    snap = collect_snapshot(fake_client, "default", Needs(reservations=True, groups=True))
     assert "Groups:     Desktops" in render_detail(view(snap, "desktop"), emoji=False)
     snap.client_groups = None                                       # the group definitions were unavailable
     text = render_detail(view(snap, "desktop"), emoji=False)
@@ -220,7 +220,7 @@ def test_a_wireless_client_without_an_ap_mac_uses_the_integration_uplink(fake_cl
     for sta in fake_client.session.fx["legacy"]["sta"]:
         if sta["mac"] == "bb:00:00:00:00:02":
             sta.pop("ap_mac", None)
-    snap = collect_snapshot(fake_client, "default", include_reservations=True)
+    snap = collect_snapshot(fake_client, "default", Needs(reservations=True))
     detail = view(snap, "phone")
     assert [hop["device"] for hop in detail["attachment"]][:1] == ["Office AP"]
 
@@ -232,7 +232,7 @@ def test_a_wireless_client_with_no_known_access_point_has_no_attachment(fake_cli
     for client in fake_client.session.fx["clients"]:
         if client["name"] == "phone":
             client["uplinkDeviceId"] = "nobody"
-    snap = collect_snapshot(fake_client, "default", include_reservations=True)
+    snap = collect_snapshot(fake_client, "default", Needs(reservations=True))
     assert view(snap, "phone")["attachment"] == []
 
 
@@ -240,19 +240,19 @@ def test_a_wired_client_without_a_port_number_still_names_its_switch(fake_client
     for sta in fake_client.session.fx["legacy"]["sta"]:
         if sta["mac"] == "bb:00:00:00:00:01":
             sta["sw_port"] = None
-    snap = collect_snapshot(fake_client, "default", include_reservations=True)
+    snap = collect_snapshot(fake_client, "default", Needs(reservations=True))
     hops = view(snap, "desktop")["attachment"]
     assert hops[0]["device"] == "Office Switch" and hops[0]["port"] is None
 
 
 def test_the_search_falls_through_when_a_mac_or_an_ip_matches_nobody(fake_client):
-    snap = collect_snapshot(fake_client, "default", include_reservations=True)
+    snap = collect_snapshot(fake_client, "default", Needs(reservations=True))
     assert find_clients(snap, "aa:bb:cc:dd:ee:ff") == [] and find_clients(snap, "10.9.9.9") == []
     assert [r["name"] for r in find_clients(snap, "10.0.0.10")] == ["desktop"]
 
 
 def test_records_without_a_mac_are_not_clients(fake_client):
-    snap = collect_snapshot(fake_client, "default", include_reservations=True)
+    snap = collect_snapshot(fake_client, "default", Needs(reservations=True))
     snap.all_users = list(snap.all_users) + [{"name": "no-mac"}, {"mac": "", "name": "blank"}]
     assert {r["name"] for r in known_clients(snap)} >= {"desktop", "phone"}
     assert "no-mac" not in {r["name"] for r in known_clients(snap)}
@@ -323,7 +323,7 @@ def test_speedtest_statistics_that_are_missing_are_left_out(fake_client):
     from unifi_sentinel.wan import build_wan, render_text
     for test in fake_client.session.fx["legacy_v2"]["speedtest"]["data"]:
         test.pop("latency_ms", None)
-    snap = collect_snapshot(fake_client, "default", include_health=True, include_speedtests=True)
+    snap = collect_snapshot(fake_client, "default", Needs(health=True, speedtests=True))
     text = render_text(build_wan(snap))
     assert "  Download: min" in text and "  Upload: min" in text and "  Latency: min" not in text
 
