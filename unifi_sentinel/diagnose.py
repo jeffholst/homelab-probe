@@ -309,8 +309,8 @@ def _wifi_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]:
             channel = radio.get("channel")
             on = f" (channel {channel})" if channel not in (None, "") else ""
 
-            util = _number(radio.get("cu_total"))
-            if util >= settings.radio_util_warn_pct:
+            util = _known_percent(radio.get("cu_total"))
+            if util is not None and util >= settings.radio_util_warn_pct:
                 level = CRITICAL if util >= settings.radio_util_critical_pct else WARNING
                 findings.append(Finding(level, label, f"channel utilization {util:.0f}%{on}"))
             retries = _number(radio.get("tx_retries_pct"))
