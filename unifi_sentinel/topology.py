@@ -12,7 +12,7 @@ from .client_view import DeviceIndex
 from .diagnose import EMOJI, INFO, SEVERITY_ORDER, Finding, apply_ignores, diagnose, uplink_speeds
 from .settings import DiagnoseSettings
 from .snapshot import Snapshot
-from .util import clean_data, normalize_mac, number
+from .util import clean_data, normalize_mac, number, record_for
 
 GATEWAY_KINDS = {"Gateway", "Dream Machine"}
 Node = Dict[str, Any]
@@ -28,7 +28,7 @@ def _link(snap: Snapshot, idx: DeviceIndex, mac: str) -> Tuple[str, Optional[int
     up = legacy.get("uplink") or {}
     parent = (up.get("uplink_mac") or "").upper()
     if not parent:
-        detail = snap.device_details.get((idx.integration.get(mac) or {}).get("id")) or {}
+        detail = record_for(snap.device_details, (idx.integration.get(mac) or {}).get("id"))
         wanted = (detail.get("uplink") or {}).get("deviceId")
         parent = next((m for m, d in idx.integration.items() if wanted and d.get("id") == wanted), "")
     port, own = up.get("uplink_remote_port"), up.get("port_idx")

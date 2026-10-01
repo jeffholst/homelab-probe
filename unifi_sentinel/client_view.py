@@ -114,7 +114,9 @@ class DeviceIndex:
 
     def offline(self, mac: str) -> bool:
         integ = self.integration.get(mac)
-        return bool(integ) and integ.get("state") != "ONLINE"
+        if not integ:
+            return False
+        return integ.get("state") != "ONLINE"
 
 
 def _hop(net: DeviceIndex, mac: str, port: Any = None, speed: Any = None, detail: str = "") -> Dict[str, Any]:
@@ -155,7 +157,7 @@ def _attachment(snap: Snapshot, net: DeviceIndex, rec: Dict[str, Any]
         if not ap_mac and live:
             ap_mac = next((m for m, d in net.integration.items()
                            if d.get("id") == live.get("uplinkDeviceId")), "")
-        band = BANDS.get(sta.get("radio"), "")
+        band = BANDS.get(str(sta.get("radio") or ""), "")
         ssid = sta.get("essid") or ""
         detail = ", ".join(x for x in (band, f"channel {sta['channel']}" if sta.get("channel") else "",
                                        f"SSID {ssid}" if ssid else "") if x)
@@ -168,7 +170,7 @@ def _attachment(snap: Snapshot, net: DeviceIndex, rec: Dict[str, Any]
         satisfaction = number(sta.get("satisfaction"))
         if satisfaction is not None and satisfaction < 0:
             satisfaction = None
-        link = {"kind": "wireless", "band": band, "channel": sta.get("channel"), "ssid": ssid,
+        link: Optional[Dict[str, Any]] = {"kind": "wireless", "band": band, "channel": sta.get("channel"), "ssid": ssid,
                 "signal_dbm": number(sta.get("signal")), "noise_dbm": number(sta.get("noise")),
                 "tx_rate_mbps": (number(sta.get("tx_rate")) or 0) / 1000 or None,
                 "rx_rate_mbps": (number(sta.get("rx_rate")) or 0) / 1000 or None,
@@ -188,8 +190,8 @@ def _attachment(snap: Snapshot, net: DeviceIndex, rec: Dict[str, Any]
     if not sw_mac:
         return [], None, subjects
 
-    port = next((p for p in (net.legacy.get(sw_mac) or {}).get("port_table") or []
-                 if p.get("port_idx") == port_idx), {}) if rec["online"] else {}
+    port: Dict[str, Any] = next((p for p in (net.legacy.get(sw_mac) or {}).get("port_table") or []
+                                 if p.get("port_idx") == port_idx), {}) if rec["online"] else {}
     hops = [_hop(net, sw_mac, port_idx, port.get("speed"), "last seen here" if not rec["online"] else "")]
     subjects.add(net.name(sw_mac))
     if port_idx is not None:
@@ -277,6 +279,7 @@ def _recent_events(snap: Snapshot, rec: Dict[str, Any], hops: List[Dict[str, Any
         return result
 
     mine = make_filter(client=rec["mac"])
+    assert mine is not None                      # a client was given, so there is a filter
     own = [e for e in snap.events if mine(e)]
     path = [(h.get("id"), h["device"].lower()) for h in hops]
 

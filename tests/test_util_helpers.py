@@ -83,3 +83,12 @@ def test_the_private_copies_are_gone():
                           (wan, ("_num",)), (wifi, ("_num", "_clean", "_plural"))):
         for name in names:
             assert not hasattr(module, name), f"{module.__name__}.{name} is a private copy of a util helper"
+
+
+def test_record_for_looks_up_by_an_id_that_may_be_missing():
+    from unifi_sentinel.util import record_for
+    table = {"sw1": {"name": "Office Switch"}, "empty": {}}
+    assert record_for(table, "sw1") == {"name": "Office Switch"}
+    assert record_for(table, "unknown") == {} and record_for(table, None) == {} and record_for(table, 5) == {}
+    assert record_for(table, "empty") == {}
+    assert record_for({}, "sw1") == {}

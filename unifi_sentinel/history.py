@@ -11,7 +11,7 @@ import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, TypedDict
 
 from . import __version__
 from .client_view import DeviceIndex, addressing, known_clients
@@ -133,7 +133,7 @@ def _age_key(path: Path) -> Optional[Tuple[datetime, int]]:
                 captured_at = record.get("captured_at") if (
                     isinstance(record, dict) and record.get("schema_version") == SCHEMA_VERSION
                 ) else None
-                captured = datetime.fromisoformat(captured_at)
+                captured = datetime.fromisoformat(str(captured_at))
                 moment = captured.astimezone(timezone.utc) if captured.tzinfo is not None else fallback
             except (OSError, TypeError, ValueError, AttributeError, json.JSONDecodeError):
                 moment = fallback
@@ -229,14 +229,51 @@ RESERVATION_FIELDS = [("name", "Renamed"), ("reserved_ip", "Reserved IP changed"
                       ("network", "Network changed")]
 
 
+class Change(TypedDict):
+    """One field that differs between two inventories."""
+
+    field: str
+    old: Any
+    new: Any
+
+
+class ChangedRecord(TypedDict):
+    """A device, client or reservation present in both inventories with at least one change."""
+
+    mac: str
+    name: str
+    changes: List[Change]
+
+
+class DiffPart(TypedDict):
+    """The differences for one kind of record (devices, clients or reservations)."""
+
+    added: List[Record]
+    removed: List[Record]
+    changed: List[ChangedRecord]
+
+
+class Diff(TypedDict):
+    """The result of ``diff_snapshots``; ``total`` counts every difference."""
+
+    same_site: bool
+    controller: List[Change]
+    devices: DiffPart
+    clients: DiffPart
+    reservations: DiffPart
+    total: int
+
+
 def _location(r: Record) -> str:
     where = r.get("uplink") or ""
     return f"{where} port {r['uplink_port']}" if where and r.get("uplink_port") else where
 
 
-def _compare(old: Record, new: Record, fields: List[Tuple[str, str]]) -> List[Dict[str, Any]]:
-    changes = []
+def _compare(old: Record, new: Record, fields: List[Tuple[str, str]]) -> List[Change]:
+    changes: List[Change] = []
     for field, _label in fields:
+        a: Any
+        b: Any
         if field == "location":
             a, b = _location(old), _location(new)
             if not (a and b):          # unknown on one side (e.g. offline Wi-Fi): not a move
@@ -248,9 +285,9 @@ def _compare(old: Record, new: Record, fields: List[Tuple[str, str]]) -> List[Di
     return changes
 
 
-def _diff_list(old: List[Record], new: List[Record], fields: List[Tuple[str, str]]) -> Dict[str, Any]:
+def _diff_list(old: List[Record], new: List[Record], fields: List[Tuple[str, str]]) -> DiffPart:
     before, after = {r["mac"]: r for r in old}, {r["mac"]: r for r in new}
-    changed = []
+    changed: List[ChangedRecord] = []
     for mac in sorted(set(before) & set(after)):
         changes = _compare(before[mac], after[mac], fields)
         if changes:
@@ -261,23 +298,23 @@ def _diff_list(old: List[Record], new: List[Record], fields: List[Tuple[str, str
             "changed": changed}
 
 
-def diff_snapshots(old: Record, new: Record) -> Dict[str, Any]:
+def diff_snapshots(old: Record, new: Record) -> Diff:
     """Everything that differs between two captured inventories, matched by MAC address."""
-    controller = []
+    controller: List[Change] = []
     old_v, new_v = old["controller"].get("application_version"), new["controller"].get("application_version")
     if old_v and new_v and old_v != new_v:
         controller.append({"field": "application_version", "old": old_v, "new": new_v})
-    result = {
-        "same_site": (old.get("site") or {}).get("id") == (new.get("site") or {}).get("id"),
-        "controller": controller,
-        "devices": _diff_list(old["devices"], new["devices"], DEVICE_FIELDS),
-        "clients": _diff_list(old["clients"], new["clients"], CLIENT_FIELDS),
-        "reservations": _diff_list(old["reservations"], new["reservations"], RESERVATION_FIELDS),
-    }
-    result["total"] = len(controller) + sum(
+    devices = _diff_list(old["devices"], new["devices"], DEVICE_FIELDS)
+    clients = _diff_list(old["clients"], new["clients"], CLIENT_FIELDS)
+    reservations = _diff_list(old["reservations"], new["reservations"], RESERVATION_FIELDS)
+    total = len(controller) + sum(
         len(part["added"]) + len(part["removed"]) + sum(len(c["changes"]) for c in part["changed"])
-        for part in (result["devices"], result["clients"], result["reservations"]))
-    return result
+        for part in (devices, clients, reservations))
+    return {
+        "same_site": (old.get("site") or {}).get("id") == (new.get("site") or {}).get("id"),
+        "controller": controller, "devices": devices, "clients": clients, "reservations": reservations,
+        "total": total,
+    }
 
 
 # -- rendering ---------------------------------------------------------------
@@ -295,7 +332,7 @@ def _describe(kind: str, r: Record) -> str:
     return f"{r.get('name') or r['mac']} ({detail})" if detail else str(r.get("name") or r["mac"])
 
 
-def _section(kind: str, title: str, part: Dict[str, Any], fields: List[Tuple[str, str]],
+def _section(kind: str, title: str, part: DiffPart, fields: List[Tuple[str, str]],
              show_all: bool, noun: str) -> List[str]:
     lines: List[str] = []
 
@@ -321,7 +358,7 @@ def _section(kind: str, title: str, part: Dict[str, Any], fields: List[Tuple[str
     return [title] + lines + [""] if lines else []
 
 
-def render_diff(diff: Dict[str, Any], old_label: str, new_label: str, show_all: bool = False) -> str:
+def render_diff(diff: Diff, old_label: str, new_label: str, show_all: bool = False) -> str:
     diff, old_label, new_label = clean_data(diff), clean_data(old_label), clean_data(new_label)
     out = [f"Comparing {old_label} -> {new_label}", ""]
     if not diff["same_site"]:

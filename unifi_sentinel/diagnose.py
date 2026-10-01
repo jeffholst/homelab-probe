@@ -13,7 +13,7 @@ from .query import format_uptime
 from .reservations import dhcp_pool, offline_reservations, reservation_records
 from .settings import DiagnoseSettings, IgnoreRule
 from .snapshot import Snapshot
-from .util import describe_age, is_randomized_mac, known_percent, number_or_zero, plural, printable
+from .util import describe_age, is_randomized_mac, known_percent, number_or_zero, plural, printable, record_for
 from .wan import SPEEDTEST_BASELINE_DAYS, median_download, monitoring, nat_status, speedtests_for_baseline
 
 CRITICAL, WARNING, INFO = "critical", "warning", "info"
@@ -107,7 +107,7 @@ def _uplink_parents(snap: Snapshot) -> Dict[str, int]:
     }
     counts: Dict[str, int] = {}
     for d in snap.devices:
-        parent = ((snap.device_details.get(d.get("id")) or {}).get("uplink") or {}).get("deviceId")
+        parent = (record_for(snap.device_details, d.get("id")).get("uplink") or {}).get("deviceId")
         if not parent:
             parent = id_by_mac.get(legacy_uplink.get((d.get("macAddress") or "").upper(), ""))
         if parent:
@@ -661,7 +661,7 @@ def _wifi_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]:
             continue
         name = c.get("name") or c.get("hostname") or c.get("mac") or "?"
         ap = ap_name.get((c.get("ap_mac") or "").upper())
-        place = ", ".join(x for x in (BANDS.get(c.get("radio"), ""), f"on {ap}" if ap else "") if x)
+        place = ", ".join(x for x in (BANDS.get(str(c.get("radio") or ""), ""), f"on {ap}" if ap else "") if x)
         where = f" ({place})" if place else ""
 
         signal = number_or_zero(c.get("signal"))
@@ -723,8 +723,8 @@ def uplink_speeds(snap: Snapshot, device: Dict[str, Any]) -> Optional[Tuple[floa
     if not (up.get("up") and parent_mac and speed and child_max):
         return None
     id_by_mac = {(d.get("macAddress") or "").upper(): d.get("id") for d in snap.devices}
-    parent_ports = ((snap.device_details.get(id_by_mac.get(parent_mac)) or {})
-                    .get("interfaces") or {}).get("ports") or []
+    parent_ports = (record_for(snap.device_details, id_by_mac.get(parent_mac)).get("interfaces") or {}).get(
+        "ports") or []
     parent_max = next((number_or_zero(p.get("maxSpeedMbps")) for p in parent_ports
                        if p.get("idx") == up.get("uplink_remote_port")), 0.0)
     if not parent_max:
@@ -762,7 +762,7 @@ def diagnose(snap: Snapshot, settings: Optional[DiagnoseSettings] = None,
         name = d.get("name") or d.get("macAddress", "?")
         message = f"device is {str(d.get('state', 'unknown')).lower()}"
         kind = device_type_label(d, legacy_type.get((d.get("macAddress") or "").upper(), ""))
-        downstream = parents.get(d.get("id"), 0)
+        downstream = parents.get(d.get("id") or "", 0)
         if kind in GATEWAY_TYPES:
             findings.append(Finding(
                 CRITICAL, name, f"{message} (gateway)", (d.get("macAddress") or "").upper(),
@@ -776,7 +776,7 @@ def diagnose(snap: Snapshot, settings: Optional[DiagnoseSettings] = None,
                                     code="device.offline"))
 
     for d in snap.devices:
-        st = snap.device_stats.get(d.get("id")) or {}
+        st = record_for(snap.device_stats, d.get("id"))
         for key, label in (("cpuUtilizationPct", "CPU"), ("memoryUtilizationPct", "memory")):
             pct = st.get(key) or 0
             if pct >= settings.resource_warn_pct:

@@ -404,6 +404,7 @@ def _check_diff(parser: argparse.ArgumentParser, args: argparse.Namespace) -> No
 
 def _run_diff(ctx: Context) -> int:
     args = ctx.args
+    new_path: Optional[Path]
     if args.last_two:
         saved = list_snapshots(args.dir)
         if len(saved) < 2:
@@ -574,12 +575,13 @@ def _notify(findings: List[Any], config: Any, settings: Any, args: argparse.Name
 
 def _run_diagnose(ctx: Context) -> int:
     args = ctx.args
+    settings = ctx.settings or DiagnoseSettings()          # loaded for this command, so never None
     findings, ignored = apply_ignores(
         diagnose(collect_snapshot(
             ctx.client, ctx.config.site,
             Needs(reservations=True, health=True, speedtests=True,
-                  events=None if args.no_events else EventQuery(args.since))), ctx.settings),
-        ctx.settings.ignore)
+                  events=None if args.no_events else EventQuery(args.since))), settings),
+        settings.ignore)
     if args.json:
         say(findings_json(findings, ignored, args.show_ignored))
     else:
@@ -588,7 +590,7 @@ def _run_diagnose(ctx: Context) -> int:
         if args.show_ignored and ignored:
             say("\n" + format_ignored(ignored))
     code = exit_code(findings, args.fail_on)
-    if args.notify and _notify(findings, ctx.config, ctx.settings, args) and code == 0:
+    if args.notify and _notify(findings, ctx.config, settings, args) and code == 0:
         return EXIT_ERROR              # the message could not be delivered and nothing else says so
     return code
 

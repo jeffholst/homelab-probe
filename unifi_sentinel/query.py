@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 from .export import INVENTORY_COLUMNS, build_inventory, build_offline_clients, build_switch_ports
 from .reservations import OFFLINE_RESERVATION_COLUMNS, RESERVATION_COLUMNS, build_reservations, offline_reservation_rows
 from .snapshot import Snapshot
-from .util import is_randomized_mac, printable, search_rows
+from .util import is_randomized_mac, printable, record_for, search_rows
 
 TABLE_COLUMNS = ["Name", "MAC Address", "IP Address", "Model", "Connection Type",
                  "Switch", "Port", "Status"]
@@ -38,9 +38,9 @@ def _add_device_details(rows: List[Dict[str, Any]], snap: Snapshot) -> None:
     for row in rows:
         dev = by_mac.get(row["MAC Address"])
         if row["Type"].startswith("Device") and dev:
-            detail = snap.device_details.get(dev.get("id")) or {}
+            detail = record_for(snap.device_details, dev.get("id"))
             uptime = (
-                (snap.device_stats.get(dev.get("id")) or {}).get("uptimeSec")
+                record_for(snap.device_stats, dev.get("id")).get("uptimeSec")
                 if row["Status"] == "Online"
                 else None
             )

@@ -150,7 +150,7 @@ def event_json(event: Dict[str, Any]) -> Dict[str, Any]:
 def summarize(events: List[Dict[str, Any]], top: int = 10) -> Dict[str, Any]:
     """Counts by event type and severity, and the noisiest (event, client/device) pairs,
     which is where a flapping device or client shows up."""
-    pairs = Counter()
+    pairs: Counter[Tuple[str, str]] = Counter()
     for e in events:
         subject = first_name(e, "CLIENT") or first_name(e, "DEVICE")
         pairs[(e.get("event") or e.get("key") or "", subject)] += 1

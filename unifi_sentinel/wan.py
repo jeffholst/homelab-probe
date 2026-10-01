@@ -179,7 +179,8 @@ def _speedtest_section(snap: Snapshot, days: int, settings: DiagnoseSettings, no
 def _links(snap: Snapshot) -> List[Dict[str, Any]]:
     gateway = next((d for d in snap.legacy_devices if d.get("type") in GATEWAY_TYPES), None)
     links = []
-    for key in sorted(k for k in (gateway or {}) if re.fullmatch(r"wan\d+", k)):
+    gateway = gateway or {}
+    for key in sorted(k for k in gateway if re.fullmatch(r"wan\d+", k)):
         w = gateway[key] if isinstance(gateway[key], dict) else {}
         tx, rx = number(w.get("tx_bytes-r")), number(w.get("rx_bytes-r"))
         links.append({
