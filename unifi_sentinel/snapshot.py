@@ -37,6 +37,7 @@ class Snapshot:
     health: List[Dict[str, Any]] = field(default_factory=list)
     events: List[Dict[str, Any]] = field(default_factory=list)
     events_truncated: bool = False
+    event_window_seconds: int = 0     # how far back the events reach (0: events not collected)
 
 
 def _legacy_or_empty(client: UniFiClient, site_ref: str, resource: str) -> List[Dict[str, Any]]:
@@ -180,6 +181,7 @@ def collect_snapshot(
         ),
         events=events,
         events_truncated=events_truncated,
+        event_window_seconds=event_since_seconds if include_events else 0,
     )
 
 
@@ -198,4 +200,4 @@ def collect_event_snapshot(
         client, site_ref, since_seconds, categories or [], severities or [], search, now_ms
     )
     return Snapshot(site=site_info, devices=[], clients=[], events=events,
-                    events_truncated=truncated)
+                    events_truncated=truncated, event_window_seconds=since_seconds)

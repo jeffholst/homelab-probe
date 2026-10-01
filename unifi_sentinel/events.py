@@ -21,6 +21,15 @@ _UNITS = {"m": 60, "h": 3600, "d": 86400, "w": 7 * 86400}
 _PLACEHOLDER = re.compile(r"\{([A-Za-z0-9_]+)\}")
 
 
+def describe_duration(seconds: int) -> str:
+    """A window as short text: 86400 -> '24h', 7 days -> '7d', 90 minutes -> '90m'."""
+    if seconds >= 2 * 86400 and seconds % 86400 == 0:
+        return f"{seconds // 86400}d"
+    if seconds % 3600 == 0:
+        return f"{seconds // 3600}h"
+    return f"{max(1, seconds // 60)}m"
+
+
 def parse_duration(text: str) -> int:
     """Seconds in a duration like ``90m``, ``24h``, ``7d`` or ``2w``."""
     match = re.fullmatch(r"\s*(\d+)\s*([mhdw])\s*", str(text).lower())
@@ -49,7 +58,7 @@ def render_message(event: Dict[str, Any]) -> str:
     return _PLACEHOLDER.sub(fill, event.get("message_raw") or event.get("title_raw") or "")
 
 
-def _subjects(event: Dict[str, Any], prefix: str) -> List[Dict[str, Any]]:
+def subjects(event: Dict[str, Any], prefix: str) -> List[Dict[str, Any]]:
     """Parameter objects whose name starts with ``prefix`` (CLIENT, DEVICE, DEVICE_FROM...)."""
     params = event.get("parameters") or {}
     return [v for k, v in params.items() if k.startswith(prefix) and isinstance(v, dict)]
@@ -81,9 +90,9 @@ def make_filter(client: str = "", device: str = "", event: str = "") -> Optional
     wanted = re.sub(r"[\s\-]+", "_", event.strip().lower())
 
     def predicate(e: Dict[str, Any]) -> bool:
-        if client and not _matches(_subjects(e, "CLIENT"), client, ("name", "hostname", "ip", "id")):
+        if client and not _matches(subjects(e, "CLIENT"), client, ("name", "hostname", "ip", "id")):
             return False
-        if device and not _matches(_subjects(e, "DEVICE"), device, ("name", "ip", "id", "model_name")):
+        if device and not _matches(subjects(e, "DEVICE"), device, ("name", "ip", "id", "model_name")):
             return False
         if wanted and wanted not in f"{e.get('event', '')}_{e.get('key', '')}".lower():
             return False
@@ -109,12 +118,12 @@ def fetch_events(
 
 # -- presenting ------------------------------------------------------------
 
-def _first_name(event: Dict[str, Any], prefix: str) -> str:
-    objs = _subjects(event, prefix)
+def first_name(event: Dict[str, Any], prefix: str) -> str:
+    objs = subjects(event, prefix)
     return str(objs[0].get("name") or "") if objs else ""
 
 
-def _local_time(timestamp_ms: Any) -> str:
+def local_time(timestamp_ms: Any) -> str:
     try:
         return datetime.fromtimestamp(timestamp_ms / 1000).strftime("%Y-%m-%d %H:%M:%S")
     except (TypeError, ValueError, OverflowError, OSError):
@@ -123,7 +132,7 @@ def _local_time(timestamp_ms: Any) -> str:
 
 def event_row(event: Dict[str, Any]) -> Dict[str, Any]:
     return {
-        "Time": _local_time(event.get("timestamp")),
+        "Time": local_time(event.get("timestamp")),
         "Severity": str(event.get("severity") or "").title(),
         "Category": event.get("category") or "",
         "Event": event.get("event") or event.get("key") or "",
@@ -133,7 +142,7 @@ def event_row(event: Dict[str, Any]) -> Dict[str, Any]:
 
 def event_json(event: Dict[str, Any]) -> Dict[str, Any]:
     def ident(prefix: str) -> Optional[Dict[str, Any]]:
-        objs = _subjects(event, prefix)
+        objs = subjects(event, prefix)
         return {k: objs[0].get(k) for k in ("name", "ip", "id") if objs[0].get(k)} if objs else None
 
     return {**event_row(event), "timestamp": event.get("timestamp"),
@@ -146,7 +155,7 @@ def summarize(events: List[Dict[str, Any]], top: int = 10) -> Dict[str, Any]:
     which is where a flapping device or client shows up."""
     pairs = Counter()
     for e in events:
-        subject = _first_name(e, "CLIENT") or _first_name(e, "DEVICE")
+        subject = first_name(e, "CLIENT") or first_name(e, "DEVICE")
         pairs[(e.get("event") or e.get("key") or "", subject)] += 1
     return {
         "total": len(events),

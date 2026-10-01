@@ -48,6 +48,7 @@ class DiagnoseSettings:
     min_packets_for_drop_pct: int = 1000 # minimum packet count before evaluating drop percentage
     poe_warn_pct: float = 80             # switch PoE budget used at or above: warning
     poe_critical_pct: float = 95         # switch PoE budget used at or above: critical
+    event_flap_count: int = 10           # disconnects/unreachable events in the window at or above: warning
     wifi_weak_signal_dbm: float = -75    # client signal at or below: warning
     wifi_retry_pct: float = 30           # client or radio TX retries at or above: warning
     wifi_min_attempts: int = 1000        # minimum client TX attempts before judging retries
@@ -81,7 +82,7 @@ def _parse(data: Dict[str, Any]) -> DiagnoseSettings:
     known = {"resource_warn_pct", "resource_critical_pct", "slow_link_mbps",
              "wan_latency_warn_ms", "wan_drops_warn", "link_flap_count", "port_drop_pct",
              "min_packets_for_drop_pct", "poe_warn_pct", "poe_critical_pct",
-             "wifi_weak_signal_dbm", "wifi_retry_pct", "wifi_min_attempts",
+             "event_flap_count", "wifi_weak_signal_dbm", "wifi_retry_pct", "wifi_min_attempts",
              "wifi_satisfaction_warn", "radio_util_warn_pct", "radio_util_critical_pct"}
     if set(thresholds) - known:
         raise ConfigError(f"unknown [thresholds] key(s): {', '.join(sorted(set(thresholds) - known))} "
@@ -106,6 +107,7 @@ def _parse(data: Dict[str, Any]) -> DiagnoseSettings:
                            thresholds.get("poe_critical_pct", defaults.poe_critical_pct), 0, 100)
     if poe_warn > poe_critical:
         raise ConfigError("[thresholds] poe_warn_pct must not exceed poe_critical_pct")
+    event_flaps = _number("event_flap_count", thresholds.get("event_flap_count", defaults.event_flap_count), 1)
     weak = _number("wifi_weak_signal_dbm",
                    thresholds.get("wifi_weak_signal_dbm", defaults.wifi_weak_signal_dbm), -120, 0)
     retry = _number("wifi_retry_pct", thresholds.get("wifi_retry_pct", defaults.wifi_retry_pct), 0, 100)
@@ -120,7 +122,8 @@ def _parse(data: Dict[str, Any]) -> DiagnoseSettings:
     if util_warn > util_critical:
         raise ConfigError("[thresholds] radio_util_warn_pct must not exceed radio_util_critical_pct")
     for name, value in (("wan_drops_warn", drops), ("link_flap_count", flaps),
-                        ("min_packets_for_drop_pct", min_packets), ("wifi_min_attempts", min_attempts)):
+                        ("min_packets_for_drop_pct", min_packets), ("wifi_min_attempts", min_attempts),
+                        ("event_flap_count", event_flaps)):
         if value != int(value):
             raise ConfigError(f"[thresholds] {name} must be a whole number")
 
@@ -142,7 +145,7 @@ def _parse(data: Dict[str, Any]) -> DiagnoseSettings:
 
     return DiagnoseSettings(
         resource_warn_pct=warn, resource_critical_pct=critical, slow_link_mbps=int(slow),
-        wan_latency_warn_ms=latency, wan_drops_warn=int(drops),
+        wan_latency_warn_ms=latency, wan_drops_warn=int(drops), event_flap_count=int(event_flaps),
         link_flap_count=int(flaps), port_drop_pct=drop_pct,
         min_packets_for_drop_pct=int(min_packets), poe_warn_pct=poe_warn,
         poe_critical_pct=poe_critical, wifi_weak_signal_dbm=weak, wifi_retry_pct=retry,
