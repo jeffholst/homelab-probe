@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from .events import describe_duration, first_name, local_time, subjects
 from .export import client_location, device_type_label
 from .query import format_uptime
-from .reservations import offline_reservations, reservation_records
+from .reservations import dhcp_pool, offline_reservations, reservation_records
 from .settings import DiagnoseSettings, IgnoreRule
 from .snapshot import Snapshot
 from .util import describe_age as _age_text
@@ -54,6 +54,8 @@ CODES = {
     "reservation.duplicate": "the same IP is reserved for several clients",
     "reservation.ip_in_use": "a reserved IP is in use by a different client or device",
     "reservation.offline": "a client with a reservation has been offline longer than the threshold",
+    "reservation.in_dhcp_pool": "a reserved IP lies inside its network's dynamic DHCP range",
+    "reservation.pool_unknown": "a network's DHCP range is missing or invalid, so its reservations cannot be checked",
     "reservation.private_mac": "a reservation is tied to a randomized (private) MAC address",
     "client.private_mac_summary": "how many connected clients use randomized (private) MAC addresses",
     "reservation.never_seen": "a reservation whose client has no last-seen time",
@@ -215,6 +217,53 @@ def _reservation_findings(snap: Snapshot) -> List[Finding]:
             findings.append(Finding(
                 WARNING, ip, f"reserved for {len(names)} clients: {', '.join(sorted(names))}",
                 code="reservation.duplicate"))
+    return findings
+
+
+def _pool_findings(snap: Snapshot) -> List[Finding]:
+    """Reservations that lie inside their network's dynamic DHCP range.
+
+    The reservation itself is honoured by the gateway, but an address in the pool is also
+    offered to other clients (and a device configured statically in the pool collides with
+    them), so keeping reservations outside the range is the safe layout. It is a warning, and
+    critical when another client is using the address right now. Networks where the controller
+    does not serve DHCP are skipped; DHCP on with an unusable range is one info per network
+    (only if it has reservations) instead of a guess.
+    """
+    findings: List[Finding] = []
+    holders = _ip_holders(snap)
+    unknown: Dict[str, str] = {}
+    for user, net in reservation_records(snap):
+        if not net:
+            continue                                  # network unresolved: nothing reliable to say
+        state, pool = dhcp_pool(net)
+        if state == "unknown":
+            unknown.setdefault(net.get("_id") or net.get("name") or "?", net.get("name") or "?")
+            continue
+        if pool is None:
+            continue
+        try:
+            reserved = ipaddress.ip_address(str(user["fixed_ip"]).strip())
+        except ValueError:
+            continue
+        if reserved.version != pool[0].version or not int(pool[0]) <= int(reserved) <= int(pool[1]):
+            continue
+        mac = (user.get("mac") or "").upper()
+        name = user.get("name") or user.get("hostname") or mac
+        text = f"reserved IP {reserved} is inside the DHCP pool {pool[0]}-{pool[1]} of {net.get('name') or '?'}"
+        others = {m: who for m, who in holders.get(str(reserved), {}).items() if m != mac}
+        if others:
+            findings.append(Finding(
+                CRITICAL, name, f"{text}; also in use by {', '.join(sorted(others.values()))}",
+                code="reservation.in_dhcp_pool"))
+        else:
+            findings.append(Finding(WARNING, name, text, code="reservation.in_dhcp_pool"))
+    for network in sorted(unknown.values()):
+        findings.append(Finding(
+            INFO, network,
+            "DHCP is enabled but its address range is missing or invalid; reservations on this network "
+            "cannot be checked against the pool",
+            code="reservation.pool_unknown"))
     return findings
 
 
@@ -744,6 +793,7 @@ def diagnose(snap: Snapshot, settings: Optional[DiagnoseSettings] = None,
     findings.extend(_wan_findings(snap, settings))
     findings.extend(_client_ip_findings(snap))
     findings.extend(_reservation_findings(snap))
+    findings.extend(_pool_findings(snap))
     findings.extend(_offline_reservation_findings(snap, settings, now))
     findings.extend(_private_mac_findings(snap))
     findings.extend(_duplicate_ip_findings(snap))

@@ -671,7 +671,11 @@
         "name": "Main",
         "purpose": "corporate",
         "vlan_enabled": false,
-        "ip_subnet": "10.0.0.1/24"
+        "ip_subnet": "10.0.0.1/24",
+        "dhcpd_enabled": true,
+        "dhcp_relay_enabled": false,
+        "dhcpd_start": "10.0.0.100",
+        "dhcpd_stop": "10.0.0.200"
       },
       {
         "_id": "net-2",
@@ -679,7 +683,11 @@
         "purpose": "corporate",
         "vlan_enabled": true,
         "vlan": 20,
-        "ip_subnet": "10.0.20.1/24"
+        "ip_subnet": "10.0.20.1/24",
+        "dhcpd_enabled": true,
+        "dhcp_relay_enabled": false,
+        "dhcpd_start": "10.0.20.100",
+        "dhcpd_stop": "10.0.20.200"
       }
     ]
   },

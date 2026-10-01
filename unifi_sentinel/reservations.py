@@ -14,6 +14,30 @@ RESERVATION_COLUMNS = ["Name", "MAC Address", "Reserved IP", "Network", "VLAN",
 OFFLINE_RESERVATION_COLUMNS = RESERVATION_COLUMNS + ["Offline For"]
 
 
+IPAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
+
+
+def dhcp_pool(net: Dict[str, Any]) -> Tuple[str, Optional[Tuple[IPAddress, IPAddress]]]:
+    """The dynamic DHCP range of a network from its legacy ``rest/networkconf`` record.
+
+    Returns ``("ok", (first, last))``; ``("off", None)`` when the controller does not serve DHCP
+    there (``dhcpd_enabled`` is not true, which also covers WAN and VPN networks that carry a
+    ``dhcpd_start``/``dhcpd_stop`` without being a client network, or ``dhcp_relay_enabled`` is
+    true); or ``("unknown", None)`` when DHCP is on but the range is missing, unparsable, mixed
+    IPv4/IPv6 or reversed.
+    """
+    if net.get("dhcp_relay_enabled") is True or net.get("dhcpd_enabled") is not True:
+        return "off", None
+    try:
+        first = ipaddress.ip_address(str(net.get("dhcpd_start")).strip())
+        last = ipaddress.ip_address(str(net.get("dhcpd_stop")).strip())
+    except ValueError:
+        return "unknown", None
+    if first.version != last.version or int(first) > int(last):      # same family, in order
+        return "unknown", None
+    return "ok", (first, last)
+
+
 def _ip_sort_key(ip: str) -> Tuple[int, Any]:
     try:
         return (0, ipaddress.ip_address(ip))
