@@ -311,13 +311,15 @@ def _run_client(ctx: Context) -> int:
     args = ctx.args
     # Look the client up in the cheap data first (the devices, the connected clients and the client history);
     # the network configuration, the groups and the event log (a POST) are read only for a client that matched.
-    snap = collect_snapshot(ctx.client, ctx.config.site, Needs(offline=True))
+    snap = collect_snapshot(ctx.client, ctx.config.site,
+                            Needs(offline=True, device_extras=False, legacy_devices=False))
     matches = find_clients(snap, args.query)
     if len(matches) != 1:
         say(render_candidates(args.query, matches), file=sys.stderr)
         return EXIT_NO_MATCH
     extend_snapshot(ctx.client, snap,
-                    Needs(reservations=True, groups=True, events=None if args.no_events else EventQuery(args.since)))
+                    Needs(reservations=True, groups=True, device_extras=True, legacy_devices=True,
+                          events=None if args.no_events else EventQuery(args.since)))
     detail = build_client_detail(snap, matches[0], ctx.settings)
     emoji = not args.no_emoji and stream_supports_emoji(sys.stdout)
     say(to_json(detail) if args.json else render_detail(detail, emoji))

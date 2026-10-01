@@ -197,9 +197,12 @@ def test_workers_one_means_no_pool_and_more_means_a_pool():
 
 def test_a_real_session_gets_a_connection_pool_sized_for_the_workers():
     client = UniFiClient("https://controller.example", "k", workers=7)
+    adapter = client.session.get_adapter("https://controller.example/x")
+    assert adapter._pool_maxsize == 7
     with client.parallel():
-        adapter = client.session.get_adapter("https://controller.example/x")
-        assert adapter._pool_maxsize == 7
+        assert client.session.get_adapter("https://controller.example/x") is adapter
+    with client.parallel():
+        assert client.session.get_adapter("https://controller.example/x") is adapter
     assert UniFiClient("https://controller.example", "k", workers=0).workers == 1
 
 
@@ -228,11 +231,18 @@ def test_extending_reads_only_the_extras_and_matches_a_single_collection():
     one, two = other_client(1), other_client(3)
     wanted = Needs(reservations=True, groups=True, events=EventQuery())
     whole = collect_snapshot(one, "default", wanted)
-    partial = collect_snapshot(two, "default", Needs(offline=True))
+    partial = collect_snapshot(two, "default", Needs(offline=True, device_extras=False, legacy_devices=False))
+    assert not partial.legacy_devices and not partial.device_details and not partial.device_stats
+    assert not any(path.endswith("/stat/device") or
+                   ("/devices/" in path and not path.endswith("/devices")) for path in two.session.calls)
     before = len(two.session.calls)
-    extend_snapshot(two, partial, wanted)
+    extend_snapshot(two, partial, Needs(reservations=True, groups=True, device_extras=True,
+                                        legacy_devices=True, events=EventQuery()))
     extra = two.session.calls[before:]
-    assert sorted(p.rsplit("/", 1)[-1] for p in extra) == ["network-members-groups", "networkconf"]
+    assert any(path.endswith("/stat/device") for path in extra)
+    assert len([path for path in extra if "/devices/" in path and not path.endswith("/devices")]) == 8
+    assert any(path.endswith("/network-members-groups") for path in extra)
+    assert any(path.endswith("/networkconf") for path in extra)
     assert len(two.session.posts) == 1
     same(whole, partial)
 

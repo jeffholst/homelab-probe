@@ -80,6 +80,10 @@ class UniFiClient:
         self._lock = threading.Lock()          # guards the counters and the trace output across threads
         self._in_parallel = False
         self.session = requests.Session()
+        if self.workers > 1:
+            adapter = HTTPAdapter(pool_connections=self.workers, pool_maxsize=self.workers)
+            self.session.mount("https://", adapter)
+            self.session.mount("http://", adapter)
         self.session.headers.update(
             {"X-API-KEY": api_key, "Accept": "application/json"}
         )
@@ -103,10 +107,6 @@ class UniFiClient:
         if self.workers <= 1:
             yield None
             return
-        if type(self.session) is requests.Session:
-            adapter = HTTPAdapter(pool_connections=self.workers, pool_maxsize=self.workers)
-            self.session.mount("https://", adapter)
-            self.session.mount("http://", adapter)
         with warnings.catch_warnings():
             if self.verify_ssl is False:
                 warnings.simplefilter("ignore", urllib3.exceptions.InsecureRequestWarning)
