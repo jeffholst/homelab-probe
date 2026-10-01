@@ -1,6 +1,6 @@
 # UniFi Sentinel
 
-A command-line tool for querying, troubleshooting and inventorying a UniFi Network controller. It is **read-only**: it never changes anything on the controller. Every request is a GET, with one exception: the event log can only be queried with a POST, so `events`, and `diagnose` and `client` by default (`--no-events` skips it), send a read-only query to that one endpoint (see [Event history](#event-history)).
+A command-line tool for querying, troubleshooting and inventorying a UniFi Network controller. It is **read-only**: it never changes anything on the controller. Every request is a GET, with one exception: the event log can only be queried with a POST, so `events`, and `diagnose` and `client` by default (`--no-events` skips it), send a read-only query to that one endpoint (see [Event history](#event-history)). Nothing else is ever sent anywhere, with one opt-in exception: `diagnose --notify` can send a short message to a notification service you configure (see [Notifications](#notifications)).
 
 > **Status: early development.** Tested against one live controller (Network 10.6.106); other versions and hardware may differ. See [open issues](https://github.com/jeffholst/unifi-sentinel/issues) for the roadmap.
 
@@ -43,6 +43,7 @@ The tool is still evolving; see open issues for planned reports, controller-vers
 - **Verbose logging**: `--verbose` shows every request (path, status, time, retries) and what was read on stderr, never the API key, to diagnose slow runs and undocumented endpoints
 - **Randomized MAC detection**: clients that use a private (locally administered) Wi-Fi MAC address are flagged in `query clients`, `new-clients` and `client`, and `diagnose` notes reservations tied to one, because they stop applying when the device changes its address
 - **New client detection**: list every known client that is in no client group, newest first, to spot new devices
+- **Notifications**: `diagnose --notify` tells you through ntfy or a webhook when a problem is new, has got worse, or is fixed (critical ones are repeated daily), once instead of every run, opt-in, with a redaction option
 - **Health checks**: read-only diagnostics with severity levels, exit codes for scripts and cron, `--json` output with a stable code per check, and a TOML file for thresholds and an ignore list
 - **Official API first**: uses the UniFi Network Integration API (`/proxy/network/integration/v1`). Legacy endpoints are used only for data the Integration API does not expose (per-port counters, client-to-port mapping, DHCP reservations, network config and client groups) and degrade gracefully with a warning if unavailable
 - **Safe output**: names come from devices on your network, so text output has control characters, line breaks, text-direction overrides and invisible characters removed, and exported CSV cells that a spreadsheet would run as a formula are neutralized
@@ -81,6 +82,10 @@ VERIFY_SSL=true
 | `SITE_ID`        | No       | `default` | Site name, internal reference (e.g. `default`) or UUID             |
 | `VERIFY_SSL`     | No       | `true`    | `true`/`yes`/`1`/`on`, `false`/`no`/`0`/`off` (any case), or the path of a CA bundle |
 | `TIMEOUT`        | No       | `15`      | Seconds to wait for each request, 1 to 600 (also `--timeout SECONDS` before the command) |
+| `NOTIFY_NTFY_URL` | No      | -         | Full ntfy topic URL for `diagnose --notify` (a secret, `https://` only) |
+| `NOTIFY_NTFY_TOKEN` | No    | -         | ntfy access token, sent as a bearer token |
+| `NOTIFY_WEBHOOK_URL` | No   | -         | Generic webhook URL for `diagnose --notify` (a secret, `https://` only) |
+| `NOTIFY_WEBHOOK_TOKEN` | No | -         | Webhook bearer token |
 | `ALLOW_INSECURE_HTTP` | No  | `false`   | Lab-only opt-in to an `http://` controller URL (same words as `VERIFY_SSL`) |
 
 - **Where the `.env` file is found**, first match wins: the file given with `--env-file FILE` (before the command, for example `unifi-sentinel --env-file lab.env diagnose`); the file named by the `UNIFI_SENTINEL_ENV` environment variable; `.env` in the **current directory**. Parent directories and the installed package's directory are not searched, so an installed copy (`pip install .`) works from whichever directory holds your `.env`, an unrelated project's `.env` is never picked up, and running from a subdirectory of the project does not find the project's `.env` (use `--env-file` or run from the project root). A file named with `--env-file` or `UNIFI_SENTINEL_ENV` must exist. Real environment variables always take precedence over values in the file. The `unifi-sentinel.toml` settings file for `diagnose` is likewise read from the current directory.
@@ -363,6 +368,30 @@ Ignored findings are left out of the output, counted in the summary (`3 warnings
 | `wifi.radio_utilization` | an AP radio's channel utilization is at or above the threshold |
 | `wifi.weak_signal` | a Wi-Fi client's signal is at or below the threshold |
 
+#### Notifications
+
+`diagnose --notify` sends a short message to **ntfy** and/or a **generic webhook** when something changed since the last notified run, so you hear about a new problem once instead of reading cron output. Nothing is ever sent unless you pass `--notify` **and** have configured a destination, and nothing is ever sent to the controller's address or any other place.
+
+```bash
+# in .env (the URLs and tokens are secrets; keep the file private, `chmod 600 .env`)
+NOTIFY_NTFY_URL=https://ntfy.example.com/a-long-random-topic-name
+NOTIFY_NTFY_TOKEN=tk_...                  # optional, for a protected topic
+NOTIFY_WEBHOOK_URL=https://hooks.example.com/in/abc123
+NOTIFY_WEBHOOK_TOKEN=...                  # optional, sent as "Authorization: Bearer ..."
+
+uv run unifi-sentinel.py diagnose --notify --notify-baseline   # once: treat today's findings as already reported
+*/15 * * * * cd /path/to/unifi-sentinel && uv run unifi-sentinel.py diagnose --notify --fail-on critical
+```
+
+- **When it sends:** a finding at or above `--notify-min` (default `warning`) that is **new** (not reported before), has got **worse** (warning to critical), or is a **critical** one still unresolved after `notify_repeat_hours` (default 24, `0` turns reminders off; set it in `[thresholds]`); and a **recovery** note when a reported finding has gone (or fallen below `--notify-min`). Warnings and info are sent once, never repeated. Unchanged situations send nothing, and one run sends one message per destination (at most 20 lines, then `... and N more`).
+- **Identity:** a finding is the same finding when its check (`code`) and subject are the same, whatever its wording says, so a changing count does not re-send. What was reported is remembered in `snapshots/notify-state.json` (git-ignored, owner-only; `--notify-state FILE` changes it). The first run with no state would report everything, so run `--notify-baseline` once to record today's findings as already reported.
+- **`--notify-dry-run`** prints the message that would be sent to stderr and sends nothing and keeps the state, the way to check the wording and what leaves your network. The ignore list applies before notifying, so ignored findings are never sent.
+- **What leaves your network:** the finding text, which **includes device and client names, IP addresses and MACs** (an alert without the name is hard to act on), to the services you configured and nowhere else. **`--notify-redact`** sends only the generic description of each check and a count (`[WARNING] NEW  a switch port is dropping packets above the threshold (x3)`), no names, addresses or MACs. Never sent: the API key, the controller's address, the site id. Names are untrusted data (control characters are removed from the text; a chat system that renders markdown or mentions may still show them).
+- **ntfy:** a public `ntfy.sh` topic is readable by **anyone who knows its name**, so use a long random topic or your own server, and treat the topic like a password (it is part of the URL, kept in `.env`, never printed). The message is the body; the priority is 5 for a critical problem, 4 for a warning, 3 otherwise, with a matching tag.
+- **Webhook:** a JSON `POST` with `source`, `version`, `redacted`, `title`, a ready-to-show `text`, and an `events` list (`event` of `new`, `worsened`, `reminder` or `recovered`, `severity`, `code`, `description`, and, unless redacted, `subject` and `message`). Slack and Discord style webhooks are not adapted yet.
+- **Safety of the destinations:** `https://` only (a lab can opt in with `ALLOW_INSECURE_HTTP=true`), TLS is always verified, redirects are not followed (a redirect could carry the token elsewhere), and a user name or password in the URL is refused. Errors say only which destination and a fixed reason (`HTTP 403`, `timed out`, `connection error`, `TLS certificate verification failed`), never the URL, the topic or the token.
+- **Failures and exit codes:** the findings decide the exit code as usual. If a message could not be delivered to any destination, a warning goes to stderr, the state is **not** updated (the next run tries again), and the exit code is `3` **only if the findings would have given `0`**, so a cron job notices. One destination working is enough. `--notify-*` options other than `--notify` itself are usage errors without it.
+
 #### Exit codes
 
 | Code | Meaning |
@@ -370,7 +399,7 @@ Ignored findings are left out of the output, counted in the summary (`3 warnings
 | 0 | success; for `diagnose`, no findings at or above the `--fail-on` threshold |
 | 1 | `diagnose` found at least one non-critical finding at or above the `--fail-on` threshold |
 | 2 | `diagnose` found at least one critical finding |
-| 3 | error: bad configuration, or the controller could not be reached or returned an error |
+| 3 | error: bad configuration, or the controller could not be reached or returned an error; also `diagnose --notify` when the findings gave 0 but the notification could not be delivered |
 | 4 | `client` found no client, or several (it lists them) |
 | 64 | command-line usage error |
 
@@ -750,6 +779,7 @@ unifi_sentinel/
   topology.py            uplink tree: wiring, link speeds, client counts, flags
   history.py             saved inventories (snapshot) and the diff between them
   diagnose.py            read-only health checks
+  notify.py              notifications: what changed since the last run, ntfy/webhook sending, state file
   settings.py            diagnose thresholds and ignore list (TOML)
   util.py                output safety: printable text for names, CSV formula neutralizing
   cli.py                 argparse subcommands

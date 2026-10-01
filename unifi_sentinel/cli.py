@@ -3,6 +3,7 @@
 import argparse
 import json
 import sys
+import time
 from dataclasses import replace
 from pathlib import Path
 from typing import Any, List, Optional
@@ -39,6 +40,16 @@ from .history import (
 )
 from .new_clients import render as render_new_clients
 from .new_clients import report as new_clients_report
+from .notify import (
+    DEFAULT_STATE_FILE,
+    baseline,
+    destinations_from_config,
+    load_state,
+    plan,
+    render_text,
+    save_state,
+    send,
+)
 from .query import query_rows, render
 from .settings import load_settings
 from .snapshot import collect_event_snapshot, collect_snapshot, warn
@@ -81,6 +92,55 @@ def _describe_connection(config: Any) -> str:
     source = str(config.env_file) if config.env_file else "environment variables only"
     return (f"settings from {source}; controller {config.controller_url}, site {config.site}, "
             f"timeout {config.timeout:g} s, TLS verification {verify}")
+
+
+def _notify(findings: List[Any], config: Any, settings: Any, args: argparse.Namespace) -> bool:
+    """Run the notification step of ``diagnose --notify``. True when a message had to be sent and
+    every destination failed (the caller turns that into exit code 3 if nothing else applies)."""
+    state_path = args.notify_state or Path(DEFAULT_STATE_FILE)
+    minimum = args.notify_min or WARNING
+    state, problem = load_state(state_path)
+    if problem:
+        warn(problem)
+    now = time.time()
+    if args.notify_baseline:
+        saved = baseline(findings, now, minimum)
+        try:
+            save_state(state_path, saved)
+        except OSError as e:
+            raise ConfigError(
+                f"the notification baseline could not be saved to {state_path}: {e.strerror or e}"
+            ) from e
+        _say(f"Notification baseline saved: {len(saved['active'])} current finding(s) count as already reported",
+             file=sys.stderr)
+        return False
+    events, new_state = plan(findings, state, now, minimum, settings.notify_repeat_hours)
+    if not events:
+        if new_state != state:
+            try:
+                save_state(state_path, new_state)          # e.g. a finding improved but is still reported
+            except OSError as e:
+                raise ConfigError(
+                    f"the notification state could not be saved to {state_path}: {e.strerror or e}"
+                ) from e
+        _say("Notification: nothing new, worse or fixed since the last notified run", file=sys.stderr)
+        return False
+    if args.notify_dry_run:
+        title, body = render_text(events, args.notify_redact)
+        _say(f"Notification dry run (nothing sent, state unchanged): {title}\n{body}", file=sys.stderr)
+        return False
+    results = send(destinations_from_config(config), events, args.notify_redact, config.timeout,
+                   trace=_verbose if args.verbose else None)
+    for kind, delivered, reason in results:
+        _say(f"Notification to {kind}: " + ("sent" if delivered else f"FAILED ({reason})"), file=sys.stderr)
+    delivered_somewhere = any(ok for _, ok, _ in results)
+    if delivered_somewhere:
+        try:
+            save_state(state_path, new_state)
+        except OSError as e:
+            raise ConfigError(f"the notification was sent but its state could not be saved to {state_path}: "
+                              f"{e.strerror or e}; it will be sent again next run") from e
+    return not delivered_somewhere
 
 
 def _timeout(text: str) -> float:
@@ -294,6 +354,21 @@ def build_parser() -> argparse.ArgumentParser:
                       help="Use text severity labels (automatic when output is not a UTF-8 terminal)")
     diag.add_argument("--json", action="store_true",
                       help="Print the findings as JSON (with a stable code per check); exit codes are unchanged")
+    diag.add_argument("--notify", action="store_true",
+                      help="Send a notification (ntfy and/or a webhook, set in .env) when findings are new, worse or "
+                           "fixed since the last notified run; this is the only thing that sends data off this machine")
+    diag.add_argument("--notify-min", choices=[INFO, WARNING, CRITICAL], default=None, metavar="SEVERITY",
+                      help="with --notify: lowest severity to notify about (default: warning)")
+    diag.add_argument("--notify-redact", action="store_true",
+                      help="with --notify: send only the generic description of each check, no names, "
+                           "addresses or MACs")
+    diag.add_argument("--notify-dry-run", action="store_true",
+                      help="with --notify: print what would be sent to stderr, send nothing, keep the state")
+    diag.add_argument("--notify-baseline", action="store_true",
+                      help="with --notify: record the current findings as already reported and send nothing "
+                           "(avoids a first message about everything)")
+    diag.add_argument("--notify-state", type=Path, default=None, metavar="FILE",
+                      help=f"with --notify: where reported findings are remembered (default: {DEFAULT_STATE_FILE})")
 
     sub.add_parser("info", help="Show controller version and available sites")
     return parser
@@ -361,6 +436,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         parser.error("--offline and --config only apply to 'query reservations'")
     if args.command == "query" and args.config is not None and not args.offline:
         parser.error("--config only applies with --offline")
+    if args.command == "diagnose" and not args.notify and (
+            args.notify_min or args.notify_redact or args.notify_dry_run or args.notify_baseline
+            or args.notify_state is not None):
+        parser.error("the --notify-* options only apply together with --notify")
+    if args.command == "diagnose" and args.notify_dry_run and args.notify_baseline:
+        parser.error("--notify-dry-run and --notify-baseline cannot be combined")
     client: Optional[UniFiClient] = None
     try:
         config = load_config(args.env_file)
@@ -375,6 +456,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         needs_settings = args.command in ("diagnose", "client", "topology", "wan") or (
             args.command == "query" and args.offline)
         settings = load_settings(args.config) if needs_settings else None
+        if (args.command == "diagnose" and args.notify and not args.notify_dry_run and not args.notify_baseline
+                and not destinations_from_config(config)):
+            raise ConfigError("--notify needs a destination: set NOTIFY_NTFY_URL and/or NOTIFY_WEBHOOK_URL in .env "
+                              "(see the README); nothing was sent")
         client = UniFiClient.from_config(config)
         if args.verbose:
             client.trace = _verbose
@@ -439,12 +524,15 @@ def main(argv: Optional[List[str]] = None) -> int:
                 settings.ignore)
             if args.json:
                 _say(findings_json(findings, ignored, args.show_ignored))
-                return exit_code(findings, args.fail_on)
-            emoji = not args.no_emoji and stream_supports_emoji(sys.stdout)
-            _say(format_findings(findings, emoji, len(ignored)))
-            if args.show_ignored and ignored:
-                _say("\n" + format_ignored(ignored))
-            return exit_code(findings, args.fail_on)
+            else:
+                emoji = not args.no_emoji and stream_supports_emoji(sys.stdout)
+                _say(format_findings(findings, emoji, len(ignored)))
+                if args.show_ignored and ignored:
+                    _say("\n" + format_ignored(ignored))
+            code = exit_code(findings, args.fail_on)
+            if args.notify and _notify(findings, config, settings, args) and code == 0:
+                return EXIT_ERROR              # the message could not be delivered and nothing else says so
+            return code
     except (ConfigError, UniFiAPIError) as e:
         _say(f"ERROR: {e}", file=sys.stderr)
         return EXIT_ERROR
