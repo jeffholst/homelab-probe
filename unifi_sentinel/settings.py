@@ -82,6 +82,8 @@ def _parse(data: Dict[str, Any]) -> DiagnoseSettings:
     latency = _number("wan_latency_warn_ms",
                       thresholds.get("wan_latency_warn_ms", defaults.wan_latency_warn_ms), 0)
     drops = _number("wan_drops_warn", thresholds.get("wan_drops_warn", defaults.wan_drops_warn), 0)
+    if drops != int(drops):
+        raise ConfigError("[thresholds] wan_drops_warn must be a whole number")
 
     raw_rules = data.get("ignore", [])
     if not isinstance(raw_rules, list):
