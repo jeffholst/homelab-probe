@@ -145,6 +145,8 @@ def test_predicate_is_applied_before_the_limit(fake_client, monkeypatch):
     assert names(got) == ["ev1", "ev2"] and more
     got, more = fetch_events(snap, predicate=make_filter(client="phone"), limit=0)
     assert names(got) == ["ev1", "ev2", "ev3", "ev4", "ev5"] and not more
+    got, more = fetch_events(snap, predicate=make_filter(client="phone"), limit=5)
+    assert names(got) == ["ev1", "ev2", "ev3", "ev4", "ev5"] and not more
 
 
 def test_never_reads_more_than_max_events_and_says_so(fake_client, monkeypatch):
@@ -232,8 +234,8 @@ def test_render_modes(fake_client):
     assert render_events([], False) == "No events match."
     text = render_events(fake_client.session.events[:10], False, summary=True)
     assert "By severity:" in text and "Noisiest" in text and "phone" in text
-    parsed = json.loads(render_events(fake_client.session.events[:10], True, as_json=True, summary=True))
-    assert parsed["total"] == 10 and parsed["truncated"] is True and parsed["noisiest"][0]["Count"] == 3
+    parsed = json.loads(render_events(fake_client.session.events[:10], False, as_json=True, summary=True))
+    assert parsed["total"] == 10 and parsed["truncated"] is False and parsed["noisiest"][0]["Count"] == 3
     assert render_events([], False, summary=True) == "No events in this window."
 
 
