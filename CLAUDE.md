@@ -11,7 +11,7 @@ Fork of [ericfitz/unifi-clients-export](https://github.com/ericfitz/unifi-client
 ## Commands
 
 - Run: `uv run unifi-sentinel.py <export|query|client|new-clients|diagnose|events|wan|wifi|topology|snapshot|diff|info>`
-- Tests: `uv run pytest`. Lint: `uv run ruff check .` (add `--fix` for import order and unused imports). Types: `uv run mypy` (CI reports it but does not fail on it yet). Lockfile: `uv lock --check`. CI (`.github/workflows/ci.yml`) runs all of these on every push to `main` and every PR, tests on Python 3.10 to 3.13; run `uv run pytest` and `uv run ruff check .` before pushing. The minimum Python is 3.10.
+- Tests: `uv run pytest`. Lint: `uv run ruff check .` (add `--fix` for import order and unused imports). Types: `uv run mypy` (clean, and blocking in CI: fix a finding with a real narrowing or type, not a `# type: ignore`, which `warn_unused_ignores` would also police). The shapes worth naming are `TypedDict`s (`history.Diff`/`DiffPart`/`Change`, `wifi.Radio`); use `util.record_for` to look up a record by an id that may be missing. Lockfile: `uv lock --check`. CI (`.github/workflows/ci.yml`) runs all of these on every push to `main` and every PR, tests on Python 3.10 to 3.13; run `uv run pytest` and `uv run ruff check .` before pushing. The minimum Python is 3.10.
 
 ## Documentation
 

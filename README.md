@@ -831,7 +831,7 @@ Checks (the same ones CI runs on every push and pull request, in `.github/workfl
 ```bash
 uv run pytest             # tests; CI runs them on Python 3.10, 3.11, 3.12 and 3.13
 uv run ruff check .       # lint (rules E, F, B, I, UP in pyproject.toml; lines up to 120 characters, tests exempt)
-uv run mypy               # types; reported in CI but not blocking yet (about 27 known findings)
+uv run mypy               # types, checked in untyped functions too; CI fails on any finding
 uv lock --check           # uv.lock must match pyproject.toml; run `uv lock` after changing dependencies
 ```
 

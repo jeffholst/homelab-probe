@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from .snapshot import Snapshot
-from .util import csv_safe, format_time, normalize_mac, printable
+from .util import csv_safe, format_time, normalize_mac, printable, record_for
 
 INVENTORY_COLUMNS = [
     "Type", "Name", "MAC Address", "IP Address", "Model", "Connection Type",
@@ -116,7 +116,8 @@ def build_inventory(
             port = str(uplink["uplink_remote_port"])
         if not switch:
             # Integration API uplink (no port number, but works without legacy data).
-            switch = names_by_id.get(((device_details.get(d.get("id")) or {}).get("uplink") or {}).get("deviceId"), "")
+            parent_id = (record_for(device_details, d.get("id")).get("uplink") or {}).get("deviceId")
+            switch = names_by_id.get(parent_id or "", "")
         legacy_type = (legacy_device_by_mac.get(mac) or {}).get("type", "")
         friendly = device_type_label(d, legacy_type)
         rows.append({
@@ -128,7 +129,7 @@ def build_inventory(
             "Connection Type": "Wired",
             "Switch": switch,
             "Port": port,
-            "Last Seen": format_time((device_stats.get(d.get("id")) or {}).get("lastHeartbeatAt")),
+            "Last Seen": format_time(record_for(device_stats, d.get("id")).get("lastHeartbeatAt")),
             "Status": "Online" if d.get("state") == "ONLINE" else "Offline",
         })
     return rows

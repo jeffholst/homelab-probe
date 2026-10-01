@@ -8,7 +8,7 @@ controller reports them, so be careful where you paste the output.
 
 import json
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, TypedDict
 
 from .client_view import DeviceIndex
 from .query import format_table
@@ -20,7 +20,24 @@ BAND_ALIASES = {"2.4": "ng", "2": "ng", "24": "ng", "5": "na", "6": "6e"}
 DEFAULT_MIN_SIGNAL = -80          # dBm: weaker neighbors are counted but not named or compared
 NAMES_PER_CHANNEL = 5             # strongest neighbors named per channel unless --all
 USUAL_2G_CHANNELS = (1, 6, 11)
-Radio = Dict[str, Any]
+
+
+class Radio(TypedDict):
+    """One radio of one access point, as `wifi` and `diagnose` use it. ``None`` means the controller did not
+    report the value (``satisfaction`` is also None when the controller sends -1 for unknown)."""
+
+    ap: str
+    mac: str
+    band: str                      # "ng", "na", "6e", or "" for an AP with no radio statistics
+    channel: Optional[int]
+    online: bool
+    width: Optional[int]
+    tx_power: Optional[float]
+    clients: Optional[int]
+    utilization: Optional[float]
+    retries: Optional[float]
+    satisfaction: Optional[float]
+    span: Optional[Tuple[float, float]]   # the frequency range in MHz that the radio occupies
 Neighbor = Dict[str, Any]
 
 # 5 GHz channel blocks for a given width (first and last 20 MHz channel in each block)
@@ -153,6 +170,11 @@ def unique_neighbors(snap: Snapshot, ap_macs: Optional[set] = None) -> List[Neig
     return result
 
 
+def _band_rank(radio: Any) -> int:
+    """Sort order of the radios of one AP: 2.4 GHz, 5 GHz, 6 GHz, then anything else."""
+    return list(BANDS).index(radio) if isinstance(radio, str) and radio in BANDS else 9
+
+
 def radios(snap: Snapshot, idx: DeviceIndex) -> List[Radio]:
     """Every radio of every access point. An AP with no radio statistics (offline, or one the
     controller has not reported on) gets a single placeholder entry so it is not hidden."""
@@ -166,15 +188,17 @@ def radios(snap: Snapshot, idx: DeviceIndex) -> List[Radio]:
                          "width": None, "tx_power": None, "clients": None, "utilization": None,
                          "retries": None, "satisfaction": None, "span": None})
             continue
-        for r in sorted(stats, key=lambda r: list(BANDS).index(r.get("radio")) if r.get("radio") in BANDS else 9):
+        for r in sorted(stats, key=lambda r: _band_rank(r.get("radio"))):
             sat = number(r.get("satisfaction"))
             channel = number(r.get("channel"))
+            width = number(r.get("bw"))
+            stations = number(r.get("num_sta"))
             rows.append({
                 "ap": idx.name(mac), "mac": mac, "band": r.get("radio") or "",
                 "channel": None if channel is None else int(channel), "online": not idx.offline(mac),
-                "width": None if number(r.get("bw")) is None else int(number(r.get("bw"))),
+                "width": None if width is None else int(width),
                 "tx_power": number(r.get("tx_power")),
-                "clients": None if number(r.get("num_sta")) is None else int(number(r.get("num_sta"))),
+                "clients": None if stations is None else int(stations),
                 "utilization": number(r.get("cu_total")), "retries": number(r.get("tx_retries_pct")),
                 "satisfaction": sat if sat is not None and sat >= 0 else None,      # -1 means unknown
                 "span": span_mhz(
@@ -208,7 +232,8 @@ def build_wifi(snap: Snapshot, min_signal: float = DEFAULT_MIN_SIGNAL, band: str
         if not (in_band or radios_here) or (band and code != band):
             continue
         channels = []
-        for ch in sorted({n["channel"] for n in in_band if n["channel"]} | {r["channel"] for r in radios_here}):
+        for ch in sorted({n["channel"] for n in in_band if n["channel"]} | {
+                r["channel"] for r in radios_here if r["channel"] is not None}):
             here = [n for n in in_band if n["channel"] == ch]
             here_strong = sorted((n for n in here if n["signal"] >= min_signal), key=lambda n: -n["signal"])
             channels.append({

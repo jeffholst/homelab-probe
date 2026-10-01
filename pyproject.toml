@@ -77,3 +77,7 @@ known-first-party = ["unifi_sentinel"]
 [tool.mypy]
 files = ["unifi_sentinel"]
 warn_unused_configs = true
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unreachable = true

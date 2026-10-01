@@ -45,7 +45,7 @@ jobs:
       - run: uv run ruff check .
 
   types:
-    name: Types (mypy, not blocking yet)
+    name: Types (mypy)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -53,8 +53,4 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --locked
-      - name: mypy (findings are reported, not enforced)
-        # The baseline has known findings; the refactors issue (#75) makes this blocking once
-        # it is clean. The step is allowed to fail so the job and the PR stay green.
-        continue-on-error: true
-        run: uv run mypy
+      - run: uv run mypy

@@ -170,3 +170,9 @@ def search_rows(rows: List[Dict[str, Any]], search: str) -> List[Dict[str, Any]]
         return rows
     needle = search.lower()
     return [r for r in rows if any(needle in str(v).lower() for v in r.values())]
+
+
+def record_for(table: Dict[str, Dict[str, Any]], key: Any) -> Dict[str, Any]:
+    """``table[key]`` for a record keyed by device id, or ``{}`` when the key is missing or unknown.
+    The id of a record may itself be missing (None), which is not a valid key, so it is checked here once."""
+    return (table.get(key) if isinstance(key, str) else None) or {}
