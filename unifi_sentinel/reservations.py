@@ -1,14 +1,17 @@
 """DHCP fixed IP reservations."""
 
 import ipaddress
+import time
 from datetime import datetime
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from .export import _fmt_time, _mac
 from .snapshot import Snapshot
+from .util import describe_age
 
 RESERVATION_COLUMNS = ["Name", "MAC Address", "Reserved IP", "Network", "VLAN",
                        "Current IP", "Status", "Last Seen"]
+OFFLINE_RESERVATION_COLUMNS = RESERVATION_COLUMNS + ["Offline For"]
 
 
 def _ip_sort_key(ip: str) -> Tuple[int, Any]:
@@ -67,3 +70,42 @@ def build_reservations(snap: Snapshot) -> List[Dict[str, Any]]:
             "Last Seen": last_seen,
         })
     return sorted(rows, key=lambda r: _ip_sort_key(r["Reserved IP"]))
+
+
+def offline_reservations(snap: Snapshot, min_days: float, now: Optional[float] = None) -> List[Dict[str, Any]]:
+    """Enabled reservations whose client is not connected and was last seen at least ``min_days``
+    ago, or has no last-seen time at all (``offline_seconds`` is then None).
+
+    Joined by MAC with the connected clients; UniFi devices are skipped (the device checks
+    report them). ``last_seen`` is the controller's epoch-seconds value from ``stat/alluser``.
+    ``diagnose`` and ``query reservations --offline`` both use this, so the listing is exactly
+    what the check reports.
+    """
+    now = time.time() if now is None else now
+    connected = {_mac(c.get("macAddress")).replace("-", ":") for c in snap.clients}
+    devices = {_mac(d.get("macAddress")).replace("-", ":") for d in snap.devices}
+    found = []
+    for user, net in reservation_records(snap):
+        mac = _mac(user.get("mac"))
+        normalized_mac = mac.replace("-", ":")
+        if normalized_mac in connected or normalized_mac in devices:
+            continue
+        seen = user.get("last_seen")
+        seen = float(seen) if isinstance(seen, (int, float)) and not isinstance(seen, bool) and seen > 0 else None
+        offline = None if seen is None else max(0.0, now - seen)
+        if offline is not None and offline < min_days * 86400:
+            continue
+        found.append({"user": user, "net": net, "mac": mac, "last_seen": seen, "offline_seconds": offline})
+    return found
+
+
+def offline_reservation_rows(snap: Snapshot, min_days: float, now: Optional[float] = None) -> List[Dict[str, Any]]:
+    """The ``query reservations`` rows for ``offline_reservations``, with an "Offline For" column."""
+    offline = {r["mac"]: r for r in offline_reservations(snap, min_days, now)}
+    rows = []
+    for row in build_reservations(snap):
+        record = offline.get(row["MAC Address"])
+        if record is not None:
+            seconds = record["offline_seconds"]
+            rows.append({**row, "Offline For": "never seen" if seconds is None else describe_age(int(seconds))})
+    return rows

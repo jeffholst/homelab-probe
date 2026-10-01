@@ -47,6 +47,9 @@ class FakeSession:
         now = time.time() * 1000
         for t in self.fx.get("legacy_v2", {}).get("speedtest", {}).get("data", []):
             t["time"] = int(now - t.pop("age_s") * 1000)          # the fixture stores ages, not dates
+        for user in self.fx.get("legacy", {}).get("alluser", []):
+            if "last_seen_age_s" in user:                          # relative, like the speedtests
+                user["last_seen"] = int(now / 1000 - user.pop("last_seen_age_s"))
         self.events = [
             {**{k: v for k, v in e.items() if k != "age_s"}, "timestamp": int(now - e["age_s"] * 1000)}
             for e in self.fx.get("system_log", [])]

@@ -81,7 +81,8 @@ def test_the_published_codes_are_pinned():
         "internet.latency", "internet.speedtest_failed", "ip.duplicate", "link.below_capability",
         "port.drops", "port.errors", "port.half_duplex", "port.link_flaps", "port.poe_budget",
         "port.slow_link", "port.stp", "reservation.duplicate", "reservation.ip_in_use",
-        "reservation.ip_mismatch", "reservation.outside_subnet", "wan.availability",
+        "reservation.ip_mismatch", "reservation.never_seen", "reservation.offline",
+        "reservation.outside_subnet", "wan.availability",
         "wan.monitor_availability", "wan.speedtest_slow", "wifi.client_retries",
         "wifi.client_satisfaction", "wifi.radio_retries", "wifi.radio_satisfaction",
         "wifi.radio_utilization", "wifi.weak_signal"]

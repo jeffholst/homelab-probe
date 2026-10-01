@@ -381,7 +381,7 @@
         "mac": "bb:00:00:00:00:03",
         "hostname": "old-printer",
         "is_wired": true,
-        "last_seen": 1766000000,
+        "last_seen_age_s": 10800,
         "last_ip": "10.0.0.50",
         "last_uplink_name": "Office Switch",
         "last_uplink_remote_port": 6,

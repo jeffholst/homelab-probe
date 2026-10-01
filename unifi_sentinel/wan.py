@@ -17,7 +17,7 @@ from .events import describe_duration
 from .query import format_table
 from .settings import DiagnoseSettings
 from .snapshot import Snapshot
-from .util import clean_data
+from .util import clean_data, describe_age
 
 DEFAULT_DAYS = 30
 SPEEDTEST_BASELINE_DAYS = 30   # `diagnose` compares the last speedtest with this many days
@@ -45,15 +45,6 @@ def _when(ms: Any) -> str:
 def _age(ms: Any, now_ms: int) -> str:
     seconds = (now_ms - ms) / 1000 if isinstance(ms, (int, float)) else None
     return "" if seconds is None or seconds < 0 else describe_age(int(seconds))
-
-
-def describe_age(seconds: int) -> str:
-    """'45m', '18h' or '12d' ago style text without the 'ago'."""
-    if seconds < 3600:
-        return f"{max(1, seconds // 60)}m"
-    if seconds < 2 * 86400:
-        return f"{seconds // 3600}h"
-    return f"{seconds // 86400}d"
 
 
 # -- speedtests ----------------------------------------------------------------
