@@ -15,7 +15,7 @@ from .settings import DiagnoseSettings, IgnoreRule
 from .snapshot import Snapshot
 from .util import describe_age as _age_text
 from .util import is_randomized_mac, printable
-from .wan import SPEEDTEST_BASELINE_DAYS, describe_age, median_download, monitoring, speedtests_for_baseline
+from .wan import SPEEDTEST_BASELINE_DAYS, describe_age, median_download, monitoring, nat_status, speedtests_for_baseline
 
 CRITICAL, WARNING, INFO = "critical", "warning", "info"
 SEVERITY_ORDER = {CRITICAL: 0, WARNING: 1, INFO: 2}
@@ -46,6 +46,9 @@ CODES = {
     "wan.availability": "24-hour internet availability below the threshold",
     "wan.monitor_availability": "one monitored internet target below the availability threshold",
     "wan.speedtest_slow": "the last speedtest download is well below the 30-day median",
+    "wan.double_nat": "the WAN address is private: the gateway is behind another router doing NAT",
+    "wan.cgnat": "the WAN address is in the carrier-grade NAT range (100.64.0.0/10)",
+    "wan.link_local_address": "the WAN address is link-local: the gateway got no address from the ISP",
     "client.no_ip": "a connected client has no IP address",
     "client.link_local_ip": "a connected client has a link-local (169.254.x.x) address",
     "ip.duplicate": "the same IP is in use by several clients or devices",
@@ -608,6 +611,12 @@ def _wan_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]:
     monitor is judged by its own availability.
     """
     findings: List[Finding] = []
+    nat = nat_status(snap)
+    if nat["message"]:
+        findings.append(Finding(
+            WARNING, "wan", nat["message"],
+            code=("wan.double_nat" if nat["kind"] == "private"
+                  else "wan.cgnat" if nat["kind"] == "cgnat" else "wan.link_local_address")))
     all_wans = monitoring(snap)
     for m in all_wans:
         which = f" ({m['name']})" if len(all_wans) > 1 else ""

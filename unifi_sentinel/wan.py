@@ -6,6 +6,7 @@ the WAN and internet subsystems of `stat/health` (including the controller's own
 speedtest history. Everything here is read with GET.
 """
 
+import ipaddress
 import json
 import re
 import statistics
@@ -23,6 +24,68 @@ DEFAULT_DAYS = 30
 SPEEDTEST_BASELINE_DAYS = 30   # `diagnose` compares the last speedtest with this many days
 MIN_SPEEDTESTS = 5             # a median over fewer runs says little about what is normal
 GATEWAY_TYPES = {"udm", "ugw", "uxg", "ucg"}
+
+
+# -- NAT in front of the gateway ----------------------------------------------
+
+_PRIVATE_V4 = [ipaddress.ip_network(n) for n in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")]
+_CGNAT_V4 = ipaddress.ip_network("100.64.0.0/10")
+_LINK_LOCAL_V4 = ipaddress.ip_network("169.254.0.0/16")
+_PRIVATE_V6 = ipaddress.ip_network("fc00::/7")
+_LINK_LOCAL_V6 = ipaddress.ip_network("fe80::/10")
+
+
+def classify_wan_address(text: Any) -> str:
+    """What kind of address the gateway's WAN port has, from the address alone.
+
+    ``"private"`` (RFC 1918, or an IPv6 unique-local ``fc00::/7``): another router that does NAT
+    sits in front of the gateway. ``"cgnat"``: the shared 100.64.0.0/10 range of carrier-grade
+    NAT. ``"link_local"``: no address was obtained. ``"public"``: anything else. ``"none"``:
+    nothing or ``0.0.0.0`` (the WAN is down). ``"unknown"``: not an IP address.
+
+    The ranges are listed explicitly because Python's ``is_private`` also covers documentation
+    and benchmarking ranges that a real ISP never uses and that synthetic data does.
+    """
+    value = "" if text is None else str(text).strip()
+    if not value:
+        return "none"
+    try:
+        ip = ipaddress.ip_address(value)
+    except ValueError:
+        return "unknown"
+    if ip.is_unspecified:
+        return "none"
+    if isinstance(ip, ipaddress.IPv4Address):
+        if any(ip in net for net in _PRIVATE_V4):
+            return "private"
+        if ip in _CGNAT_V4:
+            return "cgnat"
+        return "link_local" if ip in _LINK_LOCAL_V4 else "public"
+    if ip in _PRIVATE_V6:
+        return "private"
+    return "link_local" if ip in _LINK_LOCAL_V6 else "public"
+
+
+_NAT_MESSAGES = {
+    "private": ("WAN address {ip} is private: the gateway is behind another router doing NAT (double NAT); "
+                "inbound port forwards and some VPNs will not work until that router is put in bridge mode "
+                "or forwards the ports too"),
+    "cgnat": ("WAN address {ip} is in the carrier-grade NAT range (100.64.0.0/10): the ISP shares one public "
+              "address between customers, so inbound port forwards and some VPNs will not work"),
+    "link_local": "WAN address {ip} is link-local: the gateway got no address from the ISP",
+}
+
+
+def nat_status(snap: Snapshot) -> Dict[str, Any]:
+    """Whether the gateway's WAN address says it is behind NAT: ``{"wan_ip", "kind", "message"}``.
+
+    Read from the ``wan_ip`` of the ``wan`` health entry (the primary WAN). It needs no outside
+    lookup, so it cannot see a modem or router in front of the gateway that translates addresses
+    while handing the gateway a public one; ``message`` is empty unless there is something to say.
+    """
+    ip = str(_health(snap, "wan").get("wan_ip") or "").strip()
+    kind = classify_wan_address(ip)
+    return {"wan_ip": ip, "kind": kind, "message": _NAT_MESSAGES.get(kind, "").format(ip=ip)}
 
 
 def _num(value: Any) -> Optional[float]:
@@ -157,6 +220,7 @@ def build_wan(snap: Snapshot, days: int = DEFAULT_DAYS, settings: Optional[Diagn
             "internet_status": www.get("status") or "unknown",
             "latency_ms": _num(www.get("latency")), "drops": _num(www.get("drops")),
             "speedtest_status": www.get("speedtest_status") or ""},
+        "nat": nat_status(snap),
         "links": _links(snap),
         "monitoring": monitoring(snap),
         "speedtests": _speedtest_section(snap, days, settings, now),
@@ -191,6 +255,11 @@ def render_text(wan: Dict[str, Any]) -> str:
     for label, value in (("WAN IP", n["wan_ip"]), ("Gateway", n["gateway"])):
         if value:
             lines.append(f"  {label}: {value}")
+    nat = wan["nat"]
+    if nat["message"]:
+        lines.append(f"  NAT: {nat['message']}")
+    elif nat["kind"] == "public":
+        lines.append("  NAT: none seen (public WAN address; a modem doing NAT in front of the gateway cannot be seen)")
     detail = [f"latency {_ms(n['latency_ms'])}"]
     if n["drops"] is not None:
         detail.append(f"{n['drops']:.0f} drops")

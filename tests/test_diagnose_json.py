@@ -84,7 +84,7 @@ def test_the_published_codes_are_pinned():
         "reservation.ip_in_use", "reservation.ip_mismatch", "reservation.never_seen", "reservation.offline",
         "reservation.outside_subnet", "reservation.pool_unknown", "reservation.private_mac",
         "wan.availability",
-        "wan.monitor_availability", "wan.speedtest_slow", "wifi.client_retries",
+        "wan.cgnat", "wan.double_nat", "wan.link_local_address", "wan.monitor_availability", "wan.speedtest_slow", "wifi.client_retries",
         "wifi.client_satisfaction", "wifi.radio_retries", "wifi.radio_satisfaction",
         "wifi.radio_utilization", "wifi.weak_signal"]
 
