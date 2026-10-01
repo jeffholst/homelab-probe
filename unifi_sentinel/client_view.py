@@ -335,7 +335,7 @@ def build_client_detail(snap: Snapshot, rec: Dict[str, Any],
         "addressing": addressing(snap, rec),
         "attachment": hops,
         "link": link,
-        "findings": [{"severity": f.severity, "subject": f.subject, "message": f.message}
+        "findings": [{"severity": f.severity, "code": f.code, "subject": f.subject, "message": f.message}
                      for f in _related(kept, rec, path_subjects)],
         # null when events were not requested (--no-events), false when the log could not be read
         "events_available": recent["available"],
@@ -457,7 +457,7 @@ def render_detail(detail: Dict[str, Any], emoji: bool = True) -> str:
     lines += _events_text(detail, i["mac"])
 
     lines.append("")
-    findings = [Finding(f["severity"], f["subject"], f["message"]) for f in detail["findings"]]
+    findings = [Finding(f["severity"], f["subject"], f["message"], code=f.get("code", "")) for f in detail["findings"]]
     lines.append("Related findings:" if findings else "No related findings.")
     if findings:
         lines.append(format_findings(findings, emoji))

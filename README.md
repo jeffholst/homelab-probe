@@ -22,7 +22,7 @@ UniFi Sentinel is a fork of [ericfitz/unifi-clients-export](https://github.com/e
 | `events` | Event history from the controller log: disconnects, roams, IP conflicts, device outages |
 | `client` | Troubleshoot one client by name, MAC or IP: where it attaches, link quality and related findings |
 | `new-clients` | List clients that are in no client group, to spot new devices |
-| `diagnose` | Read-only health checks with 🛑 critical, ⚠️ warning and ℹ️ info findings |
+| `diagnose` | Read-only health checks with 🛑 critical, ⚠️ warning and ℹ️ info findings (`--json` for scripts) |
 | `info`   | Show the controller application info and available sites       |
 
 Planned: richer inventory and troubleshooting reports.
@@ -41,7 +41,7 @@ Planned: richer inventory and troubleshooting reports.
 - **Event history**: what happened and when (disconnects, roams, IP conflicts, device outages, admin changes) from the controller's log, filterable by time, severity, category, client and device, with a summary of the noisiest clients
 - **Single-client troubleshooting**: `client <name|mac|ip>` shows where a client attaches (the full uplink chain to the gateway with port numbers and link speeds), its link quality, addressing and the `diagnose` findings that concern it
 - **New client detection**: list every known client that is in no client group, newest first, to spot new devices
-- **Health checks**: read-only diagnostics with severity levels, exit codes for scripts and cron, and a TOML file for thresholds and an ignore list
+- **Health checks**: read-only diagnostics with severity levels, exit codes for scripts and cron, `--json` output with a stable code per check, and a TOML file for thresholds and an ignore list
 - **Official API first**: uses the UniFi Network Integration API (`/proxy/network/integration/v1`). Legacy endpoints are used only for data the Integration API does not expose (per-port counters, client-to-port mapping, DHCP reservations, network config and client groups) and degrade gracefully with a warning if unavailable
 - **Safe output**: names come from devices on your network, so text output has control characters, line breaks, text-direction overrides and invisible characters removed, and exported CSV cells that a spreadsheet would run as a formula are neutralized
 - **Environment-based configuration**: credentials live in a `.env` file
@@ -141,6 +141,7 @@ uv run unifi-sentinel.py client desktop              # one client: attachment, l
 uv run unifi-sentinel.py client aa:bb:cc:dd:ee:ff --json   # by MAC (any format) or IP, as JSON
 uv run unifi-sentinel.py new-clients                 # clients in no client group
 uv run unifi-sentinel.py diagnose                    # health checks
+uv run unifi-sentinel.py diagnose --json             # the same, as JSON with a stable code per finding
 ```
 
 `query` takes an optional kind (`all` by default, `devices`, `clients`, `reservations` or `ports`). Run these from the project root (uv uses `pyproject.toml`). After `pip install .` use `unifi-sentinel <command>` instead. Run `--help` on the tool or any command for options.
@@ -233,6 +234,96 @@ reason = "spare AP, kept unplugged on purpose"   # required
 
 Ignored findings are left out of the output, counted in the summary (`3 warnings (2 ignored)`), and excluded from exit codes, so a known-okay finding cannot fail a cron job. `diagnose --show-ignored` lists them with each rule's reason, so ignores do not hide problems forever. A rule needs a `reason` and a `subject` and/or `message`. A missing, unreadable or invalid file (unknown keys, bad values, rules without a reason) stops `diagnose` with exit code 3 before it contacts the controller. Other commands do not read this file. On Python 3.10 the `tomli` package (installed automatically) reads it; 3.11 and later use the standard library.
 
+#### JSON output and finding codes
+
+`diagnose --json` prints one JSON document on stdout (warnings still go to stderr) for scripts, dashboards and notifiers. The exit code is the same as without `--json` (`--fail-on` is honored), and `--no-emoji` has no effect. Findings suppressed by the ignore list are counted in `summary.ignored`; they are listed under a separate `ignored` key (each with its rule's `reason`) only with `--show-ignored`. A configuration error prints nothing on stdout and exits 3.
+
+```json
+{
+  "version": 1,
+  "summary": {
+    "critical": 0,
+    "warning": 10,
+    "info": 2,
+    "ignored": 0
+  },
+  "findings": [
+    {
+      "severity": "warning",
+      "code": "device.offline",
+      "subject": "Garage AP",
+      "message": "device is offline",
+      "mac": "AA:00:00:00:00:04"
+    },
+    {
+      "severity": "warning",
+      "code": "reservation.outside_subnet",
+      "subject": "old-printer",
+      "message": "reserved IP 10.0.0.50 is outside network IoT (10.0.20.1/24)",
+      "mac": ""
+    },
+    {
+      "severity": "info",
+      "code": "port.slow_link",
+      "subject": "Office Switch port 2",
+      "message": "negotiated at 100 Mbps",
+      "mac": "AA:00:00:00:00:02"
+    }
+  ]
+}
+```
+
+(The example is from the synthetic fixture with `--no-events`; the findings are shortened, so they do not add up to the summary.)
+
+- **`version`** is the document format (currently `1`); it changes only when a field is removed or renamed. New fields may be added without a new version.
+- **`code`** names the check that produced the finding, so a script does not have to match wording that can change. Codes are an interface: they are never renamed or reused. The same finding can have a different `severity` between runs (a device offline is critical for a gateway, a warning otherwise), so key on `code` and `subject`.
+- **`subject`** and **`message`** are the same text as the plain output, with names exactly as the controller reports them (JSON escapes control characters; treat them as untrusted data if you pass them on).
+- **`mac`** is the upper-case MAC address of the device the finding is about, or an empty string when it is not about one device.
+- `client --json` and `topology --json` carry the same `code` in each of their findings.
+
+| Code | What it reports |
+| ---- | --------------- |
+| `client.link_local_ip` | a connected client has a link-local (169.254.x.x) address |
+| `client.no_ip` | a connected client has no IP address |
+| `controller.legacy_unavailable` | legacy device data could not be read, so port checks were skipped |
+| `controller.pending_adoption` | devices waiting to be adopted |
+| `device.cpu_high` | device CPU utilization at or above the warning threshold |
+| `device.memory_high` | device memory utilization at or above the warning threshold |
+| `device.offline` | a UniFi device is not online (critical for a gateway or a device that others uplink through) |
+| `event.client_disconnects` | a client disconnected repeatedly in the event window |
+| `event.client_roams` | a client roamed repeatedly in the event window |
+| `event.device_unreachable` | a device was reported unreachable in the event window |
+| `event.internet_latency` | the controller reported high internet latency in the event window |
+| `event.ip_conflict` | the controller reported an IP conflict in the event window |
+| `event.log_truncated` | the event log read hit its cap, so event counts may be low |
+| `health.device_subsystem` | lan/wlan subsystem status that only reflects disconnected devices |
+| `health.subsystem` | a controller health subsystem is in a warning or error state |
+| `internet.drops` | internet drops at or above the threshold |
+| `internet.latency` | internet latency at or above the threshold |
+| `internet.speedtest_failed` | the last speedtest failed |
+| `ip.duplicate` | the same IP is in use by several clients or devices |
+| `link.below_capability` | an uplink negotiated below what both ends support |
+| `port.drops` | a switch port is dropping packets above the threshold |
+| `port.errors` | a port has rx/tx errors |
+| `port.half_duplex` | a port link is half duplex |
+| `port.link_flaps` | a switch port's link has gone down repeatedly since boot |
+| `port.poe_budget` | a switch's PoE budget use is at or above the threshold |
+| `port.slow_link` | a port negotiated at or below the slow-link speed |
+| `port.stp` | an up port is not in the STP forwarding state |
+| `reservation.duplicate` | the same IP is reserved for several clients |
+| `reservation.ip_in_use` | a reserved IP is in use by a different client or device |
+| `reservation.ip_mismatch` | an online client's IP differs from its reservation |
+| `reservation.outside_subnet` | a reserved IP is outside its network's subnet |
+| `wan.availability` | 24-hour internet availability below the threshold |
+| `wan.monitor_availability` | one monitored internet target below the availability threshold |
+| `wan.speedtest_slow` | the last speedtest download is well below the 30-day median |
+| `wifi.client_retries` | a Wi-Fi client retries too many transmissions |
+| `wifi.client_satisfaction` | a Wi-Fi client's satisfaction is below the threshold |
+| `wifi.radio_retries` | an AP radio retries too many transmissions |
+| `wifi.radio_satisfaction` | an AP radio's satisfaction is below the threshold |
+| `wifi.radio_utilization` | an AP radio's channel utilization is at or above the threshold |
+| `wifi.weak_signal` | a Wi-Fi client's signal is at or below the threshold |
+
 #### Exit codes
 
 | Code | Meaning |
@@ -250,7 +341,7 @@ Ignored findings are left out of the output, counted in the summary (`3 warnings
 */15 * * * * cd /path/to/unifi-sentinel && uv run unifi-sentinel.py diagnose --fail-on critical || notify-me
 ```
 
-Event-based warnings (above) count towards exit code 1 like any other warning.
+Event-based warnings (above) count towards exit code 1 like any other warning. `--json` does not change any exit code.
 
 Tool errors used to exit 1 for every command; they now exit 3 so that 1 and 2 only ever mean findings.
 

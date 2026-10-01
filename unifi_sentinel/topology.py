@@ -111,7 +111,7 @@ def build_topology(snap: Snapshot, settings: Optional[DiagnoseSettings] = None,
             "clients": None if count is None else {
                 "wired": count.get("wired", 0), "wireless": count.get("wireless", 0),
                 "total": count.get("wired", 0) + count.get("wireless", 0)},
-            "findings": [{"severity": f.severity, "subject": f.subject, "message": f.message}
+            "findings": [{"severity": f.severity, "code": f.code, "subject": f.subject, "message": f.message}
                          for f in mine],
             "children": [],
         }
