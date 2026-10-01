@@ -291,8 +291,9 @@ def _wifi_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]:
             findings.append(Finding(WARNING, name, f"weak Wi-Fi signal {signal:.0f} dBm{where}"))
 
         attempts = _number(c.get("wifi_tx_attempts"))
-        retries = _number(c.get("wifi_tx_retries_percentage"))
-        if attempts >= settings.wifi_min_attempts and retries >= settings.wifi_retry_pct:
+        retries = _known_percent(c.get("wifi_tx_retries_percentage"))
+        if (attempts >= settings.wifi_min_attempts and retries is not None
+                and retries >= settings.wifi_retry_pct):
             findings.append(Finding(WARNING, name, f"{retries:.0f}% of Wi-Fi transmissions retried{where}"))
 
         satisfaction = _known_percent(c.get("satisfaction"))
