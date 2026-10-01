@@ -48,7 +48,7 @@ Planned: richer inventory and troubleshooting reports.
 
 ## Requirements
 
-- Python 3.9 or higher
+- Python 3.10 or higher
 - A UniFi Network Application recent enough to support the Integration API and API keys (9.5.21+ recommended)
 - An API key from your controller (read-only access is sufficient, and recommended)
 
@@ -231,7 +231,7 @@ message = "offline"          # case-insensitive substring; both must match if bo
 reason = "spare AP, kept unplugged on purpose"   # required
 ```
 
-Ignored findings are left out of the output, counted in the summary (`3 warnings (2 ignored)`), and excluded from exit codes, so a known-okay finding cannot fail a cron job. `diagnose --show-ignored` lists them with each rule's reason, so ignores do not hide problems forever. A rule needs a `reason` and a `subject` and/or `message`. A missing, unreadable or invalid file (unknown keys, bad values, rules without a reason) stops `diagnose` with exit code 3 before it contacts the controller. Other commands do not read this file. On Python 3.9 and 3.10 the `tomli` package (installed automatically) reads it.
+Ignored findings are left out of the output, counted in the summary (`3 warnings (2 ignored)`), and excluded from exit codes, so a known-okay finding cannot fail a cron job. `diagnose --show-ignored` lists them with each rule's reason, so ignores do not hide problems forever. A rule needs a `reason` and a `subject` and/or `message`. A missing, unreadable or invalid file (unknown keys, bad values, rules without a reason) stops `diagnose` with exit code 3 before it contacts the controller. Other commands do not read this file. On Python 3.10 the `tomli` package (installed automatically) reads it; 3.11 and later use the standard library.
 
 #### Exit codes
 
@@ -611,7 +611,18 @@ tests/
   fixtures/controller.json   synthetic, sanitized controller data
 ```
 
-New features are new subcommands in `cli.py` backed by modules that take a `Snapshot` (fetching stays in `snapshot.py` and `client.py`). Dependencies are declared once, in `pyproject.toml` (lockfile: `uv.lock`; regenerate with `uv lock`). Run the tests with `uv run pytest`; they use a synthetic fixture in `tests/fixtures/` and never contact a controller. See [CLAUDE.md](CLAUDE.md) for contributor and AI-assistant guidelines.
+New features are new subcommands in `cli.py` backed by modules that take a `Snapshot` (fetching stays in `snapshot.py` and `client.py`). Dependencies are declared once, in `pyproject.toml` (lockfile: `uv.lock`; regenerate with `uv lock`). Run the tests with `uv run pytest`; they use a synthetic fixture in `tests/fixtures/` and never contact a controller.
+
+Checks (the same ones CI runs on every push and pull request, in `.github/workflows/ci.yml`):
+
+```bash
+uv run pytest             # tests; CI runs them on Python 3.10, 3.11, 3.12 and 3.13
+uv run ruff check .       # lint (rules E, F, B, I, UP in pyproject.toml; lines up to 120 characters, tests exempt)
+uv run mypy               # types; reported in CI but not blocking yet (about 27 known findings)
+uv lock --check           # uv.lock must match pyproject.toml; run `uv lock` after changing dependencies
+```
+
+`uv run ruff check . --fix` applies the safe fixes (import order, unused imports). The `List[...]` and `Optional[...]` annotation style is not enforced yet, and there is no code formatter. See [CLAUDE.md](CLAUDE.md) for contributor and AI-assistant guidelines.
 
 ## License
 
