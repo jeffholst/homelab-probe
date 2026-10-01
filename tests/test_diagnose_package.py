@@ -116,6 +116,9 @@ def test_every_package_directory_is_included_when_the_project_is_installed():
     assert patterns == ["unifi_sentinel*"], "use [tool.setuptools.packages.find] with include = [\"unifi_sentinel*\"]"
     from fnmatch import fnmatch
 
-    on_disk = {p.parent.relative_to(root).as_posix().replace("/", ".") for p in (root / "unifi_sentinel").rglob("__init__.py")}
+    on_disk = {
+        p.parent.relative_to(root).as_posix().replace("/", ".")
+        for p in (root / "unifi_sentinel").rglob("__init__.py")
+    }
     assert "unifi_sentinel.diagnose" in on_disk
     assert all(any(fnmatch(name, pattern) for pattern in patterns) for name in on_disk), on_disk
