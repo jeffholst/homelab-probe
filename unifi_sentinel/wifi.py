@@ -49,7 +49,10 @@ def parse_band(text: str) -> str:
 
 # -- spectrum --------------------------------------------------------------------
 
-def span_mhz(band: str, channel: Any, width: Any) -> Optional[Tuple[float, float]]:
+def span_mhz(
+    band: str, channel: Any, width: Any, center_freq: Any = None,
+    center_channel: Any = None, extension_channel: Any = None,
+) -> Optional[Tuple[float, float]]:
     """The frequency range (MHz) a transmitter on ``channel`` with ``width`` occupies, or None
     when the channel is unknown. 2.4 GHz channels are 5 MHz apart but about 22 MHz wide,
     which is why a neighbor on channel 4 disturbs channels 1 and 6."""
@@ -58,7 +61,33 @@ def span_mhz(band: str, channel: Any, width: Any) -> Optional[Tuple[float, float
         return None
     ch = int(ch)
     if band == "ng":
-        centre, half = 2407 + 5 * ch, (11 if bw <= 20 else bw / 2)
+        centre = _num(center_freq)
+        if centre is not None and centre <= 0:
+            centre = None
+        if centre is None and bw > 20:
+            centre_ch = _num(center_channel)
+            if centre_ch is not None and centre_ch > 0:
+                centre = 2407 + 5 * centre_ch
+            else:
+                secondary = _num(extension_channel)
+                if secondary is not None and secondary > 0:
+                    centre = ((2407 + 5 * ch) + (2407 + 5 * secondary)) / 2
+                elif isinstance(extension_channel, str):
+                    extension = extension_channel.strip().lower()
+                    offset = 4 if "+" in extension or "above" in extension else (
+                        -4 if "-" in extension or "below" in extension else 0
+                    )
+                    if offset:
+                        centre = ((2407 + 5 * ch) + (2407 + 5 * (ch + offset))) / 2
+            if centre is None:
+                return None
+        if centre is None:
+            centre = 2407 + 5 * ch
+        half = 11 if bw <= 20 else bw / 2
+        return centre - half, centre + half
+    centre = _num(center_freq)
+    if centre is not None and centre > 0:
+        half = 11 if band == "ng" and bw <= 20 else max(bw, 20) / 2
         return centre - half, centre + half
     if band == "na":
         for lo, hi in _BLOCKS_5G.get(bw, []):
@@ -93,7 +122,7 @@ def own_bssids(snap: Snapshot) -> set:
     return found
 
 
-def unique_neighbors(snap: Snapshot) -> List[Neighbor]:
+def unique_neighbors(snap: Snapshot, ap_macs: Optional[set] = None) -> List[Neighbor]:
     """One entry per neighboring network (BSSID), from rows that are per (BSSID, observing AP).
 
     Counting rows would count a network once for every AP that hears it. The strongest
@@ -104,19 +133,22 @@ def unique_neighbors(snap: Snapshot) -> List[Neighbor]:
     for row in snap.neighbors:
         bssid = str(row.get("bssid") or "").lower()
         signal = _num(row.get("signal"))
-        if not bssid or bssid in ours or signal is None:
+        ap_mac = str(row.get("ap_mac") or "").lower()
+        if (not bssid or bssid in ours or signal is None
+                or (ap_macs is not None and ap_mac not in ap_macs)):
             continue
         seen = best.setdefault(bssid, {"seen_by": set(), "signal": signal, "row": row})
-        seen["seen_by"].add((row.get("ap_mac") or "").lower())
+        seen["seen_by"].add(ap_mac)
         if signal > seen["signal"]:
             seen["signal"], seen["row"] = signal, row
     result = []
     for bssid, info in best.items():
         row, band = info["row"], info["row"].get("band") or info["row"].get("radio") or ""
         width = _num(row.get("bw")) or 20
-        centre = _num(row.get("center_freq"))
-        half = 11 if (band == "ng" and width <= 20) else width / 2
-        span = (centre - half, centre + half) if centre else span_mhz(band, row.get("channel"), width)
+        span = span_mhz(
+            band, row.get("channel"), width, row.get("center_freq"), row.get("center_channel"),
+            row.get("extension_channel", row.get("secondary_channel", row.get("ext_channel"))),
+        )
         result.append({
             "bssid": bssid, "name": _clean(row.get("essid")), "band": band,
             "channel": int(_num(row.get("channel")) or 0) or None, "width": int(width),
@@ -128,7 +160,7 @@ def unique_neighbors(snap: Snapshot) -> List[Neighbor]:
 
 def _clean(name: Any, limit: int = 40) -> str:
     """A network name safe to print: control characters removed and long names cut."""
-    text = re.sub(r"[\x00-\x1f\x7f]", "", str(name or "")).strip()
+    text = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", str(name or "")).strip()
     return text if len(text) <= limit else text[:limit - 1] + "…"
 
 
@@ -155,7 +187,11 @@ def radios(snap: Snapshot, idx: DeviceIndex) -> List[Radio]:
                 "tx_power": _num(r.get("tx_power")), "clients": None if _num(r.get("num_sta")) is None else int(_num(r.get("num_sta"))),
                 "utilization": _num(r.get("cu_total")), "retries": _num(r.get("tx_retries_pct")),
                 "satisfaction": sat if sat is not None and sat >= 0 else None,      # -1 means unknown
-                "span": span_mhz(r.get("radio") or "", channel, r.get("bw"))})
+                "span": span_mhz(
+                    r.get("radio") or "", channel, r.get("bw"), r.get("center_freq"),
+                    r.get("center_channel"),
+                    r.get("extension_channel", r.get("secondary_channel", r.get("ext_channel"))),
+                )})
     return rows
 
 
@@ -172,8 +208,9 @@ def build_wifi(snap: Snapshot, min_signal: float = DEFAULT_MIN_SIGNAL, band: str
     mine = [r for r in all_radios if (not needle or needle in r["ap"].lower()) and (not band or r["band"] in (band, ""))]
     wanted_aps = {r["mac"].lower() for r in mine} if needle else None
 
-    neigh = [n for n in unique_neighbors(snap)
-             if (not band or n["band"] == band) and (wanted_aps is None or wanted_aps & set(n["seen_by"]))]
+    neighbors_available = snap.neighbors_available
+    neigh = [n for n in unique_neighbors(snap, wanted_aps)
+             if not band or n["band"] == band] if neighbors_available else []
     strong = [n for n in neigh if n["signal"] >= min_signal]
 
     plan: List[Dict[str, Any]] = []
@@ -187,7 +224,8 @@ def build_wifi(snap: Snapshot, min_signal: float = DEFAULT_MIN_SIGNAL, band: str
             here = [n for n in in_band if n["channel"] == ch]
             here_strong = sorted((n for n in here if n["signal"] >= min_signal), key=lambda n: -n["signal"])
             channels.append({
-                "channel": ch, "neighbors": len(here), "strong": len(here_strong),
+                "channel": ch, "neighbors": len(here) if neighbors_available else None,
+                "strong": len(here_strong) if neighbors_available else None,
                 "our_radios": [r["ap"] for r in radios_here if r["channel"] == ch],
                 "strong_networks": [{"name": n["name"], "hidden": not n["name"], "bssid": n["bssid"],
                                      "signal": n["signal"], "security": n["security"], "open": n["open"],
@@ -199,33 +237,41 @@ def build_wifi(snap: Snapshot, min_signal: float = DEFAULT_MIN_SIGNAL, band: str
         "ap_matched": not needle or any(r["ap"].lower().find(needle) >= 0 for r in all_radios),
         "min_signal": min_signal,
         "radios": [{k: v for k, v in r.items() if k != "span"} for r in mine],
-        "neighbors": {"total": len(neigh), "strong": len(strong), "open": sum(n["open"] for n in neigh),
-                      "hidden": sum(not n["name"] for n in neigh)},
+        "neighbors": {
+            "available": neighbors_available,
+            "total": len(neigh) if neighbors_available else None,
+            "strong": len(strong) if neighbors_available else None,
+            "open": sum(n["open"] for n in neigh) if neighbors_available else None,
+            "hidden": sum(not n["name"] for n in neigh) if neighbors_available else None,
+        },
         "plan": plan,
-        "observations": _observations(mine, strong, min_signal),
+        "observations": _observations(mine, strong, min_signal, neighbors_available),
     }
 
 
-def _observations(mine: List[Radio], strong: List[Neighbor], min_signal: float) -> List[str]:
+def _observations(
+    mine: List[Radio], strong: List[Neighbor], min_signal: float, neighbors_available: bool = True
+) -> List[str]:
     out: List[str] = []
     limit = f"stronger than {min_signal:g} dBm"
     live = [r for r in mine if r["band"] and r["channel"] is not None]
 
     quiet_radios: List[str] = []
-    for r in live:
-        label = f"{r['ap']} {BANDS[r['band']]} (channel {r['channel']})"
-        if r["band"] == "6e":                          # the controller's neighbor scan has no 6 GHz data
-            continue
-        same = [n for n in strong if n["band"] == r["band"] and n["channel"] == r["channel"]]
-        near = [n for n in strong if n["band"] == r["band"] and n["channel"] != r["channel"]
-                and overlaps(r["span"], n["span"])]
-        if same or near:
-            out.append(f"{label}: {_plural(len(same), 'neighbor')} {limit} on the same channel, "
-                       f"{len(near)} overlapping it")
-        else:
-            quiet_radios.append(label)
-    if quiet_radios:
-        out.append(f"No neighbors {limit} on or overlapping: " + "; ".join(quiet_radios))
+    if neighbors_available:
+        for r in live:
+            label = f"{r['ap']} {BANDS[r['band']]} (channel {r['channel']})"
+            if r["band"] == "6e":                      # the controller's neighbor scan has no 6 GHz data
+                continue
+            same = [n for n in strong if n["band"] == r["band"] and n["channel"] == r["channel"]]
+            near = [n for n in strong if n["band"] == r["band"] and n["channel"] != r["channel"]
+                    and overlaps(r["span"], n["span"])]
+            if same or near:
+                out.append(f"{label}: {_plural(len(same), 'neighbor')} {limit} on the same channel, "
+                           f"{len(near)} overlapping it")
+            else:
+                quiet_radios.append(label)
+        if quiet_radios:
+            out.append(f"No neighbors {limit} on or overlapping: " + "; ".join(quiet_radios))
 
     for i, a in enumerate(live):                       # our own radios competing with each other
         for b in live[i + 1:]:
@@ -234,7 +280,9 @@ def _observations(mine: List[Radio], strong: List[Neighbor], min_signal: float) 
                         else f"use overlapping {BANDS[a['band']]} channels {a['channel']} and {b['channel']}")
                 out.append(f"{a['ap']} and {b['ap']} {kind}, so they compete with each other")
 
-    if any(r["band"] == "ng" for r in live) or any(n["band"] == "ng" for n in strong):
+    if neighbors_available and (
+        any(r["band"] == "ng" for r in live) or any(n["band"] == "ng" for n in strong)
+    ):
         crowd = {ch: [n for n in strong if n["band"] == "ng" and overlaps(span_mhz("ng", ch, 20), n["span"])]
                  for ch in USUAL_2G_CHANNELS}
         fewest = min(len(v) for v in crowd.values())
@@ -276,13 +324,16 @@ def render_text(wifi: Dict[str, Any], show_all: bool = False, ap: str = "") -> s
         lines.append(f"  {name}: no radio data")
 
     n = wifi["neighbors"]
-    lines += ["", f"Neighboring networks: {n['total']} seen by your APs ({n['strong']} stronger than "
-                  f"{wifi['min_signal']:g} dBm, {n['open']} open, {n['hidden']} with a hidden name)"]
+    if n["available"]:
+        lines += ["", f"Neighboring networks: {n['total']} seen by your APs ({n['strong']} stronger than "
+                      f"{wifi['min_signal']:g} dBm, {n['open']} open, {n['hidden']} with a hidden name)"]
+    else:
+        lines += ["", "Neighboring networks: unavailable (scan failed)"]
     for band in wifi["plan"]:
         lines += ["", band["label"]]
-        if not band["scanned"]:
+        if n["available"] and not band["scanned"]:
             lines.append("  (the controller's neighbor scan does not report 6 GHz networks)")
-        na = "n/a" if not band["scanned"] else None
+        na = "n/a" if not n["available"] or not band["scanned"] else None
         table = [{"Channel": c["channel"], "Neighbors": na or c["neighbors"], "Strong": na or c["strong"],
                   "Your radios": ", ".join(c["our_radios"])} for c in band["channels"]]
         lines.append(format_table(table, ["Channel", "Neighbors", "Strong", "Your radios"]))

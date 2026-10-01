@@ -20,6 +20,10 @@ def test_2_4_ghz_spans_overlap_when_channels_are_closer_than_five_apart():
         assert overlaps(span(1), span(adjacent)), adjacent                      # 2-5 all overlap channel 1
     assert overlaps(span(1), span(4)) and overlaps(span(6), span(4)) and overlaps(span(6), span(8))
     assert overlaps(span(6), span(6))                                           # co-channel overlaps itself
+    assert span_mhz("ng", 6, 40) is None
+    assert span_mhz("ng", 6, 40, extension_channel="HT40+") == (2427, 2467)
+    assert span_mhz("ng", 6, 40, extension_channel=2) == (2407, 2447)
+    assert span_mhz("ng", 6, 40, center_freq=2447) == (2427, 2467)
 
 
 def test_5_ghz_widths_occupy_whole_blocks():
@@ -85,12 +89,20 @@ def test_names_are_cleaned_hidden_names_stay_empty_and_widths_default():
     got = {n["bssid"]: n for n in unique_neighbors(snap_with([
         row(bssid="b1", name="Line\nBreak\x07 "), row(bssid="b2", name=None), row(bssid="b3", name="x" * 60),
         row(bssid="b4", name="Café ☕", bw=None, center_freq=None, security="Open", oui="Acme"),
-        row(bssid="b5", ch=None)]))}
+        row(bssid="b5", ch=None), row(bssid="b6", name="CSI\x9bOSC\x9d")]))}
     assert got["b1"]["name"] == "LineBreak" and got["b2"]["name"] == ""
     assert len(got["b3"]["name"]) == 40 and got["b3"]["name"].endswith("…")
     assert got["b4"]["name"] == "Café ☕" and got["b4"]["open"] and got["b4"]["vendor"] == "Acme"
     assert got["b4"]["span"] == (2426, 2448)                                      # computed when center_freq is missing
     assert got["b5"]["channel"] is None and got["b5"]["span"] is None             # unknown channel: no overlap claims
+    assert got["b6"]["name"] == "CSIOSC"
+
+
+def test_ap_filter_is_applied_before_neighbor_deduplication():
+    snap = snap_with([row(ap="aa:03", sig=-60), row(ap="aa:04", sig=-45)])
+    got = unique_neighbors(snap, {"aa:03"})
+    assert len(got) == 1 and got[0]["signal"] == -60
+    assert got[0]["seen_by"] == ["aa:03"]
 
 
 # -- radios -----------------------------------------------------------------------
@@ -116,6 +128,16 @@ def test_radio_rows_unknown_satisfaction_offline_aps_and_odd_values():
     assert off["online"] is False and off["channel"] is None                      # placeholder, not hidden
 
 
+def test_2_4_ghz_40mhz_radio_span_uses_extension_channel_or_stays_unknown():
+    s = Snapshot(site={}, devices=[], clients=[], legacy_devices=[
+        ap("AA:01", "No extension", [{"radio": "ng", "channel": 6, "bw": 40}]),
+        ap("AA:02", "With extension", [
+            {"radio": "ng", "channel": 6, "bw": 40, "extension_channel": "HT40+"}])])
+    rows = radios(s, DeviceIndex(s))
+    assert rows[0]["span"] is None
+    assert rows[1]["span"] == (2427, 2467)
+
+
 # -- the report -------------------------------------------------------------------
 
 @pytest.fixture
@@ -128,7 +150,8 @@ def channel(report, band, ch):
 
 
 def test_fixture_counts_dedupe_and_strong_neighbors(report):
-    assert report["neighbors"] == {"total": 9, "strong": 8, "open": 1, "hidden": 1}      # 13 rows, 9 networks
+    assert report["neighbors"] == {"available": True, "total": 9, "strong": 8, "open": 1,
+                                   "hidden": 1}                                          # 13 rows, 9 networks
     assert (channel(report, "ng", 6)["neighbors"], channel(report, "ng", 6)["strong"]) == (3, 3)
     assert (channel(report, "ng", 1)["neighbors"], channel(report, "ng", 1)["strong"]) == (1, 0)   # the weak one
     assert channel(report, "ng", 6)["our_radios"] == ["Office AP"] and channel(report, "ng", 11)["our_radios"] == []
@@ -212,6 +235,11 @@ def test_filters_by_band_and_by_ap(fake_client):
     garage = build_wifi(snap, ap="garage")                                             # only what Garage AP hears
     assert garage["ap_matched"] is True and [r["ap"] for r in garage["radios"]] == ["Garage AP"]
     assert garage["neighbors"]["total"] == 3                                           # One, Eleven Net, Far Block
+    garage_strong = build_wifi(snap, ap="garage", min_signal=-55)
+    assert garage_strong["neighbors"]["strong"] == 1
+    assert "Neighbor One" not in [
+        n["name"] for b in garage_strong["plan"] for c in b["channels"] for n in c["strong_networks"]
+    ]
     none = build_wifi(snap, ap="nonexistent")
     assert none["ap_matched"] is False and none["radios"] == [] and none["neighbors"]["total"] == 0
     assert render_text(none, ap="nonexistent") == "No access point matches 'nonexistent'."
@@ -248,6 +276,7 @@ def test_missing_data_still_renders_and_json_is_complete(report):
     assert "no radio data" in text and "Neighboring networks: 0 seen by your APs" in text
     parsed = json.loads(to_json(report))
     assert set(parsed) == {"ap_matched", "min_signal", "radios", "neighbors", "plan", "observations"}
+    assert parsed["neighbors"]["available"] is True
     assert parsed["plan"][0]["channels"][0]["strong_networks"] is not None and "span" not in parsed["radios"][0]
 
 
@@ -272,7 +301,7 @@ def test_cli_wifi_options(fake_client, monkeypatch, capsys):
 
     assert _run(fake_client, monkeypatch, ["wifi", "--band", "2.4 GHz", "--ap", "garage", "--min-signal", "-55"]) == 0
     out = capsys.readouterr().out
-    assert "Eleven Net" in out and "Neighbor One" in out and "Far Block" not in out
+    assert "Eleven Net" in out and "Neighbor One" not in out and "Far Block" not in out
 
     assert _run(fake_client, monkeypatch, ["wifi", "--ap", "zzz"]) == 0
     assert capsys.readouterr().out.strip() == "No access point matches 'zzz'."
@@ -308,6 +337,28 @@ def test_cli_wifi_degrades_when_the_neighbor_scan_is_unavailable(fake_client, mo
     monkeypatch.setattr(fake_client, "legacy_stat", flaky)
     assert _run(fake_client, monkeypatch, ["wifi"]) == 0
     captured = capsys.readouterr()
-    assert "neighboring networks unavailable, the channel plan was skipped: scan down" in captured.err
+    assert "neighboring networks unavailable; neighbor-based channel comparisons were skipped: scan down" in captured.err
     assert any(line.split()[:4] == ["Office", "AP", "2.4", "GHz"] for line in captured.out.splitlines())
-    assert "Neighboring networks: 0 seen" in captured.out
+    assert "Neighboring networks: unavailable (scan failed)" in captured.out
+    assert "n/a" in captured.out
+    assert "No neighbors" not in captured.out and "equally busy" not in captured.out
+
+
+def test_failed_neighbor_scan_is_not_reported_as_an_empty_scan(fake_client, monkeypatch):
+    real = fake_client.legacy_stat
+
+    def flaky(site_ref, resource):
+        if resource == "rogueap":
+            raise UniFiAPIError("scan down")
+        return real(site_ref, resource)
+
+    monkeypatch.setattr(fake_client, "legacy_stat", flaky)
+    snap = collect_snapshot(fake_client, "default", include_neighbors=True)
+    report = build_wifi(snap)
+    assert snap.neighbors == [] and snap.neighbors_available is False
+    assert report["neighbors"] == {
+        "available": False, "total": None, "strong": None, "open": None, "hidden": None,
+    }
+    assert all(c["neighbors"] is None and c["strong"] is None
+               for b in report["plan"] for c in b["channels"])
+    assert not any("neighbor" in o.lower() for o in report["observations"])
