@@ -6,6 +6,12 @@ which is documented, versioned and paginated. Site IDs are UUIDs.
 Legacy API: the undocumented ``/proxy/network/api`` endpoints. The Integration
 API does not expose per-port counters or which switch port a client is on, so
 the legacy endpoints remain available for that data only.
+
+Every request is a GET, with one approved exception: the event log
+(``v2/system-log/all``) can only be queried with a POST that carries the filter.
+That query changes nothing on the controller, and it is sent only by
+``UniFiClient.system_log`` to that one fixed path. There is deliberately no
+general-purpose POST/PUT/PATCH/DELETE method on this class.
 """
 
 from typing import Any, Dict, Iterator, List, Optional
@@ -18,6 +24,13 @@ from .config import Config
 INTEGRATION_PREFIX = "/proxy/network/integration/v1"
 LEGACY_PREFIX = "/proxy/network/api"
 LEGACY_V2_PREFIX = "/proxy/network/v2/api"
+# The single approved POST: a read-only query of the event log.
+SYSTEM_LOG_PATH = LEGACY_V2_PREFIX + "/site/{site}/system-log/all"
+# The only keys a system-log query may carry (anything else raises before sending).
+SYSTEM_LOG_QUERY_KEYS = frozenset({
+    "timestampFrom", "timestampTo", "pageNumber", "pageSize",
+    "categories", "severities", "keys", "searchText",
+})
 PAGE_SIZE = 200
 
 
@@ -51,11 +64,18 @@ class UniFiClient:
     # -- transport ---------------------------------------------------------
 
     def _get(self, path: str, params: Optional[Dict[str, Any]] = None) -> Any:
-        url = f"{self.base_url}{path}"
+        return self._send("GET", f"{self.base_url}{path}", params=params)
+
+    def _send(self, method: str, url: str, **kwargs: Any) -> Any:
+        """Shared request and error handling. Private: GET goes through ``_get`` and the
+        one approved POST through ``system_log``; nothing else calls this with a body."""
         try:
-            resp = self.session.get(
-                url, params=params, verify=self.verify_ssl, timeout=self.timeout
-            )
+            if method == "GET":
+                resp = self.session.get(
+                    url, params=kwargs.get("params"), verify=self.verify_ssl, timeout=self.timeout)
+            else:  # only reachable from system_log (see _post_system_log)
+                resp = self.session.post(
+                    url, json=kwargs.get("json"), verify=self.verify_ssl, timeout=self.timeout)
         except requests.exceptions.SSLError as e:
             raise UniFiAPIError(
                 f"TLS certificate verification failed for {self.base_url}. Install a "
@@ -135,3 +155,26 @@ class UniFiClient:
         """GET /v2/api/site/{site}/{resource} (e.g. 'network-members-groups')."""
         body = self._get(f"{LEGACY_V2_PREFIX}/site/{site_ref}/{resource}")
         return body.get("data", []) if isinstance(body, dict) else body
+
+    # -- event log (the one approved POST) ----------------------------------
+
+    def _post_system_log(self, site_ref: str, query: Dict[str, Any]) -> Any:
+        """POST a read-only query to the fixed system-log path. Never takes a path."""
+        unexpected = set(query) - SYSTEM_LOG_QUERY_KEYS
+        if unexpected:
+            raise ValueError(f"unsupported system-log query key(s): {', '.join(sorted(unexpected))}")
+        url = self.base_url + SYSTEM_LOG_PATH.format(site=site_ref)
+        return self._send("POST", url, json=query)
+
+    def system_log(self, site_ref: str, query: Dict[str, Any]) -> Dict[str, Any]:
+        """One page of the controller's event log (newest first).
+
+        ``query`` may use ``timestampFrom``/``timestampTo`` (milliseconds), ``pageNumber``,
+        ``pageSize``, and the server-side filters ``categories``, ``severities``, ``keys``
+        and ``searchText``. Returns ``{"data": [...], "page_number", "total_element_count",
+        "total_page_count"}``.
+        """
+        body = self._post_system_log(site_ref, query)
+        if not isinstance(body, dict) or not isinstance(body.get("data"), list):
+            raise UniFiAPIError("Unexpected response from the event log (no 'data' list)")
+        return body

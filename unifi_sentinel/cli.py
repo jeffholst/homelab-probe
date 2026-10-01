@@ -12,6 +12,8 @@ from .client_view import (build_client_detail, find_clients, render_candidates,
                           render_detail, to_json)
 from .diagnose import (CRITICAL, INFO, WARNING, apply_ignores, diagnose, exit_code,
                        format_findings, format_ignored, stream_supports_emoji)
+from .events import (DEFAULT_LIMIT, DEFAULT_SINCE, SEVERITIES, fetch_events, make_filter,
+                     parse_duration, render_events)
 from .export import run_export
 from .new_clients import render as render_new_clients, report as new_clients_report
 from .query import query_rows, render
@@ -29,6 +31,23 @@ class _Parser(argparse.ArgumentParser):
         # argparse defaults to exit code 2, which would look like a critical finding.
         self.print_usage(sys.stderr)
         self.exit(EXIT_USAGE, f"{self.prog}: error: {message}\n")
+
+
+def _duration(text: str) -> int:
+    try:
+        return parse_duration(text)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(str(e))
+
+
+def _non_negative(text: str) -> int:
+    try:
+        value = int(text)
+    except ValueError:
+        value = -1
+    if value < 0:
+        raise argparse.ArgumentTypeError(f"invalid value {text!r}: use a whole number, 0 or more")
+    return value
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -63,6 +82,29 @@ def build_parser() -> argparse.ArgumentParser:
     new.add_argument("-s", "--search", default="",
                      help="Case-insensitive substring match on any field")
     new.add_argument("--json", action="store_true", help="Output JSON instead of a table")
+
+    ev = sub.add_parser(
+        "events", help="Event history from the controller log: disconnects, roams, IP conflicts...")
+    ev.add_argument("--since", type=_duration, default=_duration(DEFAULT_SINCE), metavar="DURATION",
+                    help=f"How far back to look, e.g. 90m, 24h, 7d, 2w (default: {DEFAULT_SINCE})")
+    ev.add_argument("--category", action="append", default=[], metavar="NAME",
+                    help="Only this category, e.g. CLIENT_DEVICES, UNIFI_DEVICES, INTERNET_AND_WAN, "
+                         "AUDIT (repeatable)")
+    ev.add_argument("--severity", action="append", default=[], type=str.lower, choices=SEVERITIES,
+                    help="Only this severity (repeatable)")
+    ev.add_argument("--event", default="", metavar="TEXT",
+                    help="Only event types containing TEXT, e.g. roam, disconnected, ip_conflict")
+    ev.add_argument("--client", default="", metavar="NAME|MAC|IP",
+                    help="Only events about this client (name, hostname, IP or part of a MAC)")
+    ev.add_argument("--device", default="", metavar="NAME|IP",
+                    help="Only events about this UniFi device (e.g. an AP or switch)")
+    ev.add_argument("-s", "--search", default="", help="Text search done by the controller")
+    ev.add_argument("--limit", type=_non_negative, default=DEFAULT_LIMIT,
+                    help=f"Most events to show, newest first (default {DEFAULT_LIMIT}; 0 for all)")
+    ev.add_argument("--summary", action="store_true",
+                    help="Counts by type and the noisiest clients/devices over the whole window "
+                         "(ignores --limit) instead of a list")
+    ev.add_argument("--json", action="store_true", help="Output JSON instead of a table")
 
     cview = sub.add_parser(
         "client", help="Troubleshoot one client: where it attaches, link quality and related findings")
@@ -118,6 +160,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         elif args.command == "new-clients":
             snap = collect_snapshot(client, config.site, include_groups=True)
             print(render_new_clients(new_clients_report(snap, args.search), args.json))
+        elif args.command == "events":
+            site = client.resolve_site(config.site)
+            events, more = fetch_events(
+                client, site.get("internalReference") or config.site, args.since,
+                categories=args.category, severities=args.severity, search=args.search,
+                predicate=make_filter(args.client, args.device, args.event),
+                limit=0 if args.summary else args.limit)  # a summary counts the whole window
+            print(render_events(events, more, args.json, args.summary))
         elif args.command == "client":
             snap = collect_snapshot(client, config.site, include_reservations=True,
                                     include_groups=True)
