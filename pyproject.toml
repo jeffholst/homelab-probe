@@ -48,8 +48,8 @@ Issues = "https://github.com/jeffholst/unifi-sentinel/issues"
 [project.scripts]
 unifi-sentinel = "unifi_sentinel.cli:main"
 
-[tool.setuptools]
-packages = ["unifi_sentinel"]
+[tool.setuptools.packages.find]
+include = ["unifi_sentinel*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

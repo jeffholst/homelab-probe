@@ -12,7 +12,7 @@ from unifi_sentinel import diagnose as diagnose_module
 from unifi_sentinel.diagnose import CODES, Finding, apply_ignores, findings_json
 from unifi_sentinel.settings import IgnoreRule
 
-DIAGNOSE_SOURCE = Path(diagnose_module.__file__)
+DIAGNOSE_PACKAGE = Path(diagnose_module.__file__).parent
 FINDING_KEYS = {"severity", "code", "subject", "message", "mac"}
 
 
@@ -41,22 +41,23 @@ def code_strings(node):
 
 
 def finding_calls():
-    """Every ``Finding(...)`` call in diagnose.py, as the set of code strings it can pass."""
-    tree = ast.parse(DIAGNOSE_SOURCE.read_text(encoding="utf-8"))
+    """Every ``Finding(...)`` call in the diagnose package, as ``(file, line, set of code strings it can pass)``."""
     calls = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "Finding":
-            codes = set().union(*(code_strings(kw.value) for kw in node.keywords if kw.arg == "code"))
-            calls.append((node.lineno, codes))
+    for path in sorted(DIAGNOSE_PACKAGE.glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "Finding":
+                codes = set().union(*(code_strings(kw.value) for kw in node.keywords if kw.arg == "code"))
+                calls.append((f"{path.name}:{node.lineno}", codes))
     return calls
 
 
 def test_every_finding_in_the_checks_has_a_code_from_the_catalogue():
     calls = finding_calls()
     assert len(calls) >= 40                                    # the scan found the checks, not nothing
-    missing = [line for line, codes in calls if not codes]
-    assert not missing, f"Finding(...) without code= at diagnose.py lines {missing}"
-    unknown = {(line, c) for line, codes in calls for c in codes if c not in CODES}
+    missing = [where for where, codes in calls if not codes]
+    assert not missing, f"Finding(...) without code= at {missing}"
+    unknown = {(where, c) for where, codes in calls for c in codes if c not in CODES}
     assert not unknown, f"codes not in CODES: {sorted(unknown)}"
 
 

@@ -813,7 +813,14 @@ unifi_sentinel/
   wifi.py                wireless report: radios and a channel plan from neighbors
   topology.py            uplink tree: wiring, link speeds, client counts, flags
   history.py             saved inventories (snapshot) and the diff between them
-  diagnose.py            read-only health checks
+  diagnose/              read-only health checks, one module per topic
+    __init__.py            diagnose(): runs every check, worst findings first
+    model.py               severities, exit codes, the catalogue of finding codes, Finding
+    devices.py  health.py  offline devices, CPU and memory; controller subsystems and the internet connection
+    addresses.py reserved.py  client IPs, duplicates, randomized MACs; DHCP reservations
+    ports.py  wireless.py  switch ports and uplinks; Wi-Fi quality
+    event_checks.py        the event log (conflicts, disconnects, roaming, unreachable devices)
+    output.py              ignoring findings, exit codes, text and JSON
   notify.py              notifications: what changed since the last run, ntfy/webhook sending, state file
   settings.py            diagnose thresholds and ignore list (TOML)
   util.py                shared helpers: output safety (printable names, CSV formulas), numbers, MACs, times, plurals
