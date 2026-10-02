@@ -67,7 +67,7 @@ and `wep` Wi-Fi security values) the README says so.
   did not check. Email is TLS only, one plain-text message per run.
 - **`--verbose` / `--debug`:** every request (method, path, status, milliseconds, retries) and what was read, on
   stderr, never the API key.
-- **`--parallel N` / `PARALLEL_REQUESTS`** (default 6) and `--timeout` / `TIMEOUT`, `--env-file` /
+- **`--parallel N` / `PARALLEL_REQUESTS`** (default 6), `--site NAME|REF|UUID` (beats `SITE_ID`) and `--timeout` / `TIMEOUT`, `--env-file` /
   `UNIFI_SENTINEL_ENV`, `VERIFY_SSL` as a CA bundle path.
 - **Development:** a contract table of the fields the code reads (`tests/contract.py`), opt-in live contract tests
   (`pytest -m live`, GET only), a fixture recorder with a deterministic sanitiser and leak check (`tools/`), golden

@@ -107,7 +107,8 @@ Either installs the `unifi-sentinel` command (its `--version` option shows which
 ## Usage
 
 ```bash
-uv run unifi-sentinel.py info
+uv run unifi-sentinel.py info                                 # the controller's version and its sites
+uv run unifi-sentinel.py --site Lab diagnose --no-events      # another site for this run (beats SITE_ID)
 uv run unifi-sentinel.py export -o ./out --include-offline    # CSV files (long form: --output-dir); also previously seen clients
 uv run unifi-sentinel.py query clients -s printer --json      # filter (long form: --search), as JSON; --csv for a spreadsheet
 uv run unifi-sentinel.py query clients --include-offline      # also previously seen clients
