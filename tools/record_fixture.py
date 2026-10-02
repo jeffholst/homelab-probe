@@ -134,7 +134,8 @@ def record(client: UniFiClient, site: str, event_days: int) -> Tuple[Dict[str, A
     collect_snapshot(client, site, Needs(offline=True, reservations=True, groups=True, health=True, speedtests=True,
                                          neighbors=True, events=EventQuery(since_seconds=event_days * 86400)),
                      now_ms=int(now_ms))
-    found = {name: problems(name, records) for name, records in recording.records().items() if name in CONTRACT}
+    records = recording.records()
+    found = {name: problems(name, records.get(name, [])) for name in CONTRACT}
     fx = build_fixture(recording.exchanges, now_ms)
     return sanitise(fx, recording.exchanges), {n: p for n, p in found.items() if p}, now_ms
 
