@@ -14,7 +14,7 @@ changes the exit code (0 unless the controller cannot be read).
 """
 
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from .diagnose.addresses import ip_holders, normalize_ip
 from .diagnose.model import INFO, WARNING, Finding
@@ -22,7 +22,7 @@ from .diagnose.output import format_findings
 from .query import format_table
 from .reservations import reservation_records
 from .snapshot import FirewallData, Snapshot
-from .util import clean_data, plural, search_rows
+from .util import clean_data, normalize_mac, plural, search_rows
 
 JSON_VERSION = 1
 
@@ -140,7 +140,7 @@ def zone_rows(snap: Snapshot, fw: FirewallData) -> List[Dict[str, Any]]:
 
 
 def matrix_rows(fw: FirewallData) -> List[Dict[str, Any]]:
-    """One row per source zone: ``{"From": zone, "cells": {destination zone: {"action", "policies"}}}``."""
+    """One row per source zone: ``{"From": zone, "cells": {destination id: {"action", "policies"}}}``."""
     zones = _zone_names(fw)
     rows = []
     for m in fw.matrix or []:
@@ -148,7 +148,8 @@ def matrix_rows(fw: FirewallData) -> List[Dict[str, Any]]:
         for c in m.get("data") or []:
             count = _count(c.get("policy_count")) or 0
             action = MATRIX_CELLS.get(c.get("action"), "C" if count else "-")
-            cells[_zone(zones, c.get("_id"))] = {"action": action, "policies": count}
+            zone_id = c.get("_id")
+            cells[zone_id if isinstance(zone_id, str) else UNKNOWN_ZONE] = {"action": action, "policies": count}
         rows.append({"From": _zone(zones, m.get("_id"), str(m.get("name") or UNKNOWN_ZONE)), "cells": cells})
     return rows
 
@@ -167,8 +168,11 @@ def forward_findings(snap: Snapshot, forwards: List[Dict[str, Any]]) -> List[Fin
     findings: List[Finding] = []
     enabled = [f for f in forwards if f["On"] == "yes"]
     holders = ip_holders(snap)
-    devices = {normalize_ip(d.get("ipAddress")) for d in snap.devices}
-    reserved = {normalize_ip(user.get("fixed_ip")) for user, _net in reservation_records(snap)}
+    reserved: Dict[str, Set[str]] = {}
+    for user, _net in reservation_records(snap):
+        ip, mac = normalize_ip(user.get("fixed_ip")), normalize_mac(user.get("mac"))
+        if ip and mac:
+            reserved.setdefault(ip, set()).add(mac)
     for f in enabled:
         ip = normalize_ip(f["_ip"])
         where = f"{f['Protocol']} port {f['External port']} to {f['Forwards to']}"
@@ -176,10 +180,15 @@ def forward_findings(snap: Snapshot, forwards: List[Dict[str, Any]]) -> List[Fin
             findings.append(Finding(WARNING, f["Name"] or f["Forwards to"],
                                     f"{where}, but nothing is using that address now",
                                     code="firewall.forward_target_offline"))
-        elif ip and snap.all_users and ip not in reserved and ip not in devices:
-            findings.append(Finding(INFO, f["Name"] or f["Forwards to"],
-                                    f"{where}; that client has no DHCP reservation, so the forward breaks if its "
-                                    "address changes", code="firewall.forward_no_reservation"))
+        elif ip and snap.all_users:
+            clients = [c for c in snap.clients if normalize_ip(c.get("ipAddress")) == ip]
+            unreserved = any(not normalize_mac(c.get("macAddress")) or
+                             normalize_mac(c.get("macAddress")) not in reserved.get(ip, set())
+                             for c in clients)
+            if unreserved:
+                findings.append(Finding(INFO, f["Name"] or f["Forwards to"],
+                                        f"{where}; that client has no DHCP reservation, so the forward breaks if its "
+                                        "address changes", code="firewall.forward_no_reservation"))
     seen: Dict[tuple, Dict[str, Any]] = {}
     for f in enabled:
         if not f["External port"]:
@@ -255,22 +264,24 @@ def build_firewall(snap: Snapshot, show_all: bool = False, search: str = "") -> 
             {k: v for k, v in r.items() if not k.startswith("_")} for r in search_rows(forwards, search)],
         "zones": zone_rows(snap, fw),
         "matrix": matrix_rows(fw),
+        "_zone_names": _zone_names(fw),
         "findings": [f.to_dict() for f in findings],
         "notes": notes,
     }
 
 
 def to_json(report: Dict[str, Any]) -> str:
-    return json.dumps(report, indent=2)
+    return json.dumps({k: v for k, v in report.items() if k != "_zone_names"}, indent=2)
 
 
-def _matrix_table(matrix: List[Dict[str, Any]]) -> str:
-    names = [r["From"] for r in matrix]
+def _matrix_table(matrix: List[Dict[str, Any]], zone_names: Dict[str, str]) -> str:
+    zone_ids = list(dict.fromkeys(zone_id for row in matrix for zone_id in row["cells"]))
+    names = [_zone(zone_names, zone_id) for zone_id in zone_ids]
     columns = ["From \\ To"]
     for name in names:                                   # two zones may share a name
         columns.append(name if name not in columns else f"{name} ({len(columns)})")
     rows = [{"From \\ To": r["From"], **{col: r["cells"].get(name, {}).get("action", "")
-                                         for col, name in zip(columns[1:], names, strict=True)}} for r in matrix]
+                                         for col, name in zip(columns[1:], zone_ids, strict=True)}} for r in matrix]
     return format_table(rows, columns)
 
 
@@ -301,7 +312,8 @@ def render_text(report: Dict[str, Any], zones: bool = False, emoji: bool = True)
             lines.append(f"  {z['Zone']}{'' if z['Built in'] else ' (yours)'}: "
                          + (", ".join(z["Networks"]) or "no networks"))
         lines += ["", "Zone matrix (what traffic from a zone may do in another: A allow all, B block all, "
-                      "R return traffic only, C custom rules, - none)", _matrix_table(report["matrix"])]
+                      "R return traffic only, C custom rules, - none)",
+                   _matrix_table(report["matrix"], report["_zone_names"])]
 
     findings = [Finding(f["severity"], f["subject"], f["message"], code=f["code"]) for f in report["findings"]]
     lines += ["", "Findings", format_findings(findings, emoji) if findings else "No issues found."]

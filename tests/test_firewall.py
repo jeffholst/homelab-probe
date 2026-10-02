@@ -106,10 +106,10 @@ def test_zones_and_the_matrix(fake_client):
     assert zones["Internal"] == {"Zone": "Internal", "Built in": True, "Networks": ["Main"]}
     assert zones["IoT Zone"]["Built in"] is False and zones["IoT Zone"]["Networks"] == ["IoT"]
     cells = {r["From"]: r["cells"] for r in report["matrix"]}
-    assert cells["Internal"]["External"] == {"action": "A", "policies": 1}
-    assert cells["Internal"]["Gateway"] == {"action": "C", "policies": 2}
-    assert cells["External"]["Gateway"] == {"action": "B", "policies": 0}
-    assert cells["External"]["Internal"]["action"] == "C"
+    assert cells["Internal"]["z-ext"] == {"action": "A", "policies": 1}
+    assert cells["Internal"]["z-gw"] == {"action": "C", "policies": 2}
+    assert cells["External"]["z-gw"] == {"action": "B", "policies": 0}
+    assert cells["External"]["z-int"]["action"] == "C"
 
 
 def test_a_matrix_cell_without_policies_or_action_is_empty_and_unknown_zones_are_named(fake_client):
@@ -120,11 +120,16 @@ def test_a_matrix_cell_without_policies_or_action_is_empty_and_unknown_zones_are
         fx["legacy_v2"]["firewall/zone-matrix"][2]["data"][0].pop("policy_count")
         fx["legacy_v2"]["firewall/zone-matrix"][3]["_id"] = "z-lost"
         fx["legacy_v2"]["firewall/zone-matrix"].append({"_id": "z-two", "name": "Internal", "data": []})
+        fx["legacy_v2"]["firewall/zone-matrix"][0]["data"].append(
+            {"_id": "z-two", "action": "block_all", "policy_count": 0})
 
     report = build_firewall(snapshot(fake_client, change))
     cells = {r["From"]: r["cells"] for r in report["matrix"] if r["cells"]}
-    assert cells["Internal"]["External"] == {"action": "-", "policies": 0}
-    assert "(unknown zone)" in cells["External"] and "Vpn" in cells        # a row with an unknown id keeps its own name
+    assert cells["Internal"]["z-ext"] == {"action": "-", "policies": 0}
+    assert "z-unknown" in cells["External"] and "z-vpn" in cells["External"]
+    first_internal = next(r for r in report["matrix"] if r["From"] == "Internal")
+    assert first_internal["cells"]["z-int"]["action"] == "A"
+    assert first_internal["cells"]["z-two"]["action"] == "B"
     header = next(line for line in render_text(report, zones=True).splitlines() if line.startswith("From \\ To"))
     assert "Internal (8)" in header
 
@@ -277,6 +282,22 @@ def test_port_forward_checks(fake_client):
     assert not any(subject == "Phone Test" for _, subject in found)
     assert ("firewall.forward_duplicate", "Game Server Backup") in found
     assert not any(subject in ("Other Interface", "Disabled Copy") for _, subject in found)
+
+
+def test_a_reservation_for_another_mac_does_not_exempt_the_forward_target(fake_client):
+    def change(fx):
+        fx["legacy"]["alluser"][1].update(fixed_ip="10.0.0.11")
+
+    found = findings(build_firewall(snapshot(fake_client, change)))
+    assert ("firewall.forward_no_reservation", "Phone Test") in found
+
+
+def test_an_offline_device_does_not_exempt_a_client_without_a_reservation(fake_client):
+    def change(fx):
+        fx["devices"][3]["ipAddress"] = "10.0.0.11"
+
+    found = findings(build_firewall(snapshot(fake_client, change)))
+    assert ("firewall.forward_no_reservation", "Phone Test") in found
 
 
 def test_without_the_client_history_no_reservation_is_claimed(fake_client):
