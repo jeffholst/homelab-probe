@@ -364,7 +364,7 @@
         "ap_mac": "aa:00:00:00:00:03",
         "is_wired": false,
         "hostname": "phone-host",
-        "ip": "10.0.0.20",
+        "ip": "10.0.0.11",
         "oui": "Example Mobile Co",
         "essid": "HomeNet",
         "radio": "na",
@@ -709,6 +709,58 @@
         "dhcpd_start": "10.0.20.100",
         "dhcpd_stop": "10.0.20.200"
       }
+    ],
+    "portforward": [
+      {
+        "name": "Web Server",
+        "enabled": true,
+        "proto": "tcp",
+        "dst_port": "443",
+        "fwd": "10.0.0.10",
+        "fwd_port": "443",
+        "pfwd_interface": "wan",
+        "src": "any"
+      },
+      {
+        "name": "Phone Test",
+        "enabled": true,
+        "proto": "tcp",
+        "dst_port": "8080",
+        "fwd": "10.0.0.11",
+        "fwd_port": "8080",
+        "pfwd_interface": "wan",
+        "src": "any"
+      },
+      {
+        "name": "Game Server",
+        "enabled": true,
+        "proto": "udp",
+        "dst_port": "27015",
+        "fwd": "10.0.0.77",
+        "fwd_port": "27015",
+        "pfwd_interface": "wan",
+        "src": "any"
+      },
+      {
+        "name": "Game Server Backup",
+        "enabled": true,
+        "proto": "udp",
+        "dst_port": "27015",
+        "fwd": "10.0.0.10",
+        "fwd_port": "27016",
+        "pfwd_interface": "wan",
+        "src": "any"
+      },
+      {
+        "name": "Old FTP",
+        "enabled": false,
+        "proto": "tcp",
+        "dst_port": "21",
+        "fwd": "10.0.0.50",
+        "fwd_port": "21",
+        "pfwd_interface": "wan",
+        "src": "198.51.100.7"
+      }
     ]
   },
   "legacy_v2": {
@@ -839,7 +891,635 @@
           "wan_networkgroup": "WAN"
         }
       ]
-    }
+    },
+    "firewall-policies": [
+      {
+        "_id": "pol-10001",
+        "name": "Allow All Traffic",
+        "enabled": true,
+        "action": "ALLOW",
+        "predefined": true,
+        "index": 10001,
+        "protocol": "all",
+        "source": {
+          "zone_id": "z-int",
+          "matching_target": "ANY",
+          "port_matching_type": "ANY",
+          "match_opposite_ports": false
+        },
+        "destination": {
+          "zone_id": "z-int",
+          "matching_target": "ANY",
+          "port_matching_type": "ANY",
+          "match_opposite_ports": false
+        }
+      },
+      {
+        "_id": "pol-10002",
+        "name": "Allow All Traffic",
+        "enabled": true,
+        "action": "ALLOW",
+        "predefined": true,
+        "index": 10002,
+        "protocol": "all",
+        "source": {
+          "zone_id": "z-int",
+          "matching_target": "ANY",
+          "port_matching_type": "ANY",
+          "match_opposite_ports": false
+        },
+        "destination": {
+          "zone_id": "z-ext",
+          "matching_target": "ANY",
+          "port_matching_type": "ANY",
+          "match_opposite_ports": false
+        },
+        "hits": 5210
+      },
+      {
+        "_id": "pol-10003",
+        "name": "Allow Return Traffic",
+        "enabled": true,
+        "action": "ALLOW",
+        "predefined": true,
+        "index": 10003,
+        "protocol": "all",
+        "source": {
+          "zone_id": "z-ext",
+          "matching_target": "ANY",
+          "port_matching_type": "ANY",
+          "match_opposite_ports": false
+        },
+        "destination": {
+          "zone_id": "z-int",
+          "matching_target": "ANY",
+          "port_matching_type": "ANY",
+          "match_opposite_ports": false
+        },
+        "connection_state_type": "RESPOND_ONLY",
+        "hits": 88100
+      },
+      {
+        "_id": "pol-10004",
+        "name": "Block All Traffic",
+        "enabled": true,
+        "action": "BLOCK",
+        "predefined": true,
+        "index": 10004,
+        "protocol": "all",
+        "source": {
+          "zone_id": "z-ext",
+          "matching_target": "ANY",
+          "port_matching_type": "ANY",
+          "match_opposite_ports": false
+        },
+        "destination": {
+          "zone_id": "z-int",
+          "matching_target": "ANY",
+          "port_matching_type": "ANY",
+          "match_opposite_ports": false
+        },
+        "hits": 1304
+      },
+      {
+        "_id": "pol-10005",
+        "name": "Block All Traffic",
+        "enabled": true,
+        "action": "BLOCK",
+        "predefined": true,
+        "index": 10005,
+        "protocol": "all",
+        "source": {
+          "zone_id": "z-iot",
+          "matching_target": "ANY",
+          "port_matching_type": "ANY",
+          "match_opposite_ports": false
+        },
+        "destination": {
+          "zone_id": "z-int",
+          "matching_target": "ANY",
+          "port_matching_type": "ANY",
+          "match_opposite_ports": false
+        },
+        "hits": 17
+      },
+      {
+        "_id": "pol-10006",
+        "name": "Allow mDNS",
+        "enabled": true,
+        "action": "ALLOW",
+        "predefined": true,
+        "index": 10006,
+        "protocol": "udp",
+        "source": {
+          "zone_id": "z-int",
+          "matching_target": "ANY",
+          "port_matching_type": "ANY",
+          "match_opposite_ports": false
+        },
+        "destination": {
+          "zone_id": "z-gw",
+          "matching_target": "ANY",
+          "port_matching_type": "SPECIFIC",
+          "match_opposite_ports": false,
+          "port": "5353"
+        },
+        "hits": 120
+      },
+      {
+        "_id": "pol-20001",
+        "name": "Allow IoT DNS",
+        "enabled": true,
+        "action": "ALLOW",
+        "predefined": false,
+        "index": 20001,
+        "protocol": "tcp_udp",
+        "source": {
+          "zone_id": "z-iot",
+          "matching_target": "NETWORK",
+          "port_matching_type": "ANY",
+          "match_opposite_ports": false,
+          "network_ids": [
+            "net-2"
+          ],
+          "match_opposite_networks": false
+        },
+        "destination": {
+          "zone_id": "z-int",
+          "matching_target": "IP",
+          "port_matching_type": "SPECIFIC",
+          "match_opposite_ports": false,
+          "ips": [
+            "10.0.0.53"
+          ],
+          "match_opposite_ips": false,
+          "port": "53"
+        },
+        "hits": 42
+      },
+      {
+        "_id": "pol-20002",
+        "name": "Open Inbound",
+        "enabled": true,
+        "action": "ALLOW",
+        "predefined": false,
+        "index": 20002,
+        "protocol": "all",
+        "source": {
+          "zone_id": "z-ext",
+          "matching_target": "ANY",
+          "port_matching_type": "ANY",
+          "match_opposite_ports": false
+        },
+        "destination": {
+          "zone_id": "z-int",
+          "matching_target": "ANY",
+          "port_matching_type": "ANY",
+          "match_opposite_ports": false
+        }
+      },
+      {
+        "_id": "pol-20003",
+        "name": "Old Camera Access",
+        "enabled": false,
+        "action": "ALLOW",
+        "predefined": false,
+        "index": 20003,
+        "protocol": "all",
+        "source": {
+          "zone_id": "z-iot",
+          "matching_target": "NETWORK",
+          "port_matching_type": "ANY",
+          "match_opposite_ports": false,
+          "network_ids": [],
+          "match_opposite_networks": false
+        },
+        "destination": {
+          "zone_id": "z-int",
+          "matching_target": "ANY",
+          "port_matching_type": "ANY",
+          "match_opposite_ports": false
+        }
+      },
+      {
+        "_id": "pol-20004",
+        "name": "Guest Printer",
+        "enabled": true,
+        "action": "ALLOW",
+        "predefined": false,
+        "index": 20004,
+        "protocol": "tcp_udp",
+        "source": {
+          "zone_id": "z-int",
+          "matching_target": "ANY",
+          "port_matching_type": "ANY",
+          "match_opposite_ports": false
+        },
+        "destination": {
+          "zone_id": "z-iot",
+          "matching_target": "NETWORK",
+          "port_matching_type": "ANY",
+          "match_opposite_ports": false,
+          "network_ids": [
+            "net-gone"
+          ],
+          "match_opposite_networks": false
+        }
+      },
+      {
+        "_id": "pol-20005",
+        "name": "Legacy VPN Allow",
+        "enabled": false,
+        "action": "ALLOW",
+        "predefined": false,
+        "index": 20005,
+        "protocol": "all",
+        "source": {
+          "zone_id": "z-vpn",
+          "matching_target": "ANY",
+          "port_matching_type": "ANY",
+          "match_opposite_ports": false
+        },
+        "destination": {
+          "zone_id": "z-int",
+          "matching_target": "ANY",
+          "port_matching_type": "ANY",
+          "match_opposite_ports": false
+        }
+      },
+      {
+        "_id": "pol-20006",
+        "name": "Admin SSH",
+        "enabled": true,
+        "action": "ALLOW",
+        "predefined": false,
+        "index": 20006,
+        "protocol": "tcp",
+        "source": {
+          "zone_id": "z-int",
+          "matching_target": "IP",
+          "ips": [
+            "10.0.0.10"
+          ],
+          "match_opposite_ips": false,
+          "port_matching_type": "SPECIFIC",
+          "port": "49152-65535",
+          "match_opposite_ports": false
+        },
+        "destination": {
+          "zone_id": "z-gw",
+          "matching_target": "ANY",
+          "port_matching_type": "SPECIFIC",
+          "port": "22",
+          "match_opposite_ports": false
+        },
+        "hits": 9
+      }
+    ],
+    "firewall/zone": [
+      {
+        "_id": "z-int",
+        "name": "Internal",
+        "zone_key": "internal",
+        "network_ids": [
+          "net-1"
+        ]
+      },
+      {
+        "_id": "z-ext",
+        "name": "External",
+        "zone_key": "external",
+        "network_ids": []
+      },
+      {
+        "_id": "z-gw",
+        "name": "Gateway",
+        "zone_key": "gateway",
+        "network_ids": []
+      },
+      {
+        "_id": "z-vpn",
+        "name": "Vpn",
+        "zone_key": "vpn",
+        "network_ids": []
+      },
+      {
+        "_id": "z-hot",
+        "name": "Hotspot",
+        "zone_key": "hotspot",
+        "network_ids": []
+      },
+      {
+        "_id": "z-dmz",
+        "name": "DMZ",
+        "zone_key": "dmz",
+        "network_ids": []
+      },
+      {
+        "_id": "z-iot",
+        "name": "IoT Zone",
+        "zone_key": null,
+        "network_ids": [
+          "net-2"
+        ]
+      }
+    ],
+    "firewall/zone-matrix": [
+      {
+        "_id": "z-int",
+        "name": "Internal",
+        "zone_key": "internal",
+        "data": [
+          {
+            "_id": "z-int",
+            "action": "allow_all",
+            "policy_count": 1
+          },
+          {
+            "_id": "z-ext",
+            "action": "allow_all",
+            "policy_count": 1
+          },
+          {
+            "_id": "z-gw",
+            "action": null,
+            "policy_count": 2
+          },
+          {
+            "_id": "z-vpn",
+            "action": "allow_all",
+            "policy_count": 0
+          },
+          {
+            "_id": "z-hot",
+            "action": "allow_all",
+            "policy_count": 0
+          },
+          {
+            "_id": "z-dmz",
+            "action": "allow_all",
+            "policy_count": 0
+          },
+          {
+            "_id": "z-iot",
+            "action": null,
+            "policy_count": 1
+          }
+        ]
+      },
+      {
+        "_id": "z-ext",
+        "name": "External",
+        "zone_key": "external",
+        "data": [
+          {
+            "_id": "z-int",
+            "action": null,
+            "policy_count": 3
+          },
+          {
+            "_id": "z-ext",
+            "action": "allow_all",
+            "policy_count": 0
+          },
+          {
+            "_id": "z-gw",
+            "action": "block_all",
+            "policy_count": 0
+          },
+          {
+            "_id": "z-vpn",
+            "action": "block_all",
+            "policy_count": 0
+          },
+          {
+            "_id": "z-hot",
+            "action": "block_all",
+            "policy_count": 0
+          },
+          {
+            "_id": "z-dmz",
+            "action": "block_all",
+            "policy_count": 0
+          },
+          {
+            "_id": "z-iot",
+            "action": "block_all",
+            "policy_count": 0
+          }
+        ]
+      },
+      {
+        "_id": "z-gw",
+        "name": "Gateway",
+        "zone_key": "gateway",
+        "data": [
+          {
+            "_id": "z-int",
+            "action": "block_all",
+            "policy_count": 0
+          },
+          {
+            "_id": "z-ext",
+            "action": "block_all",
+            "policy_count": 0
+          },
+          {
+            "_id": "z-gw",
+            "action": "allow_all",
+            "policy_count": 0
+          },
+          {
+            "_id": "z-vpn",
+            "action": "block_all",
+            "policy_count": 0
+          },
+          {
+            "_id": "z-hot",
+            "action": "block_all",
+            "policy_count": 0
+          },
+          {
+            "_id": "z-dmz",
+            "action": "block_all",
+            "policy_count": 0
+          },
+          {
+            "_id": "z-iot",
+            "action": "block_all",
+            "policy_count": 0
+          }
+        ]
+      },
+      {
+        "_id": "z-vpn",
+        "name": "Vpn",
+        "zone_key": "vpn",
+        "data": [
+          {
+            "_id": "z-int",
+            "action": null,
+            "policy_count": 1
+          },
+          {
+            "_id": "z-ext",
+            "action": "block_all",
+            "policy_count": 0
+          },
+          {
+            "_id": "z-gw",
+            "action": "block_all",
+            "policy_count": 0
+          },
+          {
+            "_id": "z-vpn",
+            "action": "allow_all",
+            "policy_count": 0
+          },
+          {
+            "_id": "z-hot",
+            "action": "block_all",
+            "policy_count": 0
+          },
+          {
+            "_id": "z-dmz",
+            "action": "block_all",
+            "policy_count": 0
+          },
+          {
+            "_id": "z-iot",
+            "action": "block_all",
+            "policy_count": 0
+          }
+        ]
+      },
+      {
+        "_id": "z-hot",
+        "name": "Hotspot",
+        "zone_key": "hotspot",
+        "data": [
+          {
+            "_id": "z-int",
+            "action": "block_all",
+            "policy_count": 0
+          },
+          {
+            "_id": "z-ext",
+            "action": "block_all",
+            "policy_count": 0
+          },
+          {
+            "_id": "z-gw",
+            "action": "block_all",
+            "policy_count": 0
+          },
+          {
+            "_id": "z-vpn",
+            "action": "block_all",
+            "policy_count": 0
+          },
+          {
+            "_id": "z-hot",
+            "action": "allow_all",
+            "policy_count": 0
+          },
+          {
+            "_id": "z-dmz",
+            "action": "block_all",
+            "policy_count": 0
+          },
+          {
+            "_id": "z-iot",
+            "action": "block_all",
+            "policy_count": 0
+          }
+        ]
+      },
+      {
+        "_id": "z-dmz",
+        "name": "DMZ",
+        "zone_key": "dmz",
+        "data": [
+          {
+            "_id": "z-int",
+            "action": "block_all",
+            "policy_count": 0
+          },
+          {
+            "_id": "z-ext",
+            "action": "block_all",
+            "policy_count": 0
+          },
+          {
+            "_id": "z-gw",
+            "action": "block_all",
+            "policy_count": 0
+          },
+          {
+            "_id": "z-vpn",
+            "action": "block_all",
+            "policy_count": 0
+          },
+          {
+            "_id": "z-hot",
+            "action": "block_all",
+            "policy_count": 0
+          },
+          {
+            "_id": "z-dmz",
+            "action": "allow_all",
+            "policy_count": 0
+          },
+          {
+            "_id": "z-iot",
+            "action": "block_all",
+            "policy_count": 0
+          }
+        ]
+      },
+      {
+        "_id": "z-iot",
+        "name": "IoT Zone",
+        "zone_key": null,
+        "data": [
+          {
+            "_id": "z-int",
+            "action": null,
+            "policy_count": 3
+          },
+          {
+            "_id": "z-ext",
+            "action": "block_all",
+            "policy_count": 0
+          },
+          {
+            "_id": "z-gw",
+            "action": "block_all",
+            "policy_count": 0
+          },
+          {
+            "_id": "z-vpn",
+            "action": "block_all",
+            "policy_count": 0
+          },
+          {
+            "_id": "z-hot",
+            "action": "block_all",
+            "policy_count": 0
+          },
+          {
+            "_id": "z-dmz",
+            "action": "block_all",
+            "policy_count": 0
+          },
+          {
+            "_id": "z-iot",
+            "action": "allow_all",
+            "policy_count": 0
+          }
+        ]
+      }
+    ]
   },
   "system_log": [
     {

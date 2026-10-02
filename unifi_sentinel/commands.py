@@ -31,6 +31,9 @@ from .diagnose import (
 )
 from .events import DEFAULT_LIMIT, DEFAULT_SINCE, SEVERITIES, fetch_events, make_filter, parse_duration, render_events
 from .export import run_export
+from .firewall import build_firewall
+from .firewall import render_text as render_firewall
+from .firewall import to_json as firewall_json
 from .history import (
     DEFAULT_DIR,
     capture,
@@ -476,6 +479,29 @@ def _run_wan(ctx: Context) -> int:
     return 0
 
 
+# -- firewall ---------------------------------------------------------------------------------------
+
+def _add_firewall(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--all", action="store_true",
+                        help="Also list the built-in policies (by default only the ones you defined)")
+    parser.add_argument("--zones", action="store_true",
+                        help="Also show each zone's networks and the zone matrix")
+    parser.add_argument("--search", default="", metavar="TEXT",
+                        help="Only policies and port forwards with this text in any column")
+    parser.add_argument("--no-emoji", action="store_true",
+                        help="Use text severity labels (automatic when output is not a UTF-8 terminal)")
+    parser.add_argument("--json", action="store_true", help="Output JSON instead of text")
+
+
+def _run_firewall(ctx: Context) -> int:
+    args = ctx.args
+    snap = collect_snapshot(ctx.client, ctx.config.site, Needs(firewall=True, reservations=True))
+    report = build_firewall(snap, args.all, args.search)
+    emoji = not args.no_emoji and stream_supports_emoji(sys.stdout)
+    say(firewall_json(report) if args.json else render_firewall(report, args.zones, emoji))
+    return 0
+
+
 # -- diagnose ---------------------------------------------------------------------------------------
 
 def _add_diagnose(parser: argparse.ArgumentParser) -> None:
@@ -625,6 +651,8 @@ COMMANDS: List[Command] = [
             _add_wifi, _run_wifi),
     Command("wan", "Internet health: current state, 24-hour monitoring and speedtest history", _add_wan, _run_wan,
             wants_settings=_always),
+    Command("firewall", "Firewall policies, port forwards and the zone matrix, with what looks wrong",
+            _add_firewall, _run_firewall),
     Command("diagnose", "Run read-only health checks (offline devices, port errors, ...)", _add_diagnose,
             _run_diagnose, validate=_check_diagnose, wants_settings=_always, prepare=_prepare_diagnose),
     Command("info", "Show controller version and available sites", _add_info, _run_info),

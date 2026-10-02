@@ -32,6 +32,8 @@ def reads(fake_client):
             kinds.add("neighbors")
         elif path.endswith("/network-members-groups"):
             kinds.add("groups")
+        elif path.endswith(("/firewall-policies", "/firewall/zone", "/firewall/zone-matrix", "/rest/portforward")):
+            kinds.add("firewall")
         elif path.endswith("/stat/device"):
             kinds.add("legacy-devices")
         elif path.endswith("/stat/sta"):
@@ -52,9 +54,11 @@ BASE = {"devices", "clients", "legacy-devices", "legacy-clients"}
     (Needs(health=True), {"health"}),
     (Needs(speedtests=True), {"speedtests"}),
     (Needs(neighbors=True), {"neighbors"}),
+    (Needs(firewall=True), {"firewall"}),
     (Needs(events=EventQuery()), {"events"}),
-    (Needs(reservations=True, groups=True, health=True, speedtests=True, neighbors=True, events=EventQuery()),
-     {"alluser", "networkconf", "groups", "health", "speedtests", "neighbors", "events"}),
+    (Needs(reservations=True, groups=True, health=True, speedtests=True, neighbors=True, firewall=True,
+           events=EventQuery()),
+     {"alluser", "networkconf", "groups", "health", "speedtests", "neighbors", "firewall", "events"}),
 ])
 def test_a_snapshot_reads_the_base_data_plus_exactly_what_was_asked_for(fake_client, needs, extra):
     collect_snapshot(fake_client, "default", needs)
@@ -134,6 +138,7 @@ COMMANDS = {
     "topology": (["topology"], BASE),
     "wifi": (["wifi"], BASE | {"neighbors"}),
     "wan": (["wan"], BASE | {"health", "speedtests"}),
+    "firewall": (["firewall"], BASE | {"alluser", "networkconf", "firewall"}),
     "events": (["events"], {"events"}),
     "client without events": (["client", "desktop", "--no-events"], BASE | {"alluser", "networkconf", "groups"}),
     "client": (["client", "desktop"], BASE | {"alluser", "networkconf", "groups", "events"}),

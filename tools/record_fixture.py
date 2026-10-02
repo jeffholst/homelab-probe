@@ -84,7 +84,7 @@ def build_fixture(exchanges: List[Tuple[str, str, Any]], now_ms: float) -> Dict[
             elif endpoint == "legacy/system-log":
                 fx["system_log"].extend(kept)
             elif endpoint.startswith("legacy/v2/"):
-                name = endpoint.rsplit("/", 1)[1]
+                name = endpoint[len("legacy/v2/"):]
                 fx["legacy_v2"][name] = {"data": kept} if name == "speedtest" else kept
             else:
                 fx["legacy_rest" if "/rest/" in path else "legacy"][endpoint.rsplit("/", 1)[1]] = kept
@@ -132,9 +132,9 @@ def record(client: UniFiClient, site: str, event_days: int) -> Tuple[Dict[str, A
     client.workers = 1
     now_ms = time.time() * 1000
     client.info()
-    collect_snapshot(client, site, Needs(offline=True, reservations=True, groups=True, health=True, speedtests=True,
-                                         neighbors=True, events=EventQuery(since_seconds=event_days * 86400)),
-                     now_ms=int(now_ms))
+    everything = Needs(offline=True, reservations=True, groups=True, health=True, speedtests=True, neighbors=True,
+                       firewall=True, events=EventQuery(since_seconds=event_days * 86400))
+    collect_snapshot(client, site, everything, now_ms=int(now_ms))
     records = recording.records()
     found = {name: problems(name, records.get(name, [])) for name in CONTRACT}
     fx = build_fixture(recording.exchanges, now_ms)
