@@ -169,8 +169,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     except LeakError as e:
         print(f"ERROR: nothing written; {e}", file=sys.stderr)
         return 4
-    except UniFiAPIError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
+    except UniFiAPIError:
+        print("ERROR: nothing written; controller could not be read", file=sys.stderr)
         return 3
     write_private(args.output, fixture)
     counts = {key: len(value) for key, value in fixture.items() if isinstance(value, (list, dict))}
