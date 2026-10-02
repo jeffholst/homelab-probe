@@ -28,8 +28,6 @@ UniFi Sentinel is a fork of [ericfitz/unifi-clients-export](https://github.com/e
 | `diagnose` | Read-only health checks with 🛑 critical, ⚠️ warning and ℹ️ info findings (`--json` for scripts) | [details](docs/diagnose.md#diagnose) |
 | `info` | Show the controller application info and available sites       |  |
 
-The tool is still evolving; see open issues for planned reports, controller-version coverage, packaging, and release work.
-
 ## Features
 
 - **Inventory and exports**: clients, UniFi devices and switch ports as tables, JSON or CSV, with DHCP reservations, client groups, randomized-MAC detection, and snapshots that show what changed
@@ -112,8 +110,6 @@ uv run unifi-sentinel.py info
 uv run unifi-sentinel.py export -o ./out --include-offline    # CSV files (long form: --output-dir); also previously seen clients
 uv run unifi-sentinel.py query clients -s printer --json      # filter (long form: --search), as JSON; --csv for a spreadsheet
 uv run unifi-sentinel.py query clients --include-offline      # also previously seen clients
-uv run unifi-sentinel.py query reservations --offline         # reserved clients that have been offline for a day or more
-uv run unifi-sentinel.py query ports --down --switch rack     # down ports on matching switches
 uv run unifi-sentinel.py snapshot                             # save the inventory to ./snapshots/
 uv run unifi-sentinel.py diff                                 # what changed since the newest snapshot?
 uv run unifi-sentinel.py topology --clients                   # how the gateway, switches and APs are wired
