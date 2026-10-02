@@ -59,6 +59,7 @@ COMMAND_DOC_SECTIONS = {
     "client": ("Client view", "Randomized MAC addresses"),
     "new-clients": ("New clients", "Randomized MAC addresses"),
     "diagnose": ("Diagnose", "Notifications"),
+    "completion": ("Shell completion",),
     "info": (),
 }
 

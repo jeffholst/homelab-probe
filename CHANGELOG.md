@@ -44,7 +44,7 @@ and `wep` Wi-Fi security values) the README says so.
   `events` (event history with filters and a summary), `firewall` (policies, port forwards and the zone matrix of
   the zone-based firewall, with findings), `audit` (configuration findings: open, WEP and WPA2-only Wi-Fi, guest
   networks without client isolation, default device names, firmware updates, unnamed clients), `snapshot` and `diff`
-  (save the inventory and see exactly what changed), `diagnose` and `info`.
+  (save the inventory and see exactly what changed), `completion` (shell completion scripts for bash, zsh and fish, generated from the parser), `diagnose` and `info`.
 - **`diagnose` checks:** offline devices (critical for a gateway or a device others uplink through), CPU and memory,
   controller health subsystems, internet latency, drops, availability and speedtest drops, double NAT and
   carrier-grade NAT, clients without an IP or with a link-local one, duplicate IPs, DHCP reservations (mismatch,

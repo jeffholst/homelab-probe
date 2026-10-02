@@ -17,6 +17,8 @@ from typing import Any, List, Optional
 from .audit import AUDIT_AREAS, audit
 from .client import UniFiAPIError, UniFiClient
 from .client_view import build_client_detail, find_clients, render_candidates, render_detail, to_json
+from .completion import SHELLS
+from .completion import script as completion_script
 from .config import Config, ConfigError
 from .diagnose import (
     AREA_NAMES,
@@ -118,6 +120,13 @@ class Command:
     validate: Callable[[argparse.ArgumentParser, argparse.Namespace], None] = _no_check
     wants_settings: Callable[[argparse.Namespace], bool] = _never
     prepare: Callable[[argparse.Namespace, Config], None] = _no_prepare
+    # A command that needs neither the configuration nor the controller (``completion``) is run with just its
+    # arguments, before any ``.env`` is read; ``run`` is then never called.
+    run_local: Optional[Callable[[argparse.Namespace], int]] = None
+
+
+def _not_run(ctx: "Context") -> int:
+    raise AssertionError("this command runs without a controller (Command.run_local)")
 
 
 def say(text: Any = "", file: Any = None) -> None:
@@ -542,6 +551,19 @@ def _run_audit(ctx: Context) -> int:
     return exit_code(findings, args.fail_on)
 
 
+# -- completion -------------------------------------------------------------------------------------
+
+def _add_completion(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("shell", choices=SHELLS, help="The shell to print the completion script for")
+
+
+def _run_completion(args: argparse.Namespace) -> int:
+    from .cli import build_parser  # the parser is what the script is generated from
+
+    say(completion_script(args.shell, build_parser()).rstrip("\n"))
+    return 0
+
+
 # -- diagnose ---------------------------------------------------------------------------------------
 
 def _add_diagnose(parser: argparse.ArgumentParser) -> None:
@@ -732,6 +754,8 @@ COMMANDS: List[Command] = [
             _add_firewall, _run_firewall),
     Command("audit", "Configuration audit: settings that are probably not what you want", _add_audit, _run_audit,
             wants_settings=_always),
+    Command("completion", "Print a shell completion script (bash, zsh or fish)", _add_completion, _not_run,
+            run_local=_run_completion),
     Command("diagnose", "Run read-only health checks (offline devices, port errors, ...)", _add_diagnose,
             _run_diagnose, validate=_check_diagnose, wants_settings=_always, prepare=_prepare_diagnose),
     Command("info", "Show controller version and available sites", _add_info, _run_info),

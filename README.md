@@ -24,6 +24,7 @@ UniFi Sentinel is a fork of [ericfitz/unifi-clients-export](https://github.com/e
 | `client` | Troubleshoot one client by name, MAC or IP: where it attaches, link quality and related findings | [details](docs/network.md#client-view) |
 | `new-clients` | List clients that are in no client group, to spot new devices | [details](docs/inventory.md#new-clients) |
 | `audit` | Configuration audit: Wi-Fi networks that are open or WPA2-only, default device names, firmware updates, unnamed clients | [details](docs/diagnose.md#audit) |
+| `completion` | Print a shell completion script for bash, zsh or fish | [details](docs/configuration.md#shell-completion) |
 | `diagnose` | Read-only health checks with 🛑 critical, ⚠️ warning and ℹ️ info findings (`--json` for scripts) | [details](docs/diagnose.md#diagnose) |
 | `info` | Show the controller application info and available sites       |  |
 
@@ -123,6 +124,7 @@ uv run unifi-sentinel.py events --since 7d --severity high    # recent serious e
 uv run unifi-sentinel.py client desktop                       # one client: attachment, link, findings
 uv run unifi-sentinel.py new-clients                          # clients in no client group
 uv run unifi-sentinel.py audit                                # settings that are probably not what you want
+uv run unifi-sentinel.py completion zsh                       # a completion script for bash, zsh or fish
 uv run unifi-sentinel.py diagnose                             # health checks (--json for scripts, --notify for alerts)
 uv run unifi-sentinel.py diagnose --only ports,wifi           # just those checks, reading only what they need
 ```

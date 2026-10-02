@@ -87,6 +87,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = parser.parse_args(argv)
     command = COMMANDS_BY_NAME[args.command]
     command.validate(parser, args)
+    if command.run_local is not None:                       # needs no .env and no controller
+        return command.run_local(args)
     client: Optional[UniFiClient] = None
     try:
         config = load_config(args.env_file)
