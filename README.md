@@ -971,6 +971,8 @@ tools/                   development scripts, not part of the package
 
 New features are new subcommands (a section and a registry row in `commands.py`) backed by modules that take a `Snapshot` (fetching stays in `snapshot.py` and `client.py`). Dependencies are declared once, in `pyproject.toml` (lockfile: `uv.lock`; regenerate with `uv lock`). Run the tests with `uv run pytest`; they use a synthetic fixture in `tests/fixtures/` and never contact a controller (except the opt-in `-m live` tests described below).
 
+**Dependency updates.** [Dependabot](.github/dependabot.yml) checks once a week (Mondays) for newer versions of the GitHub Actions that CI uses and of the Python dependencies in `pyproject.toml`/`uv.lock`, and opens one pull request per group, not one per package. They go through the same CI as any change (tests on Python 3.10 to 3.13, `ruff`, `mypy`, `uv lock --check`) and are merged by hand. The actions are pinned to exact versions on purpose (`astral-sh/setup-uv` publishes no floating major tag), which is what lets Dependabot keep them current; a test checks the pins. For security advisories, switch on **Dependabot alerts** and **Dependabot security updates** in the repository's Settings, under Advanced Security (they are repository settings, not files).
+
 Checks (the same ones CI runs on every push and pull request, in `.github/workflows/ci.yml`):
 
 ```bash

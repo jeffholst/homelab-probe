@@ -1,0 +1,31 @@
+# Weekly dependency updates, one pull request per ecosystem (not one per package).
+#
+# Dependabot pull requests follow the same rules as any other: CI must pass (tests on Python 3.10 to 3.13, ruff,
+# mypy, `uv lock --check`) and nothing is merged until the owner asks. See "Git and GitHub" in CLAUDE.md.
+version: 2
+
+updates:
+  # The actions used by .github/workflows/ci.yml. They are pinned to exact tags (astral-sh/setup-uv publishes only
+  # exact versions, there is no floating v10), so without this they go stale silently.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    groups:
+      github-actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "ci"
+
+  # The Python dependencies in pyproject.toml, resolved into the committed uv.lock (runtime and the dev group).
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    groups:
+      python:
+        patterns: ["*"]
+    commit-message:
+      prefix: "deps"
