@@ -206,6 +206,7 @@ def policy_findings(snap: Snapshot, fw: FirewallData, rows: List[Dict[str, Any]]
         enabled = bool(p.get("enabled"))
         if (enabled and p.get("action") == "ALLOW" and source.get("zone_id") in external
                 and (source.get("matching_target") or "ANY") == "ANY"
+                and source.get("port_matching_type") != "SPECIFIC"
                 and (destination.get("matching_target") or "ANY") == "ANY"
                 and destination.get("port_matching_type") != "SPECIFIC" and (p.get("protocol") or "all") == "all"):
             to = _zone(zones, destination.get("zone_id"))
