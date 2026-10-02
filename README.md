@@ -13,7 +13,7 @@ UniFi Sentinel is a fork of [ericfitz/unifi-clients-export](https://github.com/e
 | Command  | Description                                                    |
 | -------- | -------------------------------------------------------------- |
 | `export` | Export connected clients, UniFi devices and switch ports to CSV |
-| `query`  | List and filter devices, clients, DHCP reservations and switch ports (table or `--json`) |
+| `query`  | List and filter devices, clients, DHCP reservations and switch ports (table, `--json` or `--csv`) |
 | `snapshot` | Save the current inventory to a local JSON file, to compare later |
 | `diff` | What changed: compare saved snapshots, or a snapshot against the live network |
 | `topology` | Draw the uplink tree from the gateway down: ports, link speeds, client counts and problems |
@@ -35,7 +35,7 @@ The tool is still evolving; see open issues for planned reports, controller-vers
 - **Switch port mapping**: per-switch CSVs with port status, speed, duplex, PoE, connected client or device, and traffic counters
 - **Network topology**: which switch and port each client or device is attached to
 - **DHCP reservations**: list every fixed IP reservation, including offline clients, with network and VLAN
-- **Querying**: list and filter devices, clients, DHCP reservations and switch ports from the command line (table or JSON)
+- **Querying**: list and filter devices, clients, DHCP reservations and switch ports from the command line (table, JSON or CSV for a spreadsheet)
 - **Snapshots and diff**: save the inventory to a file and see exactly what changed since: new or missing devices and clients, IP, firmware, state, location, reservation and group changes
 - **Topology**: the uplink tree from the gateway down, with the port each device plugs into, negotiated link speeds (and links below what both ends support), client counts, and offline or flagged devices
 - **Wireless report**: each AP's radios (channel, width, power, clients, utilization, retries) and a channel plan from the neighboring networks your APs hear, with overlap-aware counts and plain observations
@@ -157,6 +157,7 @@ uv run unifi-sentinel.py export --include-offline   # also list previously seen 
 uv run unifi-sentinel.py query devices               # UniFi devices with firmware and uptime
 uv run unifi-sentinel.py query clients -s printer --json   # filter (long form: --search), JSON output
 uv run unifi-sentinel.py query clients --include-offline   # also previously seen clients
+uv run unifi-sentinel.py query clients --csv > clients.csv  # CSV for a spreadsheet (same columns as --json)
 uv run unifi-sentinel.py query reservations          # DHCP fixed IP reservations
 uv run unifi-sentinel.py query reservations --offline   # reserved clients that have been offline for a day or more
 uv run unifi-sentinel.py query ports                 # every switch port
@@ -187,6 +188,8 @@ uv run unifi-sentinel.py diagnose --json             # the same, as JSON with a 
 uv run unifi-sentinel.py diagnose --only ports,wifi  # just those checks, and read only what they need
 uv run unifi-sentinel.py diagnose --skip events      # everything except the event-log checks (no POST)
 ```
+
+**`query --csv`** prints CSV on stdout instead of the table, with the columns and rows of `--json` (`Private MAC` for clients, `Offline For` with `--offline`, every column for `ports`) and no row-count footer; a result with no rows is just the header. It cannot be combined with `--json` (usage error, exit 64). Cells are quoted by Python's `csv` writer, so commas, quotes and line breaks are safe, and every text cell is cleaned first (control characters and invisible characters removed, line breaks turned into spaces) and then checked for a leading `=`, `+`, `-` or `@`: such a name gets a leading `'`, which a spreadsheet shows as plain text instead of running it as a formula. The `'` is part of the value you see in the file (the `export` files follow the same rule); numbers are left as numbers, so a negative error count stays `-5`. `--json` stays raw.
 
 `query` takes an optional kind (`all` by default, `devices`, `clients`, `reservations` or `ports`). Run these from the project root (uv uses `pyproject.toml`). After `pip install .` use `unifi-sentinel <command>` instead. Run `--help` on the tool or any command for options, and `--version` for the version.
 

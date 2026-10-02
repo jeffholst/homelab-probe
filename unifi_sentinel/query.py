@@ -1,12 +1,14 @@
 """Query the inventory: filter and print devices, clients, reservations and switch ports."""
 
+import csv
+import io
 import json
 from typing import Any, Dict, List, Optional
 
 from .export import INVENTORY_COLUMNS, build_inventory, build_offline_clients, build_switch_ports
 from .reservations import OFFLINE_RESERVATION_COLUMNS, RESERVATION_COLUMNS, build_reservations, offline_reservation_rows
 from .snapshot import Snapshot
-from .util import is_randomized_mac, normalize_mac, printable, record_for, search_rows
+from .util import csv_safe, is_randomized_mac, normalize_mac, printable, record_for, search_rows
 
 TABLE_COLUMNS = ["Name", "MAC Address", "IP Address", "Model", "Connection Type",
                  "Switch", "Port", "Status"]
@@ -15,6 +17,10 @@ CLIENT_EXTRA_COLUMNS = ["Private MAC"]   # "yes" for a randomized (locally admin
 
 PORT_TABLE_COLUMNS = ["Switch", "Port", "Status", "Speed", "Full Duplex", "PoE Power (W)",
                       "Connected Name", "Connected MAC", "RX Errors", "TX Errors"]
+# Every column of a port row (the table shows a subset); --json and --csv give all of them, in this order.
+PORT_COLUMNS = ["Switch", "Port", "Port Index", "Status", "Speed", "Full Duplex", "PoE Enabled", "PoE Power (W)",
+                "PoE Class", "Connected Type", "Connected Name", "Connected MAC", "Connected Model", "RX Bytes",
+                "TX Bytes", "RX Packets", "TX Packets", "RX Errors", "TX Errors"]
 
 
 def format_uptime(seconds: Any) -> str:
@@ -127,16 +133,40 @@ def format_table(rows: List[Dict[str, Any]], columns: List[str] = TABLE_COLUMNS)
     return "\n".join(out)
 
 
+def data_columns(kind: str = "all", offline: bool = False) -> List[str]:
+    """The columns of ``--json`` and ``--csv`` for ``kind`` (the table shows fewer for some kinds)."""
+    if kind == "ports":
+        return PORT_COLUMNS
+    if kind == "reservations":
+        return OFFLINE_RESERVATION_COLUMNS if offline else RESERVATION_COLUMNS
+    if kind == "devices":
+        return INVENTORY_COLUMNS + DEVICE_EXTRA_COLUMNS
+    if kind == "clients":
+        return INVENTORY_COLUMNS + CLIENT_EXTRA_COLUMNS
+    return INVENTORY_COLUMNS
+
+
+def csv_cell(value: Any) -> Any:
+    """A cell a spreadsheet cannot run as a formula. The text is cleaned first (control and invisible characters
+    removed, line breaks flattened), then ``csv_safe`` looks at what is left: the other way round, the
+    terminal-safety filter of ``say`` would strip an escape character from in front of a ``=`` after the check
+    and leave a live formula. Numbers stay numbers."""
+    return csv_safe(printable(value)) if isinstance(value, str) else value
+
+
+def render_csv(rows: List[Dict[str, Any]], kind: str = "all", offline: bool = False) -> str:
+    """The rows of ``--json`` as CSV: a header row, then one line per row, quoted by the stdlib writer."""
+    columns = data_columns(kind, offline)
+    out = io.StringIO()
+    writer = csv.writer(out, lineterminator="\n")
+    writer.writerow(columns)
+    writer.writerows([csv_cell(row.get(c, "")) for c in columns] for row in rows)
+    return out.getvalue().rstrip("\n")
+
+
 def render(rows: List[Dict[str, Any]], as_json: bool, kind: str = "all", offline: bool = False) -> str:
     if as_json:
-        if kind == "ports":  # every port column, not just the table subset
-            return json.dumps(rows, indent=2)
-        columns = (OFFLINE_RESERVATION_COLUMNS if offline else RESERVATION_COLUMNS) if kind == "reservations" \
-            else INVENTORY_COLUMNS
-        if kind == "devices":
-            columns = INVENTORY_COLUMNS + DEVICE_EXTRA_COLUMNS
-        elif kind == "clients":
-            columns = INVENTORY_COLUMNS + CLIENT_EXTRA_COLUMNS
+        columns = data_columns(kind, offline)
         return json.dumps([{c: r.get(c, "") for c in columns} for r in rows], indent=2)
     columns = {
         "reservations": OFFLINE_RESERVATION_COLUMNS if offline else RESERVATION_COLUMNS,
