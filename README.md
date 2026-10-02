@@ -294,11 +294,20 @@ reserved_offline_critical_days = 7  # a reserved client offline this many days: 
 
 [[ignore]]
 subject = "Garage AP"        # case-insensitive name; * and ? wildcards
-message = "offline"          # case-insensitive substring; both must match if both given
+message = "offline"          # case-insensitive substring; every field given must match
 reason = "spare AP, kept unplugged on purpose"   # required
+
+[[ignore]]
+code = "port.slow_link"      # a finding code, matched exactly (see the code table below)
+subject = "* port 2"         # optional with a code: only this port of any switch
+reason = "printer only supports 100 Mbps"
 ```
 
-Ignored findings are left out of the output, counted in the summary (`3 warnings (2 ignored)`), and excluded from exit codes, so a known-okay finding cannot fail a cron job. `diagnose --show-ignored` lists them with each rule's reason, so ignores do not hide problems forever. A rule needs a `reason` and a `subject` and/or `message`. A missing, unreadable or invalid file (unknown keys, bad values, rules without a reason) stops `diagnose` with exit code 3 before it contacts the controller. Other commands do not read this file. On Python 3.10 the `tomli` package (installed automatically) reads it; 3.11 and later use the standard library.
+Ignored findings are left out of the output, counted in the summary (`3 warnings (2 ignored)`), and excluded from exit codes, so a known-okay finding cannot fail a cron job. `diagnose --show-ignored` lists them with each rule's reason, so ignores do not hide problems forever. A rule needs a `reason` and at least one of `code`, `subject` and `message`; every field it gives must match.
+
+**Ignoring by code.** `code = "port.slow_link"` silences that check, with or without a `subject` and/or `message` to narrow it. A code survives a change of wording (a rule on the message text does not) and says what you mean (a rule on a device's name silences everything about it). Codes are matched **exactly**: no wildcards, no case folding, no spaces. A code that does not exist is a configuration error that names the closest valid code (a typo must not silently match nothing) and lists the valid ones, which are the `diagnose` codes in the table below and the `audit.*` codes of [Audit](#audit) (one file serves both commands). To find the code of a finding, run `diagnose --json` (every finding has `code`), or `diagnose --show-ignored`, which prints `(code: ...; ignored: reason)` for each suppressed finding. Rules apply the same way in `diagnose` (text, `--json`, `--show-ignored`, exit codes and `--notify`: an ignored finding is never sent), `client` and `topology`. Existing rules without a code behave exactly as before.
+
+A missing, unreadable or invalid file (unknown keys, bad values, rules without a reason, an unknown code) stops `diagnose` with exit code 3 before it contacts the controller. `client`, `topology`, `wan` and `audit` read the same file (`--config FILE`, or `./unifi-sentinel.toml`) for the thresholds and ignore rules they use; the other commands do not. On Python 3.10 the `tomli` package (installed automatically) reads it; 3.11 and later use the standard library.
 
 #### JSON output and finding codes
 

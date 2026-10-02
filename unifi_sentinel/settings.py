@@ -1,5 +1,6 @@
 """diagnose settings: thresholds and an ignore list, from an optional TOML file."""
 
+import difflib
 import fnmatch
 import math
 import sys
@@ -19,15 +20,19 @@ DEFAULT_FILENAME = "unifi-sentinel.toml"
 
 @dataclass(frozen=True)
 class IgnoreRule:
-    """Suppress findings. ``subject`` is a case-insensitive name (``*`` and ``?``
-    wildcards); ``message`` is a case-insensitive substring. Both must match when
-    both are given. ``reason`` is required so ignores stay explainable."""
+    """Suppress findings. ``code`` is a finding code (``port.slow_link``), matched exactly: it survives a change
+    of wording and silences the check everywhere; ``subject`` is a case-insensitive name (``*`` and ``?``
+    wildcards); ``message`` is a case-insensitive substring. Every field that is given must match. ``reason`` is
+    required so ignores stay explainable."""
 
     subject: str = ""
     message: str = ""
     reason: str = ""
+    code: str = ""
 
-    def matches(self, subject: str, message: str) -> bool:
+    def matches(self, subject: str, message: str, code: str = "") -> bool:
+        if self.code and self.code != code:
+            return False
         pattern = self.subject.lower().replace("[", "[[]")
         if self.subject and not fnmatch.fnmatchcase(subject.lower(), pattern):
             return False
@@ -61,6 +66,14 @@ class DiagnoseSettings:
     reserved_offline_critical_days: float = 7   # a reserved client offline this many days: critical
     notify_repeat_hours: float = 24             # a critical finding still unresolved is notified again (0: never)
     ignore: Tuple[IgnoreRule, ...] = ()
+
+
+def known_codes() -> Dict[str, str]:
+    """Every finding code an ignore rule may name: those of ``diagnose`` and of ``audit`` (one settings file serves
+    both). Imported on use because ``diagnose`` itself imports this module."""
+    from .audit import AUDIT_CODES
+    from .diagnose.model import CODES
+    return {**CODES, **AUDIT_CODES}
 
 
 def _number(name: str, value: Any, lo: float, hi: Optional[float] = None) -> float:
@@ -152,13 +165,20 @@ def _parse(data: Dict[str, Any]) -> DiagnoseSettings:
         raise ConfigError("ignore rules must be written as [[ignore]] tables")
     rules: List[IgnoreRule] = []
     for i, raw in enumerate(raw_rules, 1):
-        if not isinstance(raw, dict) or set(raw) - {"subject", "message", "reason"}:
-            raise ConfigError(f"[[ignore]] #{i}: only subject, message and reason are allowed")
+        if not isinstance(raw, dict) or set(raw) - {"code", "subject", "message", "reason"}:
+            raise ConfigError(f"[[ignore]] #{i}: only code, subject, message and reason are allowed")
         if any(not isinstance(value, str) for value in raw.values()):
-            raise ConfigError(f"[[ignore]] #{i}: subject, message and reason must be strings")
+            raise ConfigError(f"[[ignore]] #{i}: code, subject, message and reason must be strings")
         rule = IgnoreRule(**raw)
-        if not (rule.subject or rule.message):
-            raise ConfigError(f"[[ignore]] #{i}: give a subject and/or a message to match")
+        if not (rule.code or rule.subject or rule.message):
+            raise ConfigError(f"[[ignore]] #{i}: give a code, a subject and/or a message to match")
+        if rule.code and rule.code not in known_codes():
+            codes = sorted(known_codes())
+            close = difflib.get_close_matches(rule.code, codes, n=1)
+            raise ConfigError(f"[[ignore]] #{i}: unknown code {rule.code!r}"
+                              + (f" (did you mean {close[0]!r}?)" if close else "")
+                              + "; codes are matched exactly, without wildcards or case folding. Valid codes: "
+                              + ", ".join(codes))
         if not rule.reason.strip():
             raise ConfigError(f"[[ignore]] #{i}: a reason is required")
         rules.append(rule)
