@@ -255,19 +255,60 @@ def load_snapshot(path: Path) -> SnapshotRecord:
         raise ConfigError(f"{path} is not a snapshot file (invalid JSON: {e})") from e
     if not isinstance(record, dict) or "schema_version" not in record:
         raise ConfigError(f"{path} is not a snapshot file (no schema_version)")
-    if record["schema_version"] != SCHEMA_VERSION:
+    if (
+        isinstance(record["schema_version"], bool)
+        or not isinstance(record["schema_version"], int)
+        or record["schema_version"] != SCHEMA_VERSION
+    ):
         raise ConfigError(f"{path} uses snapshot format {record['schema_version']!r}; "
                           f"this version of unifi-sentinel reads format {SCHEMA_VERSION}")
+    record.setdefault("tool_version", "")
+    record.setdefault("captured_at", "")
     for key in ("site", "controller"):
         if not isinstance(record.get(key), dict):
             raise ConfigError(f"{path} is damaged: '{key}' is missing or not an object")
+    site, controller = record["site"], record["controller"]
+    site.setdefault("name", "")
+    site.setdefault("id", "")
+    controller.setdefault("application_version", "")
+    if not all(isinstance(site.get(key), str) for key in ("name", "id")):
+        raise ConfigError(f"{path} is damaged: 'site' contains invalid values")
+    if not isinstance(controller.get("application_version"), str):
+        raise ConfigError(f"{path} is damaged: 'controller' contains invalid values")
+
+    defaults: Dict[str, Dict[str, Any]] = {
+        "devices": {"mac": "", "name": "", "ip": "", "model": "", "type": "", "firmware": "",
+                    "state": "", "uplink": "", "uplink_port": ""},
+        "clients": {"mac": "", "name": "", "ip": "", "connection": "", "status": "", "network": "",
+                    "vlan": "", "uplink": "", "uplink_port": "", "groups": []},
+        "reservations": {"mac": "", "name": "", "reserved_ip": "", "network": ""},
+    }
+    string_fields = {
+        "devices": ("mac", "name", "ip", "model", "type", "firmware", "state", "uplink", "uplink_port"),
+        "clients": ("mac", "name", "ip", "connection", "status", "network", "uplink", "uplink_port"),
+        "reservations": ("mac", "name", "reserved_ip", "network"),
+    }
     for key in ("devices", "clients", "reservations"):
         if not isinstance(record.get(key), list):
             raise ConfigError(f"{path} is damaged: '{key}' is missing or not a list")
         if any(not isinstance(item, dict) or not isinstance(item.get("mac"), str) or not item["mac"]
                for item in record[key]):
             raise ConfigError(f"{path} is damaged: '{key}' contains an item without a MAC address")
-    return cast(SnapshotRecord, record)       # untrusted JSON, checked above (isinstance cannot check a TypedDict)
+        for item in record[key]:
+            for field, default in defaults[key].items():
+                item.setdefault(field, default.copy() if isinstance(default, list) else default)
+            if any(not isinstance(item[field], str) for field in string_fields[key]):
+                raise ConfigError(f"{path} is damaged: '{key}' contains invalid values")
+            if key == "clients" and (
+                (isinstance(item["vlan"], bool) or not isinstance(item["vlan"], (int, str)))
+                or not isinstance(item["groups"], list)
+                or any(not isinstance(group, str) for group in item["groups"])
+            ):
+                raise ConfigError(f"{path} is damaged: 'clients' contains invalid values")
+    if not isinstance(record["tool_version"], str) or not isinstance(record["captured_at"], str):
+        raise ConfigError(f"{path} is damaged: snapshot metadata contains invalid values")
+    # Defaults and field types are checked above (isinstance cannot check a TypedDict).
+    return cast(SnapshotRecord, record)
 
 
 def resolve(ref: str, directory: Path) -> Path:

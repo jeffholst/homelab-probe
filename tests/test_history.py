@@ -290,6 +290,50 @@ def test_load_rejects_bad_files_with_a_clear_message(tmp_path, content, message)
     assert str(path) in str(exc.value)
 
 
+def test_load_fills_missing_schema_one_fields(tmp_path):
+    path = tmp_path / "sparse.json"
+    path.write_text(json.dumps({
+        "schema_version": 1, "site": {}, "controller": {},
+        "devices": [{"mac": "aa"}], "clients": [{"mac": "bb"}], "reservations": [{"mac": "cc"}],
+    }))
+
+    record = load_snapshot(path)
+    assert record["tool_version"] == record["captured_at"] == ""
+    assert record["site"] == {"name": "", "id": ""}
+    assert record["controller"] == {"application_version": ""}
+    assert record["devices"] == [{
+        "mac": "aa", "name": "", "ip": "", "model": "", "type": "", "firmware": "",
+        "state": "", "uplink": "", "uplink_port": "",
+    }]
+    assert record["clients"] == [{
+        "mac": "bb", "name": "", "ip": "", "connection": "", "status": "", "network": "",
+        "vlan": "", "uplink": "", "uplink_port": "", "groups": [],
+    }]
+    assert record["reservations"] == [{"mac": "cc", "name": "", "reserved_ip": "", "network": ""}]
+
+
+@pytest.mark.parametrize(("section", "field", "value", "message"), [
+    ("site", "name", 1, "'site' contains invalid values"),
+    ("controller", "application_version", None, "'controller' contains invalid values"),
+    ("devices", "model", [], "'devices' contains invalid values"),
+    ("clients", "vlan", True, "'clients' contains invalid values"),
+    ("clients", "groups", [1], "'clients' contains invalid values"),
+    ("reservations", "reserved_ip", None, "'reservations' contains invalid values"),
+])
+def test_load_rejects_wrong_types_in_record_fields(tmp_path, section, field, value, message):
+    path = tmp_path / "bad.json"
+    record = {
+        "schema_version": 1, "site": {}, "controller": {},
+        "devices": [{"mac": "aa"}], "clients": [{"mac": "bb"}], "reservations": [{"mac": "cc"}],
+    }
+    item = record[section] if section in ("site", "controller") else record[section][0]
+    item[field] = value
+    path.write_text(json.dumps(record))
+
+    with pytest.raises(ConfigError, match=re.escape(message)):
+        load_snapshot(path)
+
+
 def test_load_missing_or_unreadable(tmp_path):
     with pytest.raises(ConfigError, match="cannot read snapshot"):
         load_snapshot(tmp_path / "missing.json")
