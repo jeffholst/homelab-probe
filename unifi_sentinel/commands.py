@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, List, Optional
 
+from .audit import AUDIT_AREAS, audit
 from .client import UniFiAPIError, UniFiClient
 from .client_view import build_client_detail, find_clients, render_candidates, render_detail, to_json
 from .config import Config, ConfigError
@@ -505,6 +506,36 @@ def _run_firewall(ctx: Context) -> int:
     return 0
 
 
+# -- audit ------------------------------------------------------------------------------------------
+
+def _add_audit(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--fail-on", choices=[INFO, WARNING], default=WARNING,
+                        help="Lowest severity that gives a non-zero exit code (default: warning)")
+    parser.add_argument("--config", type=Path, metavar="FILE",
+                        help="TOML file with an ignore list (default: ./unifi-sentinel.toml if present)")
+    parser.add_argument("--show-ignored", action="store_true",
+                        help="Also list the findings suppressed by the ignore list")
+    parser.add_argument("--no-emoji", action="store_true",
+                        help="Use text severity labels (automatic when output is not a UTF-8 terminal)")
+    parser.add_argument("--json", action="store_true", help="Print the findings as JSON (with a stable code each)")
+
+
+def _run_audit(ctx: Context) -> int:
+    args = ctx.args
+    settings = ctx.settings or DiagnoseSettings()
+    snap = collect_snapshot(ctx.client, ctx.config.site,
+                            Needs(offline=True, wlans=True, legacy_devices=False, device_extras=False))
+    findings, ignored = apply_ignores(audit(snap), settings.ignore)
+    if args.json:
+        say(findings_json(findings, ignored, args.show_ignored, AUDIT_AREAS))
+    else:
+        emoji = not args.no_emoji and stream_supports_emoji(sys.stdout)
+        say(format_findings(findings, emoji, len(ignored)))
+        if args.show_ignored and ignored:
+            say("\n" + format_ignored(ignored))
+    return exit_code(findings, args.fail_on)
+
+
 # -- diagnose ---------------------------------------------------------------------------------------
 
 def _add_diagnose(parser: argparse.ArgumentParser) -> None:
@@ -692,6 +723,8 @@ COMMANDS: List[Command] = [
             wants_settings=_always),
     Command("firewall", "Firewall policies, port forwards and the zone matrix, with what looks wrong",
             _add_firewall, _run_firewall),
+    Command("audit", "Configuration audit: settings that are probably not what you want", _add_audit, _run_audit,
+            wants_settings=_always),
     Command("diagnose", "Run read-only health checks (offline devices, port errors, ...)", _add_diagnose,
             _run_diagnose, validate=_check_diagnose, wants_settings=_always, prepare=_prepare_diagnose),
     Command("info", "Show controller version and available sites", _add_info, _run_info),

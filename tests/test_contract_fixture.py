@@ -17,7 +17,7 @@ COMMANDS = [["info"], ["export"], ["export", "--include-offline"], ["query", "de
             ["query", "ports"], ["new-clients"], ["topology", "--clients"], ["wifi", "--all"], ["wan"], ["events"],
             ["events", "--since", "14d"], ["events", "--device", "no-such-device"],
             ["events", "--summary"], ["client", "desktop"], ["client", "phone"], ["client", "old-printer"],
-            ["diagnose"], ["snapshot"], ["diff"], ["firewall", "--all", "--zones"]]
+            ["diagnose"], ["snapshot"], ["diff"], ["firewall", "--all", "--zones"], ["audit"]]
 
 
 def fixture_records(name):
@@ -37,6 +37,7 @@ def fixture_records(name):
         "legacy/v2/firewall/zone": fx["legacy_v2"]["firewall/zone"],
         "legacy/v2/firewall/zone-matrix": fx["legacy_v2"]["firewall/zone-matrix"],
         "legacy/rest/portforward": fx["legacy_rest"]["portforward"],
+        "legacy/rest/wlanconf": fx["legacy_rest"]["wlanconf"],
     }
     return table[name]
 

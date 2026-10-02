@@ -133,7 +133,7 @@ def record(client: UniFiClient, site: str, event_days: int) -> Tuple[Dict[str, A
     now_ms = time.time() * 1000
     client.info()
     everything = Needs(offline=True, reservations=True, groups=True, health=True, speedtests=True, neighbors=True,
-                       firewall=True, events=EventQuery(since_seconds=event_days * 86400))
+                       firewall=True, wlans=True, events=EventQuery(since_seconds=event_days * 86400))
     collect_snapshot(client, site, everything, now_ms=int(now_ms))
     records = recording.records()
     found = {name: problems(name, records.get(name, [])) for name in CONTRACT}
