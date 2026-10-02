@@ -1,0 +1,23 @@
+# Features
+
+- **Client and device inventory**: connected clients (wired and wireless) and all UniFi devices (switches, access points, gateways) in one CSV
+- **Switch port mapping**: per-switch CSVs with port status, speed, duplex, PoE, connected client or device, and traffic counters
+- **Network topology**: which switch and port each client or device is attached to
+- **DHCP reservations**: list every fixed IP reservation, including offline clients, with network and VLAN
+- **Querying**: list and filter devices, clients, DHCP reservations and switch ports from the command line (table, JSON or CSV for a spreadsheet)
+- **Snapshots and diff**: save the inventory to a file and see exactly what changed since: new or missing devices and clients, IP, firmware, state, location, reservation and group changes
+- **Topology**: the uplink tree from the gateway down, with the port each device plugs into, negotiated link speeds (and links below what both ends support), client counts, and offline or flagged devices
+- **Wireless report**: each AP's radios (channel, width, power, clients, utilization, retries) and a channel plan from the neighboring networks your APs hear, with overlap-aware counts and plain observations
+- **Internet health**: `wan` shows the connection's state, the controller's own 24-hour availability and latency monitoring per target, and the speedtest history with the runs that fell well below normal, to tell an internet problem from a LAN problem
+- **Firewall view**: `firewall` lists the policies you defined (and with `--all` the built-in ones), the port forwards and the zone matrix of the zone-based firewall, and points out forwards to addresses nothing is using, duplicate external ports, an enabled rule that allows everything in from the External zone, and rules that match networks which no longer exist
+- **Event history**: what happened and when (disconnects, roams, IP conflicts, device outages, admin changes) from the controller's log, filterable by time, severity, category, client and device, with a summary of the noisiest clients
+- **Single-client troubleshooting**: `client <name|mac|ip>` shows where a client attaches (the full uplink chain to the gateway with port numbers and link speeds), its link quality, addressing and the `diagnose` findings that concern it
+- **Verbose logging**: `--verbose` shows every request (path, status, time, retries) and what was read on stderr, never the API key, to diagnose slow runs and undocumented endpoints
+- **Randomized MAC detection**: clients that use a private (locally administered) Wi-Fi MAC address are flagged in `query clients`, `new-clients` and `client`, and `diagnose` notes reservations tied to one, because they stop applying when the device changes its address
+- **New client detection**: list every known client that is in no client group, newest first, to spot new devices
+- **Notifications**: `diagnose --notify` tells you through ntfy, a webhook or email when a problem is new, has got worse, or is fixed (critical ones are repeated daily), once instead of every run, opt-in, with a redaction option
+- **Configuration audit**: `audit` flags settings that are probably not what you want, as opposed to what is broken now: open, WEP and WPA2-only Wi-Fi networks, guest networks that let their clients reach each other, devices that still have their default name, devices with a firmware update waiting, and clients with no name; same findings format, ignore list, `--json` and exit codes as `diagnose`
+- **Health checks**: read-only diagnostics with severity levels, exit codes for scripts and cron, `--json` output with a stable code per check, and a TOML file for thresholds and an ignore list
+- **Official API first**: uses the UniFi Network Integration API (`/proxy/network/integration/v1`). Legacy endpoints are used only for data the Integration API does not expose (per-port counters, client-to-port mapping, DHCP reservations, network config and client groups) and degrade gracefully with a warning if unavailable
+- **Safe output**: names come from devices on your network, so text output has control characters, line breaks, text-direction overrides and invisible characters removed, and exported CSV cells that a spreadsheet would run as a formula are neutralized
+- **Environment-based configuration**: credentials live in a `.env` file

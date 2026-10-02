@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 
 import pytest
+from docs_support import all_docs_text
 
 from unifi_sentinel import cli
 from unifi_sentinel import diagnose as diagnose_module
@@ -257,7 +258,7 @@ def test_json_goes_to_stdout_only(fake_client, monkeypatch, capsys, argv):
 
 
 def test_the_readme_documents_every_code_and_the_flag():
-    readme = (Path(__file__).resolve().parent.parent / "README.md").read_text(encoding="utf-8")
+    readme = all_docs_text()
     missing = [code for code in CODES if f"`{code}`" not in readme]
     assert not missing, f"codes missing from the README table: {missing}"
     assert "diagnose --json" in readme

@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 
 import pytest
+from docs_support import all_docs_text
 
 from unifi_sentinel import cli
 from unifi_sentinel.audit import AUDIT_AREAS, AUDIT_CODES, MAX_LISTED, audit
@@ -197,7 +198,7 @@ def test_findings_are_sorted_warnings_first_then_by_subject(fake_client):
 def test_every_code_is_listed_documented_and_used():
     source = (ROOT / "unifi_sentinel" / "audit.py").read_text()
     assert set(re.findall(r'code="(audit\.[a-z_0-9]+)"', source)) == set(AUDIT_CODES)
-    readme = (ROOT / "README.md").read_text()
+    readme = all_docs_text()
     assert all(f"`{code}`" in readme for code in AUDIT_CODES)
 
 

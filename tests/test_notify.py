@@ -450,7 +450,9 @@ def test_notify_without_a_destination_is_a_config_error_before_any_request(fake_
                                                                            tmp_path):
     make_env(monkeypatch, ntfy="")
     assert run(fake_client, monkeypatch, diagnose(state=tmp_path / "s.json")) == cli.EXIT_ERROR
-    assert "--notify needs a destination" in capsys.readouterr().err
+    error = capsys.readouterr().err
+    assert "--notify needs a destination" in error
+    assert "https://github.com/jeffholst/unifi-sentinel/blob/main/docs/notifications.md" in error
     assert fake_client.session.calls == [] and post.calls == [] and not (tmp_path / "s.json").exists()
 
 

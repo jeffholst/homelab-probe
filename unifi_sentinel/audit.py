@@ -8,7 +8,7 @@ ignore list, ``--json`` and the exit codes work the same way.
 Checked against one controller on Network 10.6.106 (``tests/contract.py``): three Wi-Fi networks, all WPA2/WPA3,
 so the Wi-Fi findings below are written from the field names and values the controller uses (``security`` is
 ``wpapsk`` there; ``open`` and ``wep`` are the legacy API's other values and were not seen live), and no device
-there had an update pending or a default name. What was dropped, and why, is in the README.
+there had an update pending or a default name. What was dropped, and why, is in docs/diagnose.md.
 """
 
 import re

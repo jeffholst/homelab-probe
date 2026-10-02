@@ -1,0 +1,5 @@
+Port,Port Index,Status,Speed,Full Duplex,PoE Enabled,PoE Power (W),PoE Class,Connected Type,Connected Name,Connected MAC,Connected Model,RX Bytes,TX Bytes,RX Packets,TX Packets,RX Errors,TX Errors
+Uplink,1,Up,1000 Mbps,Yes,No,,,Device - Dream Machine,Gateway,AA:00:00:00:00:01,UCG Max,100,200,100000,100000,0,0
+Port 2,2,Up,100 Mbps,No,No,,,Device - Access Point,Office AP,AA:00:00:00:00:03,U7 Pro,200,400,10000,10000,4,0
+Port 3,3,Up,1000 Mbps,Yes,No,,,Client,desktop,BB:00:00:00:00:01,,300,600,2500000,2500000,0,0
+Port 4,4,Down,,Yes,No,,,,,,,400,800,,,0,0
