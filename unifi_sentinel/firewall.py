@@ -182,6 +182,8 @@ def forward_findings(snap: Snapshot, forwards: List[Dict[str, Any]]) -> List[Fin
                                     "address changes", code="firewall.forward_no_reservation"))
     seen: Dict[tuple, Dict[str, Any]] = {}
     for f in enabled:
+        if not f["External port"]:
+            continue
         for protocol in ("tcp", "udp") if f["_proto"] == "tcp_udp" else (f["_proto"],):
             key = (protocol, f["External port"], f["_interface"])
             first = seen.setdefault(key, f)
