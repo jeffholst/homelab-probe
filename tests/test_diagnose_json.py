@@ -101,7 +101,8 @@ def test_finding_to_dict_and_default_code():
 
 def test_json_has_the_documented_shape(fake_client, monkeypatch, capsys):
     code, doc, err = run_json(fake_client, monkeypatch, capsys)
-    assert set(doc) == {"version", "summary", "findings"} and doc["version"] == 1
+    assert set(doc) == {"version", "areas", "summary", "findings"} and doc["version"] == 1
+    assert doc["areas"] == ["devices", "health", "wan", "clients", "reservations", "ports", "wifi", "events"]
     assert set(doc["summary"]) == {"critical", "warning", "info", "ignored"}
     assert all(set(f) == FINDING_KEYS for f in doc["findings"])
     assert all(f["code"] in CODES for f in doc["findings"])             # the real checks never emit a blank code
@@ -129,7 +130,9 @@ def test_the_codes_cover_the_checks_the_fixture_triggers(fake_client, monkeypatc
 
 def test_no_findings_is_a_valid_empty_document():
     doc = json.loads(findings_json([], []))
-    assert doc == {"version": 1, "summary": {"critical": 0, "warning": 0, "info": 0, "ignored": 0}, "findings": []}
+    assert doc == {"version": 1, "areas": ["devices", "health", "wan", "clients", "reservations", "ports", "wifi",
+                                           "events"],
+                   "summary": {"critical": 0, "warning": 0, "info": 0, "ignored": 0}, "findings": []}
 
 
 def test_json_ignores_emoji_options(fake_client, monkeypatch, capsys):

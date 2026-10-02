@@ -1,10 +1,12 @@
 """Ignoring findings, exit codes and rendering (text and JSON)."""
 
 import json
-from typing import Any, Dict, List, Tuple
+from collections.abc import Sequence
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..settings import IgnoreRule
 from ..util import printable
+from .areas import AREA_NAMES
 from .model import (
     CRITICAL,
     EMOJI,
@@ -80,13 +82,15 @@ JSON_VERSION = 1
 
 
 def findings_json(findings: List[Finding], ignored: List[Tuple[Finding, IgnoreRule]],
-                  show_ignored: bool = False) -> str:
+                  show_ignored: bool = False, areas: Optional[Sequence[str]] = None) -> str:
     """``diagnose --json``: the findings with their stable codes, a severity summary and the
     number the ignore list suppressed. The ``ignored`` list (each with its rule's reason) is
     only included with ``show_ignored``, as in the text output. Names are raw here, which is
-    safe: JSON escapes control characters itself."""
+    safe: JSON escapes control characters itself. ``areas`` are the areas of checks that ran (all of them by
+    default), so a consumer can tell "nothing found" from "not looked at"."""
     document: Dict[str, Any] = {
         "version": JSON_VERSION,
+        "areas": list(AREA_NAMES if areas is None else areas),
         "summary": {**{sev: sum(f.severity == sev for f in findings) for sev in SEVERITY_ORDER},
                     "ignored": len(ignored)},
         "findings": [f.to_dict() for f in findings],

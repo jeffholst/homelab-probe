@@ -180,6 +180,8 @@ uv run unifi-sentinel.py client aa:bb:cc:dd:ee:ff --json   # by MAC (any format)
 uv run unifi-sentinel.py new-clients                 # clients in no client group
 uv run unifi-sentinel.py diagnose                    # health checks
 uv run unifi-sentinel.py diagnose --json             # the same, as JSON with a stable code per finding
+uv run unifi-sentinel.py diagnose --only ports,wifi  # just those checks, and read only what they need
+uv run unifi-sentinel.py diagnose --skip events      # everything except the event-log checks (no POST)
 ```
 
 `query` takes an optional kind (`all` by default, `devices`, `clients`, `reservations` or `ports`). Run these from the project root (uv uses `pyproject.toml`). After `pip install .` use `unifi-sentinel <command>` instead. Run `--help` on the tool or any command for options, and `--version` for the version.
@@ -195,6 +197,21 @@ uv run unifi-sentinel.py diagnose --json             # the same, as JSON with a 
 | ℹ️ info | a client that roamed `event_flap_count` or more times; a device that was unreachable earlier but is online now; high-latency events from the ISP monitor; the controller's LAN/WLAN status when it is only caused by disconnected devices (they are reported individually); devices waiting to be adopted; a failed speedtest; ports negotiated at or below `slow_link_mbps` (default 100 Mbps); legacy data unavailable (port checks skipped); a reservation whose client has no last-seen time; a reservation tied to a randomized (private) MAC address, and a count of the connected clients that use one; a network whose DHCP range is missing or invalid, so its reservations cannot be checked against it |
 
 The reservation checks read the legacy `stat/alluser` and `rest/networkconf` endpoints (the same data as `query reservations`); offline clients are checked for duplicate and out-of-subnet reservations (a reservation whose network cannot be resolved is skipped for the subnet check) and for **being offline for too long**: a reserved client that is not connected and was last seen `reserved_offline_warn_days` (default 1) days ago or more is a warning, and `reserved_offline_critical_days` (default 7) or more is critical, so a server or appliance that went quiet does not stay invisible. A reservation with no last-seen time is reported once as info. UniFi devices are left to the device checks. A client that is meant to be off (a laptop, a seasonal device) belongs in the ignore list: `subject = "travel-laptop"`, `message = "is offline"`. `query reservations --offline` lists exactly the reservations this check reports, so you can inspect them before relying on the alerts.
+
+**Choosing checks: `--only` and `--skip`.** The checks are grouped into **areas**, named after their finding codes. `--only AREA[,AREA...]` runs just those areas and `--skip AREA[,AREA...]` runs all but those (both can be repeated and take comma-separated names, in any case; giving both is a usage error, exit 64, as is a name that is not an area, which lists the valid ones). Only the data the chosen checks need is read.
+
+| Area | Codes | Reads beyond devices and clients |
+| ---- | ----- | -------------------------------- |
+| `devices` | `device.*`, `controller.*` | health (for devices waiting to be adopted) |
+| `health` | `health.*`, `internet.*` | health |
+| `wan` | `wan.*` | health, speedtests |
+| `clients` | `client.*`, `ip.*` | nothing |
+| `reservations` | `reservation.*` | client history and network configuration |
+| `ports` | `port.*`, `link.*` | nothing |
+| `wifi` | `wifi.*` | nothing |
+| `events` | `event.*` | the event log (the one POST) and the reservations, to name who holds a conflicting address |
+
+A few checks report in two areas (the IP-conflict and duplicate-address checks name reservations, the randomized-MAC checks cover both `reservations` and `clients`), so a finding appears with the area its code belongs to and only when that area is selected. `--skip events` sends no event-log request, and `--no-events` is the same as `--skip events`. Exit codes, `--fail-on`, the ignore list and `--show-ignored` apply to the findings that were produced. The text output ends with a `Checked: ... (not checked: ...)` line when you chose areas, so "No issues found." is not mistaken for a clean bill of health; `--json` always has `areas`, the list of the areas that ran (all eight for a full run). With `--notify`, a finding of an area that did not run is neither new nor recovered and its remembered state is left as it was, so `diagnose --only ports --notify` never announces that problems in other areas were fixed; `--notify-baseline` after a partial run keeps what was recorded for the other areas.
 
 **Reservations inside the DHCP pool.** For each network where the controller itself serves DHCP (`dhcpd_enabled` true and no DHCP relay), a reserved IP between the pool's first and last address (both ends included) is a warning: `reserved IP 10.0.20.150 is inside the DHCP pool 10.0.20.100-10.0.20.200 of IoT`. The gateway honours the reservation, but an address in the dynamic range can also be offered to other clients, and a device with a static address in the range collides with them, so the safe layout keeps reservations outside the range. It is critical when another client or UniFi device is using that address right now (the message names it). Networks where DHCP is off or relayed (and WAN or VPN networks, which can carry a range without serving client DHCP) are skipped; if DHCP is on but the range is missing or invalid, that network is one info finding (only if it has reservations) instead of a guess. A reservation placed in the pool on purpose belongs in the ignore list (`subject = "media-box"`, `message = "DHCP pool"`). The range comes from the same `rest/networkconf` data as the subnet check; `query reservations` has no in-pool column, so the table stays readable.
 
@@ -228,7 +245,7 @@ For each switch port `diagnose` also checks the controller's port counters (the 
 - **Unreachable earlier, online now:** info. A device that is offline right now is left to the existing offline finding.
 - **ISP high latency** events: info with the count.
 
-`--since DURATION` changes the window (for example `12h` or `7d`), and `--no-events` skips these checks and the request they need. If the log cannot be read, `diagnose` warns and carries on without them. An event-based warning stays in the output until its event leaves the window, so it keeps `diagnose` at exit code 1 for that long; use a shorter `--since` or `--no-events` for a cron job that should only react to what is wrong right now.
+`--since DURATION` changes the window (for example `12h` or `7d`), and `--no-events` (or `--skip events`) skips these checks and the request they need. If the log cannot be read, `diagnose` warns and carries on without them. An event-based warning stays in the output until its event leaves the window, so it keeps `diagnose` at exit code 1 for that long; use a shorter `--since` or `--no-events` for a cron job that should only react to what is wrong right now.
 
 #### Wi-Fi quality
 
@@ -283,6 +300,7 @@ Ignored findings are left out of the output, counted in the summary (`3 warnings
 ```json
 {
   "version": 1,
+  "areas": ["devices", "health", "wan", "clients", "reservations", "ports", "wifi"],
   "summary": {
     "critical": 0,
     "warning": 10,
@@ -318,6 +336,7 @@ Ignored findings are left out of the output, counted in the summary (`3 warnings
 (The example is from the synthetic fixture with `--no-events`; the findings are shortened, so they do not add up to the summary.)
 
 - **`version`** is the document format (currently `1`); it changes only when a field is removed or renamed. New fields may be added without a new version.
+- **`areas`** lists the areas of checks that ran, in a fixed order (`devices`, `health`, `wan`, `clients`, `reservations`, `ports`, `wifi`, `events`; with `--no-events` or `--skip` the skipped ones are missing). An empty `findings` list only means "nothing found" for these areas.
 - **`code`** names the check that produced the finding, so a script does not have to match wording that can change. Codes are an interface: they are never renamed or reused. The same finding can have a different `severity` between runs (a device offline is critical for a gateway, a warning otherwise), so key on `code` and `subject`.
 - **`subject`** and **`message`** are the same text as the plain output, with names exactly as the controller reports them (JSON escapes control characters; treat them as untrusted data if you pass them on).
 - **`mac`** is the upper-case MAC address of the device the finding is about, or an empty string when it is not about one device.
@@ -397,6 +416,7 @@ uv run unifi-sentinel.py diagnose --notify --notify-baseline   # once: treat tod
 - **ntfy:** a public `ntfy.sh` topic is readable by **anyone who knows its name**, so use a long random topic or your own server, and treat the topic like a password (it is part of the URL, kept in `.env`, never printed). The message is the body; the priority is 5 for a critical problem, 4 for a warning, 3 otherwise, with a matching tag.
 - **Webhook:** a JSON `POST` with `source`, `version`, `redacted`, `title`, a ready-to-show `text`, and an `events` list (`event` of `new`, `worsened`, `reminder` or `recovered`, `severity`, `code`, `description`, and, unless redacted, `subject` and `message`). Slack and Discord style webhooks are not adapted yet.
 - **Safety of the destinations:** `https://` only (a lab can opt in with `ALLOW_INSECURE_HTTP=true`), TLS is always verified, redirects are not followed (a redirect could carry the token elsewhere), and a user name or password in the URL is refused. Errors say only which destination and a fixed reason (`HTTP 403`, `timed out`, `connection error`, `TLS certificate verification failed`), never the URL, the topic or the token.
+- **Partial runs:** with `--only` or `--skip`, findings of the areas that did not run are left alone: not recovered, not reminded, and their remembered state is kept (see [Diagnose](#diagnose)).
 - **Failures and exit codes:** the findings decide the exit code as usual. If a message could not be delivered to any destination, a warning goes to stderr, the state is **not** updated (the next run tries again), and the exit code is `3` **only if the findings would have given `0`**, so a cron job notices. One destination working is enough. `--notify-*` options other than `--notify` itself are usage errors without it.
 
 #### Exit codes
@@ -877,7 +897,7 @@ unifi_sentinel/
   wifi.py                wireless report: radios and a channel plan from neighbors
   topology.py            uplink tree: wiring, link speeds, client counts, flags
   history.py             saved inventories (snapshot) and the diff between them
-  diagnose/              read-only health checks, one module per topic
+  diagnose/              read-only health checks, one module per topic, and areas.py (what --only/--skip choose between)
     __init__.py            diagnose(): runs every check, worst findings first
     model.py               severities, exit codes, the catalogue of finding codes, Finding
     devices.py  health.py  offline devices, CPU and memory; controller subsystems and the internet connection

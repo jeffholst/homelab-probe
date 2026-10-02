@@ -20,7 +20,7 @@ import json
 import os
 import time
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -28,7 +28,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import requests
 
 from .config import Config
-from .diagnose import CODES, CRITICAL, INFO, SEVERITY_ORDER, WARNING, Finding
+from .diagnose import CODES, CRITICAL, INFO, SEVERITY_ORDER, WARNING, Finding, area_of
 from .util import printable
 
 STATE_VERSION = 1
@@ -79,8 +79,15 @@ def empty_state() -> Dict[str, Any]:
     return {"version": STATE_VERSION, "active": {}}
 
 
+def _ran(key: str, areas: Optional[Collection[str]]) -> bool:
+    """Did the checks that could report ``key`` run? Always true for a full run and for a state entry whose
+    code belongs to no area (nothing says it was skipped)."""
+    area = area_of(split_identity(key)[0])
+    return areas is None or area is None or area in areas
+
+
 def plan(findings: List[Finding], state: Dict[str, Any], now: float, min_severity: str = WARNING,
-         repeat_hours: float = 24) -> Tuple[List[Event], Dict[str, Any]]:
+         repeat_hours: float = 24, areas: Optional[Collection[str]] = None) -> Tuple[List[Event], Dict[str, Any]]:
     """What to tell the owner, and the state to save once it was delivered.
 
     A finding at or above ``min_severity`` that is not in the state is **new**; one that got worse
@@ -88,6 +95,10 @@ def plan(findings: List[Finding], state: Dict[str, Any], now: float, min_severit
     ``repeat_hours`` after it was last notified is a **reminder** (0 turns reminders off); and a
     notified one that is gone, or fell below ``min_severity``, is **recovered**. Everything else
     is quiet, so an unchanged situation sends nothing.
+
+    ``areas`` are the areas of checks that ran (``diagnose --only/--skip``; None: all). A notified finding
+    of an area that did not run is neither current nor gone: it is not **recovered**, and its entry is kept as it
+    was, so a partial run never announces the recovery of problems it did not look for.
     """
     floor = SEVERITY_ORDER[min_severity]
     current: Dict[str, Finding] = {}
@@ -126,16 +137,24 @@ def plan(findings: List[Finding], state: Dict[str, Any], now: float, min_severit
             entry["last_notified"] = now
         new_active[key] = entry
     for key, previous in active.items():
-        if key not in current:
+        if not _ran(key, areas):
+            new_active[key] = previous                         # not checked this time: left exactly as it is
+        elif key not in current:
             code, subject = split_identity(key)
             events.append(Event("recovered", previous["severity"], code, subject))
     events.sort(key=lambda e: (KIND_ORDER[e.kind], SEVERITY_ORDER[e.severity], e.subject, e.code))
     return events, {"version": STATE_VERSION, "active": new_active}
 
 
-def baseline(findings: List[Finding], now: float, min_severity: str = WARNING) -> Dict[str, Any]:
-    """The state in which every current finding counts as already reported (nothing is sent)."""
-    return plan(findings, empty_state(), now, min_severity)[1]
+def baseline(findings: List[Finding], now: float, min_severity: str = WARNING,
+             areas: Optional[Collection[str]] = None, state: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """The state in which every current finding counts as already reported (nothing is sent). After a run of
+    some areas only (``areas``), what ``state`` holds for the other areas is kept."""
+    saved = plan(findings, empty_state(), now, min_severity)[1]
+    for key, entry in ((state or {}).get("active") or {}).items():
+        if isinstance(entry, dict) and not _ran(key, areas):
+            saved["active"][key] = entry
+    return saved
 
 
 # -- wording -----------------------------------------------------------------------------------

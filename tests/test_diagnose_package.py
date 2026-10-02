@@ -7,13 +7,14 @@ from pathlib import Path
 import pytest
 
 import unifi_sentinel.diagnose as diagnose_package
+import unifi_sentinel.diagnose.areas as areas_module
 from unifi_sentinel.diagnose import diagnose
 from unifi_sentinel.diagnose.model import Finding
 from unifi_sentinel.settings import DiagnoseSettings
 from unifi_sentinel.snapshot import Needs, collect_snapshot
 
 PACKAGE = Path(diagnose_package.__file__).parent
-MODULES = ["addresses", "devices", "event_checks", "health", "model", "output", "ports", "reserved", "wireless"]
+MODULES = ["addresses", "areas", "devices", "event_checks", "health", "model", "output", "ports", "reserved", "wireless"]
 
 PUBLIC = {
     "BANDS", "CODES", "CRITICAL", "DEVICE_SUBSYSTEMS", "EMOJI", "EXIT_CRITICAL", "EXIT_OK", "EXIT_WARNING",
@@ -52,9 +53,10 @@ def test_no_module_is_big_again():
 
 
 def test_modules_import_each_others_public_names_only():
-    """Only the package's __init__ may pull in the underscore-named checks (to assemble diagnose())."""
+    """Only the package's __init__ and areas.py (which assembles the checks) may pull in the underscore-named
+    checks."""
     for path in PACKAGE.glob("*.py"):
-        if path.name == "__init__.py":
+        if path.name in ("__init__.py", "areas.py"):
             continue
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             if isinstance(node, ast.ImportFrom) and node.level >= 1:
@@ -72,7 +74,7 @@ def test_diagnose_runs_every_check_once_in_the_documented_order(fake_client, mon
         return check
 
     for name in CHECK_ORDER:
-        monkeypatch.setattr(diagnose_package, name, spy(name))
+        monkeypatch.setattr(areas_module, name, spy(name))
     snap = collect_snapshot(fake_client, "default", Needs())
     assert diagnose(snap, DiagnoseSettings()) == [] and calls == CHECK_ORDER
 
