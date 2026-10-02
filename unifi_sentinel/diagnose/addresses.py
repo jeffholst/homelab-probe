@@ -57,7 +57,7 @@ def ip_holders(snap: Snapshot) -> Dict[str, Dict[str, str]]:
         ip = normalize_ip(d.get("ipAddress"))
         if ip:
             name = d.get("name") or d.get("macAddress") or "?"
-            holders.setdefault(ip, {})[(normalize_mac(d.get("macAddress")) or normalize_mac(name))] = (
+            holders.setdefault(ip, {})[(normalize_mac(d.get("macAddress")) or f"device:{d.get('id') or id(d)}")] = (
                 f"{name} (UniFi device)")
     return holders
 
