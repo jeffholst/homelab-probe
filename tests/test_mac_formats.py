@@ -5,8 +5,10 @@ Every comparison of MACs goes through ``util.normalize_mac``. These tests re-spe
 comparison that still uses a bare ``.upper()`` shows up as a different answer. The source scan stops a new one.
 """
 
+import ast
 import json
 import re
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -24,6 +26,17 @@ SPELLINGS = {
     "bare": lambda m: m.replace(":", "").upper(),
 }
 
+NON_MAC_UPPER_CALLS = {
+    "diagnose/output.py": ("severity.upper()",),
+    "export.py": ('(device.get("model") or "").upper()', "legacy_type.upper()",
+                  'dev.get("type", "").upper()', 'dev.get("type", "").upper()'),
+    "firewall.py": ("protocol.upper()", "protocol.upper()", "protocol.upper()"),
+    "notify.py": ("severity.upper()", "e.severity.upper()"),
+    "snapshot.py": ("c.upper()", "s.upper()"),
+    "topology.py": ("severity.upper()", "f['severity'].upper()"),
+    "util.py": ('":".join(digits[i:i + 2] for i in range(0, 12, 2)).upper()', "value.strip().upper()"),
+}
+
 
 def respell(value, how):
     if isinstance(value, dict):
@@ -33,6 +46,27 @@ def respell(value, how):
     if isinstance(value, str) and MAC.fullmatch(value):
         return SPELLINGS[how](value)
     return value
+
+
+def unapproved_upper_calls(package):
+    allowed = Counter((path, expression) for path, expressions in NON_MAC_UPPER_CALLS.items()
+                      for expression in expressions)
+    found = Counter()
+    locations = {}
+    for path in sorted(package.rglob("*.py")):
+        relative = path.relative_to(package).as_posix()
+        source = path.read_text(encoding="utf-8")
+        for node in ast.walk(ast.parse(source)):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "upper":
+                expression = ast.get_source_segment(source, node) or ""
+                key = (relative, expression)
+                found[key] += 1
+                locations.setdefault(key, []).append(node.lineno)
+    offenders = []
+    for (path, expression), count in found.items():
+        offenders.extend(f"{path}:{line}: {expression}"
+                         for line in locations[(path, expression)][:max(0, count - allowed[(path, expression)])])
+    return offenders
 
 
 @pytest.mark.parametrize("value, expected", [
@@ -47,17 +81,16 @@ def test_normalize_mac(value, expected):
 
 
 def test_no_comparison_uses_a_bare_upper_on_a_mac():
-    """`(d.get("mac") or "").upper()` was copied into dozens of places and each copy compared spellings of one
-    address as different (found three times in review). Use util.normalize_mac."""
-    pattern = re.compile(r"\.upper\(\)")
-    offenders = []
-    for path in sorted(PACKAGE.rglob("*.py")):
-        if path.name == "util.py":
-            continue
-        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-            if pattern.search(line) and re.search(r"(?i)mac", line):
-                offenders.append(f"{path.relative_to(PACKAGE.parent)}:{number}: {line.strip()}")
+    """`.upper()` calls are rejected unless explicitly allowlisted as non-MAC conversions."""
+    offenders = unapproved_upper_calls(PACKAGE)
     assert not offenders, "use normalize_mac instead of .upper() on a MAC:\n" + "\n".join(offenders)
+
+
+def test_mac_upper_guard_catches_a_multiline_alias(tmp_path):
+    package = tmp_path / "unifi_sentinel"
+    package.mkdir()
+    (package / "bad.py").write_text('value = row.get(\n    "mac"\n)\nvalue.upper()\n', encoding="utf-8")
+    assert unapproved_upper_calls(package) == ["bad.py:4: value.upper()"]
 
 
 COMMANDS = [
