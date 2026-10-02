@@ -108,11 +108,15 @@ def test_generic_and_short_names_and_chosen_names_are_handled():
     assert clean["site"] == {"name": "Default", "internalReference": "default"}
 
 
-def test_values_the_code_compares_are_left_alone():
-    data = {"monitors": [{"target": "1.1.1.1", "type": "ICMP"}], "firmwareVersion": "4.3.2.1", "name": "Hallway Cam",
+def test_monitor_targets_are_sanitized_consistently():
+    data = {"monitors": [{"target": "1.1.1.1", "type": "ICMP"}, {"target": "router.example.net"}],
+            "ip": "1.1.1.1", "firmwareVersion": "4.3.2.1", "name": "Hallway Cam",
             "parameters": {"DURATION": {"name": "25s"}, "CLIENT": {"name": "Hallway Cam"}}}
-    clean, _ = sanitise(data)
-    assert clean["monitors"] == data["monitors"] and clean["firmwareVersion"] == "4.3.2.1"
+    clean, sanitizer = sanitise(data)
+    check_no_leaks(clean, sanitizer)
+    assert clean["monitors"][0]["target"] == clean["ip"] != "1.1.1.1"
+    assert clean["monitors"][1]["target"] == "host-1"
+    assert clean["monitors"][0]["type"] == "ICMP" and clean["firmwareVersion"] == "4.3.2.1"
     assert clean["parameters"]["DURATION"] == {"name": "25s"} and clean["parameters"]["CLIENT"]["name"] == "Name 1"
 
 

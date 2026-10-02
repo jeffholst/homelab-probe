@@ -101,8 +101,9 @@ CONTRACT: Dict[str, Endpoint] = {
     "legacy/system-log": Endpoint(
         always=("key", "timestamp", "category", "severity"),
         somewhere=("event", "message_raw", "parameters", "subcategory"),
-        optional=("parameters.ADMIN.name", "parameters.CLIENT.name", "parameters.CLIENTS.clients[].mac",
-                  "parameters.CLIENTS.clients[].name", "parameters.DEVICE.name", "parameters.DEVICE_FROM.name",
+        optional=("title_raw", "parameters.*.model_name", "parameters.ADMIN.name", "parameters.CLIENT.name",
+                  "parameters.CLIENTS.clients[].mac", "parameters.CLIENTS.clients[].name",
+                  "parameters.CLIENTS.clients[].hostname", "parameters.DEVICE.name", "parameters.DEVICE_FROM.name",
                   "parameters.DEVICE_TO.name", "parameters.DURATION.name", "parameters.IP.name",
                   "parameters.NETWORK.name", "parameters.OBJECT.name", "parameters.SECTION",
                   "parameters.SETTING_NAME", "parameters.WLAN.name", "parameters.*.hostname", "parameters.*.id",

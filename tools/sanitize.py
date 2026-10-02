@@ -20,13 +20,15 @@ from collections.abc import Iterable
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 # Keys whose string values are names (a device, client, SSID, network or ISP); any other key is left alone.
-NAME_KEYS = frozenset({"name", "hostname", "essid", "ssid", "last_uplink_name", "last_connection_network_name",
-                       "network", "gw_name", "isp_name", "isp_organization", "internalReference"})
-KIND_OF_KEY = {"essid": "ssid", "ssid": "ssid", "isp_name": "isp", "isp_organization": "isp", "hostname": "host"}
+NAME_KEYS = frozenset({"name", "hostname", "target", "essid", "ssid", "last_uplink_name",
+                       "last_connection_network_name", "network", "gw_name", "isp_name", "isp_organization",
+                       "internalReference"})
+KIND_OF_KEY = {"essid": "ssid", "ssid": "ssid", "isp_name": "isp", "isp_organization": "isp",
+               "hostname": "host", "target": "host"}
 LABEL = {"ssid": "SSID {}", "isp": "ISP {}", "name": "Name {}", "host": "host-{}"}
 KIND_PRIORITY = ("ssid", "isp", "name", "host")        # when one text is several kinds, the first listed wins
 # Values never touched: they carry no identity and the code compares them (versions, monitor targets, enums).
-KEEP_KEYS = frozenset({"target", "firmwareVersion", "applicationVersion", "version", "type", "state", "status",
+KEEP_KEYS = frozenset({"firmwareVersion", "applicationVersion", "version", "type", "state", "status",
                        "subsystem", "key", "category", "subcategory", "severity", "event", "model", "band", "radio",
                        "security", "oui"})
 SAFE_NAMES = frozenset({"wan", "wan1", "wan2", "lan", "default", "internet", "unknown"})

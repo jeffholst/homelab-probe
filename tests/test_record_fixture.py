@@ -13,6 +13,7 @@ from sanitize import LeakError
 
 from unifi_sentinel.client import UniFiClient
 from unifi_sentinel.diagnose import diagnose
+from unifi_sentinel.events import render_message
 from unifi_sentinel.snapshot import EventQuery, Needs, collect_snapshot
 
 EVERYTHING = Needs(offline=True, reservations=True, groups=True, health=True, speedtests=True, neighbors=True,
@@ -63,6 +64,17 @@ def test_the_recording_can_be_replayed_and_gives_the_same_findings(recorded):
     assert len(replay.all_users) == len(original.all_users) and len(replay.neighbors) == len(original.neighbors)
     codes = [(f.severity, f.code) for f in diagnose(original)]
     assert sorted((f.severity, f.code) for f in diagnose(replay)) == sorted(codes)
+
+
+def test_a_title_only_event_survives_recording_and_replay():
+    now_ms = 1_000_000_000
+    event = {"key": "TITLE_ONLY", "timestamp": now_ms, "category": "AUDIT", "severity": "LOW",
+             "title_raw": "Synthetic title only"}
+    fixture = build_fixture([
+        ("POST", "/proxy/network/v2/api/site/default/system-log/all", {"data": [event]})
+    ], now_ms)
+    replay = FakeSession(fixture)
+    assert render_message(replay.events[0]) == "Synthetic title only"
 
 
 def test_times_are_stored_as_ages(recorded):

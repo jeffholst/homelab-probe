@@ -15,6 +15,7 @@ from unifi_sentinel.client import UniFiClient
 COMMANDS = [["info"], ["export"], ["export", "--include-offline"], ["query", "devices"],
             ["query", "clients", "--include-offline"], ["query", "reservations"], ["query", "reservations", "--offline"],
             ["query", "ports"], ["new-clients"], ["topology", "--clients"], ["wifi", "--all"], ["wan"], ["events"],
+            ["events", "--since", "14d"], ["events", "--device", "no-such-device"],
             ["events", "--summary"], ["client", "desktop"], ["client", "phone"], ["client", "old-printer"],
             ["diagnose"], ["snapshot"], ["diff"]]
 
@@ -61,6 +62,26 @@ def paths_read(tmp_path, monkeypatch):
                 cli.main(args)
         for endpoint, paths in session.accessed.items():
             seen.setdefault(endpoint, set()).update(p[3:] if p.startswith("[].") else p for p in paths if p != "[]")
+
+    session = TrackingSession()
+    session.events.append({
+        "key": "SYNTHETIC_TITLE_ONLY",
+        "event": "SYNTHETIC_TITLE_ONLY",
+        "timestamp": session.events[0]["timestamp"] + 1,
+        "category": "AUDIT",
+        "severity": "LOW",
+        "title_raw": "Synthetic title only",
+    })
+    conflict = next(e for e in session.events if e.get("event") == "CLIENT_IP_CONFLICT")
+    conflict["parameters"]["CLIENTS"]["clients"][0].pop("name")
+    client = UniFiClient("https://controller", "key")
+    client.session = session
+    with mock.patch.object(cli.UniFiClient, "from_config", classmethod(lambda cls, c: client)), \
+            contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        cli.main(["events", "--since", "14d"])
+        cli.main(["diagnose"])
+    for endpoint, paths in session.accessed.items():
+        seen.setdefault(endpoint, set()).update(p[3:] if p.startswith("[].") else p for p in paths if p != "[]")
     return seen
 
 

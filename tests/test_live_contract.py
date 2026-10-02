@@ -29,19 +29,22 @@ def session():
     client.workers = 1                                    # one request at a time; the recording is not racy
     recording = RecordingSession(client.session)
     client.session = recording
+    version = client.info().get("applicationVersion", "unknown")
     collect_snapshot(client, config.site, EVERYTHING)
-    return recording
+    return recording, version
 
 
 @pytest.mark.parametrize("name", sorted(CONTRACT))
 def test_the_controller_returns_the_fields_the_code_reads(session, name):
-    records = session.records().get(name)
+    recording, version = session
+    records = recording.records().get(name)
     if not records:
         pytest.skip(f"this controller returned no {name} records (nothing to check)")
-    assert problems(name, records) == []
+    assert problems(name, records) == [], f"controller version: {version}"
 
 
 def test_only_reads_were_made(session):
-    methods = {(method, path.endswith("/system-log/all")) for method, path, _ in session.exchanges}
+    recording, _version = session
+    methods = {(method, path.endswith("/system-log/all")) for method, path, _ in recording.exchanges}
     assert methods <= {("GET", False), ("POST", True)}
     assert ("GET", False) in methods

@@ -42,6 +42,7 @@ def project(value: Any, specs: List[List[str]]) -> Any:
     """Keep only what ``specs`` (field paths as segment lists) name; a declared leaf keeps its whole subtree."""
     if any(not spec for spec in specs) and not any(spec for spec in specs):
         return value
+    specs = [spec for spec in specs if spec]
     if isinstance(value, list):
         rest = [spec[1:] for spec in specs if spec[0] == "[]"]
         return [project(item, rest) for item in value] if rest else []
