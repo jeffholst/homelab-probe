@@ -12,7 +12,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Tuple
 
 from .audit import AUDIT_AREAS, audit
 from .client import UniFiAPIError, UniFiClient
@@ -73,6 +73,9 @@ from .util import printable, safe_output
 from .wan import DEFAULT_DAYS, build_wan
 from .wan import render_text as render_wan
 from .wan import to_json as wan_json
+from .watch import MAX_SECONDS, MIN_SECONDS
+from .watch import changes as watch_changes
+from .watch import start as watch_start
 from .wifi import DEFAULT_MIN_SIGNAL, build_wifi, parse_band
 from .wifi import render_text as render_wifi
 from .wifi import to_json as wifi_json
@@ -135,6 +138,17 @@ def _duration(text: str) -> int:
         return parse_duration(text)
     except ValueError as e:
         raise argparse.ArgumentTypeError(str(e)) from e
+
+
+def _watch_interval(text: str) -> int:
+    try:
+        seconds = int(text)
+    except ValueError:
+        seconds = 0
+    if not MIN_SECONDS <= seconds <= MAX_SECONDS:
+        raise argparse.ArgumentTypeError(
+            f"invalid value {text!r}: use a whole number of seconds from {MIN_SECONDS} to {MAX_SECONDS}")
+    return seconds
 
 
 def _non_negative(text: str) -> int:
@@ -568,6 +582,9 @@ def _add_diagnose(parser: argparse.ArgumentParser) -> None:
                         help="Use text severity labels (automatic when output is not a UTF-8 terminal)")
     parser.add_argument("--json", action="store_true",
                         help="Print the findings as JSON (with a stable code per check); exit codes are unchanged")
+    parser.add_argument("--watch", type=_watch_interval, default=None, metavar="SECONDS",
+                        help=f"Run the checks again every SECONDS ({MIN_SECONDS} to {MAX_SECONDS}) and print only "
+                             "what changed (new, worse, fixed) until Ctrl-C; not with --json or --notify")
     parser.add_argument("--notify", action="store_true",
                         help="Send a notification (ntfy and/or a webhook, set in .env) when findings are new, "
                              "worse or fixed since the last notified run; this is the only thing that sends "
@@ -621,6 +638,11 @@ def _check_diagnose(parser: argparse.ArgumentParser, args: argparse.Namespace) -
         parser.error("the --notify-* options only apply together with --notify")
     if args.notify_dry_run and args.notify_baseline:
         parser.error("--notify-dry-run and --notify-baseline cannot be combined")
+    if args.watch is not None and args.json:
+        parser.error("--watch prints lines for a person to read and cannot be combined with --json")
+    if args.watch is not None and args.notify:
+        parser.error("--watch cannot be combined with --notify: run `diagnose --notify` from cron to be told "
+                     "about changes without a long-running process")
 
 
 def _prepare_diagnose(args: argparse.Namespace, config: Config) -> None:
@@ -679,14 +701,49 @@ def _notify(findings: List[Any], config: Any, settings: Any, args: argparse.Name
     return not delivered_somewhere
 
 
+WATCH_SLEEP = time.sleep          # looked up when used, so a test can replace the wait between passes
+
+
+def _diagnose_once(ctx: Context, settings: DiagnoseSettings) -> Tuple[List[Any], List[Any]]:
+    """One pass of the checks: the findings that remain and those the ignore list suppressed."""
+    areas = ctx.args.areas
+    return apply_ignores(
+        diagnose(collect_snapshot(ctx.client, ctx.config.site, needs_for(areas, ctx.args.since)), settings,
+                 areas=areas),
+        settings.ignore)
+
+
+def _watch_diagnose(ctx: Context, settings: DiagnoseSettings, first: List[Any]) -> int:
+    """Repeat the checks every ``--watch`` seconds and print what changed, until Ctrl-C. A failed read is reported
+    and tried again (the first one, before this starts, fails the command as usual). The exit code is the one the
+    last complete pass would have given."""
+    args = ctx.args
+    findings = first
+    state = watch_start(findings, time.time(), args.areas)
+    say(f"Watching every {args.watch} s; only changes are printed (Ctrl-C to stop).", file=sys.stderr)
+    try:
+        while True:
+            WATCH_SLEEP(args.watch)
+            try:
+                findings, _ignored = _diagnose_once(ctx, settings)
+            except (UniFiAPIError, OSError) as e:
+                reason = str(e) if isinstance(e, UniFiAPIError) else (e.strerror or type(e).__name__)
+                say(f"{time.strftime('%H:%M:%S')}  could not read the controller ({reason}); "
+                    f"trying again in {args.watch} s", file=sys.stderr)
+                continue
+            lines, state = watch_changes(findings, state, time.time(), settings.notify_repeat_hours, args.areas)
+            for line in lines:
+                say(line)
+    except KeyboardInterrupt:
+        say("Stopped.", file=sys.stderr)
+    return exit_code(findings, args.fail_on)
+
+
 def _run_diagnose(ctx: Context) -> int:
     args = ctx.args
     settings = ctx.settings or DiagnoseSettings()          # loaded for this command, so never None
     areas = args.areas
-    findings, ignored = apply_ignores(
-        diagnose(collect_snapshot(ctx.client, ctx.config.site, needs_for(areas, args.since)), settings,
-                 areas=areas),
-        settings.ignore)
+    findings, ignored = _diagnose_once(ctx, settings)
     if args.json:
         say(findings_json(findings, ignored, args.show_ignored, areas))
     else:
@@ -696,6 +753,8 @@ def _run_diagnose(ctx: Context) -> int:
             say(f"Checked: {', '.join(areas)} (not checked: {', '.join(a for a in AREA_NAMES if a not in areas)})")
         if args.show_ignored and ignored:
             say("\n" + format_ignored(ignored))
+    if args.watch is not None:
+        return _watch_diagnose(ctx, settings, findings)
     code = exit_code(findings, args.fail_on)
     if args.notify and _notify(findings, ctx.config, settings, args) and code == 0:
         return EXIT_ERROR              # the message could not be delivered and nothing else says so

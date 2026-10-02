@@ -30,6 +30,7 @@ unifi_sentinel/
     ports.py  wireless.py  switch ports and uplinks; Wi-Fi quality
     event_checks.py        the event log (conflicts, disconnects, roaming, unreachable devices)
     output.py              ignoring findings, exit codes, text and JSON
+  watch.py               diagnose --watch: what changed since the last pass (reuses the notification planner)
   notify.py              notifications: what changed since the last run, ntfy/webhook/email sending, state file
   settings.py            diagnose thresholds and ignore list (TOML)
   util.py                shared helpers: output safety (printable names, CSV formulas), numbers, MACs, times, plurals
