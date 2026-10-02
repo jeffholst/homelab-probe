@@ -11,7 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 HIDDEN = re.compile("[\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]")
-SUFFIXES = {".py", ".md", ".toml", ".yml", ".yaml", ".json", ".txt", ".example"}
+SUFFIXES = {".py", ".md", ".toml", ".yml", ".yaml", ".json", ".txt", ".example", ".lock", ".env", ""}
 
 
 def tracked_text_files():
