@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 
 import pytest
+from golden_support import normalise
 
 from unifi_sentinel import cli
 from unifi_sentinel.util import normalize_mac
@@ -73,7 +74,7 @@ def output(fake_client, monkeypatch, capsys, argv):
     monkeypatch.setenv("API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     code = cli.main(argv)
-    out = capsys.readouterr().out
+    out = normalise(capsys.readouterr().out)       # times come from when each fake session was made
     return code, MAC.sub(lambda m: m.group().upper(), out)
 
 
