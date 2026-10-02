@@ -38,7 +38,23 @@ class Radio(TypedDict):
     retries: Optional[float]
     satisfaction: Optional[float]
     span: Optional[Tuple[float, float]]   # the frequency range in MHz that the radio occupies
-Neighbor = Dict[str, Any]
+
+
+class Neighbor(TypedDict):
+    """One neighboring network (a BSSID) as `wifi` uses it: the strongest reading of the rows that list it. These
+    are other people's networks, so ``name`` is only for display."""
+
+    bssid: str
+    name: str
+    band: str
+    channel: Optional[int]
+    width: int
+    signal: float
+    security: str
+    open: bool
+    vendor: str
+    seen_by: List[str]                     # MACs of the APs that heard it
+    span: Optional[Tuple[float, float]]    # the frequency range in MHz it occupies
 
 # 5 GHz channel blocks for a given width (first and last 20 MHz channel in each block)
 _BLOCKS_5G = {
@@ -149,7 +165,7 @@ def unique_neighbors(snap: Snapshot, ap_macs: Optional[set] = None) -> List[Neig
     reading is kept and ``seen_by`` lists the APs that heard it.
     """
     ours = own_bssids(snap)
-    best: Dict[str, Neighbor] = {}
+    best: Dict[str, Dict[str, Any]] = {}          # per BSSID: the readings so far, not yet a Neighbor
     for row in snap.neighbors:
         bssid = str(row.get("bssid") or "").lower()
         signal = number(row.get("signal"))
@@ -161,7 +177,7 @@ def unique_neighbors(snap: Snapshot, ap_macs: Optional[set] = None) -> List[Neig
         seen["seen_by"].add(ap_mac)
         if signal > seen["signal"]:
             seen["signal"], seen["row"] = signal, row
-    result = []
+    result: List[Neighbor] = []
     for bssid, info in best.items():
         row, band = info["row"], info["row"].get("band") or info["row"].get("radio") or ""
         width = number(row.get("bw")) or 20

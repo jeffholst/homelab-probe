@@ -6,7 +6,7 @@ plugs into, the negotiated link speed, client counts and anything `diagnose` fla
 
 import json
 from collections import Counter
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple, TypedDict
 
 from .client_view import DeviceIndex
 from .diagnose import EMOJI, INFO, SEVERITY_ORDER, Finding, apply_ignores, diagnose, uplink_speeds
@@ -15,7 +15,68 @@ from .snapshot import Snapshot
 from .util import clean_data, normalize_mac, number, record_for
 
 GATEWAY_KINDS = {"Gateway", "Dream Machine"}
-Node = Dict[str, Any]
+
+
+class ClientCounts(TypedDict):
+    wired: int
+    wireless: int
+    total: int
+
+
+class NodeFinding(TypedDict):
+    """A finding of ``diagnose`` that flags a device (the same four keys as ``Finding.to_dict`` minus the MAC)."""
+
+    severity: str
+    code: str
+    subject: str
+    message: str
+
+
+class WiredClient(TypedDict):
+    name: str
+    ip: str
+    port: Optional[int]
+
+
+class _NodeBase(TypedDict):
+    name: str
+    mac: str
+    type: str
+    model: str
+    online: bool
+    parent: str                              # the parent's name, "" for a gateway or an unattached device
+    parent_port: Optional[int]               # the port of the PARENT it plugs into
+    port: Optional[int]                      # its own uplink port
+    speed_mbps: Optional[float]
+    supports_mbps: Optional[float]           # set only when the link negotiated below what both ends support
+    clients: Optional[ClientCounts]          # None when the connected-client data is unavailable
+    findings: List[NodeFinding]
+    children: List["Node"]
+
+
+class Node(_NodeBase, total=False):
+    """One device of the tree. The two keys below exist only sometimes: ``wired_clients`` with ``--clients``,
+    ``reason`` on an unattached device."""
+
+    wired_clients: List[WiredClient]
+    reason: str
+
+
+class Summary(TypedDict):
+    devices: int
+    offline: int
+    with_findings: int
+    below_max: int
+    unattached: int
+    clients: Optional[int]
+
+
+class Topology(TypedDict):
+    """The result of ``build_topology``."""
+
+    roots: List[Node]
+    unattached: List[Node]
+    summary: Summary
 
 
 def _link(snap: Snapshot, idx: DeviceIndex, mac: str) -> Tuple[str, Optional[int], Optional[int], Optional[float]]:
@@ -44,13 +105,13 @@ def _assign_findings(findings: List[Finding], names: Dict[str, str]) -> Dict[str
     return result
 
 
-def _client_info(snap: Snapshot) -> Tuple[Optional[Dict[str, Counter]], Dict[str, List[Dict[str, Any]]]]:
+def _client_info(snap: Snapshot) -> Tuple[Optional[Dict[str, Counter]], Dict[str, List[WiredClient]]]:
     """(counts per device MAC as {'wired': n, 'wireless': n}, wired clients per device MAC).
     The counts are None when the connected-client data is unavailable."""
     if not snap.legacy_clients:
         return None, {}
     counts: Dict[str, Counter] = {}
-    wired: Dict[str, List[Dict[str, Any]]] = {}
+    wired: Dict[str, List[WiredClient]] = {}
     for c in snap.legacy_clients:
         if c.get("is_wired") and c.get("sw_mac"):
             mac = normalize_mac(c["sw_mac"])
@@ -64,7 +125,7 @@ def _client_info(snap: Snapshot) -> Tuple[Optional[Dict[str, Counter]], Dict[str
 
 
 def build_topology(snap: Snapshot, settings: Optional[DiagnoseSettings] = None,
-                   with_clients: bool = False) -> Dict[str, Any]:
+                   with_clients: bool = False) -> Topology:
     """The wiring tree as nested dicts: ``{"roots": [...], "unattached": [...], "summary": {...}}``.
 
     Roots are gateways. Any device that cannot be reached from a gateway, whether it has
@@ -167,7 +228,7 @@ _UNICODE = {"tee": "├── ", "last": "└── ", "pipe": "│   ", "gap": 
 _ASCII = {"tee": "+-- ", "last": "`-- ", "pipe": "|   ", "gap": "    "}
 
 
-def _worst(findings: List[Dict[str, str]]) -> str:
+def _worst(findings: List[NodeFinding]) -> str:
     return min((f["severity"] for f in findings), key=lambda s: SEVERITY_ORDER[s], default="")
 
 
@@ -200,7 +261,7 @@ def _line(n: Node, emoji: bool, root: bool) -> str:
     return "   ".join(parts)
 
 
-def render_text(topology: Dict[str, Any], emoji: bool = True, with_clients: bool = False) -> str:
+def render_text(topology: Topology, emoji: bool = True, with_clients: bool = False) -> str:
     topology = clean_data(topology)
     style = _UNICODE if emoji else _ASCII
     lines: List[str] = []
@@ -240,15 +301,15 @@ def render_text(topology: Dict[str, Any], emoji: bool = True, with_clients: bool
     bits = [f"{s['devices']} device{'s' if s['devices'] != 1 else ''}"]
     if s["clients"] is not None:
         bits.append(f"{s['clients']} client{'s' if s['clients'] != 1 else ''}")
-    for key, text in (("offline", "offline"), ("below_max", "link(s) below capability"),
-                      ("with_findings", "with findings"), ("unattached", "unattached")):
-        if s[key]:
-            bits.append(f"{s[key]} {text}")
+    for count, text in ((s["offline"], "offline"), (s["below_max"], "link(s) below capability"),
+                        (s["with_findings"], "with findings"), (s["unattached"], "unattached")):
+        if count:
+            bits.append(f"{count} {text}")
     lines += ["", ", ".join(bits)]
     return "\n".join(lines)
 
 
-def _flatten(topology: Dict[str, Any]) -> List[Node]:
+def _flatten(topology: Topology) -> List[Node]:
     out: List[Node] = []
 
     def walk(nodes: List[Node]) -> None:
@@ -260,5 +321,5 @@ def _flatten(topology: Dict[str, Any]) -> List[Node]:
     return out + topology["unattached"]
 
 
-def to_json(topology: Dict[str, Any]) -> str:
+def to_json(topology: Topology) -> str:
     return json.dumps(topology, indent=2)

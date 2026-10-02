@@ -40,6 +40,7 @@ from .firewall import render_text as render_firewall
 from .firewall import to_json as firewall_json
 from .history import (
     DEFAULT_DIR,
+    SnapshotRecord,
     capture,
     diff_snapshots,
     label_for,
@@ -368,7 +369,7 @@ def _run_topology(ctx: Context) -> int:
 INVENTORY_NEEDS = Needs(reservations=True, groups=True, users_required=True)
 
 
-def _live_inventory(client: UniFiClient, config: Any) -> dict:
+def _live_inventory(client: UniFiClient, config: Any) -> SnapshotRecord:
     """The network as it is right now, as a snapshot record."""
     try:
         version = str(client.info().get("applicationVersion") or "")
