@@ -27,7 +27,7 @@ def apply_ignores(
     kept: List[Finding] = []
     ignored: List[Tuple[Finding, IgnoreRule]] = []
     for f in findings:
-        rule = next((r for r in rules if r.matches(f.subject, f.message)), None)
+        rule = next((r for r in rules if r.matches(f.subject, f.message, f.code)), None)
         if rule:
             ignored.append((f, rule))
         else:
@@ -73,7 +73,8 @@ def format_findings(findings: List[Finding], emoji: bool = True, ignored: int = 
 
 def format_ignored(ignored: List[Tuple[Finding, IgnoreRule]]) -> str:
     """The findings the ignore list suppressed, with each rule's reason."""
-    lines = [f"  {printable(f.subject)}: {printable(f.message)}  (ignored: {printable(r.reason)})"
+    lines = [f"  {printable(f.subject)}: {printable(f.message)}  "
+             f"({'code: ' + printable(f.code) + '; ' if f.code else ''}ignored: {printable(r.reason)})"
              for f, r in ignored]
     return f"Ignored ({len(ignored)}):\n" + "\n".join(lines)
 

@@ -57,10 +57,10 @@ def test_the_shipped_example_config_loads():
     ("[thresholds]\nresource_warn_pct = nan\n", "must be finite"),
     ("[thresholds]\nslow_link_mbps = inf\n", "must be finite"),
     ("[thresholds]\nslow_link_mbps = -1\n", "at least 0"),
-    ('[[ignore]]\nreason = "x"\n', "subject and/or a message"),
+    ('[[ignore]]\nreason = "x"\n', "a code, a subject and/or a message"),
     ('[[ignore]]\nsubject = "x"\n', "a reason is required"),
     ('[[ignore]]\nsubject = "x"\nreason = "  "\n', "a reason is required"),
-    ('[[ignore]]\nsubject = "x"\nreason = "y"\nextra = 1\n', "only subject, message and reason"),
+    ('[[ignore]]\nsubject = "x"\nreason = "y"\nextra = 1\n', "only code, subject, message and reason"),
     ('[[ignore]]\nsubject = 1\nreason = "x"\n', "must be strings"),
     ('[[ignore]]\nmessage = true\nreason = "x"\n', "must be strings"),
     ('[[ignore]]\nsubject = "x"\nreason = []\n', "must be strings"),
@@ -215,8 +215,8 @@ reason = "known IP conflict from the event log"
     code = _run(fake_client, monkeypatch,
                 ["diagnose", "--no-emoji", "--config", str(cfg), "--show-ignored"])
     out = capsys.readouterr().out
-    assert "Ignored (" in out and "Garage AP: device is offline  (ignored: spare AP)" in out
-    assert "(ignored: known noisy switch)" in out
+    assert "Ignored (" in out and "Garage AP: device is offline  (code: device.offline; ignored: spare AP)" in out
+    assert "; ignored: known noisy switch)" in out
 
 
 def test_cli_threshold_override_changes_findings(fake_client, monkeypatch, capsys, tmp_path):
