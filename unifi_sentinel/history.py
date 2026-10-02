@@ -9,9 +9,10 @@ Saved files hold real MACs and IPs, so they are git-ignored and created owner-on
 import json
 import os
 import re
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, TypedDict
+from typing import Any, Dict, List, Optional, Tuple, TypedDict, TypeVar, cast
 
 from . import __version__
 from .client_view import AddressingIndex, DeviceIndex, addressing, known_clients
@@ -28,12 +29,73 @@ FILE_PREFIX = "snapshot-"
 # earlier versions and are still recognised.
 _FILE_RE = re.compile(r"^snapshot-(\d{8}-\d{6})(Z)?(?:-(\d+))?\.json$")
 MAX_LISTED = 15          # connection changes shown before "... and N more" (--all lifts it)
-Record = Dict[str, Any]
+
+
+# -- the saved record --------------------------------------------------------
+# What ``capture`` writes and ``load_snapshot`` reads back. They name the keys of the file (schema version 1), not the
+# controller's payloads, which stay untyped. ``load_snapshot`` validates the file before anything here is trusted.
+
+class DeviceRecord(TypedDict):
+    mac: str
+    name: str
+    ip: str
+    model: str
+    type: str
+    firmware: str
+    state: str
+    uplink: str                      # the device it plugs into, "" when unknown
+    uplink_port: str
+
+
+class ClientRecord(TypedDict):
+    mac: str
+    name: str
+    ip: str
+    connection: str                  # "Wired" or "Wireless"
+    status: str                      # "Online" or "Offline"
+    network: str
+    vlan: int | str                  # "" when the client has none
+    uplink: str
+    uplink_port: str
+    groups: List[str]
+
+
+class ReservationRecord(TypedDict):
+    mac: str
+    name: str
+    reserved_ip: str
+    network: str
+
+
+class SiteRecord(TypedDict):
+    name: str
+    id: str
+
+
+class ControllerRecord(TypedDict):
+    application_version: str
+
+
+class SnapshotRecord(TypedDict):
+    """The whole saved inventory (a snapshot file)."""
+
+    schema_version: int
+    tool_version: str
+    captured_at: str                 # ISO 8601 with the local UTC offset
+    site: SiteRecord
+    controller: ControllerRecord
+    devices: List[DeviceRecord]
+    clients: List[ClientRecord]
+    reservations: List[ReservationRecord]
+
+
+InventoryRecord = DeviceRecord | ClientRecord | ReservationRecord
+Record = TypeVar("Record", DeviceRecord, ClientRecord, ReservationRecord)
 
 
 # -- capturing ---------------------------------------------------------------
 
-def _where(snap: Snapshot, idx: DeviceIndex, rec: Record) -> Tuple[str, str]:
+def _where(snap: Snapshot, idx: DeviceIndex, rec: Dict[str, Any]) -> Tuple[str, str]:
     """(the device a client is on, its port) for a connected client, or the last uplink the
     controller recorded for an offline one. Blank when unknown (e.g. offline Wi-Fi)."""
     live, sta, user = rec["live"], rec["sta"] or {}, rec["user"] or {}
@@ -53,7 +115,7 @@ def _where(snap: Snapshot, idx: DeviceIndex, rec: Record) -> Tuple[str, str]:
     return "", ""
 
 
-def capture(snap: Snapshot, application_version: str = "", now: Optional[datetime] = None) -> Record:
+def capture(snap: Snapshot, application_version: str = "", now: Optional[datetime] = None) -> SnapshotRecord:
     """The current inventory as a plain, versioned record.
 
     Built from the same rows the other commands print (not from raw API payloads), so the
@@ -63,13 +125,13 @@ def capture(snap: Snapshot, application_version: str = "", now: Optional[datetim
     now = now or datetime.now().astimezone()
     idx = DeviceIndex(snap)
 
-    devices = [{
+    devices: List[DeviceRecord] = [{
         "mac": r["MAC Address"], "name": r["Name"], "ip": r["IP Address"], "model": r["Model"],
         "type": r["Type"].replace("Device - ", ""), "firmware": r.get("Firmware", ""),
         "state": r["Status"], "uplink": r["Switch"], "uplink_port": r["Port"],
     } for r in query_rows(snap, "devices")]
 
-    clients = []
+    clients: List[ClientRecord] = []
     lookups = AddressingIndex(snap)
     for rec in known_clients(snap):
         info = addressing(snap, rec, lookups)
@@ -82,8 +144,9 @@ def capture(snap: Snapshot, application_version: str = "", now: Optional[datetim
             "uplink": device, "uplink_port": port, "groups": sorted(info["groups"]),
         })
 
-    reservations = [{"mac": r["MAC Address"], "name": r["Name"], "reserved_ip": r["Reserved IP"],
-                     "network": r["Network"]} for r in build_reservations(snap)]
+    reservations: List[ReservationRecord] = [
+        {"mac": r["MAC Address"], "name": r["Name"], "reserved_ip": r["Reserved IP"], "network": r["Network"]}
+        for r in build_reservations(snap)]
 
     return {
         "schema_version": SCHEMA_VERSION, "tool_version": __version__,
@@ -143,7 +206,7 @@ def _age_key(path: Path) -> Optional[Tuple[datetime, int]]:
     return moment, int(n or 0)
 
 
-def save_snapshot(record: Record, path: Optional[Path] = None, directory: Path = Path(DEFAULT_DIR),
+def save_snapshot(record: SnapshotRecord, path: Optional[Path] = None, directory: Path = Path(DEFAULT_DIR),
                   force: bool = False) -> Path:
     """Write ``record`` as JSON, owner-only. With no ``path`` a timestamped name is chosen in
     ``directory`` (never overwriting an existing file). An explicit ``path`` that exists is
@@ -180,7 +243,7 @@ def prune(directory: Path, keep: int, protect: Optional[Path] = None) -> List[Pa
     return doomed
 
 
-def load_snapshot(path: Path) -> Record:
+def load_snapshot(path: Path) -> SnapshotRecord:
     """Read and validate a snapshot file. Any problem raises ConfigError with a clear message."""
     try:
         text = path.read_text(encoding="utf-8")
@@ -204,7 +267,7 @@ def load_snapshot(path: Path) -> Record:
         if any(not isinstance(item, dict) or not isinstance(item.get("mac"), str) or not item["mac"]
                for item in record[key]):
             raise ConfigError(f"{path} is damaged: '{key}' contains an item without a MAC address")
-    return record
+    return cast(SnapshotRecord, record)       # untrusted JSON, checked above (isinstance cannot check a TypedDict)
 
 
 def resolve(ref: str, directory: Path) -> Path:
@@ -249,8 +312,8 @@ class ChangedRecord(TypedDict):
 class DiffPart(TypedDict):
     """The differences for one kind of record (devices, clients or reservations)."""
 
-    added: List[Record]
-    removed: List[Record]
+    added: Sequence[InventoryRecord]
+    removed: Sequence[InventoryRecord]
     changed: List[ChangedRecord]
 
 
@@ -265,12 +328,12 @@ class Diff(TypedDict):
     total: int
 
 
-def _location(r: Record) -> str:
+def _location(r: Mapping[str, Any]) -> str:
     where = r.get("uplink") or ""
     return f"{where} port {r['uplink_port']}" if where and r.get("uplink_port") else where
 
 
-def _compare(old: Record, new: Record, fields: List[Tuple[str, str]]) -> List[Change]:
+def _compare(old: Mapping[str, Any], new: Mapping[str, Any], fields: List[Tuple[str, str]]) -> List[Change]:
     changes: List[Change] = []
     for field, _label in fields:
         a: Any
@@ -299,7 +362,7 @@ def _diff_list(old: List[Record], new: List[Record], fields: List[Tuple[str, str
             "changed": changed}
 
 
-def diff_snapshots(old: Record, new: Record) -> Diff:
+def diff_snapshots(old: SnapshotRecord, new: SnapshotRecord) -> Diff:
     """Everything that differs between two captured inventories, matched by MAC address."""
     controller: List[Change] = []
     old_v, new_v = old["controller"].get("application_version"), new["controller"].get("application_version")
@@ -312,7 +375,7 @@ def diff_snapshots(old: Record, new: Record) -> Diff:
         len(part["added"]) + len(part["removed"]) + sum(len(c["changes"]) for c in part["changed"])
         for part in (devices, clients, reservations))
     return {
-        "same_site": (old.get("site") or {}).get("id") == (new.get("site") or {}).get("id"),
+        "same_site": old["site"].get("id") == new["site"].get("id"),
         "controller": controller, "devices": devices, "clients": clients, "reservations": reservations,
         "total": total,
     }
@@ -326,7 +389,7 @@ def _value(field: str, v: Any) -> str:
     return "none" if v in (None, "") else str(v)
 
 
-def _describe(kind: str, r: Record) -> str:
+def _describe(kind: str, r: Mapping[str, Any]) -> str:
     bits = {"devices": [r.get("model"), r.get("ip")], "clients": [r.get("ip"), r.get("connection")],
             "reservations": [r.get("reserved_ip"), r.get("network")]}[kind]
     detail = ", ".join(str(b) for b in bits if b)
@@ -376,7 +439,7 @@ def render_diff(diff: Diff, old_label: str, new_label: str, show_all: bool = Fal
     return "\n".join(out + sections).rstrip() + f"\n\n{diff['total']} change(s)"
 
 
-def label_for(record: Record, name: str) -> str:
+def label_for(record: SnapshotRecord, name: str) -> str:
     """'name (captured 2026-09-30 20:15)' for a saved snapshot."""
     try:
         when = datetime.fromisoformat(record["captured_at"]).strftime("%Y-%m-%d %H:%M")
