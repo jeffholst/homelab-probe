@@ -91,6 +91,7 @@ and `wep` Wi-Fi security values) the README says so.
   ordered correctly.
 - **`--show-ignored` lists each finding's code**, so it can be copied into an ignore rule.
 - The version is written in one place, `unifi_sentinel.__version__`.
+- **Documentation:** the README is now a short quickstart (what it is, install, configure, the commands with one example each, the exit codes) and the detail is in `docs/` (diagnose and audit, notifications, inventory, network views, configuration and troubleshooting, examples, features, development). Every old README heading still exists, in the README or in a page, so existing links keep working.
 
 ### Fixed
 

@@ -17,7 +17,8 @@ DOCUMENTED = {0, 1, 2, 3, 4, 64}
 
 
 def documented_codes():
-    section = README.read_text(encoding="utf-8").split("#### Exit codes", 1)[1].split("\n###", 1)[0]
+    after = re.split(r"#{3,4} Exit codes\n", README.read_text(encoding="utf-8"), maxsplit=1)[1]
+    section = re.split(r"\n#{2,4} ", after, maxsplit=1)[0]
     return {int(m) for m in re.findall(r"(?m)^\| (\d+) \|", section)}
 
 

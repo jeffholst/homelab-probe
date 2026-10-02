@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 
 import pytest
+from docs_support import all_docs_text
 
 from unifi_sentinel import cli
 from unifi_sentinel.client import UniFiAPIError
@@ -319,7 +320,7 @@ def test_every_code_used_is_listed_and_every_listed_code_is_used():
     source = (Path(__file__).parent.parent / "unifi_sentinel" / "firewall.py").read_text()
     used = set(re.findall(r'code="(firewall\.[a-z_]+)"', source))
     assert used == set(FIREWALL_CODES)
-    readme = (Path(__file__).parent.parent / "README.md").read_text()
+    readme = all_docs_text()
     assert all(f"`{code}`" in readme for code in FIREWALL_CODES)
     assert all(re.fullmatch(r"firewall\.[a-z_]+", code) for code in FIREWALL_CODES)
 

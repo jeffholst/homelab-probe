@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from docs_support import all_docs_text
 
 from unifi_sentinel import cli
 from unifi_sentinel.audit import AUDIT_CODES
@@ -241,7 +242,7 @@ def test_the_example_file_parses_and_shows_a_code_rule():
 
 
 def test_every_toml_block_in_the_readme_parses_with_the_real_loader(tmp_path):
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    readme = all_docs_text()
     blocks = re.findall(r"```toml\n(.*?)\n```", readme, re.S)
     assert any("code =" in block for block in blocks)
     for block in blocks:
