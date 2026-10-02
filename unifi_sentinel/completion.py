@@ -118,7 +118,7 @@ _unifi_sentinel() {
     i=1
     while [ "$i" -lt "$COMP_CWORD" ]; do
         case "${COMP_WORDS[$i]}" in
-            @TAKING@) i=$((i + 1)) ;;                 # a global option that takes a value
+@SKIP_VALUES@
             -*) ;;
             *) cmd="${COMP_WORDS[$i]}"; break ;;
         esac
@@ -163,13 +163,16 @@ def bash_script(parser: argparse.ArgumentParser) -> str:
                 patterns = "|".join(f"{scope}:{flag}" for flag in option.flags)
                 body = _bash_value_branch(option) + ["return 0 ;;"]
                 values += [f"        {patterns})"] + [f"            {line}" for line in body]
+    taking = "|".join(f for o in s.options if o.takes_value for f in o.flags)
+    # a global option that takes a value: skip it and its value when looking for the command (no such option, no branch)
+    skip_values = f"            {taking}) i=$((i + 1)) ;;\n" if taking else ""
     command_options = [
         f'                {c.name}) COMPREPLY=( $(compgen -W "{_words(f for o in c.options for f in o.flags)}"'
         ' -- "$cur") ) ;;' for c in s.commands]
     positionals = [f'                {c.name}) COMPREPLY=( $(compgen -W "{_words(c.choices)}" -- "$cur") ) ;;'
                    for c in s.commands if c.choices]
     return (_BASH.replace("@PROGRAM@", PROGRAM)
-            .replace("@TAKING@", "|".join(f for o in s.options if o.takes_value for f in o.flags))
+            .replace("@SKIP_VALUES@\n", skip_values)
             .replace("@VALUES@", "\n".join(values))
             .replace("@GLOBAL_OPTIONS@", _words(f for o in s.options for f in o.flags))
             .replace("@COMMANDS@", _words(c.name for c in s.commands))

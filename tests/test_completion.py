@@ -259,7 +259,8 @@ def test_a_missing_or_unknown_shell_is_a_usage_error(capsys):
         with pytest.raises(SystemExit) as stop:
             cli.main(argv)
         assert stop.value.code == cli.EXIT_USAGE
-    assert "invalid choice: 'powershell' (choose from 'bash', 'zsh', 'fish')" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "invalid choice: 'powershell'" in err and all(shell in err for shell in SHELLS)   # the wording of the list varies
 
 
 def test_the_command_runs_from_the_launcher(tmp_path):
@@ -281,3 +282,27 @@ def test_awkward_help_text_is_escaped_the_way_zsh_arguments_reads_it():
                          r"with $HOME and `ticks`]:note: '")
     assert r"                'act:do it\: \[now\], '\''please'\'''" in lines
     assert r"                        '(-x --ex)'{-x,--ex}'[a multiline help \[text\]]:A\:B: ' && ret=0" in lines
+
+
+def test_a_command_without_any_option_still_gets_valid_scripts(tmp_path):
+    top = argparse.ArgumentParser(prog=PROGRAM)
+    sub = top.add_subparsers(dest="command")
+    sub.add_parser("bare", help="has no options at all", add_help=False)
+    assert spec(top).commands[0].options == ()
+    for shell, checker in (("bash", BASH), ("zsh", ZSH)):
+        text = script(shell, top)
+        assert "bare" in text
+        if checker:
+            path = tmp_path / f"bare.{shell}"
+            path.write_text(text)
+            assert subprocess.run([checker, "-n", str(path)], capture_output=True, text=True).returncode == 0, shell
+    assert "bare" in script("fish", top)
+
+
+def test_the_completion_command_has_no_controller_handler():
+    from unifi_sentinel.commands import COMMANDS_BY_NAME
+
+    command = COMMANDS_BY_NAME["completion"]
+    assert command.run_local is not None
+    with pytest.raises(AssertionError, match="without a controller"):
+        command.run(None)
