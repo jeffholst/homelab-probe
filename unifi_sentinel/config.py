@@ -16,6 +16,7 @@ controller URL must be ``https://`` unless ``ALLOW_INSECURE_HTTP`` opts in, beca
 travels in a header of every request.
 """
 
+import ipaddress
 import math
 import os
 import re
@@ -52,7 +53,21 @@ SMTP_SECURITY_WORDS = ("starttls", "ssl", "none")
 SMTP_DEFAULT_PORTS = {"starttls": 587, "ssl": 465, "none": 25}
 MAX_RECIPIENTS = 20
 _ADDRESS = re.compile(r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]{1,64}@[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?")
-_HOST = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?|\[[0-9A-Fa-f:.]{2,45}\]")
+_DNS_LABEL = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?")
+
+
+def _smtp_host(host: str) -> Optional[str]:
+    if host.startswith("[") or host.endswith("]"):
+        if not (host.startswith("[") and host.endswith("]")):
+            return None
+        try:
+            return str(ipaddress.IPv6Address(host[1:-1]))
+        except ValueError:
+            return None
+    labels = host.split(".")
+    if len(host) > 253 or any(not _DNS_LABEL.fullmatch(label) for label in labels):
+        return None
+    return host
 
 
 @dataclass(frozen=True)
@@ -171,8 +186,8 @@ def validate_smtp(
     if not get("NOTIFY_SMTP_HOST"):
         raise ConfigError(f"{given[0]} is set but NOTIFY_SMTP_HOST is not: set the mail server, or remove the "
                           "email settings")
-    host = get("NOTIFY_SMTP_HOST")
-    if not _HOST.fullmatch(host):
+    host = _smtp_host(get("NOTIFY_SMTP_HOST"))
+    if host is None:
         raise ConfigError("NOTIFY_SMTP_HOST must be a host name or an address (no scheme, port, spaces or "
                           "control characters)")
 

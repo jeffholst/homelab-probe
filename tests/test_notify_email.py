@@ -151,15 +151,26 @@ def test_an_unknown_security_word_lists_the_valid_ones():
 
 
 @pytest.mark.parametrize("host", ["smtps://mail.example", "mail.example:587", "mail example", "mail.example\r\nX: y",
-                                  "-bad.example", "mail..example/", "a@b.example", "x" * 300])
+                                  "-bad.example", "mail-.example", "mail.-bad.example", "mail.bad-.example",
+                                  "mail..example", "[a:b]", "[2001:db8::25", "2001:db8::25]", "a@b.example",
+                                  "x" * 300])
 def test_a_bad_host_is_refused(host):
     with pytest.raises(ConfigError, match="NOTIFY_SMTP_HOST must be a host name"):
         parse({"NOTIFY_SMTP_HOST": host})
 
 
-@pytest.mark.parametrize("host", ["mail.example.com", "localhost", "relay-1.lan", "10.0.0.25", "[2001:db8::25]"])
-def test_good_hosts_are_kept(host):
-    assert parse({"NOTIFY_SMTP_HOST": host})[0].host == host
+@pytest.mark.parametrize("host, expected", [
+    ("mail.example.com", "mail.example.com"), ("localhost", "localhost"), ("relay-1.lan", "relay-1.lan"),
+    ("10.0.0.25", "10.0.0.25"), ("[2001:db8::25]", "2001:db8::25"),
+])
+def test_good_hosts_are_kept_or_normalized(host, expected):
+    assert parse({"NOTIFY_SMTP_HOST": host})[0].host == expected
+
+
+def test_normalized_ipv6_host_is_passed_to_the_smtp_transport():
+    smtp, _ = parse({"NOTIFY_SMTP_HOST": "[2001:db8::25]"})
+    _, plain, _ = deliver(smtp)
+    assert plain.opened[0][0] == "2001:db8::25"
 
 
 def test_from_and_to_are_required_and_a_stray_setting_without_a_host_is_an_error():
