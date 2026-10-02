@@ -11,6 +11,7 @@ through: not a tag that disagrees with the package, not a missing entry, not one
 
 import re
 import sys
+from datetime import date
 from pathlib import Path
 from typing import Optional
 
@@ -46,10 +47,15 @@ def release_notes(tag: str, root: Optional[Path] = None) -> str:
     version = package_version(root)
     if tag != f"v{version}":
         raise ReleaseError(f"the tag {tag!r} does not match the package version: expected 'v{version}'")
-    date, body = changelog_section((root / "CHANGELOG.md").read_text(encoding="utf-8"), version)
-    if not date or not DATE.fullmatch(date.strip()):
-        raise ReleaseError(f"the CHANGELOG.md entry for {version} is dated {date!r}: give it the release date "
+    release_date, body = changelog_section((root / "CHANGELOG.md").read_text(encoding="utf-8"), version)
+    if not release_date or not DATE.fullmatch(release_date.strip()):
+        raise ReleaseError(f"the CHANGELOG.md entry for {version} is dated {release_date!r}: give it the release date "
                            "(YYYY-MM-DD) before tagging")
+    try:
+        date.fromisoformat(release_date.strip())
+    except ValueError:
+        raise ReleaseError(f"the CHANGELOG.md entry for {version} is dated {release_date!r}: give it a real "
+                           "release date (YYYY-MM-DD) before tagging") from None
     if not body.strip():
         raise ReleaseError(f"the CHANGELOG.md entry for {version} is empty")
     return body + "\n"

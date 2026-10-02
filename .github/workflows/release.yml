@@ -1,8 +1,8 @@
 # Publishes a GitHub release when the owner pushes a version tag (git tag -a v0.2.0 && git push origin v0.2.0).
 #
 # It never runs on a pull request or a push to a branch, it is the only workflow that can write to the repository
-# (`contents: write`, on its one job), and it uses no third-party action: the release is made with the `gh` CLI that
-# the runner already has. Before anything is published it checks that the tag is `v` plus the package version and
+# (`contents: write`, on its one job), and it uses no third-party publishing action: the release is made with the `gh`
+# CLI that the runner already has. Before anything is published it checks that the tag is `v` plus the package version and
 # that CHANGELOG.md has a dated entry for it (tools/release_notes.py), and it runs the lockfile check and the tests.
 # See "Releases" in CLAUDE.md.
 name: Release

@@ -14,8 +14,8 @@ These are the parts of the interface that scripts, cron jobs and dashboards depe
 always listed here.
 
 - **Exit codes:** `0` success (for `diagnose` and `audit`: no finding at or above `--fail-on`); `1` a warning (or
-  `--fail-on info` finding); `2` a critical finding (`diagnose` only); `3` a configuration, connection or
-  controller error (also `diagnose --notify` when the findings gave `0` but no message could be delivered); `4`
+  `--fail-on info` finding); `2` a critical finding (`diagnose` only); `3` a configuration, connection, controller, or
+  file read/write error (also `diagnose --notify` when the findings gave `0` but no message could be delivered); `4`
   `client` found no single match; `64` a command-line usage error. `1` and `2` are never used for errors.
 - **Finding codes** (`device.offline`, `port.slow_link`, `audit.wifi_open`, ...) are never renamed or reused; new
   ones are added. They are what `--json` output and ignore rules (`[[ignore]] code = ...`) use.

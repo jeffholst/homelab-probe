@@ -5,11 +5,14 @@ command, a tag that disagrees with the package, a release made on a pull request
 than it must.
 """
 
+import json
 import re
 import sys
 from pathlib import Path
 
 import pytest
+import yaml
+from jsonschema import Draft7Validator
 from release_notes import ReleaseError, changelog_section, main, package_version, release_notes
 
 import unifi_sentinel
@@ -22,6 +25,21 @@ ROOT = Path(__file__).resolve().parent.parent
 CHANGELOG = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 WORKFLOWS = ROOT / ".github" / "workflows"
 RELEASE = (WORKFLOWS / "release.yml").read_text(encoding="utf-8")
+WORKFLOW_SCHEMA = json.loads((ROOT / "tests" / "fixtures" / "github-workflow.schema.json").read_text(encoding="utf-8"))
+WORKFLOW_FILES = sorted(WORKFLOWS.glob("*.yml"))
+
+
+class WorkflowLoader(yaml.SafeLoader):
+    pass
+
+
+WorkflowLoader.yaml_implicit_resolvers = {
+    key: [(tag, pattern) for tag, pattern in resolvers if tag != "tag:yaml.org,2002:bool"]
+    for key, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
+}
+WorkflowLoader.add_implicit_resolver(
+    "tag:yaml.org,2002:bool", re.compile(r"^(?:true|false)$", re.IGNORECASE), list("tTfF")
+)
 
 
 def without_comments(text):
@@ -61,6 +79,7 @@ def test_the_page_says_what_scripts_can_rely_on():
         assert code in contract, f"exit code {code}"
     for phrase in ("Finding codes", "never renamed or reused", "`version`", "`schema_version`", "Every request is a GET"):
         assert phrase in contract, phrase
+    assert "file read/write error" in contract
 
 
 def test_every_command_is_mentioned_so_a_new_one_needs_a_changelog_line():
@@ -115,11 +134,19 @@ def test_a_version_without_a_changelog_entry_is_refused(tmp_path):
 
 
 @pytest.mark.parametrize("heading", ["## [1.2.3] - Unreleased", "## [1.2.3]", "## [1.2.3] - soon", "## [1.2.3] - 2026-1-2",
-                                     "## [1.2.3] - 02/10/2026"])
+                                     "## [1.2.3] - 02/10/2026", "## [1.2.3] - 2026-02-31",
+                                     "## [1.2.3] - 2026-13-01", "## [1.2.3] - 2025-02-29"])
 def test_an_entry_without_a_real_date_is_refused(tmp_path, heading):
     root = tree(tmp_path, changelog=f"# Changelog\n\n{heading}\n\n### Added\n\n- x\n")
-    with pytest.raises(ReleaseError, match="give it the release date"):
+    expected = "give it a real release date" if heading.endswith(("2026-02-31", "2026-13-01", "2025-02-29")) \
+        else "give it the release date"
+    with pytest.raises(ReleaseError, match=expected):
         release_notes("v1.2.3", root)
+
+
+def test_a_leap_day_is_a_real_release_date(tmp_path):
+    root = tree(tmp_path, changelog="# Changelog\n\n## [1.2.3] - 2024-02-29\n\n### Added\n\n- x\n")
+    assert release_notes("v1.2.3", root) == "### Added\n\n- x\n"
 
 
 def test_an_empty_entry_is_refused(tmp_path):
@@ -196,9 +223,28 @@ def test_the_tag_reaches_the_shell_only_through_the_environment():
                                                                           for line in run_lines)
 
 
-def test_the_release_uses_no_third_party_action_and_the_token_is_the_built_in_one():
+def test_the_release_uses_no_third_party_publishing_action_and_the_token_is_the_built_in_one():
     actions = set(re.findall(r"uses:\s*([\w./-]+)@", RELEASE_CODE))
     assert actions == {"actions/checkout", "astral-sh/setup-uv"}
+    assert "gh release create" in RELEASE_CODE
     assert re.findall(r"GH_TOKEN: (.+)", RELEASE_CODE) == ["${{ secrets.GITHUB_TOKEN }}"]
     assert "secrets." not in RELEASE_CODE.replace("secrets.GITHUB_TOKEN", "")
     assert "enable-cache: false" in RELEASE_CODE                                           # no cache shared with other jobs
+
+
+def test_every_workflow_validates_against_the_pinned_offline_schema():
+    """The vendored SchemaStore schema is pinned at 8b994c014937a9332f2fb53d993eb1a30705677c."""
+    assert WORKFLOW_FILES
+    Draft7Validator.check_schema(WORKFLOW_SCHEMA)
+    validator = Draft7Validator(WORKFLOW_SCHEMA)
+    for path in WORKFLOW_FILES:
+        workflow = yaml.load(path.read_text(encoding="utf-8"), Loader=WorkflowLoader)
+        errors = sorted(validator.iter_errors(workflow), key=lambda error: str(error.absolute_path))
+        assert not errors, f"{path.name}: " + "; ".join(error.message for error in errors)
+
+
+def test_the_workflow_schema_rejects_a_misspelled_permissions_key():
+    workflow = yaml.load(RELEASE, Loader=WorkflowLoader)
+    workflow["jobs"]["release"]["permisions"] = workflow["jobs"]["release"].pop("permissions")
+    errors = Draft7Validator(WORKFLOW_SCHEMA).iter_errors(workflow)
+    assert any("permisions" in error.message for error in errors)
