@@ -142,7 +142,7 @@ def normalize_mac(value: Any) -> str:
     """The one way MAC addresses are compared: upper case with colons, whatever the source wrote
     (``aa-bb-cc-dd-ee-ff``, ``aabb.ccdd.eeff``, ``AABBCCDDEEFF``). Text that is not a 12-digit MAC address comes
     back trimmed and upper-cased; anything that is not text, and None, gives ''. Never compare MACs with a bare
-    ``.upper()``: two sources may spell one address differently (tests/test_accuracy scans for it)."""
+    ``.upper()``: two sources may spell one address differently (tests/test_mac_formats.py scans for it)."""
     if not isinstance(value, str):
         return ""
     digits = hex_digits(value)
