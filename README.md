@@ -1,6 +1,6 @@
 # UniFi Sentinel
 
-A command-line tool for querying, troubleshooting and inventorying a UniFi Network controller. It is **read-only**: it never changes anything on the controller. Every request is a GET, with one exception: the event log can only be queried with a POST, so `events`, and `diagnose` and `client` by default (`--no-events` skips it), send a read-only query to that one endpoint (see [Event history](#event-history)). Nothing else is ever sent anywhere, with one opt-in exception: `diagnose --notify` can send a short message to a notification service you configure (see [Notifications](#notifications)).
+A command-line tool for querying, troubleshooting and inventorying a UniFi Network controller. It is **read-only**: it never changes anything on the controller. Every request is a GET, with one exception: the event log can only be queried with a POST, so `events`, and `diagnose` and `client` by default (`--no-events` skips it), send a read-only query to that one endpoint (see [Event history](#event-history)). Nothing else is ever sent anywhere, with one opt-in exception: `diagnose --notify` can send a short message to a notification service or mail server you configure (see [Notifications](#notifications)).
 
 > **Status: early development.** Tested against one live controller (Network 10.6.106); other versions and hardware may differ. See [open issues](https://github.com/jeffholst/unifi-sentinel/issues) for the roadmap.
 
@@ -46,7 +46,7 @@ The tool is still evolving; see open issues for planned reports, controller-vers
 - **Verbose logging**: `--verbose` shows every request (path, status, time, retries) and what was read on stderr, never the API key, to diagnose slow runs and undocumented endpoints
 - **Randomized MAC detection**: clients that use a private (locally administered) Wi-Fi MAC address are flagged in `query clients`, `new-clients` and `client`, and `diagnose` notes reservations tied to one, because they stop applying when the device changes its address
 - **New client detection**: list every known client that is in no client group, newest first, to spot new devices
-- **Notifications**: `diagnose --notify` tells you through ntfy or a webhook when a problem is new, has got worse, or is fixed (critical ones are repeated daily), once instead of every run, opt-in, with a redaction option
+- **Notifications**: `diagnose --notify` tells you through ntfy, a webhook or email when a problem is new, has got worse, or is fixed (critical ones are repeated daily), once instead of every run, opt-in, with a redaction option
 - **Configuration audit**: `audit` flags settings that are probably not what you want, as opposed to what is broken now: open, WEP and WPA2-only Wi-Fi networks, guest networks that let their clients reach each other, devices that still have their default name, devices with a firmware update waiting, and clients with no name; same findings format, ignore list, `--json` and exit codes as `diagnose`
 - **Health checks**: read-only diagnostics with severity levels, exit codes for scripts and cron, `--json` output with a stable code per check, and a TOML file for thresholds and an ignore list
 - **Official API first**: uses the UniFi Network Integration API (`/proxy/network/integration/v1`). Legacy endpoints are used only for data the Integration API does not expose (per-port counters, client-to-port mapping, DHCP reservations, network config and client groups) and degrade gracefully with a warning if unavailable
@@ -91,6 +91,11 @@ VERIFY_SSL=true
 | `NOTIFY_NTFY_TOKEN` | No    | -         | ntfy access token, sent as a bearer token |
 | `NOTIFY_WEBHOOK_URL` | No   | -         | Generic webhook URL for `diagnose --notify` (a secret, `https://` only) |
 | `NOTIFY_WEBHOOK_TOKEN` | No | -         | Webhook bearer token |
+| `NOTIFY_SMTP_HOST` | No     | -         | Mail server for `diagnose --notify` email; setting it turns email on (needs the two address settings) |
+| `NOTIFY_SMTP_PORT` | No     | 587 (starttls), 465 (ssl), 25 (none) | Mail server port |
+| `NOTIFY_SMTP_SECURITY` | No | `starttls` | `starttls`, `ssl`, or `none` (plain, lab opt-in only, never with a password) |
+| `NOTIFY_SMTP_USER`, `NOTIFY_SMTP_PASSWORD` | No | - | Login, both or neither (a secret; an app password for a provider) |
+| `NOTIFY_EMAIL_FROM`, `NOTIFY_EMAIL_TO` | With a host | - | Sender, and one or more recipients separated by commas (plain `name@host` addresses) |
 | `ALLOW_INSECURE_HTTP` | No  | `false`   | Lab-only opt-in to an `http://` controller URL (same words as `VERIFY_SSL`) |
 
 - **Where the `.env` file is found**, first match wins: the file given with `--env-file FILE` (before the command, for example `unifi-sentinel --env-file lab.env diagnose`); the file named by the `UNIFI_SENTINEL_ENV` environment variable; `.env` in the **current directory**. Parent directories and the installed package's directory are not searched, so an installed copy (`pip install .`) works from whichever directory holds your `.env`, an unrelated project's `.env` is never picked up, and running from a subdirectory of the project does not find the project's `.env` (use `--env-file` or run from the project root). A file named with `--env-file` or `UNIFI_SENTINEL_ENV` must exist. Real environment variables always take precedence over values in the file. The `unifi-sentinel.toml` settings file for `diagnose` is likewise read from the current directory.
@@ -412,7 +417,7 @@ A missing, unreadable or invalid file (unknown keys, bad values, rules without a
 
 #### Notifications
 
-`diagnose --notify` sends a short message to **ntfy** and/or a **generic webhook** when something changed since the last notified run, so you hear about a new problem once instead of reading cron output. Nothing is ever sent unless you pass `--notify` **and** have configured a destination, and nothing is ever sent to the controller's address or any other place.
+`diagnose --notify` sends a short message to **ntfy**, a **generic webhook** and/or **email** when something changed since the last notified run, so you hear about a new problem once instead of reading cron output. Nothing is ever sent unless you pass `--notify` **and** have configured a destination, and nothing is ever sent to the controller's address or any other place.
 
 ```bash
 # in .env (the URLs and tokens are secrets; keep the file private, `chmod 600 .env`)
@@ -420,6 +425,11 @@ NOTIFY_NTFY_URL=https://ntfy.example.com/a-long-random-topic-name
 NOTIFY_NTFY_TOKEN=tk_...                  # optional, for a protected topic
 NOTIFY_WEBHOOK_URL=https://hooks.example.com/in/abc123
 NOTIFY_WEBHOOK_TOKEN=...                  # optional, sent as "Authorization: Bearer ..."
+NOTIFY_SMTP_HOST=smtp.example.com         # email: STARTTLS on port 587 by default
+NOTIFY_SMTP_USER=alerts@example.com       # optional login: both user and password, or neither
+NOTIFY_SMTP_PASSWORD=app-password-here
+NOTIFY_EMAIL_FROM=alerts@example.com
+NOTIFY_EMAIL_TO=me@example.com,partner@example.com
 
 uv run unifi-sentinel.py diagnose --notify --notify-baseline   # once: treat today's findings as already reported
 */15 * * * * cd /path/to/unifi-sentinel && uv run unifi-sentinel.py diagnose --notify --fail-on critical
@@ -431,6 +441,7 @@ uv run unifi-sentinel.py diagnose --notify --notify-baseline   # once: treat tod
 - **What leaves your network:** the finding text, which **includes device and client names, IP addresses and MACs** (an alert without the name is hard to act on), to the services you configured and nowhere else. **`--notify-redact`** sends only the generic description of each check and a count (`[WARNING] NEW  a switch port is dropping packets above the threshold (x3)`), no names, addresses or MACs. Never sent: the API key, the controller's address, the site id. Names are untrusted data (control characters are removed from the text; a chat system that renders markdown or mentions may still show them).
 - **ntfy:** a public `ntfy.sh` topic is readable by **anyone who knows its name**, so use a long random topic or your own server, and treat the topic like a password (it is part of the URL, kept in `.env`, never printed). The message is the body; the priority is 5 for a critical problem, 4 for a warning, 3 otherwise, with a matching tag.
 - **Webhook:** a JSON `POST` with `source`, `version`, `redacted`, `title`, a ready-to-show `text`, and an `events` list (`event` of `new`, `worsened`, `reminder` or `recovered`, `severity`, `code`, `description`, and, unless redacted, `subject` and `message`). Slack and Discord style webhooks are not adapted yet.
+- **Email:** one plain-text message per run (no HTML, no attachments) from `NOTIFY_EMAIL_FROM` to every address in `NOTIFY_EMAIL_TO`, over one SMTP session. The subject is the same short ASCII title as ntfy's (`unifi-sentinel: 2 problem(s), 1 recovered`) and the body the same text, so redaction, the minimum severity and a dry run work the same. The connection is encrypted and verified: **STARTTLS** (default, port 587) or **implicit TLS** (`NOTIFY_SMTP_SECURITY=ssl`, port 465), with the server's certificate and host name checked against the system's trusted authorities, and the login is only attempted over it. Plain SMTP (`NOTIFY_SMTP_SECURITY=none`) needs the same lab opt-in as an `http://` URL (`ALLOW_INSECURE_HTTP=true`, with a warning on every run) and is refused whenever a password is set, even if you opt in. Addresses are plain `name@host` (no display names), checked at start-up, so a line break cannot add a header; the greeting and the `Message-ID` use the sender's domain, not this machine's name. A half-set configuration (a stray `NOTIFY_SMTP_PORT` without a host, a user without a password) is an error naming the setting, never a silent no-op. If the server refuses some recipients but accepts others, it counts as delivered and the output says how many were reached. Failures print a fixed reason only: `authentication failed`, `connection error`, `timed out`, `TLS error`, `recipient refused`, `sender refused`, `server disconnected`, `server rejected the message`, or `the server does not offer the required security or login`; never the host, user name, password, addresses or the library's text. It uses only the standard library (`smtplib`), so no dependency was added.
 - **Safety of the destinations:** `https://` only (a lab can opt in with `ALLOW_INSECURE_HTTP=true`), TLS is always verified, redirects are not followed (a redirect could carry the token elsewhere), and a user name or password in the URL is refused. Errors say only which destination and a fixed reason (`HTTP 403`, `timed out`, `connection error`, `TLS certificate verification failed`), never the URL, the topic or the token.
 - **Partial runs:** with `--only` or `--skip`, findings of the areas that did not run are left alone: not recovered, not reminded, and their remembered state is kept (see [Diagnose](#diagnose)).
 - **Failures and exit codes:** the findings decide the exit code as usual. If a message could not be delivered to any destination, a warning goes to stderr, the state is **not** updated (the next run tries again), and the exit code is `3` **only if the findings would have given `0`**, so a cron job notices. One destination working is enough. `--notify-*` options other than `--notify` itself are usage errors without it.
@@ -953,7 +964,7 @@ unifi_sentinel/
     ports.py  wireless.py  switch ports and uplinks; Wi-Fi quality
     event_checks.py        the event log (conflicts, disconnects, roaming, unreachable devices)
     output.py              ignoring findings, exit codes, text and JSON
-  notify.py              notifications: what changed since the last run, ntfy/webhook sending, state file
+  notify.py              notifications: what changed since the last run, ntfy/webhook/email sending, state file
   settings.py            diagnose thresholds and ignore list (TOML)
   util.py                shared helpers: output safety (printable names, CSV formulas), numbers, MACs, times, plurals
   cli.py                 argument parser and main: loads the configuration, builds the client, runs a command

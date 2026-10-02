@@ -625,8 +625,8 @@ def _check_diagnose(parser: argparse.ArgumentParser, args: argparse.Namespace) -
 
 def _prepare_diagnose(args: argparse.Namespace, config: Config) -> None:
     if args.notify and not args.notify_dry_run and not args.notify_baseline and not destinations_from_config(config):
-        raise ConfigError("--notify needs a destination: set NOTIFY_NTFY_URL and/or NOTIFY_WEBHOOK_URL in .env "
-                          "(see the README); nothing was sent")
+        raise ConfigError("--notify needs a destination: set NOTIFY_NTFY_URL, NOTIFY_WEBHOOK_URL and/or "
+                          "NOTIFY_SMTP_HOST in .env (see the README); nothing was sent")
 
 
 def _notify(findings: List[Any], config: Any, settings: Any, args: argparse.Namespace) -> bool:

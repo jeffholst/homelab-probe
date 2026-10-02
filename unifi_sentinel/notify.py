@@ -4,7 +4,7 @@ This is the one place the tool sends data *off the machine* (never to the contro
 deliberately small and opt-in:
 
 * nothing is sent unless ``diagnose --notify`` is given and a destination is configured;
-* the destination URLs and tokens are secrets, read from the environment, and never appear in
+* the destination URLs, tokens and the mail account are secrets, read from the environment, and never appear in
   any message, error or log line (errors say only which destination and a fixed reason);
 * only the finding identity, severity and text are sent, never the API key, the controller
   address or a site id, and ``--notify-redact`` replaces names, addresses and MACs with the
@@ -13,21 +13,27 @@ deliberately small and opt-in:
   owner-only state file, so a persistent problem is not re-sent every run.
 
 The planning (`plan`) and the wording (`render_text`, `render_payload`) are pure functions; the
-single network call is in `send`.
+network calls (one HTTPS POST per ntfy or webhook destination, one SMTP session for email) are in `send`.
+Email uses verified STARTTLS or implicit TLS by default. Plain SMTP is available only with the lab opt-in,
+and a password is never sent over an unencrypted connection.
 """
 
 import json
 import os
+import smtplib
+import ssl
 import time
 from collections import Counter
 from collections.abc import Callable, Collection
 from dataclasses import dataclass, field
+from email.message import EmailMessage
+from email.utils import formatdate, make_msgid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 
-from .config import Config
+from .config import Config, SmtpSettings
 from .diagnose import CODES, CRITICAL, INFO, SEVERITY_ORDER, WARNING, Finding, area_of
 from .util import printable
 
@@ -40,9 +46,10 @@ KIND_WORD = {"new": "NEW", "worsened": "WORSE", "reminder": "STILL", "recovered"
 
 @dataclass(frozen=True)
 class Destination:
-    kind: str                                  # "ntfy" or "webhook"
-    url: str = field(repr=False)               # a secret: a topic name or a token is part of it
+    kind: str                                  # "ntfy", "webhook" or "email"
+    url: str = field(default="", repr=False)   # a secret: a topic name or a token is part of it
     token: str = field(default="", repr=False)
+    smtp: Optional[SmtpSettings] = field(default=None, repr=False)     # for "email"
 
 
 @dataclass(frozen=True)
@@ -60,6 +67,8 @@ def destinations_from_config(config: Config) -> List[Destination]:
         found.append(Destination("ntfy", config.notify_ntfy_url, config.notify_ntfy_token))
     if config.notify_webhook_url:
         found.append(Destination("webhook", config.notify_webhook_url, config.notify_webhook_token))
+    if config.notify_smtp is not None:
+        found.append(Destination("email", smtp=config.notify_smtp))
     return found
 
 
@@ -220,20 +229,98 @@ def _priority(events: List[Event]) -> Tuple[str, str]:
 
 # -- sending -----------------------------------------------------------------------------------
 
+def _email_failure(error: BaseException) -> str:
+    """A fixed phrase for an SMTP failure. The library's own text is never used: it can hold the host, the user
+    name or a line the server sent back. The order matters, because ``SMTPException`` and ``ssl.SSLError`` are
+    both ``OSError`` subclasses, as are timeouts."""
+    if isinstance(error, smtplib.SMTPAuthenticationError):
+        return "authentication failed"
+    if isinstance(error, smtplib.SMTPRecipientsRefused):
+        return "recipient refused"
+    if isinstance(error, smtplib.SMTPSenderRefused):
+        return "sender refused"
+    if isinstance(error, smtplib.SMTPNotSupportedError):
+        return "the server does not offer the required security or login"
+    if isinstance(error, ssl.SSLError):
+        return "TLS error"
+    if isinstance(error, TimeoutError):
+        return "timed out"
+    if isinstance(error, smtplib.SMTPServerDisconnected):
+        return "server disconnected"
+    if isinstance(error, smtplib.SMTPException):
+        return "server rejected the message"
+    if isinstance(error, ValueError):
+        return "the message could not be built (an invalid address)"
+    return "connection error"
+
+
+def _email_message(smtp: SmtpSettings, title: str, body: str) -> EmailMessage:
+    message = EmailMessage()
+    message["Subject"] = title.encode("ascii", "replace").decode("ascii").replace("\r", " ").replace("\n", " ")
+    message["From"] = smtp.sender
+    message["To"] = ", ".join(smtp.recipients)
+    message["Date"] = formatdate(localtime=True)
+    message["Message-ID"] = make_msgid(domain=smtp.sender.rsplit("@", 1)[1])   # not this machine's host name
+    message.set_content(body)
+    return message
+
+
+def _send_email(smtp: SmtpSettings, title: str, body: str, timeout: float,
+                plain: Callable[..., Any], implicit_tls: Callable[..., Any]) -> Tuple[bool, str]:
+    """One plain-text message to every recipient over one connection: ``(delivered, reason)``.
+
+    The connection is verified TLS (``ssl.create_default_context`` checks the certificate and the host name), a
+    login is only attempted over it, and a password is refused over anything else even if the settings were
+    built by hand. Delivered means at least one recipient accepted it; the reason says when some did not."""
+    if smtp.password and smtp.security == "none":
+        return False, "a password is never sent without encryption"
+    context = ssl.create_default_context()
+    hello = smtp.sender.rsplit("@", 1)[1]                  # the name we give the server; not this machine's host name
+    try:
+        connection = (implicit_tls(smtp.host, smtp.port, local_hostname=hello, timeout=timeout, context=context)
+                      if smtp.security == "ssl" else
+                      plain(smtp.host, smtp.port, local_hostname=hello, timeout=timeout))
+        with connection:
+            if smtp.security == "starttls":
+                connection.starttls(context=context)
+            if smtp.user:
+                connection.login(smtp.user, smtp.password)
+            refused = connection.send_message(_email_message(smtp, title, body), from_addr=smtp.sender,
+                                              to_addrs=list(smtp.recipients))
+    except (OSError, smtplib.SMTPException, ValueError) as error:    # SMTPException is an OSError; listed for clarity
+        return False, _email_failure(error)
+    if refused:
+        accepted = len(smtp.recipients) - len(refused)
+        return True, f"sent to {accepted} of {len(smtp.recipients)} recipients (the others were refused)"
+    return True, "sent"
+
+
 def send(destinations: List[Destination], events: List[Event], redact: bool, timeout: float,
          post: Optional[Callable[..., Any]] = None,
-         trace: Optional[Callable[[str], None]] = None) -> List[Tuple[str, bool, str]]:
+         trace: Optional[Callable[[str], None]] = None,
+         smtp_plain: Optional[Callable[..., Any]] = None,
+         smtp_ssl: Optional[Callable[..., Any]] = None) -> List[Tuple[str, bool, str]]:
     """Send the message to every destination: ``[(kind, delivered, reason)]``.
 
     ``reason`` is a fixed phrase (``HTTP 403``, ``timed out``, ...), never the library's text,
     because that text contains the URL, which is a secret. Redirects are not followed (a
-    redirect could carry the token to another host) and TLS is always verified.
+    redirect could carry the token to another host) and TLS is always verified. Email goes out as one
+    plain-text message over one SMTP session (``smtp_plain`` and ``smtp_ssl`` stand in for ``smtplib.SMTP`` and
+    ``smtplib.SMTP_SSL`` in tests).
     """
     post = post or requests.post
     title, body = render_text(events, redact)
     priority, tag = _priority(events)
     results = []
     for dest in destinations:
+        started = time.perf_counter()
+        if dest.kind == "email" and dest.smtp is not None:
+            outcome = _send_email(dest.smtp, title, body, timeout, smtp_plain or smtplib.SMTP,
+                                  smtp_ssl or smtplib.SMTP_SSL)
+            results.append((dest.kind, *outcome))
+            if trace is not None:
+                trace(f"notify {dest.kind} -> {outcome[1]} ({(time.perf_counter() - started) * 1000:.0f} ms)")
+            continue
         headers: Dict[str, str] = {}
         if dest.token:
             headers["Authorization"] = f"Bearer {dest.token}"
@@ -243,7 +330,6 @@ def send(destinations: List[Destination], events: List[Event], redact: bool, tim
             kwargs: Dict[str, Any] = {"data": body.encode("utf-8")}
         else:
             kwargs = {"json": render_payload(events, redact)}
-        started = time.perf_counter()
         try:
             response = post(dest.url, headers=headers, timeout=timeout, allow_redirects=False, verify=True, **kwargs)
         except requests.exceptions.SSLError:
