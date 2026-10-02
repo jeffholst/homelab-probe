@@ -5,22 +5,22 @@ from typing import Dict, List
 from ..export import device_type_label
 from ..settings import DiagnoseSettings
 from ..snapshot import Snapshot
-from ..util import record_for
+from ..util import normalize_mac, record_for
 from .model import CRITICAL, GATEWAY_TYPES, WARNING, Finding
 
 
 def _uplink_parents(snap: Snapshot) -> Dict[str, int]:
     """{device id: number of devices that uplink through it}."""
-    id_by_mac = {(d.get("macAddress") or "").upper(): d.get("id") for d in snap.devices}
+    id_by_mac = {normalize_mac(d.get("macAddress")): d.get("id") for d in snap.devices}
     legacy_uplink = {
-        (d.get("mac") or "").upper(): ((d.get("uplink") or {}).get("uplink_mac") or "").upper()
+        normalize_mac(d.get("mac")): normalize_mac((d.get("uplink") or {}).get("uplink_mac"))
         for d in snap.legacy_devices
     }
     counts: Dict[str, int] = {}
     for d in snap.devices:
         parent = (record_for(snap.device_details, d.get("id")).get("uplink") or {}).get("deviceId")
         if not parent:
-            parent = id_by_mac.get(legacy_uplink.get((d.get("macAddress") or "").upper(), ""))
+            parent = id_by_mac.get(legacy_uplink.get(normalize_mac(d.get("macAddress")), ""))
         if parent:
             counts[parent] = counts.get(parent, 0) + 1
     return counts
@@ -30,24 +30,24 @@ def _offline_device_findings(snap: Snapshot) -> List[Finding]:
     """A device that is not online: critical for a gateway or one that others uplink through, else a warning."""
     findings: List[Finding] = []
     parents = _uplink_parents(snap)
-    legacy_type = {(d.get("mac") or "").upper(): d.get("type", "") for d in snap.legacy_devices}
+    legacy_type = {normalize_mac(d.get("mac")): d.get("type", "") for d in snap.legacy_devices}
     for d in snap.devices:
         if d.get("state") == "ONLINE":
             continue
         name = d.get("name") or d.get("macAddress", "?")
         message = f"device is {str(d.get('state', 'unknown')).lower()}"
-        kind = device_type_label(d, legacy_type.get((d.get("macAddress") or "").upper(), ""))
+        kind = device_type_label(d, legacy_type.get(normalize_mac(d.get("macAddress")), ""))
         downstream = parents.get(d.get("id") or "", 0)
         if kind in GATEWAY_TYPES:
             findings.append(Finding(
-                CRITICAL, name, f"{message} (gateway)", (d.get("macAddress") or "").upper(),
+                CRITICAL, name, f"{message} (gateway)", normalize_mac(d.get("macAddress")),
                 code="device.offline"))
         elif downstream:
             findings.append(Finding(
                 CRITICAL, name, f"{message} ({downstream} device(s) uplink through it)",
-                (d.get("macAddress") or "").upper(), code="device.offline"))
+                normalize_mac(d.get("macAddress")), code="device.offline"))
         else:
-            findings.append(Finding(WARNING, name, message, (d.get("macAddress") or "").upper(),
+            findings.append(Finding(WARNING, name, message, normalize_mac(d.get("macAddress")),
                                     code="device.offline"))
     return findings
 
@@ -64,6 +64,6 @@ def _resource_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Findi
                 findings.append(Finding(
                     level, d.get("name") or d.get("macAddress", "?"),
                     f"{label} utilization {st[key]:.0f}%",
-                    (d.get("macAddress") or "").upper(),
+                    normalize_mac(d.get("macAddress")),
                     code="device.cpu_high" if key == "cpuUtilizationPct" else "device.memory_high"))
     return findings

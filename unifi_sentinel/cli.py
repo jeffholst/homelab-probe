@@ -109,6 +109,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     except (ConfigError, UniFiAPIError) as e:
         say(f"ERROR: {e}", file=sys.stderr)
         return EXIT_ERROR
+    except OSError as e:        # a file the command could not read or write: say which, never a traceback
+        say(f"ERROR: {e.strerror or type(e).__name__}" + (f" ({e.filename})" if e.filename else ""), file=sys.stderr)
+        return EXIT_ERROR
     finally:
         if args.verbose and client is not None and client.attempts_made:
             verbose(client.summary())

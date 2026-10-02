@@ -26,7 +26,7 @@ def _link(snap: Snapshot, idx: DeviceIndex, mac: str) -> Tuple[str, Optional[int
     """
     legacy = idx.legacy.get(mac) or {}
     up = legacy.get("uplink") or {}
-    parent = (up.get("uplink_mac") or "").upper()
+    parent = normalize_mac(up.get("uplink_mac"))
     if not parent:
         detail = record_for(snap.device_details, (idx.integration.get(mac) or {}).get("id"))
         wanted = (detail.get("uplink") or {}).get("deviceId")
@@ -53,13 +53,13 @@ def _client_info(snap: Snapshot) -> Tuple[Optional[Dict[str, Counter]], Dict[str
     wired: Dict[str, List[Dict[str, Any]]] = {}
     for c in snap.legacy_clients:
         if c.get("is_wired") and c.get("sw_mac"):
-            mac = (c["sw_mac"] or "").upper()
+            mac = normalize_mac(c["sw_mac"])
             counts.setdefault(mac, Counter())["wired"] += 1
             wired.setdefault(mac, []).append({
                 "name": c.get("name") or c.get("hostname") or normalize_mac(c.get("mac")),
                 "ip": c.get("ip") or "", "port": c.get("sw_port")})
         elif not c.get("is_wired") and c.get("ap_mac"):
-            counts.setdefault((c["ap_mac"] or "").upper(), Counter())["wireless"] += 1
+            counts.setdefault(normalize_mac(c["ap_mac"]), Counter())["wireless"] += 1
     return counts, wired
 
 

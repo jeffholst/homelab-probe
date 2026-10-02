@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 from .export import INVENTORY_COLUMNS, build_inventory, build_offline_clients, build_switch_ports
 from .reservations import OFFLINE_RESERVATION_COLUMNS, RESERVATION_COLUMNS, build_reservations, offline_reservation_rows
 from .snapshot import Snapshot
-from .util import is_randomized_mac, printable, record_for, search_rows
+from .util import is_randomized_mac, normalize_mac, printable, record_for, search_rows
 
 TABLE_COLUMNS = ["Name", "MAC Address", "IP Address", "Model", "Connection Type",
                  "Switch", "Port", "Status"]
@@ -34,7 +34,7 @@ def format_uptime(seconds: Any) -> str:
 
 def _add_device_details(rows: List[Dict[str, Any]], snap: Snapshot) -> None:
     """Add firmware, update availability and uptime to the device rows in place."""
-    by_mac = {(d.get("macAddress") or "").upper(): d for d in snap.devices}
+    by_mac = {normalize_mac(d.get("macAddress")): d for d in snap.devices}
     for row in rows:
         dev = by_mac.get(row["MAC Address"])
         if row["Type"].startswith("Device") and dev:

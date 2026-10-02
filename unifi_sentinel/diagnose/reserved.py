@@ -7,7 +7,7 @@ from typing import Dict, List, Optional
 from ..reservations import dhcp_pool, offline_reservations, reservation_records
 from ..settings import DiagnoseSettings
 from ..snapshot import Snapshot
-from ..util import describe_age
+from ..util import describe_age, normalize_mac
 from .addresses import ip_holders
 from .model import (
     CRITICAL,
@@ -19,11 +19,11 @@ from .model import (
 
 def _reservation_findings(snap: Snapshot) -> List[Finding]:
     findings: List[Finding] = []
-    connected = {(c.get("macAddress") or "").upper(): c for c in snap.clients}
+    connected = {normalize_mac(c.get("macAddress")): c for c in snap.clients}
     by_ip: Dict[str, List[str]] = {}
 
     for user, net in reservation_records(snap):
-        mac = (user.get("mac") or "").upper()
+        mac = normalize_mac(user.get("mac"))
         name = user.get("name") or user.get("hostname") or mac
         reserved = user["fixed_ip"]
         by_ip.setdefault(reserved, []).append(name)
@@ -83,7 +83,7 @@ def _pool_findings(snap: Snapshot) -> List[Finding]:
             continue
         if reserved.version != pool[0].version or not int(pool[0]) <= int(reserved) <= int(pool[1]):
             continue
-        mac = (user.get("mac") or "").upper()
+        mac = normalize_mac(user.get("mac"))
         name = user.get("name") or user.get("hostname") or mac
         text = f"reserved IP {reserved} is inside the DHCP pool {pool[0]}-{pool[1]} of {net.get('name') or '?'}"
         reservation_mac = mac.replace("-", ":")

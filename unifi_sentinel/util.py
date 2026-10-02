@@ -138,9 +138,17 @@ def plural(n: int, word: str) -> str:
     return f"{n} {word}" + ("" if n == 1 else "s")
 
 
-def normalize_mac(value: Optional[str]) -> str:
-    """A MAC address as the upper-case text used to match records from different sources."""
-    return (value or "").upper()
+def normalize_mac(value: Any) -> str:
+    """The one way MAC addresses are compared: upper case with colons, whatever the source wrote
+    (``aa-bb-cc-dd-ee-ff``, ``aabb.ccdd.eeff``, ``AABBCCDDEEFF``). Text that is not a 12-digit MAC address comes
+    back trimmed and upper-cased; anything that is not text, and None, gives ''. Never compare MACs with a bare
+    ``.upper()``: two sources may spell one address differently (tests/test_accuracy scans for it)."""
+    if not isinstance(value, str):
+        return ""
+    digits = hex_digits(value)
+    if len(digits) == 12 and re.fullmatch(r"[0-9a-f]{12}", digits):
+        return ":".join(digits[i:i + 2] for i in range(0, 12, 2)).upper()
+    return value.strip().upper()
 
 
 def hex_digits(text: Any) -> str:

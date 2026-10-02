@@ -19,7 +19,7 @@ from .config import ConfigError
 from .query import query_rows
 from .reservations import build_reservations
 from .snapshot import Snapshot
-from .util import clean_data
+from .util import clean_data, normalize_mac
 
 SCHEMA_VERSION = 1
 DEFAULT_DIR = "snapshots"
@@ -38,13 +38,13 @@ def _where(snap: Snapshot, idx: DeviceIndex, rec: Record) -> Tuple[str, str]:
     controller recorded for an offline one. Blank when unknown (e.g. offline Wi-Fi)."""
     live, sta, user = rec["live"], rec["sta"] or {}, rec["user"] or {}
     if rec["online"]:
-        mac = ((sta.get("sw_mac") if rec["wired"] else sta.get("ap_mac")) or "").upper()
+        mac = normalize_mac(sta.get("sw_mac") if rec["wired"] else sta.get("ap_mac"))
         if not mac and live:
             mac = next((m for m, d in idx.integration.items() if d.get("id") == live.get("uplinkDeviceId")), "")
         port = sta.get("sw_port") if rec["wired"] else None
         return (idx.name(mac) if mac else ""), ("" if port is None else str(port))
     if rec["wired"]:
-        mac = (user.get("last_uplink_mac") or "").upper()
+        mac = normalize_mac(user.get("last_uplink_mac"))
         device = idx.name(mac) if mac else ""
         if not device or device == mac:
             device = user.get("last_uplink_name") or device
