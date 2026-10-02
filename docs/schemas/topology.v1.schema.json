@@ -1,0 +1,221 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/jeffholst/unifi-sentinel/main/docs/schemas/topology.v1.schema.json",
+  "title": "topology",
+  "description": "Output of `unifi-sentinel topology --json` (with `--clients` each node also has `wired_clients`).",
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": 1,
+      "description": "The format of this document; it changes only when a field is removed or renamed."
+    },
+    "roots": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/node"
+      }
+    },
+    "unattached": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/node"
+      }
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "devices": {
+          "type": "number"
+        },
+        "offline": {
+          "type": "number"
+        },
+        "with_findings": {
+          "type": "number"
+        },
+        "below_max": {
+          "type": "number"
+        },
+        "unattached": {
+          "type": "number"
+        },
+        "clients": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "below_max",
+        "clients",
+        "devices",
+        "offline",
+        "unattached",
+        "with_findings"
+      ]
+    }
+  },
+  "required": [
+    "roots",
+    "summary",
+    "unattached",
+    "version"
+  ],
+  "$defs": {
+    "node": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "mac": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "online": {
+          "type": "boolean"
+        },
+        "parent": {
+          "type": "string"
+        },
+        "parent_port": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "port": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "speed_mbps": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "supports_mbps": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "clients": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "wired": {
+                  "type": "number"
+                },
+                "wireless": {
+                  "type": "number"
+                },
+                "total": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "total",
+                "wired",
+                "wireless"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "severity": {
+                "enum": [
+                  "critical",
+                  "warning"
+                ]
+              },
+              "code": {
+                "type": "string",
+                "pattern": "^[a-z]+\\.[a-z_0-9]+$"
+              },
+              "subject": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "severity",
+              "subject"
+            ]
+          }
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/node"
+          }
+        },
+        "wired_clients": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "ip": {
+                "type": "string"
+              },
+              "port": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "ip",
+              "name",
+              "port"
+            ]
+          },
+          "description": "Only with --clients."
+        },
+        "reason": {
+          "type": "string",
+          "description": "Only on an unattached device: why it is not in the tree."
+        }
+      },
+      "required": [
+        "children",
+        "clients",
+        "findings",
+        "mac",
+        "model",
+        "name",
+        "online",
+        "parent",
+        "parent_port",
+        "port",
+        "speed_mbps",
+        "supports_mbps",
+        "type"
+      ]
+    }
+  }
+}

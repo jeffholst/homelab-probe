@@ -1,0 +1,387 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/jeffholst/unifi-sentinel/main/docs/schemas/client.v1.schema.json",
+  "title": "client",
+  "description": "Output of `unifi-sentinel client NAME --json`.",
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": 1,
+      "description": "The format of this document; it changes only when a field is removed or renamed."
+    },
+    "attachment": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "device": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "speed_mbps": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "type": {
+            "type": "string"
+          },
+          "offline": {
+            "type": "boolean"
+          },
+          "port": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "required": [
+          "detail",
+          "device",
+          "id",
+          "offline",
+          "port",
+          "speed_mbps",
+          "type"
+        ]
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "subject": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "severity",
+          "subject"
+        ]
+      }
+    },
+    "events_window": {
+      "type": "string"
+    },
+    "device_events": {
+      "type": "array"
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "timestamp": {
+            "type": "number"
+          },
+          "Message": {
+            "type": "string"
+          },
+          "Category": {
+            "type": "string"
+          },
+          "device": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ip": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "ip",
+              "name"
+            ]
+          },
+          "Event": {
+            "type": "string"
+          },
+          "client": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "ip": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "ip",
+              "name"
+            ]
+          },
+          "key": {
+            "type": "string"
+          },
+          "Time": {
+            "type": "string"
+          },
+          "subcategory": {
+            "type": "string"
+          },
+          "Severity": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "Category",
+          "Event",
+          "Message",
+          "Severity",
+          "Time",
+          "client",
+          "device",
+          "key",
+          "subcategory",
+          "timestamp"
+        ]
+      }
+    },
+    "events_truncated": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "events_omitted": {
+      "type": "object",
+      "properties": {
+        "devices": {
+          "type": "number"
+        },
+        "client": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "client",
+        "devices"
+      ]
+    },
+    "addressing": {
+      "type": "object",
+      "properties": {
+        "reservation": {
+          "type": [
+            "null",
+            "object"
+          ],
+          "properties": {
+            "matches_current": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "network": {
+              "type": "string"
+            },
+            "reserved_ip": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "matches_current",
+            "network",
+            "reserved_ip"
+          ]
+        },
+        "group_ids_unresolved": {
+          "type": "number"
+        },
+        "network": {
+          "type": "string"
+        },
+        "ungrouped": {
+          "type": "boolean"
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "vlan": {
+          "type": [
+            "null",
+            "number"
+          ]
+        }
+      },
+      "required": [
+        "group_ids_unresolved",
+        "groups",
+        "network",
+        "reservation",
+        "ungrouped",
+        "vlan"
+      ]
+    },
+    "link": {
+      "type": [
+        "null",
+        "object"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "channel": {
+          "type": "number"
+        },
+        "speed_mbps": {
+          "type": "number"
+        },
+        "ssid": {
+          "type": "string"
+        },
+        "signal_dbm": {
+          "type": "number"
+        },
+        "rx_rate_mbps": {
+          "type": "number"
+        },
+        "rx_errors": {
+          "type": "number"
+        },
+        "tx_attempts": {
+          "type": "number"
+        },
+        "tx_dropped": {
+          "type": "number"
+        },
+        "noise_dbm": {
+          "type": "number"
+        },
+        "tx_rate_mbps": {
+          "type": "number"
+        },
+        "band": {
+          "type": "string"
+        },
+        "tx_errors": {
+          "type": "number"
+        },
+        "rx_dropped": {
+          "type": "number"
+        },
+        "satisfaction": {
+          "type": "number"
+        },
+        "full_duplex": {
+          "type": "boolean"
+        },
+        "retries_pct": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "kind"
+      ]
+    },
+    "events_available": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "identity": {
+      "type": "object",
+      "properties": {
+        "vendor": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "private_mac": {
+          "type": "boolean"
+        },
+        "hostname": {
+          "type": "string"
+        },
+        "connection": {
+          "type": "string"
+        },
+        "last_seen": {
+          "type": "string"
+        },
+        "first_seen": {
+          "type": "string"
+        },
+        "connected_since": {
+          "type": "string"
+        },
+        "mac": {
+          "type": "string"
+        },
+        "ip": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "connected_since",
+        "connection",
+        "first_seen",
+        "hostname",
+        "ip",
+        "last_seen",
+        "mac",
+        "name",
+        "private_mac",
+        "status",
+        "vendor"
+      ]
+    }
+  },
+  "required": [
+    "addressing",
+    "attachment",
+    "device_events",
+    "events",
+    "events_available",
+    "events_omitted",
+    "events_truncated",
+    "events_window",
+    "findings",
+    "identity",
+    "link",
+    "version"
+  ]
+}

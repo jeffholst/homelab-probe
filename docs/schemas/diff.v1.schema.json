@@ -1,0 +1,240 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/jeffholst/unifi-sentinel/main/docs/schemas/diff.v1.schema.json",
+  "title": "diff",
+  "description": "Output of `unifi-sentinel diff --json`.",
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": 1,
+      "description": "The format of this document; it changes only when a field is removed or renamed."
+    },
+    "same_site": {
+      "type": "boolean"
+    },
+    "controller": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/change"
+      }
+    },
+    "devices": {
+      "$ref": "#/$defs/part"
+    },
+    "clients": {
+      "$ref": "#/$defs/part"
+    },
+    "reservations": {
+      "$ref": "#/$defs/part"
+    },
+    "total": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "clients",
+    "controller",
+    "devices",
+    "reservations",
+    "same_site",
+    "total",
+    "version"
+  ],
+  "$defs": {
+    "change": {
+      "type": "object",
+      "properties": {
+        "field": {
+          "type": "string"
+        },
+        "old": {},
+        "new": {}
+      },
+      "required": [
+        "field",
+        "new",
+        "old"
+      ]
+    },
+    "part": {
+      "type": "object",
+      "properties": {
+        "added": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/record"
+          }
+        },
+        "removed": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/record"
+          }
+        },
+        "changed": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "mac": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "changes": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/change"
+                }
+              }
+            },
+            "required": [
+              "changes",
+              "mac",
+              "name"
+            ]
+          }
+        }
+      },
+      "required": [
+        "added",
+        "changed",
+        "removed"
+      ]
+    },
+    "record": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/device"
+        },
+        {
+          "$ref": "#/$defs/client"
+        },
+        {
+          "$ref": "#/$defs/reservation"
+        }
+      ]
+    },
+    "device": {
+      "type": "object",
+      "properties": {
+        "mac": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "ip": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "firmware": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string"
+        },
+        "uplink": {
+          "type": "string"
+        },
+        "uplink_port": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "firmware",
+        "ip",
+        "mac",
+        "model",
+        "name",
+        "state",
+        "type",
+        "uplink",
+        "uplink_port"
+      ]
+    },
+    "client": {
+      "type": "object",
+      "properties": {
+        "mac": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "ip": {
+          "type": "string"
+        },
+        "connection": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "network": {
+          "type": "string"
+        },
+        "uplink": {
+          "type": "string"
+        },
+        "uplink_port": {
+          "type": "string"
+        },
+        "vlan": {
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "The VLAN id, or '' for none."
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "connection",
+        "groups",
+        "ip",
+        "mac",
+        "name",
+        "network",
+        "status",
+        "uplink",
+        "uplink_port",
+        "vlan"
+      ]
+    },
+    "reservation": {
+      "type": "object",
+      "properties": {
+        "mac": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "reserved_ip": {
+          "type": "string"
+        },
+        "network": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "mac",
+        "name",
+        "network",
+        "reserved_ip"
+      ]
+    }
+  }
+}

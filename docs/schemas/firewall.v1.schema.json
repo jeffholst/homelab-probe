@@ -1,0 +1,233 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/jeffholst/unifi-sentinel/main/docs/schemas/firewall.v1.schema.json",
+  "title": "firewall",
+  "description": "Output of `unifi-sentinel firewall --json`.",
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": 1,
+      "description": "The format of this document; it changes only when a field is removed or renamed."
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "subject": {
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "critical",
+              "warning",
+              "info"
+            ]
+          },
+          "code": {
+            "type": "string"
+          },
+          "mac": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "mac",
+          "message",
+          "severity",
+          "subject"
+        ]
+      }
+    },
+    "matrix": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "From": {
+            "type": "string"
+          },
+          "cells": {
+            "type": "object",
+            "description": "Keyed by destination zone id.",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "enum": [
+                    "A",
+                    "B",
+                    "R",
+                    "C",
+                    "-"
+                  ]
+                },
+                "policies": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "action",
+                "policies"
+              ]
+            }
+          }
+        },
+        "required": [
+          "From",
+          "cells"
+        ]
+      }
+    },
+    "policies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "Built in": {
+            "type": "boolean"
+          },
+          "Hits": {
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "On": {
+            "type": "string"
+          },
+          "Source": {
+            "type": "string"
+          },
+          "Protocol": {
+            "type": "string"
+          },
+          "Name": {
+            "type": "string"
+          },
+          "To": {
+            "type": "string"
+          },
+          "Destination": {
+            "type": "string"
+          },
+          "From": {
+            "type": "string"
+          },
+          "Action": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "Action",
+          "Built in",
+          "Destination",
+          "From",
+          "Hits",
+          "Name",
+          "On",
+          "Protocol",
+          "Source",
+          "To"
+        ]
+      }
+    },
+    "built_in_hidden": {
+      "type": "number"
+    },
+    "zones": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "Built in": {
+            "type": "boolean"
+          },
+          "Networks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "Zone": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "Built in",
+          "Networks",
+          "Zone"
+        ]
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "style": {
+      "enum": [
+        "zone-based",
+        "unknown"
+      ]
+    },
+    "port_forwards": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "Only from": {
+            "type": "string"
+          },
+          "Interface": {
+            "type": "string"
+          },
+          "Name": {
+            "type": "string"
+          },
+          "On": {
+            "type": "string"
+          },
+          "Forwards to": {
+            "type": "string"
+          },
+          "External port": {
+            "type": "string"
+          },
+          "Protocol": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "External port",
+          "Forwards to",
+          "Interface",
+          "Name",
+          "On",
+          "Only from",
+          "Protocol"
+        ]
+      }
+    },
+    "built_in_policies": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "built_in_hidden",
+    "built_in_policies",
+    "findings",
+    "matrix",
+    "notes",
+    "policies",
+    "port_forwards",
+    "style",
+    "version",
+    "zones"
+  ]
+}

@@ -15,6 +15,8 @@ from .settings import DiagnoseSettings
 from .snapshot import Snapshot
 from .util import clean_data, epoch_text, format_time, hex_digits, is_randomized_mac, normalize_mac, number, printable
 
+JSON_VERSION = 1          # the format of `client --json`; it changes only when a field is removed or renamed
+
 MAX_CLIENT_EVENTS = 10      # the client's own events listed before "... and N more"
 MAX_DEVICE_EVENTS = 5       # events about the devices it depends on
 CANDIDATE_COLUMNS = ["Name", "MAC Address", "IP Address", "Status"]
@@ -478,4 +480,4 @@ def render_candidates(query: str, matches: List[Dict[str, Any]]) -> str:
 
 
 def to_json(detail: Dict[str, Any]) -> str:
-    return json.dumps(detail, indent=2)
+    return json.dumps({"version": JSON_VERSION, **detail}, indent=2)

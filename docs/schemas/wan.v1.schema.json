@@ -1,0 +1,347 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/jeffholst/unifi-sentinel/main/docs/schemas/wan.v1.schema.json",
+  "title": "wan",
+  "description": "Output of `unifi-sentinel wan --json`.",
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": 1,
+      "description": "The format of this document; it changes only when a field is removed or renamed."
+    },
+    "now": {
+      "type": "object",
+      "properties": {
+        "latency_ms": {
+          "type": "number"
+        },
+        "internet_status": {
+          "type": "string"
+        },
+        "drops": {
+          "type": "number"
+        },
+        "speedtest_status": {
+          "type": "string"
+        },
+        "isp": {
+          "type": "string"
+        },
+        "wan_ip": {
+          "type": "string"
+        },
+        "gateway": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "drops",
+        "gateway",
+        "internet_status",
+        "isp",
+        "latency_ms",
+        "speedtest_status",
+        "status",
+        "wan_ip"
+      ]
+    },
+    "speedtests": {
+      "type": "object",
+      "properties": {
+        "days": {
+          "type": "number"
+        },
+        "slow_runs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "when": {
+                "type": "string"
+              },
+              "latency_ms": {
+                "type": "number"
+              },
+              "upload_mbps": {
+                "type": "number"
+              },
+              "download_mbps": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "download_mbps",
+              "latency_ms",
+              "upload_mbps",
+              "when"
+            ]
+          }
+        },
+        "latency": {
+          "type": [
+            "null",
+            "object"
+          ],
+          "properties": {
+            "median": {
+              "type": "number"
+            },
+            "max": {
+              "type": "number"
+            },
+            "min": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "max",
+            "median",
+            "min"
+          ]
+        },
+        "upload": {
+          "type": [
+            "null",
+            "object"
+          ],
+          "properties": {
+            "median": {
+              "type": "number"
+            },
+            "max": {
+              "type": "number"
+            },
+            "min": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "max",
+            "median",
+            "min"
+          ]
+        },
+        "count": {
+          "type": "number"
+        },
+        "last": {
+          "type": [
+            "null",
+            "object"
+          ],
+          "properties": {
+            "when": {
+              "type": "string"
+            },
+            "latency_ms": {
+              "type": "number"
+            },
+            "interface": {
+              "type": "string"
+            },
+            "age": {
+              "type": "string"
+            },
+            "upload_mbps": {
+              "type": "number"
+            },
+            "time": {
+              "type": "number"
+            },
+            "download_mbps": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "age",
+            "download_mbps",
+            "interface",
+            "latency_ms",
+            "time",
+            "upload_mbps",
+            "when"
+          ]
+        },
+        "download": {
+          "type": [
+            "null",
+            "object"
+          ],
+          "properties": {
+            "median": {
+              "type": "number"
+            },
+            "max": {
+              "type": "number"
+            },
+            "min": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "max",
+            "median",
+            "min"
+          ]
+        },
+        "total_stored": {
+          "type": "number"
+        },
+        "slow_threshold_pct": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "count",
+        "days",
+        "download",
+        "last",
+        "latency",
+        "slow_runs",
+        "slow_threshold_pct",
+        "total_stored",
+        "upload"
+      ]
+    },
+    "links": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "latency_ms": {
+            "type": "number"
+          },
+          "tx_mbps": {
+            "type": "number"
+          },
+          "interface": {
+            "type": "string"
+          },
+          "max_speed_mbps": {
+            "type": "number"
+          },
+          "speed_mbps": {
+            "type": "number"
+          },
+          "up": {
+            "type": "boolean"
+          },
+          "rx_mbps": {
+            "type": "number"
+          },
+          "full_duplex": {
+            "type": "boolean"
+          },
+          "port": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "full_duplex",
+          "interface",
+          "latency_ms",
+          "max_speed_mbps",
+          "port",
+          "rx_mbps",
+          "speed_mbps",
+          "tx_mbps",
+          "up"
+        ]
+      }
+    },
+    "nat": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "public",
+            "private",
+            "cgnat",
+            "link_local",
+            "none",
+            "unknown"
+          ]
+        },
+        "message": {
+          "type": "string"
+        },
+        "wan_ip": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "message",
+        "wan_ip"
+      ]
+    },
+    "monitoring": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "latency_ms": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "availability": {
+            "type": "number"
+          },
+          "period_s": {
+            "type": "number"
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "latency_ms": {
+                  "type": "number"
+                },
+                "availability": {
+                  "type": "number"
+                },
+                "alerts": {
+                  "type": "boolean"
+                },
+                "target": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "alerts",
+                "availability",
+                "latency_ms",
+                "target",
+                "type"
+              ]
+            }
+          }
+        },
+        "required": [
+          "availability",
+          "latency_ms",
+          "name",
+          "period_s",
+          "targets"
+        ]
+      }
+    }
+  },
+  "required": [
+    "links",
+    "monitoring",
+    "nat",
+    "now",
+    "speedtests",
+    "version"
+  ]
+}

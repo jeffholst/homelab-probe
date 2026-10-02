@@ -220,6 +220,7 @@ Historical section links still work: <a id="controller-health"></a>[Controller h
 - [Inventory, queries and exports](docs/inventory.md): `query`, `export`, snapshots, reservations, ports
 - [Network views](docs/network.md): topology, Wi-Fi, WAN, firewall, events, the client view
 - [Configuration and troubleshooting](docs/configuration.md): every setting, `--verbose`, when something fails
+- [JSON output schemas](docs/schemas.md): a versioned JSON Schema for every `--json` output, the snapshot file and the webhook payload
 - [Examples](docs/examples.md): more commands and sample output
 - [Features](docs/features.md) and [Development and API documentation](docs/development.md)
 - [Changelog](CHANGELOG.md)
