@@ -62,7 +62,7 @@ from .notify import (
     save_state,
     send,
 )
-from .query import query_rows, render
+from .query import query_rows, render, render_csv
 from .settings import DiagnoseSettings
 from .snapshot import EventQuery, Needs, collect_event_snapshot, collect_snapshot, extend_snapshot, warn
 from .topology import build_topology
@@ -212,6 +212,9 @@ def _add_query(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--include-offline", action="store_true",
                         help="Also list previously seen clients that are not connected")
     parser.add_argument("--json", action="store_true", help="Output JSON instead of a table")
+    parser.add_argument("--csv", action="store_true",
+                        help="Output CSV instead of a table (the columns of --json; text that a spreadsheet would "
+                             "run as a formula gets a leading ')")
     parser.add_argument("--switch",
                         help="ports only: switch name (case-insensitive substring)")
     parser.add_argument("--down", action="store_true", help="ports only: only ports that are down")
@@ -226,6 +229,8 @@ def _add_query(parser: argparse.ArgumentParser) -> None:
 
 
 def _check_query(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    if args.json and args.csv:
+        parser.error("--json and --csv cannot be combined")
     if args.kind != "ports" and (args.switch is not None or args.down or args.errors):
         parser.error("--switch, --down and --errors only apply to 'query ports'")
     if args.kind != "reservations" and (args.offline or args.config is not None):
@@ -242,7 +247,7 @@ def _run_query(ctx: Context) -> int:
     offline_days = ctx.settings.reserved_offline_warn_days if ctx.settings is not None and args.offline else None
     rows = query_rows(snap, args.kind, args.search, args.include_offline,
                       args.switch or "", args.down, args.errors, offline_days)
-    say(render(rows, args.json, args.kind, args.offline))
+    say(render_csv(rows, args.kind, args.offline) if args.csv else render(rows, args.json, args.kind, args.offline))
     return 0
 
 

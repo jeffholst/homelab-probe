@@ -122,6 +122,8 @@ COMMANDS = [
     ["info"],
     ["query", "devices"], ["query", "clients", "--include-offline"], ["query", "ports"],
     ["query", "reservations"],
+    ["query", "clients", "--include-offline", "--csv"], ["query", "devices", "--csv"], ["query", "ports", "--csv"],
+    ["query", "reservations", "--csv"],
     ["new-clients"],
     ["events"], ["events", "--summary"],
     ["wifi", "--all"],
