@@ -34,6 +34,8 @@ def reads(fake_client):
             kinds.add("groups")
         elif path.endswith(("/firewall-policies", "/firewall/zone", "/firewall/zone-matrix", "/rest/portforward")):
             kinds.add("firewall")
+        elif path.endswith("/rest/wlanconf"):
+            kinds.add("wlans")
         elif path.endswith("/stat/device"):
             kinds.add("legacy-devices")
         elif path.endswith("/stat/sta"):
@@ -55,6 +57,7 @@ BASE = {"devices", "clients", "legacy-devices", "legacy-clients"}
     (Needs(speedtests=True), {"speedtests"}),
     (Needs(neighbors=True), {"neighbors"}),
     (Needs(firewall=True), {"firewall"}),
+    (Needs(wlans=True), {"wlans"}),
     (Needs(events=EventQuery()), {"events"}),
     (Needs(reservations=True, groups=True, health=True, speedtests=True, neighbors=True, firewall=True,
            events=EventQuery()),
@@ -139,6 +142,7 @@ COMMANDS = {
     "wifi": (["wifi"], BASE | {"neighbors"}),
     "wan": (["wan"], BASE | {"health", "speedtests"}),
     "firewall": (["firewall"], BASE | {"alluser", "networkconf", "firewall"}),
+    "audit": (["audit"], (BASE - {"legacy-devices"}) | {"alluser", "wlans"}),
     "events": (["events"], {"events"}),
     "client without events": (["client", "desktop", "--no-events"], BASE | {"alluser", "networkconf", "groups"}),
     "client": (["client", "desktop"], BASE | {"alluser", "networkconf", "groups", "events"}),

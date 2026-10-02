@@ -95,6 +95,10 @@ CONTRACT: Dict[str, Endpoint] = {
         always=("_id", "name"),
         somewhere=("ip_subnet", "vlan_enabled", "dhcpd_enabled", "dhcpd_start", "dhcpd_stop", "dhcp_relay_enabled"),
         optional=("vlan",)),
+    # Wi-Fi networks (checked on Network 10.6.106: three WPA2/WPA3 networks). `security` is "wpapsk" there; "open" and
+    # "wep" are the legacy API's other values and were not seen live. `wpa3_support` only appears on WPA networks.
+    "legacy/rest/wlanconf": Endpoint(always=("name", "security"), somewhere=("enabled", "is_guest", "l2_isolation"),
+                                     optional=("wpa3_support",)),
     "legacy/v2/network-members-groups": Endpoint(always=("id", "name")),
     "legacy/v2/speedtest": Endpoint(
         somewhere=("time", "download_mbps", "upload_mbps", "latency_ms", "interface_name", "wan_networkgroup")),

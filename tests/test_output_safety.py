@@ -127,6 +127,7 @@ COMMANDS = [
     ["wifi", "--all"],
     ["wan"],
     ["firewall", "--all", "--zones", "--no-emoji"], ["firewall", "--zones"],
+    ["audit", "--no-emoji"], ["audit"],
     ["topology", "--clients", "--no-emoji"], ["topology", "--clients"],
     ["client", "desktop", "--no-emoji"], ["client", "desktop"],
     ["diagnose", "--no-emoji", "--show-ignored"], ["diagnose"],
@@ -159,7 +160,7 @@ def test_text_output_is_clean_with_hostile_names(fake_client, monkeypatch, capsy
     assert captured.out.strip(), f"{argv} printed nothing"
     shown = {"query devices": "Office Switch", "query clients": "desktop", "query ports": "Office",
              "new-clients": "old-printer", "topology": "Office Switch", "client": "desktop",
-             "wifi": "Office AP", "events": "phone", "firewall": "Open Inbound"}.get(" ".join(argv[:2]) if argv[0] == "query" else argv[0])
+             "wifi": "Office AP", "events": "phone", "firewall": "Open Inbound", "audit": "Lobby"}.get(" ".join(argv[:2]) if argv[0] == "query" else argv[0])
     if shown:
         assert shown in captured.out, f"{shown!r} missing from {argv}"
 

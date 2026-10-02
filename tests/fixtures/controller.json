@@ -761,6 +761,62 @@
         "pfwd_interface": "wan",
         "src": "198.51.100.7"
       }
+    ],
+    "wlanconf": [
+      {
+        "_id": "wlan-1",
+        "name": "HomeNet",
+        "enabled": true,
+        "security": "wpapsk",
+        "is_guest": false,
+        "l2_isolation": false,
+        "hide_ssid": false,
+        "networkconf_id": "net-1",
+        "wpa_mode": "wpa2",
+        "wpa3_support": true
+      },
+      {
+        "_id": "wlan-2",
+        "name": "GuestNet",
+        "enabled": true,
+        "security": "wpapsk",
+        "is_guest": true,
+        "l2_isolation": false,
+        "hide_ssid": false,
+        "networkconf_id": "net-2",
+        "wpa_mode": "wpa2",
+        "wpa3_support": false
+      },
+      {
+        "_id": "wlan-3",
+        "name": "Lobby",
+        "enabled": true,
+        "security": "open",
+        "is_guest": false,
+        "l2_isolation": false,
+        "hide_ssid": false,
+        "networkconf_id": "net-1"
+      },
+      {
+        "_id": "wlan-4",
+        "name": "OldCam",
+        "enabled": true,
+        "security": "wep",
+        "is_guest": false,
+        "l2_isolation": false,
+        "hide_ssid": false,
+        "networkconf_id": "net-1"
+      },
+      {
+        "_id": "wlan-5",
+        "name": "Retired",
+        "enabled": false,
+        "security": "open",
+        "is_guest": false,
+        "l2_isolation": false,
+        "hide_ssid": false,
+        "networkconf_id": "net-1"
+      }
     ]
   },
   "legacy_v2": {

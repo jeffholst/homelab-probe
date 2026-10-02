@@ -61,6 +61,8 @@ class Snapshot:
     events_available: bool = False    # True when the event log was requested and could be read
     neighbors_available: bool = True
     firewall: Optional[FirewallData] = None     # set when the firewall was requested (Needs.firewall)
+    # Wi-Fi network settings (legacy rest/wlanconf), when requested (Needs.wlans); None: not requested or unreadable.
+    wlans: Optional[List[Dict[str, Any]]] = None
 
 
 def _legacy_or_empty(client: UniFiClient, site_ref: str, resource: str, notes: List[str]) -> List[Dict[str, Any]]:
@@ -141,8 +143,9 @@ def _legacy_v2_or_empty(
         return None
 
 
-def _firewall_part(read: Callable[[], Any], what: str, impact: str, notes: List[str]) -> Optional[List[Dict[str, Any]]]:
-    """One part of the firewall data: the records, or None (with a warning) when the controller will not give it."""
+def _optional_part(read: Callable[[], Any], what: str, impact: str, notes: List[str]) -> Optional[List[Dict[str, Any]]]:
+    """An optional list of records: the records, or None (with a warning) when the controller will not give it.
+    Unlike ``[]``, None says "could not be read", which a report must not present as "there is none"."""
     try:
         records = read()
     except UniFiAPIError as e:
@@ -171,11 +174,12 @@ class Needs:
 
     ``offline``, ``reservations`` and ``groups`` all need the legacy ``stat/alluser`` list;
     ``reservations`` also reads the network configuration (names, VLANs) and ``groups`` the client
-    group definitions. ``firewall`` reads the zone-based firewall (policies, zones, zone matrix) and the port
-    forwards. ``health`` is ``stat/health`` (for ``diagnose`` and ``wan``), ``speedtests``
-    the speedtest history, ``neighbors`` the neighboring Wi-Fi networks, ``events`` the event log
-    (None: not read). Device details and legacy devices are part of a normal collection; set their
-    fields to False to defer them, or True in ``extend_snapshot`` to read them later.
+    group definitions. ``firewall`` reads the zone-based firewall (policies, zones, zone matrix) and the
+    port forwards, ``wlans`` the Wi-Fi network settings (``rest/wlanconf``). ``health`` is ``stat/health``
+    (for ``diagnose`` and ``wan``), ``speedtests`` the speedtest history, ``neighbors`` the neighboring
+    Wi-Fi networks, ``events`` the event log (None: not read). Device details and legacy devices are part
+    of a normal collection; set their fields to False to defer them, or True in ``extend_snapshot`` to
+    read them later.
 
     Degradation policy: required data fails the command, optional data warns and carries on.
     Optional is every legacy read, including ``alluser``; a command whose answer would be wrong
@@ -190,6 +194,7 @@ class Needs:
     speedtests: bool = False
     neighbors: bool = False
     firewall: bool = False
+    wlans: bool = False
     events: Optional[EventQuery] = None
     users_required: bool = False
     device_extras: Optional[bool] = None
@@ -244,7 +249,8 @@ def describe_snapshot(snap: "Snapshot") -> str:
              (snap.all_users, "known clients"), (snap.networks, "networks"),
              (snap.client_groups or [], "client groups"), (snap.health, "health subsystems"),
              (snap.speedtests, "speedtests"), (snap.neighbors, "neighbor rows"), (snap.events, "events"),
-             (fw.policies or [], "firewall policies"), (fw.port_forwards or [], "port forwards")]
+             (fw.policies or [], "firewall policies"), (fw.port_forwards or [], "port forwards"),
+             (snap.wlans or [], "Wi-Fi networks")]
     found = [f"{len(items)} {name}" for items, name in parts if items]
     return "read " + (", ".join(found) if found else "nothing")
 
@@ -283,7 +289,7 @@ class _Reads:
 # The order in which a collection's warnings are shown (it does not depend on which read finished first).
 _WARNING_ORDER = ["events", "neighbors", "devices", "extras", "alluser", "clients", "legacy_devices",
                   "legacy_clients", "networks", "health", "speedtests", "groups", "fw_policies", "fw_zones",
-                  "fw_matrix", "fw_forwards"]
+                  "fw_matrix", "fw_forwards", "wlans"]
 
 
 def _submit_extras(reads: "_Reads", needs: Needs, client: UniFiClient, site_ref: str, now_ms: Optional[int],
@@ -307,6 +313,9 @@ def _submit_extras(reads: "_Reads", needs: Needs, client: UniFiClient, site_ref:
         reads.submit("speedtests", lambda notes: _speedtests_or_empty(client, site_ref, notes))
     if needs.groups:
         reads.submit("groups", lambda notes: _legacy_v2_or_empty(client, site_ref, "network-members-groups", notes))
+    if needs.wlans:
+        reads.submit("wlans", partial(_optional_part, lambda: client.legacy_rest(site_ref, "wlanconf"),
+                                      "Wi-Fi network settings", "the Wi-Fi checks were skipped"))
     if needs.firewall:
         classic = "this controller may use the classic firewall, which is not shown"
         for name, what, impact, read in (
@@ -317,7 +326,7 @@ def _submit_extras(reads: "_Reads", needs: Needs, client: UniFiClient, site_ref:
                  lambda: client.legacy_v2(site_ref, "firewall/zone-matrix")),
                 ("fw_forwards", "port forwards", "port forwards are not shown",
                  lambda: client.legacy_rest(site_ref, "portforward"))):
-            reads.submit(name, partial(_firewall_part, read, what, impact))
+            reads.submit(name, partial(_optional_part, read, what, impact))
 
 
 def _submit_device_extras(reads: "_Reads", snap: Snapshot, client: UniFiClient) -> None:
@@ -356,6 +365,8 @@ def _apply_extras(snap: Snapshot, reads: "_Reads", needs: Needs, users: bool) ->
         snap.speedtests = reads.result("speedtests")
     if needs.groups:
         snap.client_groups = reads.result("groups")
+    if needs.wlans:
+        snap.wlans = reads.result("wlans")
     if needs.firewall:
         snap.firewall = FirewallData(policies=reads.result("fw_policies"), zones=reads.result("fw_zones"),
                                      matrix=reads.result("fw_matrix"), port_forwards=reads.result("fw_forwards"))

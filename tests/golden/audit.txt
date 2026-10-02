@@ -1,0 +1,7 @@
+[WARNING ] GuestNet: is a guest network whose clients can reach each other (client isolation is off)
+[WARNING ] Lobby: is an open network: anyone in range can join and read unencrypted traffic
+[WARNING ] OldCam: uses WEP, which can be broken in minutes; use WPA2 or WPA3
+[INFO  ] GuestNet: offers WPA2 only; WPA3 is not enabled
+[INFO  ] Office Switch: firmware update available
+
+3 warnings, 2 info

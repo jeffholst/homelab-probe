@@ -23,6 +23,7 @@ UniFi Sentinel is a fork of [ericfitz/unifi-clients-export](https://github.com/e
 | `events` | Event history from the controller log: disconnects, roams, IP conflicts, device outages |
 | `client` | Troubleshoot one client by name, MAC or IP: where it attaches, link quality and related findings |
 | `new-clients` | List clients that are in no client group, to spot new devices |
+| `audit` | Configuration audit: Wi-Fi networks that are open or WPA2-only, default device names, firmware updates, unnamed clients |
 | `diagnose` | Read-only health checks with 🛑 critical, ⚠️ warning and ℹ️ info findings (`--json` for scripts) |
 | `info`   | Show the controller application info and available sites       |
 
@@ -46,6 +47,7 @@ The tool is still evolving; see open issues for planned reports, controller-vers
 - **Randomized MAC detection**: clients that use a private (locally administered) Wi-Fi MAC address are flagged in `query clients`, `new-clients` and `client`, and `diagnose` notes reservations tied to one, because they stop applying when the device changes its address
 - **New client detection**: list every known client that is in no client group, newest first, to spot new devices
 - **Notifications**: `diagnose --notify` tells you through ntfy or a webhook when a problem is new, has got worse, or is fixed (critical ones are repeated daily), once instead of every run, opt-in, with a redaction option
+- **Configuration audit**: `audit` flags settings that are probably not what you want, as opposed to what is broken now: open, WEP and WPA2-only Wi-Fi networks, guest networks that let their clients reach each other, devices that still have their default name, devices with a firmware update waiting, and clients with no name; same findings format, ignore list, `--json` and exit codes as `diagnose`
 - **Health checks**: read-only diagnostics with severity levels, exit codes for scripts and cron, `--json` output with a stable code per check, and a TOML file for thresholds and an ignore list
 - **Official API first**: uses the UniFi Network Integration API (`/proxy/network/integration/v1`). Legacy endpoints are used only for data the Integration API does not expose (per-port counters, client-to-port mapping, DHCP reservations, network config and client groups) and degrade gracefully with a warning if unavailable
 - **Safe output**: names come from devices on your network, so text output has control characters, line breaks, text-direction overrides and invisible characters removed, and exported CSV cells that a spreadsheet would run as a formula are neutralized
@@ -178,6 +180,8 @@ uv run unifi-sentinel.py events --summary --since 7d   # counts and the noisiest
 uv run unifi-sentinel.py client desktop              # one client: attachment, link, findings
 uv run unifi-sentinel.py client aa:bb:cc:dd:ee:ff --json   # by MAC (any format) or IP, as JSON
 uv run unifi-sentinel.py new-clients                 # clients in no client group
+uv run unifi-sentinel.py audit                       # settings that are probably not what you want
+uv run unifi-sentinel.py audit --json --fail-on info # as JSON; any finding gives exit code 1
 uv run unifi-sentinel.py diagnose                    # health checks
 uv run unifi-sentinel.py diagnose --json             # the same, as JSON with a stable code per finding
 uv run unifi-sentinel.py diagnose --only ports,wifi  # just those checks, and read only what they need
@@ -424,8 +428,8 @@ uv run unifi-sentinel.py diagnose --notify --notify-baseline   # once: treat tod
 | Code | Meaning |
 | ---- | ------- |
 | 0 | success; for `diagnose`, no findings at or above the `--fail-on` threshold |
-| 1 | `diagnose` found at least one non-critical finding at or above the `--fail-on` threshold |
-| 2 | `diagnose` found at least one critical finding |
+| 1 | `diagnose` or `audit` found at least one non-critical finding at or above the `--fail-on` threshold |
+| 2 | `diagnose` found at least one critical finding (`audit` has none) |
 | 3 | error: bad configuration, or the controller could not be reached or returned an error; also `diagnose --notify` when the findings gave 0 but the notification could not be delivered |
 | 4 | `client` found no client, or several (it lists them) |
 | 64 | command-line usage error |
@@ -616,6 +620,37 @@ Speedtests, last 30 days (11 runs), 12 stored
 - **`diagnose` uses the same data:** a warning (`wan.double_nat`, `wan.cgnat` or `wan.link_local_address`) when the NAT check above finds a private, shared or link-local WAN address (silence a deliberate double NAT with an ignore rule: `subject = "wan"`, `message = "double NAT"`), a warning when 24-hour availability, overall or for any single monitoring target, is below `wan_availability_warn_pct` (default 99%), and a warning when the last speedtest (within 30 days) is below `wan_speed_drop_pct` of the 30-day median, with its age.
 - **Not included:** an hourly traffic and latency history. The controller only returns that from a POST to its report endpoint, which is outside the one approved POST (the event log); a plain GET returns empty rows.
 
+### Audit
+
+`audit` answers "what is configured in a way I probably did not intend?", where `diagnose` answers "what is wrong now?". It reads settings (all with GET) and prints findings in the same format. Shown with `--no-emoji`:
+
+```text
+[WARNING ] GuestNet: is a guest network whose clients can reach each other (client isolation is off)
+[WARNING ] Lobby: is an open network: anyone in range can join and read unencrypted traffic
+[WARNING ] OldCam: uses WEP, which can be broken in minutes; use WPA2 or WPA3
+[INFO    ] GuestNet: offers WPA2 only; WPA3 is not enabled
+[INFO    ] Office Switch: firmware update available
+
+3 warnings, 2 info
+```
+
+| Code | Severity | Meaning |
+| ---- | -------- | ------- |
+| `audit.wifi_open` | warning (info for a guest network) | An enabled Wi-Fi network has no password |
+| `audit.wifi_weak_encryption` | warning | An enabled Wi-Fi network uses WEP |
+| `audit.wifi_no_wpa3` | info | An enabled WPA2 network does not offer WPA3 |
+| `audit.wifi_guest_no_isolation` | warning | A guest network whose clients can reach each other (client isolation is off) |
+| `audit.wifi_unavailable` | info | The Wi-Fi settings could not be read, so the Wi-Fi checks did not run |
+| `audit.default_device_name` | info | A UniFi device has no name, is named after its model, or is named after its MAC address (or the last three bytes of it) |
+| `audit.firmware_update` | info | A UniFi device has a firmware update available |
+| `audit.unnamed_clients` | info | One summary for the known clients (including offline ones) with neither a name nor a hostname, with the first five by MAC and vendor |
+
+- **Options:** `--fail-on {info,warning}` (default `warning`), `--config FILE` for the ignore list (`subject` and `message` rules work as in `diagnose`; a deliberately open lobby network is `subject = "Lobby"`, `message = "open network"`), `--show-ignored`, `--no-emoji` and `--json`. The JSON document is the one of `diagnose --json` (`version`, `areas`, `summary`, `findings` with `severity`, `code`, `subject`, `message` and `mac`); its `areas` are `wifi`, `devices` and `clients`.
+- **Exit codes:** the same rules as `diagnose`: `1` when there is a finding at or above `--fail-on` (the audit never produces a critical one, so never `2`), `0` otherwise, `3` when the controller cannot be read.
+- **Data:** the Wi-Fi networks come from the legacy `rest/wlanconf` (one record per network with `security`, `wpa3_support`, `is_guest`, `l2_isolation` and `enabled`; the Integration API's list has no guest flag). Disabled networks are skipped. The device checks use the device list (`name`, `model`, `macAddress`, `firmwareUpdatable`) and the client check the client history (`stat/alluser`), so no per-device or legacy device requests are made.
+- **Verified and not verified:** checked against one controller on Network 10.6.106 with three WPA2/WPA3 networks, so none of the Wi-Fi findings fire there. `security` is `wpapsk` on those networks; `open` and `wep` are the legacy API's other values and are matched as such but were not seen live. No device there had a firmware update or a default name, so those findings come from the field names and the fixture. A default name is a heuristic: no name, the model name, the MAC address, or a name that ends with the last three bytes of the device's own MAC.
+- **Dropped, and why:** *a port's native VLAN against the network of the client on it.* On the controller checked, 7 of the 21 wired clients sat on a different network than their port's native one, and all 7 were on trunk ports (`forward` of `all` or `customize` with tagged VLANs allowed), where that is normal; the port profile list was empty, and the only reliable subset (access ports) had no example, so the check would be wrong more often than right. *Hidden SSIDs:* hiding a network name is not a configuration risk that isolation or encryption fixes, so it is not flagged.
+
 ### Firewall
 
 `firewall` answers "what does my firewall allow, and what is reachable from the internet?" (all read with GET). Shown with `--no-emoji`; the findings use the same severity marks as `diagnose` (the command never changes the exit code):
@@ -680,11 +715,11 @@ Findings
 uv run unifi-sentinel.py events --client phone --since 6h
 Time                 Severity  Category        Event                         Message
 -------------------  --------  --------------  ----------------------------  --------------------------------------------------
-2026-10-02 00:54:05  Low       CLIENT_DEVICES  CLIENT_DISCONNECTED_WIRELESS  phone disconnected from Home. Time Connected: 25s.
-2026-10-02 00:39:05  Low       CLIENT_DEVICES  CLIENT_CONNECTED_WIRELESS     phone connected to Home on Office AP.
-2026-10-02 00:24:05  Low       CLIENT_DEVICES  CLIENT_DISCONNECTED_WIRELESS  phone disconnected from Home. Time Connected: 2m.
-2026-10-02 00:14:05  Low       CLIENT_DEVICES  CLIENT_ROAMED                 phone roamed from Garage AP to Office AP.
-2026-10-02 00:04:05  Low       CLIENT_DEVICES  CLIENT_DISCONNECTED_WIRELESS  phone disconnected from Home. Time Connected: 1h.
+2026-10-02 03:32:28  Low       CLIENT_DEVICES  CLIENT_DISCONNECTED_WIRELESS  phone disconnected from Home. Time Connected: 25s.
+2026-10-02 03:17:28  Low       CLIENT_DEVICES  CLIENT_CONNECTED_WIRELESS     phone connected to Home on Office AP.
+2026-10-02 03:02:28  Low       CLIENT_DEVICES  CLIENT_DISCONNECTED_WIRELESS  phone disconnected from Home. Time Connected: 2m.
+2026-10-02 02:52:28  Low       CLIENT_DEVICES  CLIENT_ROAMED                 phone roamed from Garage AP to Office AP.
+2026-10-02 02:42:28  Low       CLIENT_DEVICES  CLIENT_DISCONNECTED_WIRELESS  phone disconnected from Home. Time Connected: 1h.
 
 5 event(s)
 ```
@@ -727,7 +762,7 @@ Attached: desktop -> Office Switch port 3 (1000 Mbps) -> Gateway port 2 (100 Mbp
 Link:     1000 Mbps, full duplex, 0 errors, 60 dropped packets on its port
 
 Recent events (last 24h, newest first):
-  2026-10-01 23:34:05  CLIENT_CONNECTED_WIRED: desktop connected to Main on Office Switch Port 3.
+  2026-10-02 02:12:28  CLIENT_CONNECTED_WIRED: desktop connected to Main on Office Switch Port 3.
 
 Related findings:
 [WARNING ] Office Switch: CPU utilization 95%
@@ -833,7 +868,7 @@ Sample from synthetic data with `diagnose --no-events` (text labels are used whe
 Name         MAC Address        IP Address  Vendor                Connection Type  Where                        First Seen           Last Seen            Status   Private MAC
 -----------  -----------------  ----------  --------------------  ---------------  ---------------------------  -------------------  -------------------  -------  -----------
 old-tablet   BB:00:00:00:00:04  10.0.0.51                         Wireless                                      2025-06-15 15:06:40  2025-12-06 05:46:40  Offline
-old-printer  BB:00:00:00:00:03  10.0.0.50   Example Printers Inc  Wired            Wired, Office Switch port 6  2023-11-14 22:13:20  2026-10-01 22:04:05  Offline
+old-printer  BB:00:00:00:00:03  10.0.0.50   Example Printers Inc  Wired            Wired, Office Switch port 6  2023-11-14 22:13:20  2026-10-02 00:42:28  Offline
 
 2 client(s) in no group
 ```
@@ -893,6 +928,7 @@ unifi_sentinel/
   client_view.py         single-client troubleshooting view
   events.py              event history from the controller's system log
   wan.py                 internet health: state, 24h monitoring, speedtests
+  audit.py               configuration audit: Wi-Fi security, default names, firmware updates, unnamed clients
   firewall.py            firewall view: policies, port forwards, zone matrix and findings (zone-based)
   wifi.py                wireless report: radios and a channel plan from neighbors
   topology.py            uplink tree: wiring, link speeds, client counts, flags
