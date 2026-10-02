@@ -1,6 +1,6 @@
 # Examples
 
-Every command with its options, and sample output from the synthetic test fixture (not a real network).
+Every command with its options, and sample output generated from the checked-in synthetic test fixture (not a real network).
 
 ## More examples
 
@@ -55,10 +55,14 @@ uv run unifi-sentinel.py diagnose --skip events      # everything except the eve
 
 ```csv
 Type,Name,MAC Address,IP Address,Model,Connection Type,Switch,Port,Last Seen,Status
-Client,iPhone,C2:88:E5:F2:CC:D4,192.168.1.225,,Wireless,,,2025-11-17 10:40:50,Online
-Client,homeassistant,2C:CF:67:10:44:CC,192.168.1.254,,Wired,Switch - Den,6,2025-11-17 10:41:23,Online
-Device - Switch,Switch - Den,6C:63:F8:AC:65:96,192.168.1.137,USPM16P,Wired,Switch - 24 Port,22,2025-11-17 10:40:32,Online
-Device - Access Point,AP - Media Room,94:2A:6F:2C:85:52,192.168.1.228,U7PROMAX,Wired,Switch - Media Room,1,2025-11-17 10:41:22,Online
+Client,desktop,BB:00:00:00:00:01,10.0.0.10,,Wired,Office Switch,3,2026-01-01 09:00:00,Online
+Client,phone,BB:00:00:00:00:02,10.0.0.11,,Wireless,,,2026-01-01 09:30:00,Online
+Device - Dream Machine,Gateway,AA:00:00:00:00:01,10.0.0.1,UCG Max,Wired,,,2026-01-01 10:00:00,Online
+Device - Switch,Office Switch,AA:00:00:00:00:02,10.0.0.2,USW-Lite-8-PoE,Wired,Gateway,2,2026-01-01 10:00:00,Online
+Device - Access Point,Office AP,AA:00:00:00:00:03,10.0.0.3,U7 Pro,Wired,Office Switch,2,2026-01-01 10:00:00,Online
+Device - Access Point,Garage AP,AA:00:00:00:00:04,10.0.0.4,U6 Pro,Wired,Office Switch,5,,Offline
+Client,old-printer,BB:00:00:00:00:03,10.0.0.50,,Wired,Office Switch,6,2026-10-02 17:28:19,Offline
+Client,old-tablet,BB:00:00:00:00:04,10.0.0.51,,Wireless,,,2025-12-06 05:46:40,Offline
 ```
 
 ### diagnose
@@ -88,16 +92,17 @@ Sample from synthetic data with `diagnose --no-events` (text labels are used whe
 Name         MAC Address        IP Address  Vendor                Connection Type  Where                        First Seen           Last Seen            Status   Private MAC
 -----------  -----------------  ----------  --------------------  ---------------  ---------------------------  -------------------  -------------------  -------  -----------
 old-tablet   BB:00:00:00:00:04  10.0.0.51                         Wireless                                      2025-06-15 15:06:40  2025-12-06 05:46:40  Offline
-old-printer  BB:00:00:00:00:03  10.0.0.50   Example Printers Inc  Wired            Wired, Office Switch port 6  2023-11-14 22:13:20  2026-10-02 00:42:28  Offline
+old-printer  BB:00:00:00:00:03  10.0.0.50   Example Printers Inc  Wired            Wired, Office Switch port 6  2023-11-14 22:13:20  2026-10-02 17:27:59  Offline
 
 2 client(s) in no group
 ```
 
-### switch_Switch - Den.csv
+### switch_Office Switch.csv
 
 ```csv
-Port,Port Index,Status,Speed,Full Duplex,PoE Enabled,PoE Power (W),PoE Class,Connected Type,Connected Name,Connected MAC,Connected Model,RX Bytes,TX Bytes,...
-Port 1,1,Up,100 Mbps,Yes,No,0.00,Unknown,Client,Receiver,00:06:78:70:AD:80,,76680256,216506717,...
-Port 4,4,Up,1000 Mbps,Yes,No,0.00,Unknown,Device - Switch,Switch - Front,70:A7:41:C8:BC:DE,USL8LP,30690781659,1322518689,...
-Port 6,6,Up,1000 Mbps,Yes,Yes,4.95,Class 4,Client,homeassistant,2C:CF:67:10:44:CC,,195791846,11065229054,...
+Port,Port Index,Status,Speed,Full Duplex,PoE Enabled,PoE Power (W),PoE Class,Connected Type,Connected Name,Connected MAC,Connected Model,RX Bytes,TX Bytes,RX Packets,TX Packets,RX Errors,TX Errors
+Uplink,1,Up,1000 Mbps,Yes,No,,,Device - Dream Machine,Gateway,AA:00:00:00:00:01,UCG Max,100,200,100000,100000,0,0
+Port 2,2,Up,100 Mbps,No,No,,,Device - Access Point,Office AP,AA:00:00:00:00:03,U7 Pro,200,400,10000,10000,4,0
+Port 3,3,Up,1000 Mbps,Yes,No,,,Client,desktop,BB:00:00:00:00:01,,300,600,2500000,2500000,0,0
+Port 4,4,Down,,Yes,No,,,,,,,400,800,,,0,0
 ```

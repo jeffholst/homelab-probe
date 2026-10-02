@@ -91,10 +91,11 @@ and `wep` Wi-Fi security values) the README says so.
   ordered correctly.
 - **`--show-ignored` lists each finding's code**, so it can be copied into an ignore rule.
 - The version is written in one place, `unifi_sentinel.__version__`.
-- **Documentation:** the README is now a short quickstart (what it is, install, configure, the commands with one example each, the exit codes) and the detail is in `docs/` (diagnose and audit, notifications, inventory, network views, configuration and troubleshooting, examples, features, development). Every old README heading still exists, in the README or in a page, so existing links keep working.
+- **Documentation:** the README is now a short quickstart (what it is, install, configure, the commands with one example each, the exit codes) and the detail is in `docs/` (diagnose and audit, notifications, inventory, network views, configuration and troubleshooting, examples, features, development). Historical README anchors remain at their original URLs, and output samples are generated from the checked-in fixture.
 
 ### Fixed
 
+- Notification setup errors link to the online guide, including for installed users outside a source checkout.
 - Switch ports are matched on switches that report no `mac_table_count`, and offline devices keep their last uplink.
 - A device's type is detected from its model when the legacy type is unavailable.
 - Correct handling of 2.4 GHz channel 14 and the U-NII-4 channels (165 to 177) in the Wi-Fi channel plan.

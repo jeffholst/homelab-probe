@@ -1,4 +1,5 @@
 *.csv
+!tests/golden/*.csv
 __pycache__
 __pycache__/**
 

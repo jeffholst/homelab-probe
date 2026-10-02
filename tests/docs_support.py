@@ -38,7 +38,7 @@ def slug(heading: str) -> str:
 
 
 def anchors(text: str) -> Set[str]:
-    """Every anchor the headings of a file make; GitHub numbers the second heading with the same text ``-1``."""
+    """Every heading or explicit HTML anchor in a file; GitHub numbers duplicate headings with ``-1``."""
     seen: Dict[str, int] = {}
     found: Set[str] = set()
     for heading in headings(text):
@@ -46,6 +46,7 @@ def anchors(text: str) -> Set[str]:
         count = seen.get(base, 0)
         seen[base] = count + 1
         found.add(base if count == 0 else f"{base}-{count}")
+    found.update(re.findall(r'<a\s+id="([^"]+)"\s*></a>', text))
     return found
 
 

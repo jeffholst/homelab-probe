@@ -15,7 +15,7 @@ from unifi_sentinel.commands import COMMANDS
 README_LINES = 250          # "well under 250" was the target of the issue; this is the ceiling
 
 # Every anchor the README had before the split (GitHub's slugs). Issues, pull requests and bookmarks may use them, so
-# each one must still exist, in the README or in a page of docs/.
+# each one must still exist at its original README URL.
 OLD_ANCHORS = (
     "unifi-sentinel",
     "credits",
@@ -139,12 +139,10 @@ def test_the_link_checker_sees_a_broken_link_and_ignores_code_and_external_links
     assert [written for _, _, written in local_links(page)] == ["#t", "#nope", "missing.md"]
 
 
-def test_every_anchor_the_readme_used_to_have_still_exists_somewhere():
-    available = set()
-    for path in doc_paths():
-        available |= anchors(read(path))
+def test_every_anchor_the_readme_used_to_have_still_exists_in_the_readme():
+    available = anchors(read(README))
     lost = [anchor for anchor in OLD_ANCHORS if anchor not in available]
-    assert not lost, f"these anchors no longer exist in the README or docs/: {lost}"
+    assert not lost, f"these README anchors were not preserved at their original URLs: {lost}"
 
 
 @pytest.mark.parametrize("path", doc_paths(), ids=lambda p: p.relative_to(ROOT).as_posix())
@@ -158,4 +156,3 @@ def test_the_heading_helpers_follow_githubs_rules():
     assert slug("Seeing what the tool does: `--verbose`") == "seeing-what-the-tool-does---verbose"
     assert slug("Wi-Fi") == "wi-fi" and slug("DHCP reservations") == "dhcp-reservations"
     assert anchors("# A\n## A\n## A\n") == {"a", "a-1", "a-2"}
-

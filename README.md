@@ -212,6 +212,9 @@ Tool errors used to exit 1 for every command; they now exit 3 so that 1 and 2 on
 
 ## Documentation
 
+Historical section links still work: <a id="controller-health"></a>[Controller health](docs/diagnose.md#controller-health) · <a id="port-health"></a>[Port health](docs/diagnose.md#port-health) · <a id="recent-events"></a>[Recent events](docs/diagnose.md#recent-events) · <a id="wi-fi-quality"></a>[Wi-Fi quality](docs/diagnose.md#wi-fi-quality) · <a id="configuration-thresholds-and-ignore-list"></a>[Thresholds and ignore list](docs/diagnose.md#configuration-thresholds-and-ignore-list) · <a id="json-output-and-finding-codes"></a>[JSON and finding codes](docs/diagnose.md#json-output-and-finding-codes) · <a id="notifications"></a>[Notifications](docs/notifications.md)
+<a id="the-one-post-and-why-it-is-safe"></a>[The one POST](docs/network.md#the-one-post-and-why-it-is-safe) · <a id="names-in-exports-and-output"></a>[Names in exports](docs/inventory.md#names-in-exports-and-output) · <a id="example-output"></a>[Example output](docs/examples.md#example-output) · <a id="unificlientscsv"></a>[Client CSV](docs/examples.md#unificlientscsv) · <a id="switchswitch---dencsv"></a>[Switch CSV](docs/examples.md#switchoffice-switchcsv) · <a id="api-documentation"></a>[API documentation](docs/development.md#api-documentation).
+
 - [Diagnose and audit](docs/diagnose.md): the checks, thresholds and ignore list, `--json` and the finding codes
 - [Notifications](docs/notifications.md): ntfy, webhook and email
 - [Inventory, queries and exports](docs/inventory.md): `query`, `export`, snapshots, reservations, ports

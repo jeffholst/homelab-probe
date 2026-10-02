@@ -41,8 +41,10 @@ SAMPLES = [
     ("new-clients", "new_clients"),
     ("Event history", "events"),
 ]
-# Deliberately not checked: the `diff` sample describes a hypothetical set of changes, and the CSV samples
-# come from a different synthetic site.
+CSV_SAMPLES = [
+    ("unifi_clients.csv", "unifi_clients.csv"),
+    ("switch_Office Switch.csv", "switch_Office Switch.csv"),
+]
 COMMAND_DOC_SECTIONS = {
     "export": ("Output files",),
     "query": ("Devices", "Switch ports", "DHCP reservations", "Randomized MAC addresses"),
@@ -244,6 +246,13 @@ def sample_block(text, heading):
     raise AssertionError(f"no text block under the heading {heading!r}")
 
 
+def csv_sample_block(text, heading):
+    for found_heading, language, body in fenced_blocks(text):
+        if found_heading == heading and language == "csv":
+            return body
+    raise AssertionError(f"no CSV block under the heading {heading!r}")
+
+
 def find_sample(heading):
     """(the page, its text, the block) of the sample under ``heading``, wherever it lives."""
     for path in doc_paths():
@@ -253,6 +262,16 @@ def find_sample(heading):
         except AssertionError:
             continue
     raise AssertionError(f"no text block under the heading {heading!r} in the README or docs/")
+
+
+def find_csv_sample(heading):
+    for path in doc_paths():
+        text = path.read_text(encoding="utf-8")
+        try:
+            return path, text, csv_sample_block(text, heading)
+        except AssertionError:
+            continue
+    raise AssertionError(f"no CSV block under the heading {heading!r} in the README or docs/")
 
 
 def without_command_line(body):
@@ -274,6 +293,26 @@ def test_the_documented_sample_matches_the_real_output(fake_client, heading, cas
         "Regenerate it with UPDATE_README_SAMPLES=1 uv run pytest tests/test_docs_drift.py and review the diff.")
 
 
+@pytest.mark.parametrize("heading, filename", CSV_SAMPLES, ids=[filename for _, filename in CSV_SAMPLES])
+def test_documented_csv_samples_match_fixture_and_golden(fake_client, tmp_path, heading, filename):
+    code, _, _ = run_command(fake_client, ["export", "--include-offline", "-o", str(tmp_path)])
+    assert code == 0
+    actual = (tmp_path / filename).read_text(encoding="utf-8").rstrip("\n")
+    path, text, body = find_csv_sample(heading)
+    golden = GOLDEN / filename
+    if os.environ.get("UPDATE_README_SAMPLES"):
+        path.write_text(text.replace(f"```csv\n{body}\n```", f"```csv\n{actual}\n```"), encoding="utf-8")
+        golden.write_text(actual + "\n", encoding="utf-8")
+        return
+    expected = normalise(actual)
+    assert normalise(body) == expected, (
+        f"the CSV sample under '{heading}' in {path.name} no longer matches `export --include-offline`. "
+        "Regenerate it with UPDATE_README_SAMPLES=1 uv run pytest tests/test_docs_drift.py and review the diff.")
+    assert normalise(golden.read_text(encoding="utf-8")) == expected, f"{golden.name} no longer matches the fixture"
+
+
 def test_every_sample_has_a_golden_file():
     for _, case in SAMPLES:
         assert (GOLDEN / f"{case}.txt").exists(), case
+    for _, filename in CSV_SAMPLES:
+        assert (GOLDEN / filename).exists(), filename
