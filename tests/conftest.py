@@ -121,13 +121,16 @@ CONFIG_VARIABLES = ("CONTROLLER_URL", "API_KEY", "SITE_ID", "VERIFY_SSL", "ALLOW
 
 
 @pytest.fixture(autouse=True)
-def _isolated_environment(tmp_path, monkeypatch):
+def _isolated_environment(request, tmp_path, monkeypatch):
     """No test may depend on the developer's real .env, settings file or environment.
 
     Each test starts in an empty working directory (``.env`` and ``unifi-sentinel.toml``
     are looked up in the current directory) with the configuration variables unset. A test
     that needs a file creates it there, or changes directory itself.
     """
+    if request.node.get_closest_marker("live"):
+        yield                      # the live tests exist to read the developer's real settings and controller
+        return
     saved = dict(os.environ)       # load_dotenv writes os.environ directly, outside monkeypatch
     workdir = tmp_path / "cwd"
     workdir.mkdir()

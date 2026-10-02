@@ -1,15 +1,15 @@
-phone
-  MAC:  BB:00:00:00:00:02
+phone (phone-host)
+  MAC:  BB:00:00:00:00:02  (Example Mobile Co)
   Status:  Online, connected since <time>
   Connection: Wireless
   IP:  10.0.0.11  (no DHCP reservation)
-  Network:  unknown
+  Network:  Main (VLAN 0)
   Groups:  none (not in any client group)
   First seen: unknown
   Last seen:  connected now
 
-Attached: phone -> Office AP -> Office Switch port 2 -> Gateway port 2 (100 Mbps)
-Link:  no Wi-Fi quality data reported
+Attached: phone -> Office AP (5 GHz, channel 36, SSID HomeNet) -> Office Switch port 2 -> Gateway port 2 (100 Mbps)
+Link:  signal -58 dBm, noise -95 dBm, 433/390 Mbps tx/rx, 4% retried, satisfaction 96%
 
 Recent events (last 24h, newest first):
   <time>  CLIENT_DISCONNECTED_WIRELESS: phone disconnected from Home. Time Connected: 25s.
