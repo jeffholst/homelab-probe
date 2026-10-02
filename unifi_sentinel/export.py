@@ -145,23 +145,23 @@ class LocationIndex:
 
     def __init__(self, snap: Snapshot) -> None:
         self._names_by_id = {d.get("id"): d.get("name") or d.get("macAddress") for d in snap.devices}
-        self._names_by_mac = {(d.get("macAddress") or "").upper(): d.get("name") or d.get("macAddress")
+        self._names_by_mac = {normalize_mac(d.get("macAddress")): d.get("name") or d.get("macAddress")
                               for d in snap.devices}
         self._legacy: Dict[str, Dict[str, Any]] = {}
         for c in snap.legacy_clients:
-            self._legacy.setdefault((c.get("mac") or "").upper(), c)      # the first record of a MAC, as before
+            self._legacy.setdefault(normalize_mac(c.get("mac")), c)      # the first record of a MAC, as before
 
     def of(self, client: Dict[str, Any]) -> str:
         """Where a client attaches: 'Wired, Switch port 3' or 'Wireless, via AP'."""
-        legacy = self._legacy.get((client.get("macAddress") or "").upper(), {})
+        legacy = self._legacy.get(normalize_mac(client.get("macAddress")), {})
         uplink = self._names_by_id.get(client.get("uplinkDeviceId"))
         if client.get("type") == "WIRED":
-            switch = self._names_by_mac.get((legacy.get("sw_mac") or "").upper()) or uplink
+            switch = self._names_by_mac.get(normalize_mac(legacy.get("sw_mac"))) or uplink
             port = legacy.get("sw_port")
             if switch and port is not None:
                 return f"Wired, {switch} port {port}"
             return f"Wired, {switch}" if switch else "Wired"
-        ap = uplink or self._names_by_mac.get((legacy.get("ap_mac") or "").upper())
+        ap = uplink or self._names_by_mac.get(normalize_mac(legacy.get("ap_mac")))
         return f"Wireless, via {ap}" if ap else "Wireless"
 
 

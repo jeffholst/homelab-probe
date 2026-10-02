@@ -7,7 +7,7 @@ from ..events import describe_duration, first_name, local_time, subjects
 from ..reservations import reservation_records
 from ..settings import DiagnoseSettings
 from ..snapshot import Snapshot
-from ..util import plural
+from ..util import normalize_mac, plural
 from .model import INFO, WARNING, Finding
 
 
@@ -30,7 +30,7 @@ def _conflict_devices(events: List[Dict[str, Any]]) -> Tuple[List[Dict[str, str]
         for c in listed if isinstance(listed, list) else []:
             if not isinstance(c, dict):
                 continue
-            mac = str(c.get("mac") or "").upper()
+            mac = normalize_mac(c.get("mac"))
             name = str(c.get("name") or c.get("hostname") or mac or "")
             if mac or name:
                 seen.setdefault(mac or name.lower(), {"mac": mac, "name": name or mac})
@@ -47,7 +47,7 @@ def _join(names: List[str]) -> str:
 
 
 def _conflict_findings(conflicts: Dict[str, List[Dict[str, Any]]], snap: Snapshot, window: str) -> List[Finding]:
-    reserved = {(u.get("mac") or "").upper(): u["fixed_ip"] for u, _net in reservation_records(snap)}
+    reserved = {normalize_mac(u.get("mac")): u["fixed_ip"] for u, _net in reservation_records(snap)}
     findings = []
     for ip, events in sorted(conflicts.items()):
         stamps = [e.get("timestamp") or 0 for e in events]
@@ -138,7 +138,7 @@ def _event_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]
             continue                              # the offline finding already reports it
         name = (device or {}).get("name") or event_name or "?"
         target_mac = (device or {}).get("macAddress")
-        target_mac = target_mac.upper() if target_mac else None
+        target_mac = normalize_mac(target_mac) if target_mac else None
         if n >= threshold:
             findings.append(Finding(WARNING, name, f"was unreachable {plural(n, 'time')} in the last {window}",
                                     target_mac, code="event.device_unreachable"))

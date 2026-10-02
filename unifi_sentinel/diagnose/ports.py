@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from ..query import format_uptime
 from ..settings import DiagnoseSettings
 from ..snapshot import Snapshot
-from ..util import number_or_zero, record_for
+from ..util import normalize_mac, number_or_zero, record_for
 from .model import CRITICAL, INFO, WARNING, Finding
 
 
@@ -41,7 +41,7 @@ def _port_health_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Fi
                 since = f", switch up {uptime}" if uptime else ""
                 findings.append(Finding(
                     WARNING, label, f"link has gone down {flaps} times since boot{since}",
-                    (sw.get("mac") or "").upper(), code="port.link_flaps"))
+                    normalize_mac(sw.get("mac")), code="port.link_flaps"))
 
             if not port.get("up"):
                 continue
@@ -55,12 +55,12 @@ def _port_health_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Fi
                             WARNING, label,
                             f"dropping {_pct_text(pct)}% of {direction} packets "
                             f"({dropped:.0f} of {packets:.0f})",
-                            (sw.get("mac") or "").upper(), code="port.drops"))
+                            normalize_mac(sw.get("mac")), code="port.drops"))
             stp = port.get("stp_state")
             if stp and stp != "forwarding":
                 findings.append(Finding(
                     WARNING, label, f"STP state is {stp}, not forwarding",
-                    (sw.get("mac") or "").upper(), code="port.stp"))
+                    normalize_mac(sw.get("mac")), code="port.stp"))
 
         budget, used = number_or_zero(sw.get("total_max_power")), number_or_zero(sw.get("total_used_power"))
         if budget > 0:
@@ -70,7 +70,7 @@ def _port_health_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Fi
                 findings.append(Finding(
                     level, name,
                     f"PoE budget {used:.1f} W of {budget:.0f} W used ({int(pct)}%)",
-                    (sw.get("mac") or "").upper(), code="port.poe_budget"))
+                    normalize_mac(sw.get("mac")), code="port.poe_budget"))
     return findings
 
 
@@ -83,11 +83,11 @@ def uplink_speeds(snap: Snapshot, device: Dict[str, Any]) -> Optional[Tuple[floa
     port maximum (a gigabit AP on a 2.5G port is normal), so only these two are used.
     """
     up = device.get("uplink") or {}
-    parent_mac = (up.get("uplink_mac") or "").upper()
+    parent_mac = normalize_mac(up.get("uplink_mac"))
     speed, child_max = number_or_zero(up.get("speed")), number_or_zero(up.get("max_speed"))
     if not (up.get("up") and parent_mac and speed and child_max):
         return None
-    id_by_mac = {(d.get("macAddress") or "").upper(): d.get("id") for d in snap.devices}
+    id_by_mac = {normalize_mac(d.get("macAddress")): d.get("id") for d in snap.devices}
     parent_ports = (record_for(snap.device_details, id_by_mac.get(parent_mac)).get("interfaces") or {}).get(
         "ports") or []
     parent_max = next((number_or_zero(p.get("maxSpeedMbps")) for p in parent_ports
@@ -100,16 +100,16 @@ def uplink_speeds(snap: Snapshot, device: Dict[str, Any]) -> Optional[Tuple[floa
 def _uplink_speed_findings(snap: Snapshot) -> List[Finding]:
     """An uplink negotiated below what both ends of the link support."""
     findings: List[Finding] = []
-    name_by_mac = {(d.get("mac") or "").upper(): switch_name(d) for d in snap.legacy_devices}
+    name_by_mac = {normalize_mac(d.get("mac")): switch_name(d) for d in snap.legacy_devices}
     for d in snap.legacy_devices:
         speeds = uplink_speeds(snap, d)
         if speeds and speeds[0] < speeds[1]:
-            parent_mac = ((d.get("uplink") or {}).get("uplink_mac") or "").upper()
+            parent_mac = normalize_mac((d.get("uplink") or {}).get("uplink_mac"))
             findings.append(Finding(
                 WARNING, switch_name(d),
                 f"uplink to {name_by_mac.get(parent_mac, parent_mac)} negotiated at "
                 f"{speeds[0]:.0f} Mbps but both ends support {speeds[1]:.0f} Mbps",
-                (d.get("mac") or "").upper(), code="link.below_capability"))
+                normalize_mac(d.get("mac")), code="link.below_capability"))
     return findings
 
 
@@ -133,14 +133,14 @@ def _port_basic_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Fin
             errors = (port.get("rx_errors") or 0) + (port.get("tx_errors") or 0)
             if errors > 0:
                 findings.append(Finding(
-                    WARNING, label, f"{errors} rx/tx errors", (sw.get("mac") or "").upper(),
+                    WARNING, label, f"{errors} rx/tx errors", normalize_mac(sw.get("mac")),
                     code="port.errors"))
             if port.get("full_duplex") is False:
                 findings.append(Finding(
-                    WARNING, label, "link is half duplex", (sw.get("mac") or "").upper(),
+                    WARNING, label, "link is half duplex", normalize_mac(sw.get("mac")),
                     code="port.half_duplex"))
             if 0 < (port.get("speed") or 0) <= settings.slow_link_mbps:
                 findings.append(Finding(
                     INFO, label, f"negotiated at {port['speed']} Mbps",
-                    (sw.get("mac") or "").upper(), code="port.slow_link"))
+                    normalize_mac(sw.get("mac")), code="port.slow_link"))
     return findings

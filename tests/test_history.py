@@ -470,6 +470,35 @@ def test_cli_snapshot_then_diff_against_the_live_network(fake_client, monkeypatc
     assert fake_client.session.posts == []                                        # snapshot and diff never POST
 
 
+def test_cli_snapshot_and_diff_normalize_client_attachment_macs(fake_client, monkeypatch, capsys, tmp_path):
+    fx = fake_client.session.fx
+    switch = next(device for device in fx["devices"] if device["id"] == "sw1")
+    legacy_switch = next(device for device in fx["legacy"]["device"] if device["name"] == "Office Switch")
+    desktop = next(client for client in fx["legacy"]["sta"] if client["name"] == "desktop")
+    printer = next(user for user in fx["legacy"]["alluser"] if user["mac"] == "bb:00:00:00:00:03")
+    printer["last_uplink_name"] = "Stale Switch"
+
+    def spell(integration, legacy, connected, offline):
+        switch["macAddress"] = integration
+        legacy_switch["mac"] = legacy
+        desktop["sw_mac"] = connected
+        printer["last_uplink_mac"] = offline
+
+    spell("aa00.0000.0002", "AA-00-00-00-00-02", "aa0000000002", "AA:00:00:00:00:02")
+    assert _run(fake_client, monkeypatch, ["snapshot", "--dir", str(tmp_path)]) == 0
+    (first,) = list_snapshots(tmp_path)
+    first_record = load_snapshot(first)
+    assert by_mac(first_record["clients"], "BB:00:00:00:00:01")["uplink"] == "Office Switch"
+    assert by_mac(first_record["clients"], "BB:00:00:00:00:03")["uplink"] == "Office Switch"
+    capsys.readouterr()
+
+    spell("AA-00-00-00-00-02", "aa0000000002", "aa00.0000.0002", "aa-00-00-00-00-02")
+    assert _run(fake_client, monkeypatch, ["snapshot", "--dir", str(tmp_path)]) == 0
+    capsys.readouterr()
+    assert _run(fake_client, monkeypatch, ["diff", "--last-two", "--dir", str(tmp_path)]) == 0
+    assert "No changes." in capsys.readouterr().out
+
+
 def test_cli_diff_of_two_files_by_name_by_last_two_and_as_json(fake_client, monkeypatch, capsys, tmp_path):
     _run(fake_client, monkeypatch, ["snapshot", "--dir", str(tmp_path)])
     fake_client.session.fx["clients"][0]["ipAddress"] = "10.0.0.99"

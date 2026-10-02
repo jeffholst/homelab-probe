@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple, TypedDict
 from .client_view import DeviceIndex
 from .query import format_table
 from .snapshot import Snapshot
-from .util import clean_data, number, plural, printable
+from .util import clean_data, normalize_mac, number, plural, printable
 
 BANDS = {"ng": "2.4 GHz", "na": "5 GHz", "6e": "6 GHz"}
 BAND_ALIASES = {"2.4": "ng", "2": "ng", "24": "ng", "5": "na", "6": "6e"}
@@ -188,8 +188,8 @@ def radios(snap: Snapshot, idx: DeviceIndex) -> List[Radio]:
     controller has not reported on) gets a single placeholder entry so it is not hidden."""
     rows: List[Radio] = []
     for d in sorted((d for d in snap.legacy_devices if d.get("type") == "uap"),
-                    key=lambda d: idx.name((d.get("mac") or "").upper()).lower()):
-        mac = (d.get("mac") or "").upper()
+                    key=lambda d: idx.name(normalize_mac(d.get("mac"))).lower()):
+        mac = normalize_mac(d.get("mac"))
         stats = [r for r in d.get("radio_table_stats") or [] if isinstance(r, dict)]
         if not stats:
             rows.append({"ap": idx.name(mac), "mac": mac, "band": "", "channel": None, "online": not idx.offline(mac),

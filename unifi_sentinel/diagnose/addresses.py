@@ -6,7 +6,7 @@ from typing import Any, Dict, List
 from ..export import LocationIndex
 from ..reservations import reservation_records
 from ..snapshot import Snapshot
-from ..util import is_randomized_mac
+from ..util import is_randomized_mac, normalize_mac
 from .model import (
     INFO,
     LINK_LOCAL_PREFIX,
@@ -49,7 +49,7 @@ def ip_holders(snap: Snapshot) -> Dict[str, Dict[str, str]]:
         ip = normalize_ip(c.get("ipAddress"))
         if ip:
             name = c.get("name") or c.get("macAddress") or "?"
-            holders.setdefault(ip, {})[(c.get("macAddress") or name).upper()] = (
+            holders.setdefault(ip, {})[(normalize_mac(c.get("macAddress")) or f"client:{id(c)}")] = (
                 f"{name} ({locate(c)})")
     for d in snap.devices:
         if d.get("state") != "ONLINE":
@@ -57,7 +57,7 @@ def ip_holders(snap: Snapshot) -> Dict[str, Dict[str, str]]:
         ip = normalize_ip(d.get("ipAddress"))
         if ip:
             name = d.get("name") or d.get("macAddress") or "?"
-            holders.setdefault(ip, {})[(d.get("macAddress") or name).upper()] = (
+            holders.setdefault(ip, {})[(normalize_mac(d.get("macAddress")) or f"device:{d.get('id') or id(d)}")] = (
                 f"{name} (UniFi device)")
     return holders
 
@@ -74,7 +74,7 @@ def _duplicate_ip_findings(snap: Snapshot) -> List[Finding]:
     ]
     for user, _net in reservation_records(snap):
         reserved = normalize_ip(user.get("fixed_ip"))
-        mac = (user.get("mac") or "").upper()
+        mac = normalize_mac(user.get("mac"))
         who = holders.get(reserved, {})
         # If the owner holds the IP too, the duplicate finding above already covers it.
         if who and mac not in who:
@@ -96,7 +96,7 @@ def _private_mac_findings(snap: Snapshot) -> List[Finding]:
     """
     findings: List[Finding] = []
     for user, _net in reservation_records(snap):
-        mac = (user.get("mac") or "").upper()
+        mac = normalize_mac(user.get("mac"))
         if is_randomized_mac(mac):
             name = user.get("name") or user.get("hostname") or mac
             findings.append(Finding(

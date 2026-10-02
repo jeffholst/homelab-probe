@@ -98,8 +98,8 @@ class DeviceIndex:
     """Name, type and state lookups over the snapshot's devices, keyed by upper-case MAC."""
 
     def __init__(self, snap: Snapshot):
-        self.legacy = {(d.get("mac") or "").upper(): d for d in snap.legacy_devices}
-        self.integration = {(d.get("macAddress") or "").upper(): d for d in snap.devices}
+        self.legacy = {normalize_mac(d.get("mac")): d for d in snap.legacy_devices}
+        self.integration = {normalize_mac(d.get("macAddress")): d for d in snap.devices}
         self.by_id = {d.get("id"): d for d in snap.devices}
         self.by_name = {self.name(m).lower(): m for m in self.legacy}
 
@@ -133,7 +133,7 @@ def _uplink_chain(net: DeviceIndex, start_mac: str, subjects: Set[str]) -> List[
     current = start_mac
     while True:
         up = (net.legacy.get(current) or {}).get("uplink") or {}
-        parent = (up.get("uplink_mac") or "").upper()
+        parent = normalize_mac(up.get("uplink_mac"))
         if not parent or parent in seen:
             return hops
         seen.add(parent)
@@ -153,7 +153,7 @@ def _attachment(snap: Snapshot, net: DeviceIndex, rec: Dict[str, Any]
     subjects: Set[str] = set()
 
     if rec["online"] and not rec["wired"]:
-        ap_mac = (sta.get("ap_mac") or "").upper()
+        ap_mac = normalize_mac(sta.get("ap_mac"))
         if not ap_mac and live:
             ap_mac = next((m for m, d in net.integration.items()
                            if d.get("id") == live.get("uplinkDeviceId")), "")
@@ -178,13 +178,13 @@ def _attachment(snap: Snapshot, net: DeviceIndex, rec: Dict[str, Any]
                 "satisfaction": satisfaction}
         return hops, link, subjects
 
-    sw_mac, port_idx = (sta.get("sw_mac") or "").upper(), sta.get("sw_port")
+    sw_mac, port_idx = normalize_mac(sta.get("sw_mac")), sta.get("sw_port")
     if rec["online"]:
         if not sw_mac and live:
             sw_mac = next((m for m, d in net.integration.items()
                            if d.get("id") == live.get("uplinkDeviceId")), "")
     else:  # offline: the last uplink the controller recorded
-        sw_mac = (user.get("last_uplink_mac") or "").upper() or net.by_name.get(
+        sw_mac = normalize_mac(user.get("last_uplink_mac")) or net.by_name.get(
             (user.get("last_uplink_name") or "").lower(), "")
         port_idx = user.get("last_uplink_remote_port")
     if not sw_mac:

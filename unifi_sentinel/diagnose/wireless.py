@@ -4,7 +4,7 @@ from typing import List
 
 from ..settings import DiagnoseSettings
 from ..snapshot import Snapshot
-from ..util import known_percent, number_or_zero
+from ..util import known_percent, normalize_mac, number_or_zero
 from .model import CRITICAL, WARNING, Finding
 from .ports import switch_name
 
@@ -21,16 +21,16 @@ def _wifi_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]:
     """
     findings: List[Finding] = []
     ap_name = {
-        (d.get("macAddress") or "").upper(): d.get("name") or d.get("macAddress") or "?"
+        normalize_mac(d.get("macAddress")): d.get("name") or d.get("macAddress") or "?"
         for d in snap.devices
     }
-    ap_name.update({(d.get("mac") or "").upper(): switch_name(d) for d in snap.legacy_devices})
+    ap_name.update({normalize_mac(d.get("mac")): switch_name(d) for d in snap.legacy_devices})
 
     for c in snap.legacy_clients:
         if c.get("is_wired"):
             continue
         name = c.get("name") or c.get("hostname") or c.get("mac") or "?"
-        ap = ap_name.get((c.get("ap_mac") or "").upper())
+        ap = ap_name.get(normalize_mac(c.get("ap_mac")))
         place = ", ".join(x for x in (BANDS.get(str(c.get("radio") or ""), ""), f"on {ap}" if ap else "") if x)
         where = f" ({place})" if place else ""
 
@@ -65,15 +65,15 @@ def _wifi_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]:
                 level = CRITICAL if util >= settings.radio_util_critical_pct else WARNING
                 findings.append(Finding(
                     level, label, f"channel utilization {util:.0f}%{on}",
-                    (ap.get("mac") or "").upper(), code="wifi.radio_utilization"))
+                    normalize_mac(ap.get("mac")), code="wifi.radio_utilization"))
             retries = number_or_zero(radio.get("tx_retries_pct"))
             if retries >= settings.wifi_retry_pct:
                 findings.append(Finding(
                     WARNING, label, f"{retries:.0f}% of transmissions retried{on}",
-                    (ap.get("mac") or "").upper(), code="wifi.radio_retries"))
+                    normalize_mac(ap.get("mac")), code="wifi.radio_retries"))
             satisfaction = known_percent(radio.get("satisfaction"))
             if satisfaction is not None and satisfaction < settings.wifi_satisfaction_warn:
                 findings.append(Finding(
                     WARNING, label, f"satisfaction {satisfaction:.0f}%{on}",
-                    (ap.get("mac") or "").upper(), code="wifi.radio_satisfaction"))
+                    normalize_mac(ap.get("mac")), code="wifi.radio_satisfaction"))
     return findings
