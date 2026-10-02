@@ -30,8 +30,8 @@ unifi_sentinel/
     ports.py  wireless.py  switch ports and uplinks; Wi-Fi quality
     event_checks.py        the event log (conflicts, disconnects, roaming, unreachable devices)
     output.py              ignoring findings, exit codes, text and JSON
-  completion.py          shell completion scripts for bash, zsh and fish, generated from the argument parser
   notify.py              notifications: what changed since the last run, ntfy/webhook/email sending, state file
+  completion.py          shell completion scripts for bash, zsh and fish, generated from the argument parser
   settings.py            diagnose thresholds and ignore list (TOML)
   util.py                shared helpers: output safety (printable names, CSV formulas), numbers, MACs, times, plurals
   cli.py                 argument parser and main: loads the configuration, builds the client, runs a command
