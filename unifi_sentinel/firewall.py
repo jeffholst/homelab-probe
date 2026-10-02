@@ -236,7 +236,7 @@ def policy_findings(snap: Snapshot, fw: FirewallData, rows: List[Dict[str, Any]]
 
 def build_firewall(snap: Snapshot, show_all: bool = False, search: str = "") -> Dict[str, Any]:
     fw = snap.firewall or FirewallData()
-    zone_based = fw.policies is not None and bool(fw.zones)
+    zone_based = bool(fw.policies)
     policies = policy_rows(snap, fw) if zone_based else []
     forwards = forward_rows(fw)
     findings = (policy_findings(snap, fw, policies) if zone_based else []) + forward_findings(snap, forwards)
