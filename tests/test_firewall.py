@@ -292,6 +292,15 @@ def test_a_reservation_for_another_mac_does_not_exempt_the_forward_target(fake_c
     assert ("firewall.forward_no_reservation", "Phone Test") in found
 
 
+def test_a_reservation_record_without_a_mac_or_a_usable_address_is_skipped(fake_client):
+    def change(fx):
+        fx["legacy"]["alluser"].append({"use_fixedip": True, "fixed_ip": "10.0.0.11"})            # no MAC
+        fx["legacy"]["alluser"].append({"use_fixedip": True, "fixed_ip": "garbage", "mac": "bb:00:00:00:00:02"})
+
+    found = findings(build_firewall(snapshot(fake_client, change)))
+    assert ("firewall.forward_no_reservation", "Phone Test") in found
+
+
 def test_an_offline_device_does_not_exempt_a_client_without_a_reservation(fake_client):
     def change(fx):
         fx["devices"][3]["ipAddress"] = "10.0.0.11"

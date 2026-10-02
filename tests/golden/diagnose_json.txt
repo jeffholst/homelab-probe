@@ -1,5 +1,14 @@
 {
   "version": 1,
+  "areas": [
+    "devices",
+    "health",
+    "wan",
+    "clients",
+    "reservations",
+    "ports",
+    "wifi"
+  ],
   "summary": {
     "critical": 0,
     "warning": 10,

@@ -18,6 +18,7 @@ from .client import UniFiAPIError, UniFiClient
 from .client_view import build_client_detail, find_clients, render_candidates, render_detail, to_json
 from .config import Config, ConfigError
 from .diagnose import (
+    AREA_NAMES,
     CRITICAL,
     INFO,
     WARNING,
@@ -27,6 +28,8 @@ from .diagnose import (
     findings_json,
     format_findings,
     format_ignored,
+    needs_for,
+    parse_areas,
     stream_supports_emoji,
 )
 from .events import DEFAULT_LIMIT, DEFAULT_SINCE, SEVERITIES, fetch_events, make_filter, parse_duration, render_events
@@ -511,9 +514,15 @@ def _add_diagnose(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--config", type=Path, metavar="FILE",
                         help="TOML file with thresholds and an ignore list "
                              "(default: ./unifi-sentinel.toml if present)")
+    parser.add_argument("--only", action="append", default=[], metavar="AREA[,AREA...]",
+                        help=f"Run only the checks of these areas ({', '.join(AREA_NAMES)}); repeatable. "
+                             "Only the data they need is read")
+    parser.add_argument("--skip", action="append", default=[], metavar="AREA[,AREA...]",
+                        help="Run every check except those of these areas (same names); repeatable. "
+                             "Skipping events sends no event-log request")
     parser.add_argument("--no-events", action="store_true",
                         help="Skip the event-log checks (repeated disconnects, IP conflicts, ...), "
-                             "which otherwise send the one approved read-only POST")
+                             "which otherwise send the one approved read-only POST; same as --skip events")
     parser.add_argument("--since", type=_duration, default=_duration(DEFAULT_SINCE), metavar="DURATION",
                         help=f"How far back the event checks look, e.g. 12h, 7d (default: {DEFAULT_SINCE})")
     parser.add_argument("--show-ignored", action="store_true",
@@ -540,7 +549,36 @@ def _add_diagnose(parser: argparse.ArgumentParser) -> None:
                         help=f"with --notify: where reported findings are remembered (default: {DEFAULT_STATE_FILE})")
 
 
+def diagnose_areas(args: argparse.Namespace) -> Optional[List[str]]:
+    """The areas ``diagnose`` runs, in the canonical order (None: all of them), from ``--only``, ``--skip`` and
+    ``--no-events``. Raises ``ValueError`` with the reason when the options cannot be combined."""
+    only, unknown_only = parse_areas(args.only)
+    skip, unknown_skip = parse_areas(args.skip)
+    unknown = unknown_only + unknown_skip
+    if unknown:
+        raise ValueError(f"unknown area {', '.join(repr(u) for u in unknown)}; the areas are {', '.join(AREA_NAMES)}")
+    if args.only and args.skip:
+        raise ValueError("--only and --skip cannot be combined")
+    if args.only:
+        if args.no_events and "events" in only:
+            raise ValueError("--no-events contradicts --only events")
+        wanted = set(only)
+    elif args.skip or args.no_events:
+        wanted = set(AREA_NAMES) - set(skip) - ({"events"} if args.no_events else set())
+    else:
+        return None
+    chosen = [a for a in AREA_NAMES if a in wanted]
+    if not chosen:
+        raise ValueError("no checks are left to run: " + ("--only names no area" if args.only
+                                                          else "every area is skipped"))
+    return None if len(chosen) == len(AREA_NAMES) else chosen
+
+
 def _check_diagnose(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    try:
+        args.areas = diagnose_areas(args)
+    except ValueError as e:
+        parser.error(str(e))
     if not args.notify and (args.notify_min or args.notify_redact or args.notify_dry_run or args.notify_baseline
                             or args.notify_state is not None):
         parser.error("the --notify-* options only apply together with --notify")
@@ -564,7 +602,7 @@ def _notify(findings: List[Any], config: Any, settings: Any, args: argparse.Name
         warn(problem)
     now = time.time()
     if args.notify_baseline:
-        saved = baseline(findings, now, minimum)
+        saved = baseline(findings, now, minimum, args.areas, state)
         try:
             save_state(state_path, saved)
         except OSError as e:
@@ -574,7 +612,7 @@ def _notify(findings: List[Any], config: Any, settings: Any, args: argparse.Name
         say(f"Notification baseline saved: {len(saved['active'])} current finding(s) count as already reported",
              file=sys.stderr)
         return False
-    events, new_state = plan(findings, state, now, minimum, settings.notify_repeat_hours)
+    events, new_state = plan(findings, state, now, minimum, settings.notify_repeat_hours, args.areas)
     if not events:
         if new_state != state:
             try:
@@ -606,17 +644,18 @@ def _notify(findings: List[Any], config: Any, settings: Any, args: argparse.Name
 def _run_diagnose(ctx: Context) -> int:
     args = ctx.args
     settings = ctx.settings or DiagnoseSettings()          # loaded for this command, so never None
+    areas = args.areas
     findings, ignored = apply_ignores(
-        diagnose(collect_snapshot(
-            ctx.client, ctx.config.site,
-            Needs(reservations=True, health=True, speedtests=True,
-                  events=None if args.no_events else EventQuery(args.since))), settings),
+        diagnose(collect_snapshot(ctx.client, ctx.config.site, needs_for(areas, args.since)), settings,
+                 areas=areas),
         settings.ignore)
     if args.json:
-        say(findings_json(findings, ignored, args.show_ignored))
+        say(findings_json(findings, ignored, args.show_ignored, areas))
     else:
         emoji = not args.no_emoji and stream_supports_emoji(sys.stdout)
         say(format_findings(findings, emoji, len(ignored)))
+        if areas is not None and (args.only or args.skip):       # --no-events alone prints what it always did
+            say(f"Checked: {', '.join(areas)} (not checked: {', '.join(a for a in AREA_NAMES if a not in areas)})")
         if args.show_ignored and ignored:
             say("\n" + format_ignored(ignored))
     code = exit_code(findings, args.fail_on)
