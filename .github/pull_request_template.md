@@ -12,6 +12,6 @@ Fixes #
 - [ ] Conventions: `CONFIG_VARIABLES`, `test_output_safety`, `_redact`, `normalize_mac`, no stale comments or docs
 - [ ] New tests were seen to fail with the feature broken
 - [ ] README and CLAUDE.md updated; shell snippets and examples run as written
-- [ ] `uv run pytest`, `ruff check .`, `mypy` pass; coverage still 100%; no real data in code, tests, docs or this text
+- [ ] `uv run pytest`, `uv run ruff check .`, and `uv run mypy` pass; coverage still 100%; no real data in code, tests, docs or this text
 
 ## Notes for the reviewer (decisions, unverified assumptions, things deliberately left out)
