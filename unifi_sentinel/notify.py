@@ -14,8 +14,8 @@ deliberately small and opt-in:
 
 The planning (`plan`) and the wording (`render_text`, `render_payload`) are pure functions; the
 network calls (one HTTPS POST per ntfy or webhook destination, one SMTP session for email) are in `send`.
-Email is TLS only (STARTTLS or implicit TLS, certificate and host name verified), one plain-text message
-per run, and a password is never sent over an unencrypted connection.
+Email uses verified STARTTLS or implicit TLS by default. Plain SMTP is available only with the lab opt-in,
+and a password is never sent over an unencrypted connection.
 """
 
 import json
