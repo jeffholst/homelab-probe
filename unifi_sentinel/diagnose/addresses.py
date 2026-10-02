@@ -49,7 +49,7 @@ def ip_holders(snap: Snapshot) -> Dict[str, Dict[str, str]]:
         ip = normalize_ip(c.get("ipAddress"))
         if ip:
             name = c.get("name") or c.get("macAddress") or "?"
-            holders.setdefault(ip, {})[(normalize_mac(c.get("macAddress")) or normalize_mac(name))] = (
+            holders.setdefault(ip, {})[(normalize_mac(c.get("macAddress")) or f"client:{id(c)}")] = (
                 f"{name} ({locate(c)})")
     for d in snap.devices:
         if d.get("state") != "ONLINE":
