@@ -334,6 +334,17 @@ def test_load_rejects_wrong_types_in_record_fields(tmp_path, section, field, val
         load_snapshot(path)
 
 
+@pytest.mark.parametrize(("field", "value"), [("tool_version", 1), ("tool_version", None), ("captured_at", 20260930),
+                                               ("captured_at", ["2026-09-30"])])
+def test_load_rejects_wrong_types_in_the_snapshot_metadata(tmp_path, field, value):
+    path = tmp_path / "bad.json"
+    record = {"schema_version": 1, "site": {}, "controller": {}, "devices": [], "clients": [], "reservations": []}
+    record[field] = value
+    path.write_text(json.dumps(record))
+    with pytest.raises(ConfigError, match="snapshot metadata contains invalid values"):
+        load_snapshot(path)
+
+
 def test_load_missing_or_unreadable(tmp_path):
     with pytest.raises(ConfigError, match="cannot read snapshot"):
         load_snapshot(tmp_path / "missing.json")

@@ -20,6 +20,9 @@ def variables_read():
         text = path.read_text(encoding="utf-8")
         found |= set(re.findall(r'(?:getenv|environ\.get|environ\[)\(?"([A-Z][A-Z0-9_]+)"', text))
         found |= set(re.findall(r'^[A-Z_]*ENV[A-Z_]*VAR\w*\s*=\s*"([A-Z][A-Z0-9_]+)"', text, re.M))
+    # config.py also reads groups of settings through a helper (``env.get(name)``), so its quoted setting names count
+    config = (PACKAGE / "config.py").read_text(encoding="utf-8")
+    found |= set(re.findall(r'"((?:NOTIFY|CONTROLLER|API|SITE|VERIFY|ALLOW|TIMEOUT|PARALLEL|UNIFI)_[A-Z0-9_]+)"', config))
     return found
 
 

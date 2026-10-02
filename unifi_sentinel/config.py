@@ -18,12 +18,14 @@ travels in a header of every request.
 
 import math
 import os
+import re
 import shlex
 import stat
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
@@ -46,6 +48,27 @@ class ConfigError(Exception):
     """Raised when required configuration is missing or invalid."""
 
 
+SMTP_SECURITY_WORDS = ("starttls", "ssl", "none")
+SMTP_DEFAULT_PORTS = {"starttls": 587, "ssl": 465, "none": 25}
+MAX_RECIPIENTS = 20
+_ADDRESS = re.compile(r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]{1,64}@[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?")
+_HOST = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?|\[[0-9A-Fa-f:.]{2,45}\]")
+
+
+@dataclass(frozen=True)
+class SmtpSettings:
+    """Where `diagnose --notify` sends email. Everything here is a secret or close to one (the mail host, the
+    account, the addresses), so nothing is shown by ``repr`` and no message repeats a value."""
+
+    host: str = field(repr=False)
+    port: int = field(repr=False)
+    security: str = field(repr=False)          # "starttls", "ssl" or "none" (lab opt-in, never with a password)
+    sender: str = field(repr=False)
+    recipients: Tuple[str, ...] = field(repr=False)
+    user: str = field(default="", repr=False)
+    password: str = field(default="", repr=False)
+
+
 @dataclass(frozen=True)
 class Config:
     controller_url: str
@@ -59,6 +82,7 @@ class Config:
     notify_ntfy_token: str = field(default="", repr=False)
     notify_webhook_url: str = field(default="", repr=False)
     notify_webhook_token: str = field(default="", repr=False)
+    notify_smtp: Optional[SmtpSettings] = field(default=None, repr=False)
     env_file: Optional[Path] = field(default=None, compare=False)    # the .env that was read, if any (for --verbose)
     warnings: Tuple[str, ...] = field(default=(), compare=False)   # for cli.main to print
 
@@ -126,6 +150,79 @@ def validate_notify_token(name: str, text: Optional[str]) -> str:
     if any(c.isspace() or ord(c) < 32 or 127 <= ord(c) <= 159 for c in token):
         raise ConfigError(f"{name} must not contain spaces or control characters")
     return token
+
+
+def validate_smtp(
+    env: Mapping[str, Optional[str]], allow_insecure: bool = False
+) -> Tuple[Optional[SmtpSettings], List[str]]:
+    """``(settings, warnings)`` for the ``NOTIFY_SMTP_*`` and ``NOTIFY_EMAIL_*`` variables in ``env``; settings
+    are None when email is not configured. Transport security is not optional: the connection is STARTTLS or
+    implicit TLS with the certificate and host name verified, and plain SMTP needs the same lab opt-in as an
+    ``http://`` URL (``allow_insecure``, with a warning every run) and is refused whenever a password is set.
+    A half-configured setup is an error, never a silent no-op, and no message repeats a value."""
+    def get(name: str) -> str:
+        return (env.get(name) or "").strip()
+
+    names = ("NOTIFY_SMTP_HOST", "NOTIFY_SMTP_PORT", "NOTIFY_SMTP_SECURITY", "NOTIFY_SMTP_USER",
+             "NOTIFY_SMTP_PASSWORD", "NOTIFY_EMAIL_FROM", "NOTIFY_EMAIL_TO")
+    given = [name for name in names if get(name)]
+    if not given:
+        return None, []
+    if not get("NOTIFY_SMTP_HOST"):
+        raise ConfigError(f"{given[0]} is set but NOTIFY_SMTP_HOST is not: set the mail server, or remove the "
+                          "email settings")
+    host = get("NOTIFY_SMTP_HOST")
+    if not _HOST.fullmatch(host):
+        raise ConfigError("NOTIFY_SMTP_HOST must be a host name or an address (no scheme, port, spaces or "
+                          "control characters)")
+
+    security = get("NOTIFY_SMTP_SECURITY").lower() or "starttls"
+    if security not in SMTP_SECURITY_WORDS:
+        raise ConfigError(f"NOTIFY_SMTP_SECURITY must be one of {', '.join(SMTP_SECURITY_WORDS)}")
+    warnings: List[str] = []
+    user, password = get("NOTIFY_SMTP_USER"), get("NOTIFY_SMTP_PASSWORD")
+    if security == "none":
+        if password:
+            raise ConfigError("NOTIFY_SMTP_SECURITY=none would send NOTIFY_SMTP_PASSWORD without encryption, which "
+                              "is refused: use starttls or ssl, or remove the password")
+        if not allow_insecure:
+            raise ConfigError("NOTIFY_SMTP_SECURITY=none sends notifications in clear text. Use starttls or ssl, "
+                              "or set ALLOW_INSECURE_HTTP=true for a lab network you trust.")
+        warnings.append("NOTIFY_SMTP_SECURITY=none: notification email is sent unencrypted "
+                        "(allowed by ALLOW_INSECURE_HTTP)")
+
+    port_text = get("NOTIFY_SMTP_PORT")
+    port = SMTP_DEFAULT_PORTS[security]
+    if port_text:
+        if not port_text.isascii() or not port_text.isdigit() or not 1 <= int(port_text) <= 65535:
+            raise ConfigError("NOTIFY_SMTP_PORT must be a port number from 1 to 65535")
+        port = int(port_text)
+
+    for name, value in (("NOTIFY_SMTP_USER", user), ("NOTIFY_SMTP_PASSWORD", password)):
+        if any(ord(c) < 32 or 127 <= ord(c) <= 159 for c in value):
+            raise ConfigError(f"{name} must not contain control characters")
+    if bool(user) != bool(password):
+        raise ConfigError("NOTIFY_SMTP_USER and NOTIFY_SMTP_PASSWORD go together: set both, or neither for a "
+                          "server that needs no login")
+
+    sender = get("NOTIFY_EMAIL_FROM")
+    raw_to = get("NOTIFY_EMAIL_TO")
+    if not sender or not raw_to:
+        raise ConfigError("NOTIFY_EMAIL_FROM and NOTIFY_EMAIL_TO are required with NOTIFY_SMTP_HOST")
+    if len(sender) > 254 or not _ADDRESS.fullmatch(sender):
+        raise ConfigError("NOTIFY_EMAIL_FROM must be a plain address like name@example.com (no display name)")
+    recipients: List[str] = []
+    for number, entry in enumerate(raw_to.split(","), 1):
+        entry = entry.strip()
+        if len(entry) > 254 or not _ADDRESS.fullmatch(entry):
+            raise ConfigError(f"NOTIFY_EMAIL_TO entry {number} must be a plain address like name@example.com "
+                              "(separate several with commas; no display names)")
+        if entry not in recipients:
+            recipients.append(entry)
+    if len(recipients) > MAX_RECIPIENTS:
+        raise ConfigError(f"NOTIFY_EMAIL_TO has more than {MAX_RECIPIENTS} addresses")
+    return SmtpSettings(host=host, port=port, security=security, sender=sender, recipients=tuple(recipients),
+                        user=user, password=password), warnings
 
 
 def parse_timeout(text: Optional[str]) -> float:
@@ -262,7 +359,10 @@ def load_config(env_file: Optional[Path] = None) -> Config:
     if url.lower().startswith("http://"):
         warnings.append("CONTROLLER_URL uses http://: the API key is sent in clear text "
                         "(allowed by ALLOW_INSECURE_HTTP)")
+    smtp, smtp_warnings = validate_smtp(os.environ, allow_http)
+    warnings += smtp_warnings
     return Config(
+        notify_smtp=smtp,
         notify_ntfy_url=validate_notify_url("NOTIFY_NTFY_URL", os.getenv("NOTIFY_NTFY_URL"), allow_http),
         notify_ntfy_token=validate_notify_token("NOTIFY_NTFY_TOKEN", os.getenv("NOTIFY_NTFY_TOKEN")),
         notify_webhook_url=validate_notify_url("NOTIFY_WEBHOOK_URL", os.getenv("NOTIFY_WEBHOOK_URL"), allow_http),
