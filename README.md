@@ -152,6 +152,15 @@ pip install .
 
 This installs a `unifi-sentinel` command.
 
+**A tagged release, without a clone:** each release is listed on the [releases page](https://github.com/jeffholst/unifi-sentinel/releases) with its notes and a wheel, and the [changelog](CHANGELOG.md) says what changed in every version and which parts of the interface scripts can rely on (exit codes, finding codes, JSON versions). The first release is `v0.2.0`; use the newest tag you find there in place of `vX.Y.Z`:
+
+```bash
+uv tool install git+https://github.com/jeffholst/unifi-sentinel@vX.Y.Z      # an isolated install with uv
+pip install git+https://github.com/jeffholst/unifi-sentinel@vX.Y.Z          # or into a virtual environment
+```
+
+Either installs the `unifi-sentinel` command (its `--version` option shows which version you have). The `.env` file is still read from the directory you run it in (or `--env-file`), so put it there. `uv tool upgrade unifi-sentinel` does not move a pinned tag; install the newer tag instead.
+
 ## Usage
 
 ```bash
@@ -981,6 +990,8 @@ tools/                   development scripts, not part of the package
 ```
 
 New features are new subcommands (a section and a registry row in `commands.py`) backed by modules that take a `Snapshot` (fetching stays in `snapshot.py` and `client.py`). Dependencies are declared once, in `pyproject.toml` (lockfile: `uv.lock`; regenerate with `uv lock`). Run the tests with `uv run pytest`; they use a synthetic fixture in `tests/fixtures/` and never contact a controller (except the opt-in `-m live` tests described below).
+
+**Releases.** A release is a `vX.Y.Z` tag that **the owner** pushes; nothing here tags or publishes by itself. To prepare one: finish the entry for the version in [CHANGELOG.md](CHANGELOG.md) (grouped Added, Changed, Fixed and Security; a change to an exit code, a finding code or a JSON `version` always gets a line) and replace its `Unreleased` by the date, set `__version__` in `unifi_sentinel/__init__.py` (the one place the version is written; `pyproject.toml` reads it), and merge that as a pull request. Then `git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z`. The [release workflow](.github/workflows/release.yml) runs only for that push: it checks the lockfile, installs dependencies, refuses a tag that is not `v` plus the package version or a changelog entry without a real date (`tools/release_notes.py`), runs the tests, builds the wheel and source distribution with `uv build`, and creates the GitHub release with the changelog entry as its notes and the two files attached. It is the only workflow allowed to write to the repository and uses the runner's `gh` CLI rather than a third-party publishing action. A test keeps the changelog, the version and the workflow in step.
 
 **Dependency updates.** [Dependabot](.github/dependabot.yml) checks once a week (Mondays) for newer versions of the GitHub Actions that CI uses and of the Python dependencies in `pyproject.toml`/`uv.lock`, and opens one pull request per group, not one per package. They go through the same CI as any change (tests on Python 3.10 to 3.13, `ruff`, `mypy`, `uv lock --check`) and are merged by hand. The actions are pinned to exact versions on purpose (`astral-sh/setup-uv` publishes no floating major tag), which is what lets Dependabot keep them current; a test checks the pins. For security advisories, switch on **Dependabot alerts** and **Dependabot security updates** in the repository's Settings, under Advanced Security (they are repository settings, not files).
 

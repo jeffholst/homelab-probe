@@ -20,6 +20,7 @@ Fork of [ericfitz/unifi-clients-export](https://github.com/ericfitz/unifi-client
 - Keep `CLAUDE.md` current when adding a module or subcommand (Layout, Commands) or learning something non-obvious about the API.
 - Example output in docs must come from the synthetic fixture, never from a real network.
 - Before opening a PR, check that the README matches `unifi-sentinel <command> --help`.
+- Every user-visible change (a command, a flag, an output column, a check, a setting, a fix people would notice) gets a line in `CHANGELOG.md`, under the entry that is still marked `Unreleased` (after a release, open a new `## [Unreleased]` heading above the last one). A change to an exit code, a finding code or a JSON `version` must be called out; `tests/test_changelog.py` fails if a command or a finding code named there does not exist, or a command is missing from it.
 
 ## Conventions
 
@@ -96,6 +97,13 @@ Copilot reviews every PR and keeps finding the same kinds of defect (about 15 PR
 7. **Tests must be able to fail.** After writing a test, break the thing it guards (remove the field, revert the fix) and watch it fail. No silently skipped parametrizations (a missing console script must fail the collection, not shrink it), no parameter that only appears in the failure message, and a completeness check must force the fallback branches it claims to cover, not only the main ones.
 8. **Docs run.** Paste each shell snippet and example you wrote; an example must do what its sentence says (an ignore rule that silences one finding but not the other), catalogue strings must be whole sentences, and every new range or option has to be listed everywhere it applies (IPv6 next to IPv4).
 9. **Last read.** Read `git diff main` once as a skeptical reviewer: for every changed line ask what input breaks it and which test would notice.
+
+## Releases
+
+- The owner cuts releases; never create a tag or a GitHub release from here, and do not push a `v*` tag (the release workflow publishes on it). Prepare the pull request, say what remains, and stop.
+- To prepare one: complete the `CHANGELOG.md` entry for the version and replace `Unreleased` by the release date (`YYYY-MM-DD`), set `unifi_sentinel.__version__` (the only place; `uv lock` after if the lockfile changes), merge. The owner then runs `git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z`.
+- `.github/workflows/release.yml` runs only on a pushed `v*` tag: the lockfile check and dependency installation run first, then `tools/release_notes.py` refuses a tag that is not `v` plus `__version__` or an entry without a real date, followed by the tests, `uv build`, and `gh release create --verify-tag` with the entry as notes. It is the only workflow with `contents: write` (on its one job), uses the runner's `gh` CLI rather than a third-party publishing action, and passes the tag through the environment, never into a command line; `tests/test_changelog.py` pins all of that.
+- The first release is 0.2.0 (the owner chose it over 0.1.0 and 1.0.0): still 0.x because the endpoints are undocumented, only Network 10.6.106 was tested and the command line may still change.
 
 ## Git and GitHub
 
