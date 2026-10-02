@@ -26,6 +26,8 @@ CASES = {
     "diagnose": ["diagnose", "--no-events", "--no-emoji"],
     "diagnose_with_events": ["diagnose", "--no-emoji"],
     "diagnose_json": ["diagnose", "--json", "--no-events"],
+    "firewall": ["firewall", "--no-emoji"],
+    "firewall_zones": ["firewall", "--zones", "--all", "--no-emoji"],
     "events": ["events", "--client", "phone", "--since", "6h"],
     "events_summary": ["events", "--summary"],
     "new_clients": ["new-clients"],

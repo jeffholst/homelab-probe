@@ -16,7 +16,7 @@ from unifi_sentinel.diagnose import diagnose
 from unifi_sentinel.events import render_message
 from unifi_sentinel.snapshot import EventQuery, Needs, collect_snapshot
 
-EVERYTHING = Needs(offline=True, reservations=True, groups=True, health=True, speedtests=True, neighbors=True,
+EVERYTHING = Needs(offline=True, reservations=True, groups=True, health=True, speedtests=True, neighbors=True, firewall=True,
                    events=EventQuery(since_seconds=7 * 86400))
 
 

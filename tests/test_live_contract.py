@@ -15,7 +15,7 @@ from unifi_sentinel.snapshot import EventQuery, Needs, collect_snapshot
 
 pytestmark = pytest.mark.live
 
-EVERYTHING = Needs(offline=True, reservations=True, groups=True, health=True, speedtests=True, neighbors=True,
+EVERYTHING = Needs(offline=True, reservations=True, groups=True, health=True, speedtests=True, neighbors=True, firewall=True,
                    events=EventQuery(since_seconds=7 * 86400))
 
 

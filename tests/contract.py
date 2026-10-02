@@ -98,6 +98,22 @@ CONTRACT: Dict[str, Endpoint] = {
     "legacy/v2/network-members-groups": Endpoint(always=("id", "name")),
     "legacy/v2/speedtest": Endpoint(
         somewhere=("time", "download_mbps", "upload_mbps", "latency_ms", "interface_name", "wan_networkgroup")),
+    # Zone-based firewall (checked on Network 10.6.106). `hits` is missing from a policy that was never used.
+    "legacy/v2/firewall-policies": Endpoint(
+        always=("name", "enabled", "action", "predefined", "index", "protocol", "source.zone_id", "destination.zone_id",
+                "source.matching_target", "destination.matching_target", "source.port_matching_type",
+                "destination.port_matching_type"),
+        somewhere=("source.network_ids", "destination.network_ids", "destination.ips", "destination.port",
+                   "source.match_opposite_networks", "destination.match_opposite_ips"),
+        optional=("hits", "source.ips", "source.port", "source.match_opposite_ips", "destination.match_opposite_networks",
+                  "source.match_opposite_ports", "destination.match_opposite_ports")),
+    "legacy/v2/firewall/zone": Endpoint(always=("_id", "name"), somewhere=("zone_key", "network_ids")),
+    "legacy/v2/firewall/zone-matrix": Endpoint(
+        always=("_id", "data[]._id", "data[].action", "data[].policy_count"), optional=("name",)),
+    # Port forwards (legacy rest/portforward): the controller checked had none, so these are the legacy field names
+    # and are not verified against live data; none of them is required.
+    "legacy/rest/portforward": Endpoint(
+        optional=("name", "enabled", "proto", "dst_port", "fwd", "fwd_port", "pfwd_interface", "src")),
     "legacy/system-log": Endpoint(
         always=("key", "timestamp", "category", "severity"),
         somewhere=("event", "message_raw", "parameters", "subcategory"),

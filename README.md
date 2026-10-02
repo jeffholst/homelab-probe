@@ -19,6 +19,7 @@ UniFi Sentinel is a fork of [ericfitz/unifi-clients-export](https://github.com/e
 | `topology` | Draw the uplink tree from the gateway down: ports, link speeds, client counts and problems |
 | `wifi` | Wireless report: each AP's radios and a channel plan from the neighboring networks |
 | `wan` | Internet health: current state, 24-hour monitoring and speedtest history |
+| `firewall` | Firewall policies, port forwards and the zone matrix, with what looks wrong (zone-based firewall) |
 | `events` | Event history from the controller log: disconnects, roams, IP conflicts, device outages |
 | `client` | Troubleshoot one client by name, MAC or IP: where it attaches, link quality and related findings |
 | `new-clients` | List clients that are in no client group, to spot new devices |
@@ -38,6 +39,7 @@ The tool is still evolving; see open issues for planned reports, controller-vers
 - **Topology**: the uplink tree from the gateway down, with the port each device plugs into, negotiated link speeds (and links below what both ends support), client counts, and offline or flagged devices
 - **Wireless report**: each AP's radios (channel, width, power, clients, utilization, retries) and a channel plan from the neighboring networks your APs hear, with overlap-aware counts and plain observations
 - **Internet health**: `wan` shows the connection's state, the controller's own 24-hour availability and latency monitoring per target, and the speedtest history with the runs that fell well below normal, to tell an internet problem from a LAN problem
+- **Firewall view**: `firewall` lists the policies you defined (and with `--all` the built-in ones), the port forwards and the zone matrix of the zone-based firewall, and points out forwards to addresses nothing is using, duplicate external ports, an enabled rule that allows everything in from the External zone, and rules that match networks which no longer exist
 - **Event history**: what happened and when (disconnects, roams, IP conflicts, device outages, admin changes) from the controller's log, filterable by time, severity, category, client and device, with a summary of the noisiest clients
 - **Single-client troubleshooting**: `client <name|mac|ip>` shows where a client attaches (the full uplink chain to the gateway with port numbers and link speeds), its link quality, addressing and the `diagnose` findings that concern it
 - **Verbose logging**: `--verbose` shows every request (path, status, time, retries) and what was read on stderr, never the API key, to diagnose slow runs and undocumented endpoints
@@ -166,6 +168,9 @@ uv run unifi-sentinel.py wifi                        # radios and a channel plan
 uv run unifi-sentinel.py wifi --band 2.4 --ap hall   # one band, one AP
 uv run unifi-sentinel.py wan                         # is it my internet or my LAN?
 uv run unifi-sentinel.py wan --days 90               # a longer speedtest history
+uv run unifi-sentinel.py firewall                    # your firewall policies, port forwards and findings
+uv run unifi-sentinel.py firewall --all --zones      # ...plus the built-in policies, the zones and the zone matrix
+uv run unifi-sentinel.py firewall --search plex --json   # filter by text, as JSON
 uv run unifi-sentinel.py events                      # the last 24 hours, newest first
 uv run unifi-sentinel.py events --since 7d --severity high   # recent serious events
 uv run unifi-sentinel.py events --client phone --event disconnected   # one client's drops
@@ -591,6 +596,62 @@ Speedtests, last 30 days (11 runs), 12 stored
 - **`diagnose` uses the same data:** a warning (`wan.double_nat`, `wan.cgnat` or `wan.link_local_address`) when the NAT check above finds a private, shared or link-local WAN address (silence a deliberate double NAT with an ignore rule: `subject = "wan"`, `message = "double NAT"`), a warning when 24-hour availability, overall or for any single monitoring target, is below `wan_availability_warn_pct` (default 99%), and a warning when the last speedtest (within 30 days) is below `wan_speed_drop_pct` of the 30-day median, with its age.
 - **Not included:** an hourly traffic and latency history. The controller only returns that from a POST to its report endpoint, which is outside the one approved POST (the event log); a plain GET returns empty rows.
 
+### Firewall
+
+`firewall` answers "what does my firewall allow, and what is reachable from the internet?" (all read with GET). Shown with `--no-emoji`; the findings use the same severity marks as `diagnose` (the command never changes the exit code):
+
+```text
+Firewall: zone-based (7 zones, 6 policies shown)
+
+Port forwards
+Name                On   Protocol  External port  Forwards to      Interface  Only from
+------------------  ---  --------  -------------  ---------------  ---------  ------------
+Web Server          yes  TCP       443            10.0.0.10:443    WAN
+Phone Test          yes  TCP       8080           10.0.0.11:8080   WAN
+Game Server         yes  UDP       27015          10.0.0.77:27015  WAN
+Game Server Backup  yes  UDP       27015          10.0.0.10:27016  WAN
+Old FTP             no   TCP       21             10.0.0.50:21     WAN        198.51.100.7
+
+Policies of your own (6 built-in policies not shown, use --all)
+Name               Action  On   From      To        Source                      Destination                      Protocol  Hits
+-----------------  ------  ---  --------  --------  --------------------------  -------------------------------  --------  ----
+Open Inbound       allow   yes  External  Internal  any                         any                              any
+Admin SSH          allow   yes  Internal  Gateway   10.0.0.10 port 49152-65535  any port 22                      TCP       9
+Guest Printer      allow   yes  Internal  IoT Zone  any                         a network that no longer exists  TCP/UDP
+Allow IoT DNS      allow   yes  IoT Zone  Internal  IoT                         10.0.0.53 port 53                TCP/UDP   42
+Old Camera Access  allow   no   IoT Zone  Internal  no network left             any                              any
+Legacy VPN Allow   allow   no   Vpn       Internal  any                         any                              any
+
+Findings
+[WARNING ] Open Inbound: allows all traffic from the External zone to Internal
+[INFO    ] Old Camera Access: source matches specific networks but lists none (the network was probably deleted); the rule is switched off
+[WARNING ] Guest Printer: destination matches a network that no longer exists
+[INFO    ] policies: 2 rules of your own are switched off
+[INFO    ] Phone Test: TCP port 8080 to 10.0.0.11:8080; that client has no DHCP reservation, so the forward breaks if its address changes
+[WARNING ] Game Server: UDP port 27015 to 10.0.0.77:27015, but nothing is using that address now
+[WARNING ] Game Server Backup: uses UDP external port 27015 like 'Game Server'
+
+4 warnings, 3 info
+```
+
+- **Port forwards** (legacy `rest/portforward`): name, whether it is on, protocol, external port, the internal address and port, the WAN interface, and the only source address it accepts (blank for any).
+- **Policies:** only the ones you defined by default, because a zone-based controller also holds a long list of built-in ones (`--all` shows them too, marked by the count of what is hidden). Columns: the rule's action, whether it is on, the zone the traffic comes **From** and goes **To**, what the **Source** and **Destination** match (`any`, the networks by name, addresses, or the kind of target, each with its port when it matches one; `not` in front when the match is inverted), the protocol and how many times the rule has matched (`Hits`, blank when it never did). Ordered by zone pair, then the controller's rule order.
+- **`--zones`** adds each zone with its networks and the **zone matrix**: for traffic from the row's zone into the column's zone, `A` allows all, `B` blocks all, `R` allows return traffic only, `C` means custom rules decide and `-` that nothing is defined.
+- **`--search TEXT`** keeps the policies and port forwards with that text in any column; `--json` prints the same data (`version`, `style`, `policies`, `port_forwards`, `zones`, `matrix`, `findings` and `notes`) with the names untouched.
+- **Findings:**
+
+  | Code | Severity | Meaning |
+  | ---- | -------- | ------- |
+  | `firewall.forward_target_offline` | warning | An enabled port forward points at an address that no connected client or UniFi device is using |
+  | `firewall.forward_no_reservation` | info | An enabled port forward points at a client that has no DHCP reservation, so it breaks when the address changes |
+  | `firewall.forward_duplicate` | warning | Two enabled port forwards use the same protocol, external port and interface |
+  | `firewall.allow_any_from_external` | warning | An enabled rule of your own allows all protocols and ports from anywhere in the External zone to a zone |
+  | `firewall.rule_missing_network` | warning (info when the rule is off) | A rule matches specific networks but lists none, or lists one that is gone, which usually means the network was deleted |
+  | `firewall.disabled_rules` | info | How many rules of your own are switched off |
+
+  Built-in policies are never judged. The codes are fixed (listed in `firewall.FIREWALL_CODES`) like the `diagnose` ones; they are not part of `diagnose --json`.
+- **Data and limits:** checked against one controller on Network 10.6.106 that uses the **zone-based** firewall: the policies come from the v2 `firewall-policies`, `firewall/zone` and `firewall/zone-matrix` endpoints (the Integration API lists fewer policies and has no ports or hit counts). That controller had **no port forwards**, so the port forward fields are the legacy ones and are not verified against live data. The **classic firewall** (rules and groups) is not shown: on a controller without zone-based policies the command says so, with a warning for each endpoint that did not answer, and still lists port forwards. A policy can also match a client, a region or a group; those are shown as the kind of target only.
+
 ### Event history
 
 `events` reads the controller's event log, so it can answer "why did the Wi-Fi drop at 3 pm?", which none of the other commands can because they show the network as it is now. The controller keeps about three months.
@@ -599,11 +660,11 @@ Speedtests, last 30 days (11 runs), 12 stored
 uv run unifi-sentinel.py events --client phone --since 6h
 Time                 Severity  Category        Event                         Message
 -------------------  --------  --------------  ----------------------------  --------------------------------------------------
-2026-10-01 22:01:55  Low       CLIENT_DEVICES  CLIENT_DISCONNECTED_WIRELESS  phone disconnected from Home. Time Connected: 25s.
-2026-10-01 21:46:55  Low       CLIENT_DEVICES  CLIENT_CONNECTED_WIRELESS     phone connected to Home on Office AP.
-2026-10-01 21:31:55  Low       CLIENT_DEVICES  CLIENT_DISCONNECTED_WIRELESS  phone disconnected from Home. Time Connected: 2m.
-2026-10-01 21:21:55  Low       CLIENT_DEVICES  CLIENT_ROAMED                 phone roamed from Garage AP to Office AP.
-2026-10-01 21:11:55  Low       CLIENT_DEVICES  CLIENT_DISCONNECTED_WIRELESS  phone disconnected from Home. Time Connected: 1h.
+2026-10-02 00:54:05  Low       CLIENT_DEVICES  CLIENT_DISCONNECTED_WIRELESS  phone disconnected from Home. Time Connected: 25s.
+2026-10-02 00:39:05  Low       CLIENT_DEVICES  CLIENT_CONNECTED_WIRELESS     phone connected to Home on Office AP.
+2026-10-02 00:24:05  Low       CLIENT_DEVICES  CLIENT_DISCONNECTED_WIRELESS  phone disconnected from Home. Time Connected: 2m.
+2026-10-02 00:14:05  Low       CLIENT_DEVICES  CLIENT_ROAMED                 phone roamed from Garage AP to Office AP.
+2026-10-02 00:04:05  Low       CLIENT_DEVICES  CLIENT_DISCONNECTED_WIRELESS  phone disconnected from Home. Time Connected: 1h.
 
 5 event(s)
 ```
@@ -646,7 +707,7 @@ Attached: desktop -> Office Switch port 3 (1000 Mbps) -> Gateway port 2 (100 Mbp
 Link:     1000 Mbps, full duplex, 0 errors, 60 dropped packets on its port
 
 Recent events (last 24h, newest first):
-  2026-10-01 20:41:55  CLIENT_CONNECTED_WIRED: desktop connected to Main on Office Switch Port 3.
+  2026-10-01 23:34:05  CLIENT_CONNECTED_WIRED: desktop connected to Main on Office Switch Port 3.
 
 Related findings:
 [WARNING ] Office Switch: CPU utilization 95%
@@ -752,7 +813,7 @@ Sample from synthetic data with `diagnose --no-events` (text labels are used whe
 Name         MAC Address        IP Address  Vendor                Connection Type  Where                        First Seen           Last Seen            Status   Private MAC
 -----------  -----------------  ----------  --------------------  ---------------  ---------------------------  -------------------  -------------------  -------  -----------
 old-tablet   BB:00:00:00:00:04  10.0.0.51                         Wireless                                      2025-06-15 15:06:40  2025-12-06 05:46:40  Offline
-old-printer  BB:00:00:00:00:03  10.0.0.50   Example Printers Inc  Wired            Wired, Office Switch port 6  2023-11-14 22:13:20  2026-10-01 19:11:55  Offline
+old-printer  BB:00:00:00:00:03  10.0.0.50   Example Printers Inc  Wired            Wired, Office Switch port 6  2023-11-14 22:13:20  2026-10-01 22:04:05  Offline
 
 2 client(s) in no group
 ```
@@ -812,6 +873,7 @@ unifi_sentinel/
   client_view.py         single-client troubleshooting view
   events.py              event history from the controller's system log
   wan.py                 internet health: state, 24h monitoring, speedtests
+  firewall.py            firewall view: policies, port forwards, zone matrix and findings (zone-based)
   wifi.py                wireless report: radios and a channel plan from neighbors
   topology.py            uplink tree: wiring, link speeds, client counts, flags
   history.py             saved inventories (snapshot) and the diff between them

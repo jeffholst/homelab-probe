@@ -17,7 +17,7 @@ COMMANDS = [["info"], ["export"], ["export", "--include-offline"], ["query", "de
             ["query", "ports"], ["new-clients"], ["topology", "--clients"], ["wifi", "--all"], ["wan"], ["events"],
             ["events", "--since", "14d"], ["events", "--device", "no-such-device"],
             ["events", "--summary"], ["client", "desktop"], ["client", "phone"], ["client", "old-printer"],
-            ["diagnose"], ["snapshot"], ["diff"]]
+            ["diagnose"], ["snapshot"], ["diff"], ["firewall", "--all", "--zones"]]
 
 
 def fixture_records(name):
@@ -33,6 +33,10 @@ def fixture_records(name):
         "legacy/stat/rogueap": fx["legacy"]["rogueap"], "legacy/rest/networkconf": fx["legacy_rest"]["networkconf"],
         "legacy/v2/network-members-groups": fx["legacy_v2"]["network-members-groups"],
         "legacy/v2/speedtest": fx["legacy_v2"]["speedtest"]["data"], "legacy/system-log": session.events,
+        "legacy/v2/firewall-policies": fx["legacy_v2"]["firewall-policies"],
+        "legacy/v2/firewall/zone": fx["legacy_v2"]["firewall/zone"],
+        "legacy/v2/firewall/zone-matrix": fx["legacy_v2"]["firewall/zone-matrix"],
+        "legacy/rest/portforward": fx["legacy_rest"]["portforward"],
     }
     return table[name]
 

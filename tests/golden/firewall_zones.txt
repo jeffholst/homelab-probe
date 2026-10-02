@@ -1,0 +1,57 @@
+Firewall: zone-based (7 zones, 12 policies shown)
+
+Port forwards
+Name  On  Protocol  External port  Forwards to  Interface  Only from
+---  ---  ---  ---  ---  ---  ---
+Web Server  yes  TCP  443  10.0.0.10:443  WAN
+Phone Test  yes  TCP  8080  10.0.0.11:8080  WAN
+Game Server  yes  UDP  27015  10.0.0.77:27015  WAN
+Game Server Backup  yes  UDP  27015  10.0.0.10:27016  WAN
+Old FTP  no  TCP  21  10.0.0.50:21  WAN  198.51.100.7
+
+Policies
+Name  Action  On  From  To  Source  Destination  Protocol  Hits
+---  ---  ---  ---  ---  ---  ---  ---  ---
+Allow Return Traffic  allow  yes  External  Internal  any  any  any  88100
+Block All Traffic  block  yes  External  Internal  any  any  any  1304
+Open Inbound  allow  yes  External  Internal  any  any  any
+Allow All Traffic  allow  yes  Internal  External  any  any  any  5210
+Allow mDNS  allow  yes  Internal  Gateway  any  any port 5353  UDP  120
+Admin SSH  allow  yes  Internal  Gateway  10.0.0.10 port 49152-65535  any port 22  TCP  9
+Allow All Traffic  allow  yes  Internal  Internal  any  any  any
+Guest Printer  allow  yes  Internal  IoT Zone  any  a network that no longer exists  TCP/UDP
+Block All Traffic  block  yes  IoT Zone  Internal  any  any  any  17
+Allow IoT DNS  allow  yes  IoT Zone  Internal  IoT  10.0.0.53 port 53  TCP/UDP  42
+Old Camera Access  allow  no  IoT Zone  Internal  no network left  any  any
+Legacy VPN Allow  allow  no  Vpn  Internal  any  any  any
+
+Zones
+  Internal: Main
+  External: no networks
+  Gateway: no networks
+  Vpn: no networks
+  Hotspot: no networks
+  DMZ: no networks
+  IoT Zone (yours): IoT
+
+Zone matrix (what traffic from a zone may do in another: A allow all, B block all, R return traffic only, C custom rules, - none)
+From \ To  Internal  External  Gateway  Vpn  Hotspot  DMZ  IoT Zone
+---  ---  ---  ---  ---  ---  ---  ---
+Internal  A  A  C  A  A  A  C
+External  C  A  B  B  B  B  B
+Gateway  B  B  A  B  B  B  B
+Vpn  C  B  B  A  B  B  B
+Hotspot  B  B  B  B  A  B  B
+DMZ  B  B  B  B  B  A  B
+IoT Zone  C  B  B  B  B  B  A
+
+Findings
+[WARNING ] Open Inbound: allows all traffic from the External zone to Internal
+[INFO  ] Old Camera Access: source matches specific networks but lists none (the network was probably deleted); the rule is switched off
+[WARNING ] Guest Printer: destination matches a network that no longer exists
+[INFO  ] policies: 2 rules of your own are switched off
+[INFO  ] Phone Test: TCP port 8080 to 10.0.0.11:8080; that client has no DHCP reservation, so the forward breaks if its address changes
+[WARNING ] Game Server: UDP port 27015 to 10.0.0.77:27015, but nothing is using that address now
+[WARNING ] Game Server Backup: uses UDP external port 27015 like 'Game Server'
+
+4 warnings, 3 info

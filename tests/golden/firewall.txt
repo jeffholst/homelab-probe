@@ -1,0 +1,31 @@
+Firewall: zone-based (7 zones, 6 policies shown)
+
+Port forwards
+Name  On  Protocol  External port  Forwards to  Interface  Only from
+---  ---  ---  ---  ---  ---  ---
+Web Server  yes  TCP  443  10.0.0.10:443  WAN
+Phone Test  yes  TCP  8080  10.0.0.11:8080  WAN
+Game Server  yes  UDP  27015  10.0.0.77:27015  WAN
+Game Server Backup  yes  UDP  27015  10.0.0.10:27016  WAN
+Old FTP  no  TCP  21  10.0.0.50:21  WAN  198.51.100.7
+
+Policies of your own (6 built-in policies not shown, use --all)
+Name  Action  On  From  To  Source  Destination  Protocol  Hits
+---  ---  ---  ---  ---  ---  ---  ---  ---
+Open Inbound  allow  yes  External  Internal  any  any  any
+Admin SSH  allow  yes  Internal  Gateway  10.0.0.10 port 49152-65535  any port 22  TCP  9
+Guest Printer  allow  yes  Internal  IoT Zone  any  a network that no longer exists  TCP/UDP
+Allow IoT DNS  allow  yes  IoT Zone  Internal  IoT  10.0.0.53 port 53  TCP/UDP  42
+Old Camera Access  allow  no  IoT Zone  Internal  no network left  any  any
+Legacy VPN Allow  allow  no  Vpn  Internal  any  any  any
+
+Findings
+[WARNING ] Open Inbound: allows all traffic from the External zone to Internal
+[INFO  ] Old Camera Access: source matches specific networks but lists none (the network was probably deleted); the rule is switched off
+[WARNING ] Guest Printer: destination matches a network that no longer exists
+[INFO  ] policies: 2 rules of your own are switched off
+[INFO  ] Phone Test: TCP port 8080 to 10.0.0.11:8080; that client has no DHCP reservation, so the forward breaks if its address changes
+[WARNING ] Game Server: UDP port 27015 to 10.0.0.77:27015, but nothing is using that address now
+[WARNING ] Game Server Backup: uses UDP external port 27015 like 'Game Server'
+
+4 warnings, 3 info
