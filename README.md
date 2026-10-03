@@ -200,7 +200,7 @@ Clients that use a private Wi-Fi MAC address are flagged in `query clients`, `ne
 | 4 | `client` found no client, or several (it lists them) |
 | 64 | command-line usage error |
 
-`--fail-on {info,warning,critical}` sets the lowest severity that gives a non-zero code (default `warning`). Critical always exits 2. Example cron entry that only alerts on outages:
+`--fail-on {info,warning,critical}` sets the lowest severity that gives a non-zero code (default `warning`). Critical always exits 2. Example cron entry that only alerts on outages (the tested cron, systemd, launchd and Docker setups are in [Running on a schedule](docs/scheduling.md)):
 
 ```bash
 */15 * * * * cd /path/to/unifi-sentinel && uv run unifi-sentinel.py diagnose --fail-on critical || notify-me
@@ -215,6 +215,7 @@ These sections moved to `docs/`; links to their old README anchors still land he
 
 - [Diagnose and audit](docs/diagnose.md): the checks, thresholds and ignore list, `--json` and the finding codes
 - [Notifications](docs/notifications.md): ntfy, webhook and email
+- [Running on a schedule](docs/scheduling.md): cron, systemd, launchd and Docker
 - [Inventory, queries and exports](docs/inventory.md): `query`, `export`, snapshots, reservations, ports
 - [Network views](docs/network.md): topology, Wi-Fi, WAN, firewall, events, the client view
 - [Configuration and troubleshooting](docs/configuration.md): every setting, `--verbose`, when something fails
