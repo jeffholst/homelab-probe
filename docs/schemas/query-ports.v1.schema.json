@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/jeffholst/unifi-sentinel/main/docs/schemas/query-ports.v1.schema.json",
+  "title": "query ports",
+  "description": "Output of `unifi-sentinel query ports --json`: one row per switch port.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "Connected Name": {
+        "type": "string"
+      },
+      "Connected Model": {
+        "type": "string"
+      },
+      "PoE Enabled": {
+        "type": "string"
+      },
+      "TX Packets": {
+        "type": [
+          "number",
+          "string",
+          "null"
+        ]
+      },
+      "Port Index": {
+        "type": [
+          "number",
+          "string",
+          "null"
+        ]
+      },
+      "RX Errors": {
+        "type": [
+          "number",
+          "string",
+          "null"
+        ]
+      },
+      "PoE Class": {
+        "type": "string"
+      },
+      "Port": {
+        "type": "string"
+      },
+      "TX Errors": {
+        "type": [
+          "number",
+          "string",
+          "null"
+        ]
+      },
+      "Status": {
+        "type": "string"
+      },
+      "RX Packets": {
+        "type": [
+          "number",
+          "string",
+          "null"
+        ]
+      },
+      "Full Duplex": {
+        "type": "string"
+      },
+      "PoE Power (W)": {
+        "type": "string"
+      },
+      "TX Bytes": {
+        "type": [
+          "number",
+          "string",
+          "null"
+        ]
+      },
+      "RX Bytes": {
+        "type": [
+          "number",
+          "string",
+          "null"
+        ]
+      },
+      "Connected Type": {
+        "type": "string"
+      },
+      "Connected MAC": {
+        "type": "string"
+      },
+      "Switch": {
+        "type": "string"
+      },
+      "Speed": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "Connected MAC",
+      "Connected Model",
+      "Connected Name",
+      "Connected Type",
+      "Full Duplex",
+      "PoE Class",
+      "PoE Enabled",
+      "PoE Power (W)",
+      "Port",
+      "Port Index",
+      "RX Bytes",
+      "RX Errors",
+      "RX Packets",
+      "Speed",
+      "Status",
+      "Switch",
+      "TX Bytes",
+      "TX Errors",
+      "TX Packets"
+    ]
+  }
+}

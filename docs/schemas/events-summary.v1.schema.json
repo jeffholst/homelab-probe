@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/jeffholst/unifi-sentinel/main/docs/schemas/events-summary.v1.schema.json",
+  "title": "events summary",
+  "description": "Output of `unifi-sentinel events --summary --json`.",
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": 1,
+      "description": "The format of this document; it changes only when a field is removed or renamed."
+    },
+    "total": {
+      "type": "number"
+    },
+    "truncated": {
+      "type": "boolean"
+    },
+    "noisiest": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "Count": {
+            "type": "number"
+          },
+          "Event": {
+            "type": "string"
+          },
+          "Subject": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "Count",
+          "Event",
+          "Subject"
+        ]
+      }
+    },
+    "by_severity": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "number"
+      }
+    },
+    "by_event": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "number"
+      }
+    }
+  },
+  "required": [
+    "by_event",
+    "by_severity",
+    "noisiest",
+    "total",
+    "truncated",
+    "version"
+  ]
+}

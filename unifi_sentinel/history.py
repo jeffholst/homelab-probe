@@ -28,6 +28,7 @@ FILE_PREFIX = "snapshot-"
 # New names are UTC and end the time with "Z"; names without it were written in local time by
 # earlier versions and are still recognised.
 _FILE_RE = re.compile(r"^snapshot-(\d{8}-\d{6})(Z)?(?:-(\d+))?\.json$")
+JSON_VERSION = 1          # the format of `diff --json`; it changes only when a field is removed or renamed
 MAX_LISTED = 15          # connection changes shown before "... and N more" (--all lifts it)
 
 
@@ -478,6 +479,11 @@ def render_diff(diff: Diff, old_label: str, new_label: str, show_all: bool = Fal
     if not sections and not diff["controller"]:
         return "\n".join(out + ["No changes."])
     return "\n".join(out + sections).rstrip() + f"\n\n{diff['total']} change(s)"
+
+
+def diff_json(diff: Diff) -> str:
+    """``diff --json``: the diff with its format version first."""
+    return json.dumps({"version": JSON_VERSION, **diff}, indent=2)
 
 
 def label_for(record: SnapshotRecord, name: str) -> str:

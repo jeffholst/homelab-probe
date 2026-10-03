@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/jeffholst/unifi-sentinel/main/docs/schemas/webhook-payload.v1.schema.json",
+  "title": "webhook payload",
+  "description": "The JSON body that `diagnose --notify` posts to a generic webhook.",
+  "type": "object",
+  "properties": {
+    "source": {
+      "const": "unifi-sentinel"
+    },
+    "version": {
+      "const": 1,
+      "description": "The format of this document; it changes only when a field is removed or renamed."
+    },
+    "redacted": {
+      "type": "boolean"
+    },
+    "title": {
+      "type": "string"
+    },
+    "text": {
+      "type": "string"
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "event": {
+            "enum": [
+              "new",
+              "worsened",
+              "reminder",
+              "recovered"
+            ]
+          },
+          "severity": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "description",
+          "event",
+          "severity"
+        ]
+      }
+    }
+  },
+  "required": [
+    "events",
+    "redacted",
+    "source",
+    "text",
+    "title",
+    "version"
+  ]
+}

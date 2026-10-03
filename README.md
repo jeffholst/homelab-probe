@@ -106,7 +106,8 @@ Either installs the `unifi-sentinel` command (its `--version` option shows which
 ## Usage
 
 ```bash
-uv run unifi-sentinel.py info
+uv run unifi-sentinel.py info                                 # the controller's version and its sites
+uv run unifi-sentinel.py --site Lab diagnose --no-events      # another site for this run (beats SITE_ID)
 uv run unifi-sentinel.py export -o ./out --include-offline    # CSV files (long form: --output-dir); also previously seen clients
 uv run unifi-sentinel.py query clients -s printer --json      # filter (long form: --search), as JSON; --csv for a spreadsheet
 uv run unifi-sentinel.py query clients --include-offline      # also previously seen clients
@@ -123,6 +124,7 @@ uv run unifi-sentinel.py audit                                # settings that ar
 uv run unifi-sentinel.py completion zsh                       # a completion script for bash, zsh or fish
 uv run unifi-sentinel.py diagnose                             # health checks (--json for scripts, --notify for alerts)
 uv run unifi-sentinel.py diagnose --only ports,wifi           # just those checks, reading only what they need
+uv run unifi-sentinel.py diagnose --watch 60                  # every minute, print only what changed (Ctrl-C to stop)
 ```
 
 Run these from the project root (uv uses `pyproject.toml`); after `pip install .` use `unifi-sentinel <command>` instead. Run `--help` on the tool or any command for options, and `--version` for the version. More examples, with sample output, are in [docs/examples.md](docs/examples.md).
@@ -218,6 +220,7 @@ Historical section links still work: <a id="controller-health"></a>[Controller h
 - [Inventory, queries and exports](docs/inventory.md): `query`, `export`, snapshots, reservations, ports
 - [Network views](docs/network.md): topology, Wi-Fi, WAN, firewall, events, the client view
 - [Configuration and troubleshooting](docs/configuration.md): every setting, `--verbose`, when something fails
+- [JSON output schemas](docs/schemas.md): a versioned JSON Schema for every `--json` output, the snapshot file and the webhook payload
 - [Examples](docs/examples.md): more commands and sample output
 - [Features](docs/features.md) and [Development and API documentation](docs/development.md)
 - [Changelog](CHANGELOG.md)

@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/jeffholst/unifi-sentinel/main/docs/schemas/new-clients.v1.schema.json",
+  "title": "new clients",
+  "description": "Output of `unifi-sentinel new-clients --json`.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "First Seen": {
+        "type": "string"
+      },
+      "Vendor": {
+        "type": "string"
+      },
+      "Private MAC": {
+        "type": "string"
+      },
+      "MAC Address": {
+        "type": "string"
+      },
+      "Where": {
+        "type": "string"
+      },
+      "Name": {
+        "type": "string"
+      },
+      "Connection Type": {
+        "type": "string"
+      },
+      "IP Address": {
+        "type": "string"
+      },
+      "Last Seen": {
+        "type": "string"
+      },
+      "Status": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "Connection Type",
+      "First Seen",
+      "IP Address",
+      "Last Seen",
+      "MAC Address",
+      "Name",
+      "Private MAC",
+      "Status",
+      "Vendor",
+      "Where"
+    ]
+  }
+}

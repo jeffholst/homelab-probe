@@ -22,7 +22,7 @@ from .commands import (
     say,
     verbose,
 )
-from .config import ConfigError, load_config, parse_parallel, parse_timeout
+from .config import ConfigError, load_config, parse_parallel, parse_timeout, validate_site
 from .settings import load_settings
 from .snapshot import warn
 
@@ -58,6 +58,15 @@ def _parallel(text: str) -> int:
         raise argparse.ArgumentTypeError(str(e)) from e
 
 
+def _site(text: str) -> str:
+    if not text.strip():
+        raise argparse.ArgumentTypeError("--site needs a site name, internal reference or UUID")
+    try:
+        return validate_site(text, "--site")
+    except ConfigError as e:
+        raise argparse.ArgumentTypeError(str(e)) from e
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = _Parser(
         prog="unifi-sentinel",
@@ -73,6 +82,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--parallel", type=_parallel, metavar="N",
                         help="How many requests to make at once (before the command; 1 means one by one; "
                              "default: PARALLEL_REQUESTS from .env, else 6)")
+    parser.add_argument("--site", type=_site, metavar="NAME|REF|UUID",
+                        help="Which site to read: its name, internal reference (such as default) or UUID "
+                             "(before the command; default: SITE_ID from .env, else default)")
     parser.add_argument("--env-file", type=Path, metavar="FILE",
                         help="Read settings from this .env file (before the command). Default: "
                              "$UNIFI_SENTINEL_ENV, else ./.env in the current directory")
@@ -91,7 +103,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         return command.run_local(args)
     client: Optional[UniFiClient] = None
     try:
-        config = load_config(args.env_file)
+        config = load_config(args.env_file, site_override=args.site)
         if args.timeout is not None:
             config = replace(config, timeout=args.timeout)      # the command line beats .env
         if args.parallel is not None:

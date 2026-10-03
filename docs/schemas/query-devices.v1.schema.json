@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/jeffholst/unifi-sentinel/main/docs/schemas/query-devices.v1.schema.json",
+  "title": "query devices",
+  "description": "Output of `unifi-sentinel query devices --json`.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "MAC Address": {
+        "type": "string"
+      },
+      "Uptime (s)": {
+        "type": [
+          "number",
+          "string"
+        ]
+      },
+      "Name": {
+        "type": "string"
+      },
+      "Update Available": {
+        "type": "string"
+      },
+      "Connection Type": {
+        "type": "string"
+      },
+      "Port": {
+        "type": "string"
+      },
+      "Switch": {
+        "type": "string"
+      },
+      "Firmware": {
+        "type": "string"
+      },
+      "IP Address": {
+        "type": "string"
+      },
+      "Last Seen": {
+        "type": "string"
+      },
+      "Status": {
+        "type": "string"
+      },
+      "Uptime": {
+        "type": "string"
+      },
+      "Model": {
+        "type": "string"
+      },
+      "Type": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "Connection Type",
+      "Firmware",
+      "IP Address",
+      "Last Seen",
+      "MAC Address",
+      "Model",
+      "Name",
+      "Port",
+      "Status",
+      "Switch",
+      "Type",
+      "Update Available",
+      "Uptime",
+      "Uptime (s)"
+    ]
+  }
+}

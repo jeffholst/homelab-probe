@@ -212,7 +212,7 @@ def test_text_rendering_has_the_issue_example_shape(snap):
 
 def test_json_shape_and_candidates(snap):
     parsed = json.loads(to_json(detail_for(snap, "desktop")))
-    assert set(parsed) == {"identity", "addressing", "attachment", "link", "findings", "events_available",
+    assert set(parsed) == {"version", "identity", "addressing", "attachment", "link", "findings", "events_available",
                            "events_window", "events_truncated", "events", "device_events", "events_omitted"}
     assert parsed["identity"]["mac"] == "BB:00:00:00:00:01"
     rows = candidate_rows(find_clients(snap, "bb0000"))

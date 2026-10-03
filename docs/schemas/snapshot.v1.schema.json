@@ -1,0 +1,195 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/jeffholst/unifi-sentinel/main/docs/schemas/snapshot.v1.schema.json",
+  "title": "snapshot",
+  "description": "A snapshot file written by `unifi-sentinel snapshot` (and read by `diff`).",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "tool_version": {
+      "type": "string"
+    },
+    "captured_at": {
+      "type": "string",
+      "description": "ISO 8601 with the local UTC offset."
+    },
+    "site": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    },
+    "controller": {
+      "type": "object",
+      "properties": {
+        "application_version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "application_version"
+      ]
+    },
+    "devices": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/device"
+      }
+    },
+    "clients": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/client"
+      }
+    },
+    "reservations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/reservation"
+      }
+    }
+  },
+  "required": [
+    "captured_at",
+    "clients",
+    "controller",
+    "devices",
+    "reservations",
+    "schema_version",
+    "site",
+    "tool_version"
+  ],
+  "$defs": {
+    "device": {
+      "type": "object",
+      "properties": {
+        "mac": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "ip": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "firmware": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string"
+        },
+        "uplink": {
+          "type": "string"
+        },
+        "uplink_port": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "firmware",
+        "ip",
+        "mac",
+        "model",
+        "name",
+        "state",
+        "type",
+        "uplink",
+        "uplink_port"
+      ]
+    },
+    "client": {
+      "type": "object",
+      "properties": {
+        "mac": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "ip": {
+          "type": "string"
+        },
+        "connection": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "network": {
+          "type": "string"
+        },
+        "uplink": {
+          "type": "string"
+        },
+        "uplink_port": {
+          "type": "string"
+        },
+        "vlan": {
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "The VLAN id, or '' for none."
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "connection",
+        "groups",
+        "ip",
+        "mac",
+        "name",
+        "network",
+        "status",
+        "uplink",
+        "uplink_port",
+        "vlan"
+      ]
+    },
+    "reservation": {
+      "type": "object",
+      "properties": {
+        "mac": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "reserved_ip": {
+          "type": "string"
+        },
+        "network": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "mac",
+        "name",
+        "network",
+        "reserved_ip"
+      ]
+    }
+  }
+}

@@ -60,6 +60,7 @@ class Snapshot:
     neighbors: List[Dict[str, Any]] = field(default_factory=list)
     events_available: bool = False    # True when the event log was requested and could be read
     neighbors_available: bool = True
+    degraded: bool = False            # True when requested optional data may be incomplete
     firewall: Optional[FirewallData] = None     # set when the firewall was requested (Needs.firewall)
     # Wi-Fi network settings (legacy rest/wlanconf), when requested (Needs.wlans); None: not requested or unreadable.
     wlans: Optional[List[Dict[str, Any]]] = None
@@ -108,18 +109,24 @@ def _neighbors_or_empty(client: UniFiClient, site_ref: str, notes: List[str]) ->
 
 
 def _device_extras(
-    client: UniFiClient, site_id: str, device: Dict[str, Any], notes: List[str]
-) -> tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
-    """One device's (detail, statistics). Either is None when the controller has none (an offline device may
-    not have statistics); statistics are not asked for when the detail is missing."""
+    client: UniFiClient, site_id: str, device: Dict[str, Any], notes: List[str], include_stats: bool = True
+) -> tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]], bool]:
+    """One device's (detail, statistics, read_failed). An HTTP 404 can mean no detail or statistics for an offline
+    device; other read errors leave the corresponding check unavailable."""
     try:
         detail = client.device(site_id, device["id"])
-    except UniFiAPIError:
-        return None, None
+    except UniFiAPIError as e:
+        return None, None, _device_read_failed(e, device)
+    if not include_stats:
+        return detail, None, False
     try:
-        return detail, client.device_statistics(site_id, device["id"])
-    except UniFiAPIError:
-        return detail, None
+        return detail, client.device_statistics(site_id, device["id"]), False
+    except UniFiAPIError as e:
+        return detail, None, _device_read_failed(e, device)
+
+
+def _device_read_failed(error: UniFiAPIError, device: Dict[str, Any]) -> bool:
+    return not (device.get("state") == "OFFLINE" and str(error).startswith("HTTP 404 "))
 
 
 def _legacy_rest_or_empty(client: UniFiClient, site_ref: str, resource: str, notes: List[str]) -> List[Dict[str, Any]]:
@@ -177,9 +184,11 @@ class Needs:
     group definitions. ``firewall`` reads the zone-based firewall (policies, zones, zone matrix) and the
     port forwards, ``wlans`` the Wi-Fi network settings (``rest/wlanconf``). ``health`` is ``stat/health``
     (for ``diagnose`` and ``wan``), ``speedtests`` the speedtest history, ``neighbors`` the neighboring
-    Wi-Fi networks, ``events`` the event log (None: not read). Device details and legacy devices are part
-    of a normal collection; set their fields to False to defer them, or True in ``extend_snapshot`` to
-    read them later.
+    Wi-Fi networks, ``events`` the event log (None: not read). ``devices`` and ``clients`` can be deferred
+    when checks do not use them. Device details and legacy devices are part
+    of a normal collection; set their fields to False to defer them, or True in ``extend_snapshot`` to read
+    them later. Device statistics can be deferred independently of details, and legacy client records can be
+    deferred independently of the required connected-client list.
 
     Degradation policy: required data fails the command, optional data warns and carries on.
     Optional is every legacy read, including ``alluser``; a command whose answer would be wrong
@@ -197,8 +206,12 @@ class Needs:
     wlans: bool = False
     events: Optional[EventQuery] = None
     users_required: bool = False
+    devices: Optional[bool] = None
+    clients: Optional[bool] = None
     device_extras: Optional[bool] = None
+    device_stats: Optional[bool] = None
     legacy_devices: Optional[bool] = None
+    legacy_clients: Optional[bool] = None
 
 
 def _events_or_empty(
@@ -329,20 +342,22 @@ def _submit_extras(reads: "_Reads", needs: Needs, client: UniFiClient, site_ref:
             reads.submit(name, partial(_optional_part, read, what, impact))
 
 
-def _submit_device_extras(reads: "_Reads", snap: Snapshot, client: UniFiClient) -> None:
+def _submit_device_extras(reads: "_Reads", snap: Snapshot, client: UniFiClient, include_stats: bool) -> None:
     for i, device in enumerate(snap.devices):
-        reads.submit(f"extras{i}", partial(_device_extras, client, snap.site["id"], device))
+        reads.submit(f"extras{i}", partial(_device_extras, client, snap.site["id"], device,
+                                          include_stats=include_stats))
 
 
-def _apply_device_extras(snap: Snapshot, reads: "_Reads") -> None:
+def _apply_device_extras(snap: Snapshot, reads: "_Reads", include_stats: bool) -> None:
     failed = 0
     for i, device in enumerate(snap.devices):
-        detail, stats = reads.result(f"extras{i}")
+        detail, stats, read_failed = reads.result(f"extras{i}")
         if detail is not None:
             snap.device_details[device["id"]] = detail
         if stats is not None:
             snap.device_stats[device["id"]] = stats
-        if detail is None or stats is None:
+        snap.degraded = snap.degraded or read_failed
+        if detail is None or (include_stats and stats is None):
             failed += 1
     if failed:
         reads.notes.setdefault("extras", []).append(f"detail/statistics unavailable for {failed} device(s)")
@@ -391,24 +406,31 @@ def collect_snapshot(
     with client.parallel() as pool:
         reads = _Reads(pool)
         try:
-            reads.submit("devices", lambda notes: client.devices(site_id))
-            reads.submit("clients", lambda notes: client.clients(site_id))
+            if needs.devices is not False:
+                reads.submit("devices", lambda notes: client.devices(site_id))
+            if needs.clients is not False:
+                reads.submit("clients", lambda notes: client.clients(site_id))
             if needs.legacy_devices is not False:
                 reads.submit("legacy_devices", lambda notes: _legacy_or_empty(client, site_ref, "device", notes))
-            reads.submit("legacy_clients", lambda notes: _legacy_or_empty(client, site_ref, "sta", notes))
+            if needs.legacy_clients is not False:
+                reads.submit("legacy_clients", lambda notes: _legacy_or_empty(client, site_ref, "sta", notes))
             _submit_extras(reads, needs, client, site_ref, now_ms, users=True)
-            snap.devices = reads.result("devices")
+            if needs.devices is not False:
+                snap.devices = reads.result("devices")
             if needs.device_extras is not False:
-                _submit_device_extras(reads, snap, client)
-            snap.clients = reads.result("clients")
+                _submit_device_extras(reads, snap, client, needs.device_stats is not False)
+            if needs.clients is not False:
+                snap.clients = reads.result("clients")
             if needs.legacy_devices is not False:
                 snap.legacy_devices = reads.result("legacy_devices")
-            snap.legacy_clients = reads.result("legacy_clients")
+            if needs.legacy_clients is not False:
+                snap.legacy_clients = reads.result("legacy_clients")
             _apply_extras(snap, reads, needs, users=True)
             if needs.device_extras is not False:
-                _apply_device_extras(snap, reads)
+                _apply_device_extras(snap, reads, needs.device_stats is not False)
         finally:
             reads.show_warnings(_WARNING_ORDER)
+    snap.degraded = snap.degraded or any(notes for name, notes in reads.notes.items() if name != "extras")
     if client.trace is not None:
         client.trace(describe_snapshot(snap))
     return snap
@@ -426,15 +448,16 @@ def extend_snapshot(client: UniFiClient, snap: Snapshot, needs: Needs, now_ms: O
             if needs.legacy_devices is True:
                 reads.submit("legacy_devices", lambda notes: _legacy_or_empty(client, site_ref, "device", notes))
             if needs.device_extras is True:
-                _submit_device_extras(reads, snap, client)
+                _submit_device_extras(reads, snap, client, needs.device_stats is not False)
             _submit_extras(reads, needs, client, site_ref, now_ms, users=False)
             if needs.legacy_devices is True:
                 snap.legacy_devices = reads.result("legacy_devices")
             if needs.device_extras is True:
-                _apply_device_extras(snap, reads)
+                _apply_device_extras(snap, reads, needs.device_stats is not False)
             _apply_extras(snap, reads, needs, users=False)
         finally:
             reads.show_warnings(_WARNING_ORDER)
+    snap.degraded = snap.degraded or any(notes for name, notes in reads.notes.items() if name != "extras")
     if client.trace is not None:
         client.trace(describe_snapshot(snap))
 
@@ -460,6 +483,7 @@ def collect_event_snapshot(
         events_truncated=truncated,
         event_window_seconds=wanted.since_seconds,
         events_available=available,
+        degraded=not available,
     )
     if client.trace is not None:
         client.trace(describe_snapshot(snap))

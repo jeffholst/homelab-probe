@@ -15,6 +15,7 @@ from .snapshot import Snapshot
 from .util import clean_data, normalize_mac, number, record_for
 
 GATEWAY_KINDS = {"Gateway", "Dream Machine"}
+JSON_VERSION = 1          # the format of `topology --json`; it changes only when a field is removed or renamed
 
 
 class ClientCounts(TypedDict):
@@ -322,4 +323,4 @@ def _flatten(topology: Topology) -> List[Node]:
 
 
 def to_json(topology: Topology) -> str:
-    return json.dumps(topology, indent=2)
+    return json.dumps({"version": JSON_VERSION, **topology}, indent=2)

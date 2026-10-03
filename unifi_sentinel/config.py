@@ -269,19 +269,20 @@ def parse_parallel(text: Optional[str]) -> int:
     return number
 
 
-def validate_site(text: Optional[str]) -> str:
+def validate_site(text: Optional[str], name: str = "SITE_ID") -> str:
     """The site name, reference or UUID, safe to use in a URL. Names may contain spaces and
-    non-ASCII letters; path separators, ``?``, ``#`` and control characters are rejected."""
+    non-ASCII letters; path separators, ``?``, ``#`` and control characters are rejected. ``name`` is what the
+    messages call the setting (``SITE_ID``, or ``--site`` for the command-line option)."""
     site = (text or "").strip() or DEFAULT_SITE
     if len(site) > MAX_SITE_LENGTH:
-        raise ConfigError(f"SITE_ID is too long ({len(site)} characters, at most {MAX_SITE_LENGTH})")
+        raise ConfigError(f"{name} is too long ({len(site)} characters, at most {MAX_SITE_LENGTH})")
     bad = sorted({
         c for c in site
         if c in _UNSAFE_SITE_CHARACTERS or ord(c) < 32 or 127 <= ord(c) <= 159
     })
     if bad:
         shown = ", ".join(repr(c) for c in bad)
-        raise ConfigError(f"SITE_ID {site!r} contains {shown}, which cannot be part of a site name")
+        raise ConfigError(f"{name} {site!r} contains {shown}, which cannot be part of a site name")
     return site
 
 
@@ -342,7 +343,7 @@ def find_env_file(explicit: Optional[Path] = None) -> Optional[Path]:
     return default if default.is_file() else None
 
 
-def load_config(env_file: Optional[Path] = None) -> Config:
+def load_config(env_file: Optional[Path] = None, site_override: Optional[str] = None) -> Config:
     """Load and validate configuration from the environment (and the ``.env`` file)."""
     path = find_env_file(env_file)
     warnings = []
@@ -384,7 +385,7 @@ def load_config(env_file: Optional[Path] = None) -> Config:
         notify_webhook_token=validate_notify_token("NOTIFY_WEBHOOK_TOKEN", os.getenv("NOTIFY_WEBHOOK_TOKEN")),
         controller_url=url,
         api_key=api_key,
-        site=validate_site(os.getenv("SITE_ID")),
+        site=site_override if site_override is not None else validate_site(os.getenv("SITE_ID")),
         verify_ssl=parse_verify(os.getenv("VERIFY_SSL")),
         timeout=parse_timeout(os.getenv("TIMEOUT")),
         parallel=parse_parallel(os.getenv("PARALLEL_REQUESTS")),

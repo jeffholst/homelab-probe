@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/jeffholst/unifi-sentinel/main/docs/schemas/query-all.v1.schema.json",
+  "title": "query all",
+  "description": "Output of `unifi-sentinel query --json` (kind `all`): one row per device and client.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "MAC Address": {
+        "type": "string"
+      },
+      "Name": {
+        "type": "string"
+      },
+      "Connection Type": {
+        "type": "string"
+      },
+      "Port": {
+        "type": "string"
+      },
+      "Switch": {
+        "type": "string"
+      },
+      "IP Address": {
+        "type": "string"
+      },
+      "Last Seen": {
+        "type": "string"
+      },
+      "Status": {
+        "type": "string"
+      },
+      "Model": {
+        "type": "string"
+      },
+      "Type": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "Connection Type",
+      "IP Address",
+      "Last Seen",
+      "MAC Address",
+      "Model",
+      "Name",
+      "Port",
+      "Status",
+      "Switch",
+      "Type"
+    ]
+  }
+}

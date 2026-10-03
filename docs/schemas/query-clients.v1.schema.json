@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/jeffholst/unifi-sentinel/main/docs/schemas/query-clients.v1.schema.json",
+  "title": "query clients",
+  "description": "Output of `unifi-sentinel query clients --json` (with `--include-offline` also previously seen clients).",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "Private MAC": {
+        "type": "string"
+      },
+      "MAC Address": {
+        "type": "string"
+      },
+      "Name": {
+        "type": "string"
+      },
+      "Connection Type": {
+        "type": "string"
+      },
+      "Port": {
+        "type": "string"
+      },
+      "Switch": {
+        "type": "string"
+      },
+      "IP Address": {
+        "type": "string"
+      },
+      "Last Seen": {
+        "type": "string"
+      },
+      "Status": {
+        "type": "string"
+      },
+      "Model": {
+        "type": "string"
+      },
+      "Type": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "Connection Type",
+      "IP Address",
+      "Last Seen",
+      "MAC Address",
+      "Model",
+      "Name",
+      "Port",
+      "Private MAC",
+      "Status",
+      "Switch",
+      "Type"
+    ]
+  }
+}

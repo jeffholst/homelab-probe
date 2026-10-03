@@ -571,7 +571,7 @@ def test_cli_diff_of_two_files_by_name_by_last_two_and_as_json(fake_client, monk
     assert _run(fake_client, monkeypatch, ["diff", str(first), str(second), "--json"]) == 0
     parsed = json.loads(capsys.readouterr().out)
     assert parsed["total"] == 1 and parsed["clients"]["changed"][0]["changes"][0]["field"] == "ip"
-    assert set(parsed) == {"same_site", "controller", "devices", "clients", "reservations", "total"}
+    assert set(parsed) == {"version", "same_site", "controller", "devices", "clients", "reservations", "total"}
 
 
 def test_cli_diff_loads_each_snapshot_once(fake_client, monkeypatch, capsys, tmp_path, record):
