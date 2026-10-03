@@ -90,6 +90,11 @@ def test_unrelated_checks_do_not_read_device_details_and_statistics(fake_client)
     assert not any("/devices/" in path and not path.endswith("/devices") for path in fake_client.session.calls)
 
 
+def test_client_checks_read_legacy_attachment_details(fake_client):
+    snap_for(fake_client, ["clients"])
+    assert any(path.endswith("/stat/sta") for path in fake_client.session.calls)
+
+
 def test_wan_checks_skip_unrelated_legacy_reads(fake_client):
     snap_for(fake_client, ["wan"])
     assert not any(path.endswith(("/stat/device", "/stat/sta")) for path in fake_client.session.calls)
@@ -144,7 +149,7 @@ def test_findings_of_another_area_that_a_check_also_emits_are_dropped(fake_clien
 @pytest.mark.parametrize("areas, expected", [
     (["ports"], Needs(device_extras=True, device_stats=False, legacy_devices=True, legacy_clients=False)),
     (["wifi"], Needs(device_extras=False, device_stats=False, legacy_devices=True, legacy_clients=True)),
-    (["clients"], Needs(device_extras=False, device_stats=False, legacy_devices=False, legacy_clients=False)),
+    (["clients"], Needs(device_extras=False, device_stats=False, legacy_devices=False, legacy_clients=True)),
     (["health"], Needs(health=True, device_extras=False, device_stats=False, legacy_devices=False, legacy_clients=False)),
     (["devices"], Needs(health=True, device_extras=True, device_stats=True, legacy_devices=True, legacy_clients=False)),
     (["wan"], Needs(health=True, speedtests=True, device_extras=False, device_stats=False, legacy_devices=False,
@@ -274,7 +279,7 @@ def test_no_events_is_the_same_as_skip_events(fake_client, monkeypatch, capsys):
 @pytest.mark.parametrize("argv, kinds, posts", [
     (["--only", "ports"], {"legacy-devices"}, False),
     (["--only", "wifi"], {"legacy-devices", "legacy-clients"}, False),
-    (["--only", "clients"], set(), False),
+    (["--only", "clients"], {"legacy-clients"}, False),
     (["--only", "health"], {"health"}, False),
     (["--only", "devices"], {"health", "legacy-devices"}, False),
     (["--only", "wan"], {"health", "speedtests"}, False),

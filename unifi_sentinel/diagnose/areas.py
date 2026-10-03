@@ -105,5 +105,5 @@ def needs_for(areas: Optional[Iterable[str]], since_seconds: int) -> Needs:
         device_extras=bool(chosen & {"devices", "ports"}),
         device_stats="devices" in chosen,
         legacy_devices=bool(chosen & {"devices", "ports", "wifi"}),
-        legacy_clients="wifi" in chosen,
+        legacy_clients=bool(chosen & {"clients", "wifi"}),
     )
