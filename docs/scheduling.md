@@ -8,6 +8,7 @@
 - **Install it, then run the installed command.** A scheduler has a minimal `PATH`: under cron `uv` is usually not found (`uv: command not found`, exit code 127), and `uv run` would also resolve dependencies at every run. The examples use a virtual environment next to the project, which needs no `uv`, no network access to PyPI at run time and no `PATH`:
 
   ```bash
+  sudo install -d -o "$(id -un)" /opt/unifi-sentinel
   git clone https://github.com/jeffholst/unifi-sentinel /opt/unifi-sentinel
   cd /opt/unifi-sentinel
   python3 -m venv venv && venv/bin/pip install .
@@ -30,18 +31,18 @@
 ## cron
 
 ```text
-*/15 * * * * cd /opt/unifi-sentinel && venv/bin/unifi-sentinel diagnose --notify >/dev/null 2>>snapshots/unifi-sentinel.log; rc=$?; [ "$rc" -lt 3 ] || echo "unifi-sentinel failed (exit $rc), see snapshots/unifi-sentinel.log"
+*/15 * * * * flock -n /tmp/unifi-sentinel.lock /bin/sh -c 'cd /opt/unifi-sentinel 2>/dev/null || { echo "unifi-sentinel failed: cannot enter /opt/unifi-sentinel"; exit 3; }; if [ ! -d snapshots ] || [ ! -w snapshots ] || ! ( : >>snapshots/unifi-sentinel.log ) 2>/dev/null; then echo "unifi-sentinel failed: snapshots/unifi-sentinel.log is not writable"; exit 3; fi; venv/bin/unifi-sentinel diagnose --notify >/dev/null 2>>snapshots/unifi-sentinel.log; rc=$?; [ "$rc" -lt 3 ] || echo "unifi-sentinel failed (exit $rc), see snapshots/unifi-sentinel.log"; exit "$rc"'
 ```
 
-cron mails everything a job prints, and a `--notify` run always prints (the findings on stdout, a `Notification: ...` line on stderr), so this line sends stdout to nowhere, appends stderr to a log in the git-ignored `snapshots/` directory, and prints one line, which cron mails to you, **only** when the exit code is 3 or more. Findings reach you through the notification, not through cron mail. Set `MAILTO=you@example.com` at the top of the crontab to choose who gets that mail (a machine with no mail setup silently drops it; then look at the log).
+cron mails everything a job prints, and a `--notify` run always prints (the findings on stdout, a `Notification: ...` line on stderr), so this line sends stdout to nowhere, appends stderr to a log in the git-ignored `snapshots/` directory, and prints one line, which cron mails to you, **only** when the exit code is 3 or more. Findings reach you through the notification, not through cron mail. If notification delivery fails while findings produce exit code 1 or 2, check the log: the finding code is preserved, so cron does not mail an error. Set `MAILTO=you@example.com` at the top of the crontab to choose who gets that mail (a machine with no mail setup silently drops it; then look at the log).
 
 - **Without notifications:** let cron mail you the findings, and fail only on what is serious: `*/15 * * * * cd /opt/unifi-sentinel && venv/bin/unifi-sentinel diagnose --fail-on critical || notify-me` (`notify-me` is whatever you use to alert yourself; the exit code is `2` for a critical finding and `3` for an error).
-- **Overlap guard (Linux):** prefix the command with `flock -n /tmp/unifi-sentinel.lock`; a second run that finds the lock held exits at once with code 1 instead of starting. macOS has no `flock`; use launchd there.
+- **Overlap guard (Linux):** the example uses `flock` to run `/bin/sh -c '...'` while holding the lock. The shell builtin `cd` therefore runs inside the locked shell, not as a command for `flock` to execute. A second run that finds the lock held exits at once with code 1 instead of starting. macOS has no `flock`; use launchd there.
 - Edit with `crontab -e`; `%` has a special meaning in a crontab, so write `\%` if a command needs one.
 
 ## systemd timer
 
-A service that runs once and a timer that starts it, in `/etc/systemd/system/` (or `~/.config/systemd/user/` for a user service, without the `User=` line):
+A system service that runs once and a timer that starts it, in `/etc/systemd/system/`:
 
 ```ini
 [Unit]
@@ -86,7 +87,7 @@ sudo systemctl start unifi-sentinel.service                  # run it now, witho
 journalctl -u unifi-sentinel.service -n 20                   # what it printed
 ```
 
-`SuccessExitStatus=1 2` is the line that matters: without it every run that finds a warning would show the unit as **failed**, and `systemctl --failed` would be noisy all day. With it a failed unit means the tool could not run or could not deliver, which is what you want to see. `systemd-analyze verify` printing nothing means the files are well formed. `Persistent=true` runs a missed check after the machine was off; a timer does not start the service again while it is still running, so runs cannot overlap.
+`SuccessExitStatus=1 2` is the line that matters: without it every run that finds a warning would show the unit as **failed**, and `systemctl --failed` would be noisy all day. A failed unit can mean a configuration, connection or usage error, or a notification delivery failure when findings otherwise produce exit code 0. But delivery failure does not always fail the unit: when findings produce exit code 1 or 2, that code is preserved even if notification delivery also fails, and the unit is marked successful. A successful unit does not prove delivery; check the journal for `Notification to ...: FAILED` lines. `systemd-analyze verify` printing nothing means the files are well formed. `Persistent=true` runs a missed check after the machine was off; a timer does not start the service again while it is still running, so runs cannot overlap.
 
 ## launchd (macOS)
 
@@ -127,7 +128,7 @@ launchctl print gui/$(id -u)/com.example.unifi-sentinel | grep -E "last exit cod
 launchctl bootout gui/$(id -u)/com.example.unifi-sentinel               # stop and remove it
 ```
 
-launchd has no notion of "findings": `last exit code = 1` or `2` after a run means findings were reported, `3` or more means the tool could not run, and it does not retry either way, it simply runs again after `StartInterval` (900 seconds). A job is not started again while its previous run is still going (tried with a job that sleeps longer than its interval), so there is no overlap. Name the file and `Label` after yourself instead of `com.example`; keep the key in `.env`, never in the plist.
+launchd has no notion of "findings": `last exit code = 1` or `2` means findings were reported, while `3` or more means a configuration, connection or usage error, or a notification delivery failure when findings otherwise produce exit code 0. Delivery can also fail while a finding's exit code 1 or 2 is preserved, so check `snapshots/unifi-sentinel.log` for `Notification to ...: FAILED` lines. launchd does not retry based on the exit code; it simply runs again after `StartInterval` (900 seconds). A job is not started again while its previous run is still going (tried with a job that sleeps longer than its interval), so there is no overlap. Name the file and `Label` after yourself instead of `com.example`; keep the key in `.env`, never in the plist.
 
 ## Docker
 

@@ -100,6 +100,13 @@ def test_the_commands_the_page_gives_parse_with_the_real_parser():
         parse_cli(arguments)
 
 
+def test_the_installation_creates_a_user_writable_directory_before_cloning():
+    instructions = section("Before you pick a scheduler")
+    create_directory = 'sudo install -d -o "$(id -un)" /opt/unifi-sentinel'
+    clone = "git clone https://github.com/jeffholst/unifi-sentinel /opt/unifi-sentinel"
+    assert instructions.index(create_directory) < instructions.index(clone)
+
+
 # -- cron ----------------------------------------------------------------------------------------------------------
 
 def crontab_line():
@@ -133,6 +140,28 @@ def test_the_cron_line_prints_only_when_the_tool_could_not_run(tmp_path, code):
         assert done.stdout == "" and done.stderr == ""
     else:
         assert done.stdout == f"unifi-sentinel failed (exit {code}), see snapshots/unifi-sentinel.log\n"
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="cron and sh")
+@pytest.mark.parametrize("failure", ["working directory", "snapshots directory", "log path"])
+def test_the_cron_line_reports_shell_setup_failures(tmp_path, failure):
+    project = tmp_path / "project"
+    if failure != "working directory":
+        project.mkdir()
+    if failure == "log path":
+        snapshots = project / "snapshots"
+        snapshots.mkdir()
+        (snapshots / "unifi-sentinel.log").mkdir()
+        message = "unifi-sentinel failed: snapshots/unifi-sentinel.log is not writable\n"
+    elif failure == "snapshots directory":
+        message = "unifi-sentinel failed: snapshots/unifi-sentinel.log is not writable\n"
+    else:
+        message = f"unifi-sentinel failed: cannot enter {project}\n"
+    command = crontab_line().replace(INSTALL_DIR, str(project))
+    done = subprocess.run(["/bin/sh", "-c", command], capture_output=True, text=True, env={"PATH": "/usr/bin:/bin"})
+    assert done.returncode == EXIT_ERROR
+    assert done.stdout == message
+    assert done.stderr == ""
 
 
 def test_the_cron_line_threshold_is_the_first_exit_code_that_is_an_error():
