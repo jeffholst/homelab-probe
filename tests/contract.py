@@ -62,7 +62,7 @@ CONTRACT: Dict[str, Endpoint] = {
                    "radio_table_stats[].satisfaction", "radio_table_stats[].num_sta", "radio_table_stats[].tx_power",
                    "wan1.up", "wan1.name", "wan1.speed", "wan1.max_speed", "wan1.full_duplex", "wan1.latency",
                    "wan1.tx_bytes-r", "wan1.rx_bytes-r"),
-        optional=("uplink.up", "port_table[].poe_class", "port_table[].poe_enable", "port_table[].poe_power",
+        optional=("overheating", "uplink.up", "port_table[].poe_class", "port_table[].poe_enable", "port_table[].poe_power",
                   "port_table[].is_uplink", "radio_table_stats[].center_channel", "radio_table_stats[].center_freq",
                   "radio_table_stats[].ext_channel", "radio_table_stats[].extension_channel",
                   "radio_table_stats[].secondary_channel")),

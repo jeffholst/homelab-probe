@@ -77,7 +77,7 @@ def test_the_published_codes_are_pinned():
     """A code is an interface for scripts: changing or removing one must be a deliberate edit here."""
     assert sorted(CODES) == [
         "client.link_local_ip", "client.no_ip", "client.private_mac_summary", "controller.legacy_unavailable", "controller.pending_adoption",
-        "device.cpu_high", "device.memory_high", "device.offline", "event.client_disconnects",
+        "device.cpu_high", "device.memory_high", "device.offline", "device.overheating", "event.client_disconnects",
         "event.client_roams", "event.device_unreachable", "event.internet_latency", "event.ip_conflict",
         "event.log_truncated", "health.device_subsystem", "health.subsystem", "internet.drops",
         "internet.latency", "internet.speedtest_failed", "ip.duplicate", "link.below_capability",

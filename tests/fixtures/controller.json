@@ -206,6 +206,7 @@
         "type": "udm",
         "name": "Gateway",
         "model": "UCG Max",
+        "overheating": false,
         "wan1": {
           "name": "eth4",
           "up": true,
@@ -223,6 +224,7 @@
         "type": "usw",
         "name": "Office Switch",
         "model": "USW-Lite-8-PoE",
+        "overheating": false,
         "uplink": {
           "uplink_mac": "aa:00:00:00:00:01",
           "uplink_remote_port": 2,

@@ -24,7 +24,7 @@ PUBLIC = {
 
 # The order in which diagnose() runs its checks. Findings with the same severity and subject keep this order.
 CHECK_ORDER = [
-    "_offline_device_findings", "_resource_findings", "_health_findings", "_wan_findings", "_client_ip_findings",
+    "_offline_device_findings", "_resource_findings", "_overheating_findings", "_health_findings", "_wan_findings", "_client_ip_findings",
     "_reservation_findings", "_pool_findings", "_offline_reservation_findings", "_private_mac_findings",
     "_duplicate_ip_findings", "_legacy_unavailable_findings", "_port_basic_findings", "_port_health_findings",
     "_uplink_speed_findings", "_wifi_findings", "_event_findings"]
@@ -81,7 +81,7 @@ def test_diagnose_runs_every_check_once_in_the_documented_order(fake_client, mon
 
 def test_checks_are_listed_in_the_module_of_their_topic():
     expected = {
-        "devices": {"_offline_device_findings", "_resource_findings"},
+        "devices": {"_offline_device_findings", "_resource_findings", "_overheating_findings"},
         "health": {"_health_findings", "_wan_findings"},
         "addresses": {"_client_ip_findings", "_duplicate_ip_findings", "_private_mac_findings"},
         "reserved": {"_reservation_findings", "_pool_findings", "_offline_reservation_findings"},
