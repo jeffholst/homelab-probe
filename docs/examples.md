@@ -43,9 +43,14 @@ uv run unifi-sentinel.py diagnose                    # health checks
 uv run unifi-sentinel.py diagnose --json             # the same, as JSON with a stable code per finding
 uv run unifi-sentinel.py diagnose --only ports,wifi  # just those checks, and read only what they need
 uv run unifi-sentinel.py diagnose --skip events      # everything except the event-log checks (no POST)
+uv run unifi-sentinel.py diagnose --watch 60         # every minute, print only what changed (Ctrl-C to stop)
+uv run unifi-sentinel.py --site Lab diagnose --no-events   # another site for this run (beats SITE_ID)
+uv run unifi-sentinel.py completion zsh > _unifi-sentinel   # a completion script (bash, zsh or fish)
 ```
 
 **`query --csv`** prints CSV on stdout instead of the table, with the columns and rows of `--json` (`Private MAC` for clients, `Offline For` with `--offline`, every column for `ports`) and no row-count footer; a result with no rows is just the header. It cannot be combined with `--json` (usage error, exit 64). Cells are quoted by Python's `csv` writer, so commas, quotes and line breaks are safe, and every text cell is cleaned first (control characters and invisible characters removed, line breaks turned into spaces) and then checked for a leading `=`, `+`, `-` or `@`: such a name gets a leading `'`, which a spreadsheet shows as plain text instead of running it as a formula. The `'` is part of the value you see in the file (the `export` files follow the same rule); numbers are left as numbers, so a negative error count stays `-5`. `--json` stays raw.
+
+**`--watch`, `--site` and `completion`.** `diagnose --watch SECONDS` prints the full report once and then, every SECONDS (10 to 86400), only what is new, worse or fixed; it cannot be combined with `--json` or `--notify` (see [Diagnose](diagnose.md#diagnose)). `--site` goes before the command and chooses the site for that run ([Configuration](configuration.md#configure)). `completion` prints a script for the shell you name and needs no `.env` ([Shell completion](configuration.md#shell-completion)).
 
 `query` takes an optional kind (`all` by default, `devices`, `clients`, `reservations` or `ports`). Run these from the project root (uv uses `pyproject.toml`). After `pip install .` use `unifi-sentinel <command>` instead. Run `--help` on the tool or any command for options, and `--version` for the version.
 

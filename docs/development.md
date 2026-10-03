@@ -45,7 +45,9 @@ tests/
   test_live_contract.py  opt-in (pytest -m live): the same table against a real controller, GET only
   docs_support.py        shared by the documentation tests: the doc files and GitHub's anchors
   test_docs_layout.py    the README stays short; every link resolves; every old anchor still exists
+  test_json_schemas.py   real `--json` output (and the snapshot and webhook payload) validates against docs/schemas/
 docs/                    the detail behind the README: one page per group of commands, settings, notifications, examples
+  schemas.md, schemas/   a versioned JSON Schema for every --json output, the snapshot file and the webhook payload
 tools/                   development scripts, not part of the package
   record_fixture.py      records a controller into a sanitised fixture
   sanitize.py            the deterministic sanitiser and its leak check

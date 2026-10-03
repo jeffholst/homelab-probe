@@ -18,6 +18,12 @@
 - **Notifications**: `diagnose --notify` tells you through ntfy, a webhook or email when a problem is new, has got worse, or is fixed (critical ones are repeated daily), once instead of every run, opt-in, with a redaction option
 - **Configuration audit**: `audit` flags settings that are probably not what you want, as opposed to what is broken now: open, WEP and WPA2-only Wi-Fi networks, guest networks that let their clients reach each other, devices that still have their default name, devices with a firmware update waiting, and clients with no name; same findings format, ignore list, `--json` and exit codes as `diagnose`
 - **Health checks**: read-only diagnostics with severity levels, exit codes for scripts and cron, `--json` output with a stable code per check, and a TOML file for thresholds and an ignore list
+- **Choosing checks**: `diagnose --only` and `--skip` run some areas (`devices`, `health`, `wan`, `clients`, `reservations`, `ports`, `wifi`, `events`) and read only the data those need; the output says what was not checked
+- **Watching**: `diagnose --watch SECONDS` repeats the checks and prints only what is new, worse or fixed since the last pass, until Ctrl-C
+- **Several sites**: `--site NAME|REF|UUID`, before the command, reads another site for one run and beats `SITE_ID`
+- **JSON Schemas**: a versioned JSON Schema (draft 2020-12) for every `--json` output, the snapshot file and the webhook payload, in `docs/schemas/`, so a script can validate what it reads
+- **Shell completion**: `completion bash|zsh|fish` prints a script generated from the program's own options, so new options complete as soon as they exist
+- **Speed and resilience**: independent reads run side by side (`--parallel`), a failed GET is retried twice, `--timeout` sets the per-request limit, and an optional read that fails warns instead of stopping the command
 - **Official API first**: uses the UniFi Network Integration API (`/proxy/network/integration/v1`). Legacy endpoints are used only for data the Integration API does not expose (per-port counters, client-to-port mapping, DHCP reservations, network config and client groups) and degrade gracefully with a warning if unavailable
 - **Safe output**: names come from devices on your network, so text output has control characters, line breaks, text-direction overrides and invisible characters removed, and exported CSV cells that a spreadsheet would run as a formula are neutralized
 - **Environment-based configuration**: credentials live in a `.env` file
