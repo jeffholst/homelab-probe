@@ -61,7 +61,9 @@ and `wep` Wi-Fi security values) the README says so.
   `--since`, `--no-events`, `--show-ignored`, `--no-emoji`.
 - **Settings file** (`unifi-sentinel.toml`): thresholds for every check and an ignore list. A rule matches a finding
   by `code` (exact), `subject` (case-insensitive, wildcards), `message` (substring) or any combination, with a
-  required `reason`; an unknown code is an error that suggests the closest one.
+  required `reason`; an unknown code is an error that suggests the closest one. A rule may carry `until = 2026-12-31`,
+  the last day it applies: after that the findings come back, `diagnose` and `audit` warn on stderr about the expired
+  rule, and `--show-ignored` and `--json` show the date (a new optional `until` on the `ignored` entries).
 - **Notifications** (`diagnose --notify`): ntfy, a generic webhook and email (SMTP). A message is sent only when a
   finding is new, got worse, is a critical one still unresolved after a day, or is fixed; the state is kept in an
   owner-only file. Options: `--notify-min`, `--notify-redact` (no names, addresses or MACs), `--notify-dry-run`,

@@ -33,6 +33,9 @@ notify_repeat_hours = 24           # `diagnose --notify` repeats a critical find
 #   `diagnose --show-ignored`; an unknown code is an error that lists the valid ones.
 # subject: case-insensitive name, * and ? wildcards.
 # message: case-insensitive substring.
+# until: optional last day the rule applies (inclusive), written 2026-12-31. After that
+#   day the rule stops matching, so its findings come back and a warning on stderr
+#   names the stale rule; delete it or give it a later date. Use it for a temporary ignore.
 # Ignored findings are counted in the summary, excluded from exit codes and
 # notifications, and listed with `diagnose --show-ignored`. `audit` reads the
 # same rules (and its audit.* codes).
@@ -46,3 +49,9 @@ reason = "spare AP, kept unplugged on purpose"
 code = "port.slow_link"
 subject = "* port 2"
 reason = "printer only supports 100 Mbps"
+
+[[ignore]]
+code = "reservation.offline"
+subject = "Guest laptop"
+until = 2026-12-31
+reason = "temporary: away until the new year"
