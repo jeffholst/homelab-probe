@@ -85,6 +85,11 @@ def snap_for(fake_client, areas):
     return collect_snapshot(fake_client, "default", needs_for(areas, 86400))
 
 
+def test_unrelated_checks_do_not_read_device_details_and_statistics(fake_client):
+    snap_for(fake_client, ["wifi"])
+    assert not any("/devices/" in path and not path.endswith("/devices") for path in fake_client.session.calls)
+
+
 def make_every_area_report(fake_client):
     """Change the fake controller so that each of the eight areas has at least one finding."""
     fx = fake_client.session.fx
@@ -126,13 +131,13 @@ def test_findings_of_another_area_that_a_check_also_emits_are_dropped(fake_clien
 
 
 @pytest.mark.parametrize("areas, expected", [
-    (["ports"], Needs()),
-    (["wifi"], Needs()),
-    (["clients"], Needs()),
-    (["health"], Needs(health=True)),
-    (["devices"], Needs(health=True)),
-    (["wan"], Needs(health=True, speedtests=True)),
-    (["reservations"], Needs(reservations=True)),
+    (["ports"], Needs(device_extras=True)),
+    (["wifi"], Needs(device_extras=False)),
+    (["clients"], Needs(device_extras=False)),
+    (["health"], Needs(health=True, device_extras=False)),
+    (["devices"], Needs(health=True, device_extras=True)),
+    (["wan"], Needs(health=True, speedtests=True, device_extras=False)),
+    (["reservations"], Needs(reservations=True, device_extras=False)),
 ])
 def test_what_a_selection_reads(areas, expected):
     assert needs_for(areas, 3600) == expected
