@@ -33,6 +33,23 @@ jobs:
       - name: Tests
         run: uv run pytest -q
 
+  coverage:
+    name: Coverage (100%)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+          python-version: "3.13"
+      - name: Fish and zsh, which the completion tests run for real (they skip without them)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq fish zsh
+      - run: uv sync --locked
+      - name: Tests, with line and branch coverage
+        run: uv run coverage run -m pytest -q
+      - name: Every line and branch is covered
+        run: uv run coverage report
+
   lint:
     name: Lint (ruff)
     runs-on: ubuntu-latest

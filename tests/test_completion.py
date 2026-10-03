@@ -241,7 +241,7 @@ def test_fish_completes_later_comma_list_items_and_only_unconsumed_positionals(t
     def reply(line):
         command = f"source {shlex.quote(str(path))}; complete -C {shlex.quote(line)}"
         done = subprocess.run([FISH, "-c", command], capture_output=True, text=True, check=True)
-        return done.stdout.splitlines()
+        return [row.split("\t")[0] for row in done.stdout.splitlines()]      # fish adds "<TAB>description"
 
     assert any(item.endswith("ports,wan") for item in reply(f"{PROGRAM} diagnose --only ports,w"))
     assert reply(f"{PROGRAM} query clients ") == []
@@ -342,6 +342,73 @@ def test_a_command_without_any_option_still_gets_valid_scripts(tmp_path):
             path.write_text(text)
             assert subprocess.run([checker, "-n", str(path)], capture_output=True, text=True).returncode == 0, shell
     assert "bare" in script("fish", top)
+
+
+def flag_only_parser():
+    """No global option takes a value (the real parser has several): the generators then have nothing to skip over."""
+    top = argparse.ArgumentParser(prog=PROGRAM)
+    top.add_argument("--quiet", action="store_true", help="a global flag")
+    sub = top.add_subparsers(dest="command")
+    pick = sub.add_parser("pick", help="chooses one")
+    pick.add_argument("kind", choices=["a", "b"])
+    return top
+
+
+def test_a_parser_with_no_value_taking_global_option_gets_valid_scripts(tmp_path):
+    top = flag_only_parser()
+    assert [o for o in spec(top).options if o.takes_value] == [] and spec(top).commands[0].choices == ("a", "b")
+    for shell, checker in (("bash", BASH), ("zsh", ZSH), ("fish", FISH)):
+        text = script(shell, top)
+        assert "pick" in text
+        if checker:
+            path = tmp_path / f"flags.{shell}"
+            path.write_text(text)
+            done = subprocess.run([checker, "-n", str(path)], capture_output=True, text=True)
+            assert done.returncode == 0, (shell, done.stderr)
+
+
+def test_the_fish_script_skips_nothing_when_no_global_option_takes_a_value():
+    """The branch that skips the value of a global option is not written at all, and the rest of the function is."""
+    function = fish_script(flag_only_parser()).split("function __unifi_sentinel_positional_available", 1)[1]
+    function = function.split("\nend\n", 1)[0]
+    assert not re.findall(r"case '--[a-z]", function)         # no flag is listed as one that takes a value
+    assert "set skip true" not in function                    # and nothing ever makes it skip the next word
+    assert 'switch "$command:$word"' in function and "set found_command true" in function
+    with_values = fish_script(parser()).split("function __unifi_sentinel_positional_available", 1)[1]
+    assert "case '--timeout'" in with_values.split("\nend\n", 1)[0] and "set skip true" in with_values
+
+
+@pytest.mark.skipif(not BASH, reason="bash is not installed")
+def test_bash_completes_the_only_positional_of_a_parser_with_no_value_taking_global_option(tmp_path):
+    path = tmp_path / "flags.bash"
+    path.write_text(bash_script(flag_only_parser()))
+
+    def reply(words, index):
+        quoted = " ".join(f"'{w}'" for w in words)
+        done = subprocess.run(
+            [BASH, "--noprofile", "--norc", "-c",
+             f"source '{path}'; COMP_WORDS=({quoted}); COMP_CWORD={index}; _unifi_sentinel; "
+             'printf "%s\\n" "${COMPREPLY[@]}"'], capture_output=True, text=True, check=True)
+        return done.stdout.split()
+
+    assert reply([PROGRAM, "pick", ""], 2) == ["a", "b"]
+    assert reply([PROGRAM, "--quiet", "pick", ""], 3) == ["a", "b"]     # a flag in front is not mistaken for a value
+    assert reply([PROGRAM, "pick", "a", ""], 3) == []                    # the positional is consumed
+
+
+@pytest.mark.skipif(not FISH, reason="fish is not installed")
+def test_fish_completes_the_only_positional_of_a_parser_with_no_value_taking_global_option(tmp_path):
+    path = tmp_path / "flags.fish"
+    path.write_text(fish_script(flag_only_parser()))
+
+    def reply(line):
+        command = f"source {shlex.quote(str(path))}; complete -C {shlex.quote(line)}"
+        done = subprocess.run([FISH, "-c", command], capture_output=True, text=True, check=True)
+        return [row.split("\t")[0] for row in done.stdout.splitlines()]      # fish adds "<TAB>description"
+
+    assert reply(f"{PROGRAM} pick ") == ["a", "b"]
+    assert reply(f"{PROGRAM} --quiet pick ") == ["a", "b"]
+    assert reply(f"{PROGRAM} pick a ") == []
 
 
 def test_the_completion_command_has_no_controller_handler():

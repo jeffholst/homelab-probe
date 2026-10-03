@@ -36,6 +36,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "coverage>=7.6",
     "jsonschema>=4.25.1",
     "mypy>=2.3.1",
     "pytest>=8.0",
@@ -63,6 +64,15 @@ pythonpath = ["tests", "tools"]
 # Tests marked live read a real controller; they run only when asked for: uv run pytest -m live
 addopts = "-m 'not live'"
 markers = ["live: reads a real controller (GET only; credentials from the environment or ./.env); opt in with -m live"]
+
+[tool.coverage.run]
+branch = true
+source = ["unifi_sentinel"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 100
 
 [tool.ruff]
 target-version = "py310"

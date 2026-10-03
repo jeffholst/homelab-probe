@@ -11,9 +11,11 @@ import json
 import plistlib
 import re
 import shlex
+import shutil
 import stat
 import subprocess
 import sys
+import time
 
 import pytest
 from docs_support import README, ROOT, anchors, headings, local_links
@@ -123,6 +125,36 @@ def test_the_cron_line_runs_every_fifteen_minutes_like_the_other_schedulers():
     assert plistlib.loads(blocks("xml")[0].encode())["StartInterval"] == INTERVAL_MINUTES * 60
 
 
+LOCK = "/tmp/unifi-sentinel.lock"
+FLOCK_STAND_IN = """#!/bin/sh
+# util-linux `flock -n LOCKFILE COMMAND...` without the lock, so the rest of the line runs where flock is missing (macOS)
+[ "$1" = "-n" ] || exit 64
+shift 2
+exec "$@"
+"""
+
+
+def cron_command(project, tmp_path):
+    """The documented line, pointed at a temporary project and lock file."""
+    return crontab_line().replace(INSTALL_DIR, str(project)).replace(LOCK, str(tmp_path / "lock"))
+
+
+def cron_path(tmp_path, real_flock=False):
+    """A cron-like PATH. By default ``flock`` is a stand-in that only runs the command, so the shell body of the line is
+    tested on every platform (macOS has no flock); ``real_flock`` leaves the system's, for the test of the lock."""
+    if real_flock:
+        return "/usr/bin:/bin"
+    stand_in = tmp_path / "bin" / "flock"
+    stand_in.parent.mkdir(exist_ok=True)
+    stand_in.write_text(FLOCK_STAND_IN)
+    stand_in.chmod(stand_in.stat().st_mode | stat.S_IXUSR)
+    return f"{stand_in.parent}:/usr/bin:/bin"
+
+
+def run_cron(command, path):
+    return subprocess.run(["/bin/sh", "-c", command], capture_output=True, text=True, env={"PATH": path})
+
+
 @pytest.mark.skipif(sys.platform == "win32", reason="cron and sh")
 @pytest.mark.parametrize("code", [0, 1, 2, 3, 4, 64, 127])
 def test_the_cron_line_prints_only_when_the_tool_could_not_run(tmp_path, code):
@@ -132,8 +164,7 @@ def test_the_cron_line_prints_only_when_the_tool_could_not_run(tmp_path, code):
     (tmp_path / "snapshots").mkdir()
     stub.write_text(f"#!/bin/sh\necho findings\necho 'Notification: nothing new' >&2\nexit {code}\n")
     stub.chmod(stub.stat().st_mode | stat.S_IXUSR)
-    command = crontab_line().replace(INSTALL_DIR, str(tmp_path))
-    done = subprocess.run(["/bin/sh", "-c", command], capture_output=True, text=True, env={"PATH": "/usr/bin:/bin"})
+    done = run_cron(cron_command(tmp_path, tmp_path), cron_path(tmp_path))
     log = (tmp_path / "snapshots" / "unifi-sentinel.log").read_text()
     assert log == "Notification: nothing new\n" and "findings" not in done.stdout + done.stderr
     if code in (0, *FINDINGS):
@@ -157,11 +188,40 @@ def test_the_cron_line_reports_shell_setup_failures(tmp_path, failure):
         message = "unifi-sentinel failed: snapshots/unifi-sentinel.log is not writable\n"
     else:
         message = f"unifi-sentinel failed: cannot enter {project}\n"
-    command = crontab_line().replace(INSTALL_DIR, str(project))
-    done = subprocess.run(["/bin/sh", "-c", command], capture_output=True, text=True, env={"PATH": "/usr/bin:/bin"})
+    done = run_cron(cron_command(project, tmp_path), cron_path(tmp_path))
     assert done.returncode == EXIT_ERROR
     assert done.stdout == message
     assert done.stderr == ""
+
+
+def test_the_cron_line_is_wrapped_in_the_lock_the_page_describes():
+    assert crontab_line().startswith(f"flock -n {LOCK} /bin/sh -c '")
+    assert "macOS has no `flock`" in section("cron")             # why the tests below do not rely on the system's
+
+
+@pytest.mark.skipif(shutil.which("flock") is None, reason="needs util-linux flock (not on macOS)")
+def test_a_second_run_that_finds_the_lock_held_exits_at_once_and_runs_nothing(tmp_path):
+    """The one test of the real lock: the first run is still going when the second starts."""
+    started, ran = tmp_path / "started", tmp_path / "ran"
+    stub = tmp_path / "venv" / "bin" / "unifi-sentinel"
+    stub.parent.mkdir(parents=True)
+    (tmp_path / "snapshots").mkdir()
+    stub.write_text(f"#!/bin/sh\necho x >> {ran}\n: > {started}\nsleep 3\nexit 0\n")
+    stub.chmod(stub.stat().st_mode | stat.S_IXUSR)
+    command = cron_command(tmp_path, tmp_path)
+    path = cron_path(tmp_path, real_flock=True)
+    first = subprocess.Popen(["/bin/sh", "-c", command], env={"PATH": path}, stdout=subprocess.PIPE, text=True)
+    try:
+        for _ in range(100):
+            if started.exists():
+                break
+            time.sleep(0.05)
+        assert started.exists(), "the first run never started"
+        second = run_cron(command, path)
+        assert second.returncode == 1 and second.stdout == "" and second.stderr == ""
+    finally:
+        first.communicate(timeout=30)
+    assert first.returncode == 0 and ran.read_text() == "x\n"            # the second never reached the tool
 
 
 def test_the_cron_line_threshold_is_the_first_exit_code_that_is_an_error():
