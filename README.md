@@ -237,7 +237,7 @@ Apache License 2.0. See [LICENSE](LICENSE).
 
 ## Contributing
 
-Issues and pull requests are welcome. Work is tracked in [GitHub issues](https://github.com/jeffholst/unifi-sentinel/issues).
+Issues and pull requests are welcome; read [CONTRIBUTING.md](CONTRIBUTING.md) first. Report a security problem privately, as [SECURITY.md](SECURITY.md) describes. Work is tracked in [GitHub issues](https://github.com/jeffholst/unifi-sentinel/issues).
 
 ## Acknowledgments
 

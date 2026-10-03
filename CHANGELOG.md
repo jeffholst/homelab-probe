@@ -79,7 +79,9 @@ and `wep` Wi-Fi security values) the README says so.
 - **Development:** a contract table of the fields the code reads (`tests/contract.py`), opt-in live contract tests
   (`pytest -m live`, GET only), a fixture recorder with a deterministic sanitiser and leak check (`tools/`), golden
   files and a docs-drift test, a 100% line and branch coverage requirement, Dependabot for the GitHub Actions and
-  `uv.lock`, and CI on Python 3.10 to 3.13 with `ruff` and `mypy`.
+  `uv.lock`, and CI on Python 3.10 to 3.13 with `ruff` and `mypy`. `SECURITY.md` (how to report a vulnerability
+  privately, what is in scope), `CONTRIBUTING.md` and GitHub issue forms for a bug report and a feature request, which
+  ask the reporter to redact addresses, names and keys; `tests/test_community_files.py` keeps them honest.
 
 ### Changed
 

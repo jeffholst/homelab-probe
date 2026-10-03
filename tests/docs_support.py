@@ -2,7 +2,7 @@
 
 import re
 from pathlib import Path
-from typing import Dict, List, Set
+from typing import Dict, List, Set, Tuple
 
 ROOT = Path(__file__).resolve().parent.parent
 README = ROOT / "README.md"
@@ -56,3 +56,19 @@ def duplicate_headings(text: str) -> List[str]:
     for heading in headings(text):
         seen[slug(heading)] = seen.get(slug(heading), 0) + 1
     return sorted(anchor for anchor, count in seen.items() if count > 1)
+
+
+LINK = re.compile(r"(?<!\!)\[[^\]]*\]\(([^)\s]+)\)")
+
+
+def local_links(path: Path) -> List[Tuple[Path, str, str]]:
+    """(target file, anchor, as written) for every relative link in a page; links inside code are not links."""
+    text = re.sub(r"```.*?```", "", path.read_text(encoding="utf-8"), flags=re.S)
+    text = re.sub(r"`[^`\n]*`", "", text)
+    found = []
+    for target in LINK.findall(text):
+        if re.match(r"[a-z][a-z0-9+.-]*:", target):          # https:, mailto:, ...
+            continue
+        name, _, anchor = target.partition("#")
+        found.append((path if not name else (path.parent / name).resolve(), anchor, target))
+    return found

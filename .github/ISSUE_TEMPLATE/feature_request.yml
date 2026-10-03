@@ -1,0 +1,42 @@
+name: Feature request
+description: A command, option, check or output you would like
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea. The tool is **read-only** (every request is a GET, plus one read-only event-log query),
+        so it cannot change anything on the controller. Do not include real MAC addresses, IP addresses, names,
+        SSIDs or your API key; use made-up values.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem do you want to solve?
+      description: The question you cannot answer today, or the thing you do by hand.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like it to do?
+      description: A command or option name, and what the output should show. A sketch with made-up values is plenty.
+    validations:
+      required: true
+  - type: textarea
+    id: data
+    attributes:
+      label: Where does the data come from?
+      description: If you know the controller screen, endpoint or field that has it, say so. Otherwise leave this empty; a read-only look at the controller comes first.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What do you do instead, and what did you consider?
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Before you submit
+      options:
+        - label: The request is read-only, or it only needs the one event-log query that is already there.
+          required: true
+        - label: I removed every real address, name and key from this request.
+          required: true
