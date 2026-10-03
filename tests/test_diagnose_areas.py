@@ -90,6 +90,17 @@ def test_unrelated_checks_do_not_read_device_details_and_statistics(fake_client)
     assert not any("/devices/" in path and not path.endswith("/devices") for path in fake_client.session.calls)
 
 
+def test_wan_checks_skip_unrelated_legacy_reads(fake_client):
+    snap_for(fake_client, ["wan"])
+    assert not any(path.endswith(("/stat/device", "/stat/sta")) for path in fake_client.session.calls)
+
+
+def test_port_checks_read_device_details_without_statistics(fake_client):
+    snap_for(fake_client, ["ports"])
+    assert any("/devices/" in path and not path.endswith("/devices") for path in fake_client.session.calls)
+    assert not any(path.endswith("/statistics/latest") for path in fake_client.session.calls)
+
+
 def make_every_area_report(fake_client):
     """Change the fake controller so that each of the eight areas has at least one finding."""
     fx = fake_client.session.fx
@@ -131,13 +142,15 @@ def test_findings_of_another_area_that_a_check_also_emits_are_dropped(fake_clien
 
 
 @pytest.mark.parametrize("areas, expected", [
-    (["ports"], Needs(device_extras=True)),
-    (["wifi"], Needs(device_extras=False)),
-    (["clients"], Needs(device_extras=False)),
-    (["health"], Needs(health=True, device_extras=False)),
-    (["devices"], Needs(health=True, device_extras=True)),
-    (["wan"], Needs(health=True, speedtests=True, device_extras=False)),
-    (["reservations"], Needs(reservations=True, device_extras=False)),
+    (["ports"], Needs(device_extras=True, device_stats=False, legacy_devices=True, legacy_clients=False)),
+    (["wifi"], Needs(device_extras=False, device_stats=False, legacy_devices=True, legacy_clients=True)),
+    (["clients"], Needs(device_extras=False, device_stats=False, legacy_devices=False, legacy_clients=False)),
+    (["health"], Needs(health=True, device_extras=False, device_stats=False, legacy_devices=False, legacy_clients=False)),
+    (["devices"], Needs(health=True, device_extras=True, device_stats=True, legacy_devices=True, legacy_clients=False)),
+    (["wan"], Needs(health=True, speedtests=True, device_extras=False, device_stats=False, legacy_devices=False,
+                    legacy_clients=False)),
+    (["reservations"], Needs(reservations=True, device_extras=False, device_stats=False, legacy_devices=False,
+                             legacy_clients=False)),
 ])
 def test_what_a_selection_reads(areas, expected):
     assert needs_for(areas, 3600) == expected
@@ -259,23 +272,25 @@ def test_no_events_is_the_same_as_skip_events(fake_client, monkeypatch, capsys):
 # -- what each selection reads from the controller ---------------------------------------------------------------
 
 @pytest.mark.parametrize("argv, kinds, posts", [
-    (["--only", "ports"], set(), False),
-    (["--only", "wifi"], set(), False),
+    (["--only", "ports"], {"legacy-devices"}, False),
+    (["--only", "wifi"], {"legacy-devices", "legacy-clients"}, False),
     (["--only", "clients"], set(), False),
     (["--only", "health"], {"health"}, False),
-    (["--only", "devices"], {"health"}, False),
+    (["--only", "devices"], {"health", "legacy-devices"}, False),
     (["--only", "wan"], {"health", "speedtests"}, False),
     (["--only", "reservations"], {"alluser", "networkconf"}, False),
     (["--only", "events"], {"alluser", "networkconf"}, True),
-    (["--skip", "events"], {"alluser", "networkconf", "health", "speedtests"}, False),
-    (["--skip", "wan,reservations"], {"health", "alluser", "networkconf"}, True),   # events still need them
+    (["--skip", "events"], {"alluser", "networkconf", "health", "speedtests", "legacy-devices",
+                             "legacy-clients"}, False),
+    (["--skip", "wan,reservations"], {"health", "alluser", "networkconf", "legacy-devices",
+                                      "legacy-clients"}, True),                     # events still need them
 ])
 def test_a_selection_reads_only_what_its_checks_need(fake_client, monkeypatch, capsys, argv, kinds, posts):
-    from test_needs import BASE, reads
+    from test_needs import reads
 
     run(fake_client, monkeypatch, ["diagnose", *argv])
     capsys.readouterr()
-    assert reads(fake_client) - {"events"} == BASE | kinds
+    assert reads(fake_client) - {"events"} == {"devices", "clients"} | kinds
     assert bool(fake_client.session.posts) is posts
 
 
