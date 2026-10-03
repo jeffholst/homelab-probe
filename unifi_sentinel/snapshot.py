@@ -60,6 +60,7 @@ class Snapshot:
     neighbors: List[Dict[str, Any]] = field(default_factory=list)
     events_available: bool = False    # True when the event log was requested and could be read
     neighbors_available: bool = True
+    degraded: bool = False            # True when a requested optional collection read was unavailable
     firewall: Optional[FirewallData] = None     # set when the firewall was requested (Needs.firewall)
     # Wi-Fi network settings (legacy rest/wlanconf), when requested (Needs.wlans); None: not requested or unreadable.
     wlans: Optional[List[Dict[str, Any]]] = None
@@ -409,6 +410,7 @@ def collect_snapshot(
                 _apply_device_extras(snap, reads)
         finally:
             reads.show_warnings(_WARNING_ORDER)
+    snap.degraded = snap.degraded or any(notes for name, notes in reads.notes.items() if name != "extras")
     if client.trace is not None:
         client.trace(describe_snapshot(snap))
     return snap
@@ -435,6 +437,7 @@ def extend_snapshot(client: UniFiClient, snap: Snapshot, needs: Needs, now_ms: O
             _apply_extras(snap, reads, needs, users=False)
         finally:
             reads.show_warnings(_WARNING_ORDER)
+    snap.degraded = snap.degraded or any(notes for name, notes in reads.notes.items() if name != "extras")
     if client.trace is not None:
         client.trace(describe_snapshot(snap))
 
@@ -460,6 +463,7 @@ def collect_event_snapshot(
         events_truncated=truncated,
         event_window_seconds=wanted.since_seconds,
         events_available=available,
+        degraded=not available,
     )
     if client.trace is not None:
         client.trace(describe_snapshot(snap))

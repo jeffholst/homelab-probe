@@ -180,6 +180,65 @@ def test_a_read_that_fails_is_reported_and_tried_again_and_the_watch_goes_on(fak
     assert any("RECOVERED  Garage AP" in line for line in lines(captured))      # compared with the last good pass
 
 
+def test_a_degraded_pass_keeps_the_last_complete_watch_state(monkeypatch, capsys):
+    finding = Finding(WARNING, "Garage AP", "is offline", code="device.offline")
+    passes = iter([([finding], [], True), ([], [], False), ([finding], [], True), ([], [], False)])
+    monkeypatch.setattr(commands, "_diagnose_once", lambda *_: next(passes))
+
+    class Context:
+        args = type("Args", (), {"watch": 30, "areas": None, "fail_on": "warning"})()
+        settings = None
+
+    script = Script(lambda: None, lambda: None, lambda: None)
+    monkeypatch.setattr(commands, "WATCH_SLEEP", script)
+    settings = type("Settings", (), {"notify_repeat_hours": 24})()
+    assert commands._watch_diagnose(Context(), settings, [finding], True) == 1
+    captured = capsys.readouterr()
+    assert lines(captured) == []
+    assert "keeping the last complete watch state" in captured.err
+
+
+def test_an_incomplete_first_pass_waits_for_a_complete_baseline(monkeypatch, capsys):
+    finding = Finding(WARNING, "Garage AP", "is offline", code="device.offline")
+    passes = iter([([], [], False), ([finding], [], True)])
+    monkeypatch.setattr(commands, "_diagnose_once", lambda *_: next(passes))
+
+    class Context:
+        args = type("Args", (), {"watch": 30, "areas": None, "fail_on": "warning"})()
+        settings = None
+
+    script = Script(lambda: None, lambda: None)
+    monkeypatch.setattr(commands, "WATCH_SLEEP", script)
+    settings = type("Settings", (), {"notify_repeat_hours": 24})()
+    assert commands._watch_diagnose(Context(), settings, [], False) == 1
+    captured = capsys.readouterr()
+    assert lines(captured) == []
+    assert "waiting for a complete baseline" in captured.err
+
+
+def test_an_unavailable_optional_collection_marks_the_pass_incomplete(fake_client, monkeypatch, capsys):
+    from unifi_sentinel.client import UniFiAPIError
+    from unifi_sentinel.settings import DiagnoseSettings
+
+    real_legacy_stat = fake_client.legacy_stat
+
+    def legacy_stat(site, resource):
+        if resource == "health":
+            raise UniFiAPIError("unavailable")
+        return real_legacy_stat(site, resource)
+
+    monkeypatch.setattr(fake_client, "legacy_stat", legacy_stat)
+
+    class Context:
+        client = fake_client
+        config = type("Config", (), {"site": "default"})()
+        args = type("Args", (), {"areas": None, "since": 86400})()
+
+    _, _, complete = commands._diagnose_once(Context(), DiagnoseSettings())
+    assert not complete
+    assert "stat/health unavailable" in capsys.readouterr().err
+
+
 def test_the_first_read_failing_is_an_error_as_for_any_command(fake_client, monkeypatch, capsys):
     fake_client.session.status = 500
     assert run(fake_client, monkeypatch, Script()) == cli.EXIT_ERROR

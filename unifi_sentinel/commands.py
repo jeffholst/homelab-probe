@@ -12,7 +12,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from .audit import AUDIT_AREAS, audit
 from .client import UniFiAPIError, UniFiClient
@@ -704,33 +704,41 @@ def _notify(findings: List[Any], config: Any, settings: Any, args: argparse.Name
 WATCH_SLEEP = time.sleep          # looked up when used, so a test can replace the wait between passes
 
 
-def _diagnose_once(ctx: Context, settings: DiagnoseSettings) -> Tuple[List[Any], List[Any]]:
+def _diagnose_once(ctx: Context, settings: DiagnoseSettings) -> Tuple[List[Any], List[Any], bool]:
     """One pass of the checks: the findings that remain and those the ignore list suppressed."""
     areas = ctx.args.areas
-    return apply_ignores(
-        diagnose(collect_snapshot(ctx.client, ctx.config.site, needs_for(areas, ctx.args.since)), settings,
-                 areas=areas),
-        settings.ignore)
+    snap = collect_snapshot(ctx.client, ctx.config.site, needs_for(areas, ctx.args.since))
+    findings, ignored = apply_ignores(diagnose(snap, settings, areas=areas), settings.ignore)
+    return findings, ignored, not snap.degraded
 
 
-def _watch_diagnose(ctx: Context, settings: DiagnoseSettings, first: List[Any]) -> int:
-    """Repeat the checks every ``--watch`` seconds and print what changed, until Ctrl-C. A failed read is reported
-    and tried again (the first one, before this starts, fails the command as usual). The exit code is the one the
-    last complete pass would have given."""
+def _watch_diagnose(ctx: Context, settings: DiagnoseSettings, first: List[Any], first_complete: bool) -> int:
+    """Repeat the checks every ``--watch`` seconds and print what changed, until Ctrl-C. Failed or degraded reads
+    are retried without changing the last complete state. The exit code is the one the last complete pass gave."""
     args = ctx.args
     findings = first
-    state = watch_start(findings, time.time(), args.areas)
+    state: Optional[Dict[str, Any]] = watch_start(findings, time.time(), args.areas) if first_complete else None
     say(f"Watching every {args.watch} s; only changes are printed (Ctrl-C to stop).", file=sys.stderr)
     try:
         while True:
             WATCH_SLEEP(args.watch)
             try:
-                findings, _ignored = _diagnose_once(ctx, settings)
+                next_findings, _ignored, complete = _diagnose_once(ctx, settings)
             except (UniFiAPIError, OSError) as e:
                 reason = str(e) if isinstance(e, UniFiAPIError) else (e.strerror or type(e).__name__)
                 say(f"{time.strftime('%H:%M:%S')}  could not read the controller ({reason}); "
                     f"trying again in {args.watch} s", file=sys.stderr)
                 continue
+            if not complete:
+                status = "waiting for a complete baseline" if state is None else "keeping the last complete watch state"
+                say(f"{time.strftime('%H:%M:%S')}  optional controller data unavailable; {status} "
+                    f"and trying again in {args.watch} s", file=sys.stderr)
+                continue
+            if state is None:
+                findings = next_findings
+                state = watch_start(findings, time.time(), args.areas)
+                continue
+            findings = next_findings
             lines, state = watch_changes(findings, state, time.time(), settings.notify_repeat_hours, args.areas)
             for line in lines:
                 say(line)
@@ -743,7 +751,7 @@ def _run_diagnose(ctx: Context) -> int:
     args = ctx.args
     settings = ctx.settings or DiagnoseSettings()          # loaded for this command, so never None
     areas = args.areas
-    findings, ignored = _diagnose_once(ctx, settings)
+    findings, ignored, complete = _diagnose_once(ctx, settings)
     if args.json:
         say(findings_json(findings, ignored, args.show_ignored, areas))
     else:
@@ -754,7 +762,7 @@ def _run_diagnose(ctx: Context) -> int:
         if args.show_ignored and ignored:
             say("\n" + format_ignored(ignored))
     if args.watch is not None:
-        return _watch_diagnose(ctx, settings, findings)
+        return _watch_diagnose(ctx, settings, findings, complete)
     code = exit_code(findings, args.fail_on)
     if args.notify and _notify(findings, ctx.config, settings, args) and code == 0:
         return EXIT_ERROR              # the message could not be delivered and nothing else says so
