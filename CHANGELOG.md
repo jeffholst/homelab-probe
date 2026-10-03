@@ -55,6 +55,7 @@ and `wep` Wi-Fi security values) the README says so.
   utilization) and event-log checks (IP conflicts, repeated disconnects, roaming, unreachable devices, internet
   latency).
 - **Severities, exit codes and options for `diagnose`:** `critical`, `warning` and `info`, with `--fail-on`;
+  `--watch SECONDS` to repeat the checks and print only what changed (new, worse, fixed) until Ctrl-C;
   `--json` with a stable code per finding; `--only` and `--skip` to run a subset of the checks (by area: `devices`,
   `health`, `wan`, `clients`, `reservations`, `ports`, `wifi`, `events`), reading only the data those checks need;
   `--since`, `--no-events`, `--show-ignored`, `--no-emoji`.
@@ -99,6 +100,7 @@ and `wep` Wi-Fi security values) the README says so.
 
 ### Fixed
 
+- An incomplete optional-data pass in **`diagnose --watch`** no longer reports findings as recovered or resets the watch baseline.
 - Notification setup errors link to the online guide, including for installed users outside a source checkout.
 - Switch ports are matched on switches that report no `mac_table_count`, and offline devices keep their last uplink.
 - A device's type is detected from its model when the legacy type is unavailable.

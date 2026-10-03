@@ -126,6 +126,7 @@ uv run unifi-sentinel.py new-clients                          # clients in no cl
 uv run unifi-sentinel.py audit                                # settings that are probably not what you want
 uv run unifi-sentinel.py diagnose                             # health checks (--json for scripts, --notify for alerts)
 uv run unifi-sentinel.py diagnose --only ports,wifi           # just those checks, reading only what they need
+uv run unifi-sentinel.py diagnose --watch 60                  # every minute, print only what changed (Ctrl-C to stop)
 ```
 
 Run these from the project root (uv uses `pyproject.toml`); after `pip install .` use `unifi-sentinel <command>` instead. Run `--help` on the tool or any command for options, and `--version` for the version. More examples, with sample output, are in [docs/examples.md](docs/examples.md).
