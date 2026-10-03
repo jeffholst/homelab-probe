@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/jeffholst/unifi-sentinel/main/docs/schemas/events.v1.schema.json",
+  "title": "events",
+  "description": "Output of `unifi-sentinel events --json`: the events, newest first.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "timestamp": {
+        "type": "number"
+      },
+      "Message": {
+        "type": "string"
+      },
+      "Category": {
+        "type": "string"
+      },
+      "device": {
+        "type": [
+          "null",
+          "object"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "ip": {
+            "type": "string"
+          }
+        }
+      },
+      "Event": {
+        "type": "string"
+      },
+      "client": {
+        "type": [
+          "null",
+          "object"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "ip": {
+            "type": "string"
+          }
+        }
+      },
+      "key": {
+        "type": "string"
+      },
+      "Time": {
+        "type": "string"
+      },
+      "subcategory": {
+        "type": "string"
+      },
+      "Severity": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "Category",
+      "Event",
+      "Message",
+      "Severity",
+      "Time",
+      "client",
+      "device",
+      "key",
+      "subcategory",
+      "timestamp"
+    ]
+  }
+}

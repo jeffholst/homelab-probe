@@ -229,7 +229,7 @@ def test_clients_listing_lines_up_with_the_child_connectors(fixture_tree):
 
 def test_json_is_nested_and_complete(fixture_tree):
     parsed = json.loads(to_json(fixture_tree))
-    assert set(parsed) == {"roots", "unattached", "summary"}
+    assert set(parsed) == {"version", "roots", "unattached", "summary"}
     node = parsed["roots"][0]["children"][0]
     assert {"name", "mac", "type", "model", "online", "parent", "parent_port", "speed_mbps",
             "supports_mbps", "clients", "findings", "children", "wired_clients"} <= set(node)

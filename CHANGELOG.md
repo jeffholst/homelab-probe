@@ -19,8 +19,9 @@ always listed here.
   `client` found no single match; `64` a command-line usage error. `1` and `2` are never used for errors.
 - **Finding codes** (`device.offline`, `port.slow_link`, `audit.wifi_open`, ...) are never renamed or reused; new
   ones are added. They are what `--json` output and ignore rules (`[[ignore]] code = ...`) use.
-- **JSON documents** carry a `version` (`diagnose --json`, `audit --json`, `firewall --json` and the webhook payload
-  are version `1`). It changes only when a field is removed or renamed; new fields may appear without a new version.
+- **JSON documents** carry a `version` as their first key (every `--json` output that is an object, and the webhook
+  payload, are version `1`; the plain lists of `query`, `new-clients` and `events` are bare arrays and have none),
+  and each has a JSON Schema in `docs/schemas/`. It changes when a field is removed, renamed or its meaning changes; new fields may appear without a new version.
 - **Saved snapshots** (`snapshot`, `diff`) have `schema_version` `1`; a file of another version is refused with a
   clear message, never misread.
 - The package never changes anything on the controller. Every request is a GET, with one read-only exception: the
@@ -65,6 +66,9 @@ and `wep` Wi-Fi security values) the README says so.
   owner-only file. Options: `--notify-min`, `--notify-redact` (no names, addresses or MACs), `--notify-dry-run`,
   `--notify-baseline`, `--notify-state`. A partial `--only`/`--skip` run never announces the recovery of areas it
   did not check. Email is TLS only, one plain-text message per run.
+- **JSON Schemas** (`docs/schemas/*.v1.schema.json`, draft 2020-12) for every `--json` output, the snapshot file and the
+  webhook payload, checked by the tests against real output, plus a `version` field in `topology`, `wifi`, `wan`,
+  `client`, `diff` and `events --summary` documents (additive).
 - **`--verbose` / `--debug`:** every request (method, path, status, milliseconds, retries) and what was read, on
   stderr, never the API key.
 - **`--parallel N` / `PARALLEL_REQUESTS`** (default 6) and `--timeout` / `TIMEOUT`, `--env-file` /

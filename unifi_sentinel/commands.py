@@ -6,7 +6,6 @@ handler declares what it reads with a ``Needs``), analysis and rendering in the 
 """
 
 import argparse
-import json
 import sys
 import time
 from collections.abc import Callable
@@ -42,6 +41,7 @@ from .history import (
     DEFAULT_DIR,
     SnapshotRecord,
     capture,
+    diff_json,
     diff_snapshots,
     label_for,
     list_snapshots,
@@ -445,7 +445,7 @@ def _run_diff(ctx: Context) -> int:
     else:
         new, new_label = _live_inventory(ctx.client, ctx.config), "the network right now"
     result = diff_snapshots(old, new)
-    say(json.dumps(result, indent=2) if args.json
+    say(diff_json(result) if args.json
         else render_diff(result, label_for(old, old_path.name), new_label, args.all))
     return 0
 

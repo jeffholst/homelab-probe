@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/jeffholst/unifi-sentinel/main/docs/schemas/query-reservations.v1.schema.json",
+  "title": "query reservations",
+  "description": "Output of `unifi-sentinel query reservations --json` (`Offline For` only with `--offline`).",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "Offline For": {
+        "type": "string"
+      },
+      "Name": {
+        "type": "string"
+      },
+      "Network": {
+        "type": "string"
+      },
+      "Last Seen": {
+        "type": "string"
+      },
+      "MAC Address": {
+        "type": "string"
+      },
+      "VLAN": {
+        "type": [
+          "number",
+          "string",
+          "null"
+        ]
+      },
+      "Reserved IP": {
+        "type": "string"
+      },
+      "Status": {
+        "type": "string"
+      },
+      "Current IP": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "Current IP",
+      "Last Seen",
+      "MAC Address",
+      "Name",
+      "Network",
+      "Reserved IP",
+      "Status",
+      "VLAN"
+    ]
+  }
+}

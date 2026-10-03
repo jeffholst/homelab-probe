@@ -21,6 +21,7 @@ from .snapshot import Snapshot
 from .util import clean_data, describe_age, number
 
 DEFAULT_DAYS = 30
+JSON_VERSION = 1               # the format of `wan --json`; it changes only when a field is removed or renamed
 SPEEDTEST_BASELINE_DAYS = 30   # `diagnose` compares the last speedtest with this many days
 MIN_SPEEDTESTS = 5             # a median over fewer runs says little about what is normal
 GATEWAY_TYPES = {"udm", "ugw", "uxg", "ucg"}
@@ -322,4 +323,4 @@ def render_text(wan: Dict[str, Any]) -> str:
 
 
 def to_json(wan: Dict[str, Any]) -> str:
-    return json.dumps(wan, indent=2)
+    return json.dumps({"version": JSON_VERSION, **wan}, indent=2)

@@ -13,6 +13,7 @@ from .query import format_table
 from .snapshot import Snapshot
 from .util import hex_digits, printable
 
+JSON_VERSION = 1       # the format of `events --summary --json` (the plain event list is a bare array)
 DEFAULT_SINCE = "24h"
 DEFAULT_LIMIT = 100
 SEVERITIES = ["low", "medium", "high"]
@@ -169,7 +170,7 @@ def render_events(events: List[Dict[str, Any]], more: bool, as_json: bool = Fals
         s = summarize(events)
         if as_json:
             return json.dumps({
-                "total": s["total"], "by_severity": dict(s["by_severity"]),
+                "version": JSON_VERSION, "total": s["total"], "by_severity": dict(s["by_severity"]),
                 "by_event": dict(s["by_event"]), "noisiest": s["noisiest"], "truncated": more}, indent=2)
         if not events:
             return "No events in this window."

@@ -290,7 +290,7 @@ def test_missing_data_still_renders_and_json_is_complete(report):
     text = render_text(empty)
     assert "no radio data" in text and "Neighboring networks: 0 seen by your APs" in text
     parsed = json.loads(to_json(report))
-    assert set(parsed) == {"ap_matched", "min_signal", "radios", "neighbors", "plan", "observations"}
+    assert set(parsed) == {"version", "ap_matched", "min_signal", "radios", "neighbors", "plan", "observations"}
     assert parsed["neighbors"]["available"] is True
     assert parsed["plan"][0]["channels"][0]["strong_networks"] is not None and "span" not in parsed["radios"][0]
 

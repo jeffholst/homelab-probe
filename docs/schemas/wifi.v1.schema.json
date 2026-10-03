@@ -1,0 +1,249 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/jeffholst/unifi-sentinel/main/docs/schemas/wifi.v1.schema.json",
+  "title": "wifi",
+  "description": "Output of `unifi-sentinel wifi --json`.",
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": 1,
+      "description": "The format of this document; it changes only when a field is removed or renamed."
+    },
+    "radios": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "width": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "channel": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "tx_power": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "utilization": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "retries": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "band": {
+            "type": "string"
+          },
+          "clients": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "mac": {
+            "type": "string"
+          },
+          "satisfaction": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "ap": {
+            "type": "string"
+          },
+          "online": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ap",
+          "band",
+          "channel",
+          "clients",
+          "mac",
+          "online",
+          "retries",
+          "satisfaction",
+          "tx_power",
+          "utilization",
+          "width"
+        ]
+      }
+    },
+    "plan": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "band": {
+            "type": "string"
+          },
+          "scanned": {
+            "type": "boolean"
+          },
+          "label": {
+            "type": "string"
+          },
+          "channels": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "neighbors": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "channel": {
+                  "type": "number"
+                },
+                "strong": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "our_radios": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "strong_networks": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "hidden": {
+                        "type": "boolean"
+                      },
+                      "vendor": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "open": {
+                        "type": "boolean"
+                      },
+                      "bssid": {
+                        "type": "string"
+                      },
+                      "security": {
+                        "type": "string"
+                      },
+                      "seen_by_aps": {
+                        "type": "number"
+                      },
+                      "signal": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "bssid",
+                      "hidden",
+                      "name",
+                      "open",
+                      "security",
+                      "seen_by_aps",
+                      "signal",
+                      "vendor"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "channel",
+                "neighbors",
+                "our_radios",
+                "strong",
+                "strong_networks"
+              ]
+            }
+          }
+        },
+        "required": [
+          "band",
+          "channels",
+          "label",
+          "scanned"
+        ]
+      }
+    },
+    "ap_matched": {
+      "type": "boolean"
+    },
+    "neighbors": {
+      "type": "object",
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "total": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "hidden": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "open": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "strong": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "available",
+        "hidden",
+        "open",
+        "strong",
+        "total"
+      ]
+    },
+    "observations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "min_signal": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "ap_matched",
+    "min_signal",
+    "neighbors",
+    "observations",
+    "plan",
+    "radios",
+    "version"
+  ]
+}

@@ -17,6 +17,7 @@ from .util import clean_data, normalize_mac, number, plural, printable
 
 BANDS = {"ng": "2.4 GHz", "na": "5 GHz", "6e": "6 GHz"}
 BAND_ALIASES = {"2.4": "ng", "2": "ng", "24": "ng", "5": "na", "6": "6e"}
+JSON_VERSION = 1                  # the format of `wifi --json`; it changes only when a field is removed or renamed
 DEFAULT_MIN_SIGNAL = -80          # dBm: weaker neighbors are counted but not named or compared
 NAMES_PER_CHANNEL = 5             # strongest neighbors named per channel unless --all
 USUAL_2G_CHANNELS = (1, 6, 11)
@@ -396,4 +397,4 @@ def render_text(wifi: Dict[str, Any], show_all: bool = False, ap: str = "") -> s
 
 
 def to_json(wifi: Dict[str, Any]) -> str:
-    return json.dumps(wifi, indent=2)
+    return json.dumps({"version": JSON_VERSION, **wifi}, indent=2)

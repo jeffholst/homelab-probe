@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/jeffholst/unifi-sentinel/main/docs/schemas/diagnose.v1.schema.json",
+  "title": "diagnose",
+  "description": "Output of `unifi-sentinel diagnose --json`.",
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": 1,
+      "description": "The format of this document; it changes only when a field is removed or renamed."
+    },
+    "areas": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "devices",
+          "health",
+          "wan",
+          "clients",
+          "reservations",
+          "ports",
+          "wifi",
+          "events"
+        ]
+      },
+      "description": "The areas of checks that ran."
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "critical": {
+          "type": "number"
+        },
+        "warning": {
+          "type": "number"
+        },
+        "info": {
+          "type": "number"
+        },
+        "ignored": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "critical",
+        "ignored",
+        "info",
+        "warning"
+      ]
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
+    },
+    "ignored": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ignored"
+      }
+    }
+  },
+  "required": [
+    "areas",
+    "findings",
+    "summary",
+    "version"
+  ],
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "properties": {
+        "severity": {
+          "enum": [
+            "critical",
+            "warning",
+            "info"
+          ]
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^[a-z]+\\.[a-z_0-9]+$"
+        },
+        "subject": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "mac": {
+          "type": "string",
+          "description": "Upper-case MAC of the device the finding is about, or ''."
+        }
+      },
+      "required": [
+        "code",
+        "mac",
+        "message",
+        "severity",
+        "subject"
+      ]
+    },
+    "ignored": {
+      "type": "object",
+      "properties": {
+        "severity": {
+          "enum": [
+            "critical",
+            "warning",
+            "info"
+          ]
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^[a-z]+\\.[a-z_0-9]+$"
+        },
+        "subject": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "mac": {
+          "type": "string",
+          "description": "Upper-case MAC of the device the finding is about, or ''."
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "mac",
+        "message",
+        "reason",
+        "severity",
+        "subject"
+      ]
+    }
+  }
+}
