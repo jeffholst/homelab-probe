@@ -18,6 +18,8 @@ uv run unifi-sentinel.py diagnose --notify --notify-baseline   # once: treat tod
 */15 * * * * cd /path/to/unifi-sentinel && uv run unifi-sentinel.py diagnose --notify --fail-on critical
 ```
 
+The cron line is the short form; [Running on a schedule](scheduling.md) has the tested versions for cron, a systemd timer, launchd and Docker, and what to do about the working directory, `PATH`, exit codes and overlapping runs.
+
 - **When it sends:** a finding at or above `--notify-min` (default `warning`) that is **new** (not reported before), has got **worse** (warning to critical), or is a **critical** one still unresolved after `notify_repeat_hours` (default 24, `0` turns reminders off; set it in `[thresholds]`); and a **recovery** note when a reported finding has gone (or fallen below `--notify-min`). Warnings and info are sent once, never repeated. Unchanged situations send nothing, and one run sends one message per destination (at most 20 lines, then `... and N more`).
 - **Identity:** a finding is the same finding when its check (`code`) and subject are the same, whatever its wording says, so a changing count does not re-send. What was reported is remembered in `snapshots/notify-state.json` (git-ignored, owner-only; `--notify-state FILE` changes it). The first run with no state would report everything, so run `--notify-baseline` once to record today's findings as already reported.
 - **`--notify-dry-run`** prints the message that would be sent to stderr and sends nothing and keeps the state, the way to check the wording and what leaves your network. The ignore list applies before notifying, so ignored findings are never sent.
