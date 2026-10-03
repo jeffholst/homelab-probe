@@ -140,9 +140,10 @@ def test_a_network_with_a_missing_name_or_purpose_has_blank_cells():
 
 
 def test_counts_are_blank_not_zero_when_the_client_list_could_not_be_read():
-    snap = snapshot(networks=[{"_id": "n", "name": "x"}], degraded=True)
+    snap = snapshot(networks=[{"_id": "n", "name": "x"}], legacy_clients_available=False, degraded=True)
     assert network_rows(snap)[0]["Clients"] == ""
     assert network_rows(snapshot(networks=[{"_id": "n", "name": "x"}]))[0]["Clients"] == 0     # none connected: 0
+    assert network_rows(snapshot(networks=[{"_id": "n", "name": "x"}], degraded=True))[0]["Clients"] == 0
 
 
 def test_query_networks_in_every_format(fake_client, monkeypatch, capsys):
@@ -239,8 +240,9 @@ def test_wifi_clients_are_counted_by_id_with_a_name_fallback_and_never_without_a
 
 
 def test_wifi_counts_are_blank_when_the_client_list_could_not_be_read():
-    snap = snapshot(wlans=[{"_id": "w", "name": "x"}], degraded=True)
+    snap = snapshot(wlans=[{"_id": "w", "name": "x"}], legacy_clients_available=False, degraded=True)
     assert wlan_rows(snap)[0]["Clients"] == ""
+    assert wlan_rows(snapshot(wlans=[{"_id": "w", "name": "x"}], degraded=True))[0]["Clients"] == 0
 
 
 def test_query_wlans_in_every_format(fake_client, monkeypatch, capsys):
@@ -316,6 +318,14 @@ def test_unreadable_networks_fail_instead_of_showing_none(fake_client, monkeypat
     assert "legacy rest/networkconf unavailable" in err and "no networks were returned" in err
 
 
+def test_a_site_with_no_networks_says_zero_not_an_error(fake_client, monkeypatch, capsys):
+    fake_client.session.fx["legacy_rest"]["networkconf"] = []
+    code, out, _ = run(fake_client, monkeypatch, capsys, "query", "networks")
+    assert code == 0 and out.rstrip().endswith("0 row(s)")
+    _, rows, _ = run_json(fake_client, monkeypatch, capsys, "query", "networks")
+    assert rows == []
+
+
 def test_unreadable_wifi_settings_fail_with_a_warning_that_fits(fake_client, monkeypatch, capsys):
     fail(fake_client, "/rest/wlanconf")
     code, out, err = run(fake_client, monkeypatch, capsys, "query", "wlans")
@@ -338,6 +348,23 @@ def test_wifi_without_the_network_list_still_lists_the_networks_with_blank_netwo
     code, rows, err = run_json(fake_client, monkeypatch, capsys, "query", "wlans")
     assert code == 0 and len(rows) == 6 and {r["Network"] for r in rows} == {""} and {r["VLAN"] for r in rows} == {""}
     assert "legacy rest/networkconf unavailable, network names may be missing" in err
+
+
+def test_client_filters_use_stat_sta_availability_not_list_contents(fake_client, monkeypatch, capsys):
+    fake_client.session.fx["legacy"]["sta"] = []
+    code, out, err = run(fake_client, monkeypatch, capsys, "query", "clients", "--ssid", "Home")
+    assert code == 0 and "0 row(s)" in out and "legacy stat/sta unavailable" not in err
+
+
+@pytest.mark.parametrize("integration_clients", [None, []])
+def test_client_filters_fail_when_stat_sta_could_not_be_read_even_if_empty(integration_clients, fake_client,
+                                                                           monkeypatch, capsys):
+    if integration_clients is not None:
+        fake_client.session.fx["clients"] = integration_clients
+    fail(fake_client, "/stat/sta")
+    code, out, err = run(fake_client, monkeypatch, capsys, "query", "clients", "--ssid", "Home")
+    assert code == 3 and out == ""
+    assert "legacy stat/sta unavailable" in err and "connected-client details (legacy stat/sta)" in err
 
 
 def test_counts_are_blank_when_the_client_read_fails(fake_client, monkeypatch, capsys):

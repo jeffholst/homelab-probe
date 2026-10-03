@@ -286,12 +286,12 @@ def _run_query(ctx: Context) -> int:
                       networks=args.network is not None)
     snap = collect_snapshot(ctx.client, ctx.config.site, needs)
     # The whole answer is that data, so an empty list from a failed read must not look like "there are none".
-    if args.kind == "networks" and not snap.networks:
-        raise UniFiAPIError("no networks were returned (legacy rest/networkconf could not be read, or is empty)")
+    if args.kind == "networks" and not snap.networks_available:
+        raise UniFiAPIError("no networks were returned (legacy rest/networkconf could not be read)")
     if args.kind == "wlans" and snap.wlans is None:
         raise UniFiAPIError("the Wi-Fi networks could not be read (legacy rest/wlanconf); see the warning above")
     filtering = any(value is not None for value in (args.network, args.ssid, args.ap))
-    if filtering and snap.clients and not snap.legacy_clients:
+    if filtering and not snap.legacy_clients_available:
         raise UniFiAPIError("--network, --ssid and --ap need the connected-client details (legacy stat/sta), "
                             "which could not be read; see the warning above")
     offline_days = ctx.settings.reserved_offline_warn_days if ctx.settings is not None and args.offline else None

@@ -106,6 +106,8 @@ and `wep` Wi-Fi security values) the README says so.
 
 ### Fixed
 
+- Empty network inventories are now reported as zero rows, and client filters and WLAN/network client counts use
+  explicit `stat/sta` availability instead of inferring failures from empty results or unrelated degraded reads.
 - Shell completions now dispatch correctly in zsh, stop offering consumed positional choices, and complete later items in fish comma lists.
 - An incomplete optional-data pass in **`diagnose --watch`** no longer reports findings as recovered or resets the watch baseline.
 - Notification setup errors link to the online guide, including for installed users outside a source checkout.

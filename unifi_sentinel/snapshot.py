@@ -40,6 +40,7 @@ class Snapshot:
     # Legacy data supplies switch/port mapping and counters; empty if unavailable.
     legacy_devices: List[Dict[str, Any]] = field(default_factory=list)
     legacy_clients: List[Dict[str, Any]] = field(default_factory=list)
+    legacy_clients_available: bool = True
     all_users: List[Dict[str, Any]] = field(default_factory=list)
     # Integration API per-device detail and latest statistics, keyed by device id.
     device_details: Dict[str, Dict[str, Any]] = field(default_factory=dict)
@@ -47,6 +48,7 @@ class Snapshot:
     # Legacy rest/networkconf. Client records reference these ids, which differ
     # from the Integration API network UUIDs.
     networks: List[Dict[str, Any]] = field(default_factory=list)
+    networks_available: bool = True
     # Client group definitions (legacy v2 network-members-groups): id, name, members.
     client_groups: Optional[List[Dict[str, Any]]] = None
     # Legacy stat/health: one entry per subsystem (wlan, lan, wan, www, vpn).
@@ -77,6 +79,16 @@ def _legacy_or_empty(client: UniFiClient, site_ref: str, resource: str, notes: L
         )
         notes.append(f"legacy stat/{resource} unavailable; {impact}: {e}")
         return []
+
+
+def _legacy_clients_or_empty(
+    client: UniFiClient, site_ref: str, notes: List[str]
+) -> tuple[List[Dict[str, Any]], bool]:
+    try:
+        return client.legacy_stat(site_ref, "sta"), True
+    except UniFiAPIError as e:
+        notes.append(f"legacy stat/sta unavailable; port mapping will be incomplete: {e}")
+        return [], False
 
 
 def _legacy_health_or_empty(client: UniFiClient, site_ref: str, notes: List[str]) -> List[Dict[str, Any]]:
@@ -129,12 +141,14 @@ def _device_read_failed(error: UniFiAPIError, device: Dict[str, Any]) -> bool:
     return not (device.get("state") == "OFFLINE" and str(error).startswith("HTTP 404 "))
 
 
-def _legacy_rest_or_empty(client: UniFiClient, site_ref: str, resource: str, notes: List[str]) -> List[Dict[str, Any]]:
+def _legacy_rest_or_empty(
+    client: UniFiClient, site_ref: str, resource: str, notes: List[str]
+) -> tuple[List[Dict[str, Any]], bool]:
     try:
-        return client.legacy_rest(site_ref, resource)
+        return client.legacy_rest(site_ref, resource), True
     except UniFiAPIError as e:
         notes.append(f"legacy rest/{resource} unavailable, network names may be missing: {e}")
-        return []
+        return [], False
 
 
 def _legacy_v2_or_empty(
@@ -375,7 +389,7 @@ def _apply_extras(snap: Snapshot, reads: "_Reads", needs: Needs, users: bool) ->
     if users and (needs.groups or needs.offline or needs.reservations):
         snap.all_users = reads.result("alluser")
     if needs.reservations or needs.networks:
-        snap.networks = reads.result("networks")
+        snap.networks, snap.networks_available = reads.result("networks")
     if needs.health:
         snap.health = reads.result("health")
     if needs.speedtests:
@@ -415,7 +429,7 @@ def collect_snapshot(
             if needs.legacy_devices is not False:
                 reads.submit("legacy_devices", lambda notes: _legacy_or_empty(client, site_ref, "device", notes))
             if needs.legacy_clients is not False:
-                reads.submit("legacy_clients", lambda notes: _legacy_or_empty(client, site_ref, "sta", notes))
+                reads.submit("legacy_clients", lambda notes: _legacy_clients_or_empty(client, site_ref, notes))
             _submit_extras(reads, needs, client, site_ref, now_ms, users=True)
             if needs.devices is not False:
                 snap.devices = reads.result("devices")
@@ -426,7 +440,7 @@ def collect_snapshot(
             if needs.legacy_devices is not False:
                 snap.legacy_devices = reads.result("legacy_devices")
             if needs.legacy_clients is not False:
-                snap.legacy_clients = reads.result("legacy_clients")
+                snap.legacy_clients, snap.legacy_clients_available = reads.result("legacy_clients")
             _apply_extras(snap, reads, needs, users=True)
             if needs.device_extras is not False:
                 _apply_device_extras(snap, reads, needs.device_stats is not False)

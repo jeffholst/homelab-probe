@@ -137,7 +137,7 @@ def _dhcp(net: Dict[str, Any]) -> Tuple[str, str]:
 
 def _clients_known(snap: Snapshot) -> bool:
     """False when the connected-client list could not be read, so a count of 0 would be a guess."""
-    return bool(snap.legacy_clients) or not snap.degraded
+    return snap.legacy_clients_available
 
 
 def network_rows(snap: Snapshot) -> List[Dict[str, Any]]:
