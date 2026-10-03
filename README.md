@@ -26,14 +26,14 @@ UniFi Sentinel is a fork of [ericfitz/unifi-clients-export](https://github.com/e
 | `audit` | Configuration audit: Wi-Fi networks that are open or WPA2-only, default device names, firmware updates, unnamed clients | [details](docs/diagnose.md#audit) |
 | `completion` | Print a shell completion script for bash, zsh or fish | [details](docs/configuration.md#shell-completion) |
 | `diagnose` | Read-only health checks with 🛑 critical, ⚠️ warning and ℹ️ info findings (`--json` for scripts) | [details](docs/diagnose.md#diagnose) |
-| `info` | Show the controller application info and available sites       |  |
+| `info` | Show the controller application info and available sites | [details](docs/configuration.md#finding-your-site-info) |
 
 ## Features
 
 - **Inventory and exports**: clients, UniFi devices and switch ports as tables, JSON or CSV, with DHCP reservations, client groups, randomized-MAC detection, and snapshots that show what changed
-- **Troubleshooting**: `diagnose` health checks with exit codes and stable finding codes, `client` for one device, `topology`, `wifi`, `wan`, `events` and `firewall` views, and `audit` for risky settings
+- **Troubleshooting**: `diagnose` health checks with exit codes and stable finding codes (run only some with `--only`/`--skip`, or `--watch` to see what changed), `client` for one device, `topology`, `wifi`, `wan`, `events` and `firewall` views, and `audit` for risky settings
 - **Notifications**: ntfy, a webhook or email when a problem is new, worse or fixed, opt-in, with redaction
-- **Official API first**, read-only (every request is a GET, apart from one read-only event-log query), safe output for names and CSV cells, and credentials kept in a `.env` file
+- **Official API first**, read-only (every request is a GET, apart from one read-only event-log query), safe output for names and CSV cells, credentials kept in a `.env` file, `--site` to pick a site, a JSON Schema for every `--json` output and shell completion
 
 All of them, in full, are in [docs/features.md](docs/features.md).
 
@@ -206,13 +206,11 @@ Clients that use a private Wi-Fi MAC address are flagged in `query clients`, `ne
 */15 * * * * cd /path/to/unifi-sentinel && uv run unifi-sentinel.py diagnose --fail-on critical || notify-me
 ```
 
-Event-based warnings (above) count towards exit code 1 like any other warning. `--json` does not change any exit code.
-
-Tool errors used to exit 1 for every command; they now exit 3 so that 1 and 2 only ever mean findings.
+Event-based warnings ([Recent events](docs/diagnose.md#recent-events)) count towards exit code 1 like any other warning. `--json` does not change any exit code.
 
 ## Documentation
 
-Historical section links still work: <a id="controller-health"></a>[Controller health](docs/diagnose.md#controller-health) · <a id="port-health"></a>[Port health](docs/diagnose.md#port-health) · <a id="recent-events"></a>[Recent events](docs/diagnose.md#recent-events) · <a id="wi-fi-quality"></a>[Wi-Fi quality](docs/diagnose.md#wi-fi-quality) · <a id="configuration-thresholds-and-ignore-list"></a>[Thresholds and ignore list](docs/diagnose.md#configuration-thresholds-and-ignore-list) · <a id="json-output-and-finding-codes"></a>[JSON and finding codes](docs/diagnose.md#json-output-and-finding-codes) · <a id="notifications"></a>[Notifications](docs/notifications.md)
+These sections moved to `docs/`; links to their old README anchors still land here: <a id="controller-health"></a>[Controller health](docs/diagnose.md#controller-health) · <a id="port-health"></a>[Port health](docs/diagnose.md#port-health) · <a id="recent-events"></a>[Recent events](docs/diagnose.md#recent-events) · <a id="wi-fi-quality"></a>[Wi-Fi quality](docs/diagnose.md#wi-fi-quality) · <a id="configuration-thresholds-and-ignore-list"></a>[Thresholds and ignore list](docs/diagnose.md#configuration-thresholds-and-ignore-list) · <a id="json-output-and-finding-codes"></a>[JSON and finding codes](docs/diagnose.md#json-output-and-finding-codes) · <a id="notifications"></a>[Notifications](docs/notifications.md) ·
 <a id="the-one-post-and-why-it-is-safe"></a>[The one POST](docs/network.md#the-one-post-and-why-it-is-safe) · <a id="names-in-exports-and-output"></a>[Names in exports](docs/inventory.md#names-in-exports-and-output) · <a id="example-output"></a>[Example output](docs/examples.md#example-output) · <a id="unificlientscsv"></a>[Client CSV](docs/examples.md#unificlientscsv) · <a id="switchswitch---dencsv"></a>[Switch CSV](docs/examples.md#switchoffice-switchcsv) · <a id="api-documentation"></a>[API documentation](docs/development.md#api-documentation).
 
 - [Diagnose and audit](docs/diagnose.md): the checks, thresholds and ignore list, `--json` and the finding codes

@@ -608,7 +608,7 @@ def _add_diagnose(parser: argparse.ArgumentParser) -> None:
                         help=f"Run the checks again every SECONDS ({MIN_SECONDS} to {MAX_SECONDS}) and print only "
                              "what changed (new, worse, fixed) until Ctrl-C; not with --json or --notify")
     parser.add_argument("--notify", action="store_true",
-                        help="Send a notification (ntfy and/or a webhook, set in .env) when findings are new, "
+                        help="Send a notification (ntfy, a webhook and/or email, set in .env) when findings are new, "
                              "worse or fixed since the last notified run; this is the only thing that sends "
                              "data off this machine")
     parser.add_argument("--notify-min", choices=[INFO, WARNING, CRITICAL], default=None, metavar="SEVERITY",

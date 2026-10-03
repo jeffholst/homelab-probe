@@ -90,6 +90,7 @@ and `wep` Wi-Fi security values) the README says so.
 - **Reads run side by side** (up to 6 requests at once) and a client lookup reads far less; analysis is linear in
   the number of clients. Output and the order of warnings are the same as when reading one by one (`--parallel 1`).
 - **Minimum Python is 3.10** (3.9 is no longer supported).
+- **Errors exit with code 3** (earlier untagged versions exited 1 for every error), so `1` and `2` only ever mean findings.
 - **`.env` is read from the current directory** (or `--env-file`, or `UNIFI_SENTINEL_ENV`), never from the package
   directory or a parent directory. A tool installed with `pip install .` now finds the `.env` the README describes.
 - **Snapshot file names are in UTC** (`snapshot-YYYYMMDD-HHMMSSZ.json`); older local-time names are still read and

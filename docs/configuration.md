@@ -41,6 +41,18 @@ VERIFY_SSL=true
 - **When a read fails:** required data stops the command with exit code 3; optional data warns and the command carries on with less. The list of connected clients and devices is required everywhere. Every legacy read is optional, **including the client history (`stat/alluser`)** for `query`, `client`, `diagnose` and the other reports (they warn that offline clients and reservations are unavailable), except for the two commands whose answer would be wrong without it: `new-clients` and `snapshot`/`diff` stop with exit code 3, so they never print a misleading list or save an incomplete snapshot.
 - **`SITE_ID`:** a site name may contain spaces and non-ASCII letters, but not `/`, `\`, `?`, `#` or control characters, and at most 128 characters; it is also percent-encoded wherever it appears in a URL. **`--site NAME|REF|UUID`** (before the command, like `--timeout`) chooses the site for one run and beats `SITE_ID`: `unifi-sentinel --site Lab diagnose`. It takes the same three kinds of value and is checked the same way (a bad or empty value is a usage error, exit code 64, before any request); an unknown site stops the command with exit code 3 and lists the sites there are (`unifi-sentinel info` shows them). Every command that reads a site uses it. Saved snapshots and the notification state are not kept apart by site, so with several sites give each its own `--notify-state FILE` and `snapshot --dir DIRECTORY`.
 
+## Finding your site: `info`
+
+`info` is the quickest way to test your settings: it reads the controller's application info and its sites, nothing else, so a wrong address, key or certificate shows up here first. The sample is from the synthetic fixture:
+
+```text
+$ unifi-sentinel info
+Application: {'applicationVersion': '10.0.0'}
+Site: Default ref=default id=site-1
+```
+
+There is one `Site:` line per site, with its name, internal reference (`ref`) and UUID (`id`). Any of the three is a valid `SITE_ID` or `--site` value; for any other command an unknown one stops it with exit code 3 and lists these. Names are cleaned of control characters before they are printed. `info` has no options of its own and reads only the two Integration API endpoints (every request is a GET).
+
 ## Seeing what the tool does: `--verbose`
 
 `--verbose` (or `--debug`), given before the command, logs to **stderr** what the tool does, so the normal output on stdout is unchanged and can still be piped. It is the tool for diagnosing a slow run, a failing request or an undocumented endpoint:
