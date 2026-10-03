@@ -1,8 +1,10 @@
 """diagnose settings: thresholds and an ignore list, from an optional TOML file."""
 
+import datetime
 import difflib
 import fnmatch
 import math
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,6 +16,7 @@ else:  # Python 3.10
     import tomli as tomllib  # pragma: no cover  (only runs on Python 3.10, which CI covers)
 
 from .config import ConfigError
+from .util import printable
 
 DEFAULT_FILENAME = "unifi-sentinel.toml"
 
@@ -23,12 +26,22 @@ class IgnoreRule:
     """Suppress findings. ``code`` is a finding code (``port.slow_link``), matched exactly: it survives a change
     of wording and silences the check everywhere; ``subject`` is a case-insensitive name (``*`` and ``?``
     wildcards); ``message`` is a case-insensitive substring. Every field that is given must match. ``reason`` is
-    required so ignores stay explainable."""
+    required so ignores stay explainable. ``until`` is the last day the rule applies (inclusive); after it the
+    rule is expired and the finding comes back."""
 
     subject: str = ""
     message: str = ""
     reason: str = ""
     code: str = ""
+    until: Optional[datetime.date] = None
+
+    def expired(self, today: datetime.date) -> bool:
+        return self.until is not None and today > self.until
+
+    def describe(self) -> str:
+        """The fields that select findings, for a message (names come from the user's own file; still cleaned)."""
+        given = (("code", self.code), ("subject", self.subject), ("message", self.message))
+        return ", ".join(f'{name} "{printable(value)}"' for name, value in given if value)
 
     def matches(self, subject: str, message: str, code: str = "") -> bool:
         if self.code and self.code != code:
@@ -39,6 +52,33 @@ class IgnoreRule:
         if self.message and self.message.lower() not in message.lower():
             return False
         return True
+
+
+def expired_rules(rules: Tuple[IgnoreRule, ...],
+                  today: Optional[datetime.date] = None) -> List[Tuple[IgnoreRule, datetime.date]]:
+    """(rule, its until date) for each rule whose date has passed (``today`` is the local date unless a test
+    gives one)."""
+    today = today or datetime.date.today()
+    return [(rule, rule.until) for rule in rules if rule.until is not None and rule.expired(today)]
+
+
+_DATE_TEXT = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
+
+
+def _parse_until(value: Any, number: int) -> datetime.date:
+    """A date written as ``2026-10-10``: a TOML date or a string. Both Python versions get the same strict form
+    (3.11 would also take ``20261010`` and week dates), and a date with a time is refused."""
+    problem = f"[[ignore]] #{number}: until must be a date like 2026-10-10"
+    if isinstance(value, datetime.datetime):
+        raise ConfigError(problem + " (a date, without a time)")
+    if isinstance(value, datetime.date):
+        return value
+    if isinstance(value, str) and _DATE_TEXT.fullmatch(value):
+        try:
+            return datetime.date.fromisoformat(value)
+        except ValueError:
+            pass
+    raise ConfigError(problem)
 
 
 @dataclass(frozen=True)
@@ -165,11 +205,14 @@ def _parse(data: Dict[str, Any]) -> DiagnoseSettings:
         raise ConfigError("ignore rules must be written as [[ignore]] tables")
     rules: List[IgnoreRule] = []
     for i, raw in enumerate(raw_rules, 1):
-        if not isinstance(raw, dict) or set(raw) - {"code", "subject", "message", "reason"}:
-            raise ConfigError(f"[[ignore]] #{i}: only code, subject, message and reason are allowed")
-        if any(not isinstance(value, str) for value in raw.values()):
+        if not isinstance(raw, dict) or set(raw) - {"code", "subject", "message", "reason", "until"}:
+            raise ConfigError(f"[[ignore]] #{i}: only code, subject, message, reason and until are allowed")
+        if any(not isinstance(value, str) for key, value in raw.items() if key != "until"):
             raise ConfigError(f"[[ignore]] #{i}: code, subject, message and reason must be strings")
-        rule = IgnoreRule(**raw)
+        fields = {key: value for key, value in raw.items() if key != "until"}
+        if "until" in raw:
+            fields["until"] = _parse_until(raw["until"], i)
+        rule = IgnoreRule(**fields)
         if not (rule.code or rule.subject or rule.message):
             raise ConfigError(f"[[ignore]] #{i}: give a code, a subject and/or a message to match")
         if rule.code and rule.code not in known_codes():

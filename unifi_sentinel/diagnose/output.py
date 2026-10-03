@@ -1,5 +1,6 @@
 """Ignoring findings, exit codes and rendering (text and JSON)."""
 
+import datetime
 import json
 from collections.abc import Sequence
 from typing import Any, Dict, List, Optional, Tuple
@@ -21,9 +22,12 @@ from .model import (
 
 
 def apply_ignores(
-    findings: List[Finding], rules: Tuple[IgnoreRule, ...]
+    findings: List[Finding], rules: Tuple[IgnoreRule, ...], today: Optional[datetime.date] = None
 ) -> Tuple[List[Finding], List[Tuple[Finding, IgnoreRule]]]:
-    """Split findings into (kept, [(ignored finding, the rule that matched)])."""
+    """Split findings into (kept, [(ignored finding, the rule that matched)]). A rule whose ``until`` date has
+    passed (``today`` is the local date unless a test gives one) no longer matches, so its findings are kept."""
+    today = today or datetime.date.today()
+    rules = tuple(rule for rule in rules if not rule.expired(today))
     kept: List[Finding] = []
     ignored: List[Tuple[Finding, IgnoreRule]] = []
     for f in findings:
@@ -72,9 +76,10 @@ def format_findings(findings: List[Finding], emoji: bool = True, ignored: int = 
 
 
 def format_ignored(ignored: List[Tuple[Finding, IgnoreRule]]) -> str:
-    """The findings the ignore list suppressed, with each rule's reason."""
+    """The findings the ignore list suppressed, with each rule's reason (and the date a temporary rule ends)."""
     lines = [f"  {printable(f.subject)}: {printable(f.message)}  "
-             f"({'code: ' + printable(f.code) + '; ' if f.code else ''}ignored: {printable(r.reason)})"
+             f"({'code: ' + printable(f.code) + '; ' if f.code else ''}"
+             f"ignored{' until ' + r.until.isoformat() if r.until else ''}: {printable(r.reason)})"
              for f, r in ignored]
     return f"Ignored ({len(ignored)}):\n" + "\n".join(lines)
 
@@ -85,8 +90,8 @@ JSON_VERSION = 1
 def findings_json(findings: List[Finding], ignored: List[Tuple[Finding, IgnoreRule]],
                   show_ignored: bool = False, areas: Optional[Sequence[str]] = None) -> str:
     """``diagnose --json``: the findings with their stable codes, a severity summary and the
-    number the ignore list suppressed. The ``ignored`` list (each with its rule's reason) is
-    only included with ``show_ignored``, as in the text output. Names are raw here, which is
+    number the ignore list suppressed. The ``ignored`` list (each with its rule's reason, and its ``until`` date
+    if it has one) is only included with ``show_ignored``, as in the text output. Names are raw here, which is
     safe: JSON escapes control characters itself. ``areas`` are the areas of checks that ran (all of them by
     default), so a consumer can tell "nothing found" from "not looked at"."""
     document: Dict[str, Any] = {
@@ -97,7 +102,9 @@ def findings_json(findings: List[Finding], ignored: List[Tuple[Finding, IgnoreRu
         "findings": [f.to_dict() for f in findings],
     }
     if show_ignored:
-        document["ignored"] = [{**f.to_dict(), "reason": rule.reason} for f, rule in ignored]
+        document["ignored"] = [{**f.to_dict(), "reason": rule.reason,
+                                **({"until": rule.until.isoformat()} if rule.until else {})}
+                               for f, rule in ignored]
     return json.dumps(document, indent=2)
 
 

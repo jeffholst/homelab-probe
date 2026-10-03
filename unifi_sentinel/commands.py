@@ -66,7 +66,7 @@ from .notify import (
     send,
 )
 from .query import query_rows, render, render_csv
-from .settings import DiagnoseSettings
+from .settings import DiagnoseSettings, expired_rules
 from .snapshot import EventQuery, Needs, collect_event_snapshot, collect_snapshot, extend_snapshot, warn
 from .topology import build_topology
 from .topology import render_text as render_topology
@@ -549,9 +549,18 @@ def _add_audit(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--json", action="store_true", help="Print the findings as JSON (with a stable code each)")
 
 
+def _warn_expired_rules(settings: DiagnoseSettings) -> None:
+    """One stderr line per ignore rule whose ``until`` date has passed: its findings are back, and the rule is
+    stale. Only a warning: it never changes an exit code or what is on stdout."""
+    for rule, until in expired_rules(settings.ignore):
+        say(f"Warning: the ignore rule for {rule.describe()} expired on {until.isoformat()} and no longer "
+            f"applies; delete it or give it a later until date ({printable(rule.reason)})", file=sys.stderr)
+
+
 def _run_audit(ctx: Context) -> int:
     args = ctx.args
     settings = ctx.settings or DiagnoseSettings()
+    _warn_expired_rules(settings)
     snap = collect_snapshot(ctx.client, ctx.config.site,
                             Needs(offline=True, wlans=True, legacy_devices=False, device_extras=False))
     findings, ignored = apply_ignores(audit(snap), settings.ignore)
@@ -772,6 +781,7 @@ def _watch_diagnose(ctx: Context, settings: DiagnoseSettings, first: List[Any], 
 def _run_diagnose(ctx: Context) -> int:
     args = ctx.args
     settings = ctx.settings or DiagnoseSettings()          # loaded for this command, so never None
+    _warn_expired_rules(settings)                          # once, also before a --watch loop
     areas = args.areas
     findings, ignored, complete = _diagnose_once(ctx, settings)
     if args.json:

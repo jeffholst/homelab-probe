@@ -42,7 +42,7 @@ def test_partial_config_keeps_other_defaults(tmp_path):
 def test_the_shipped_example_config_loads():
     s = load_settings(ROOT / "unifi-sentinel.example.toml")
     assert (s.resource_warn_pct, s.resource_critical_pct, s.slow_link_mbps) == (90, 98, 100)
-    assert [r.subject for r in s.ignore] == ["Garage AP", "* port 2"]
+    assert [r.subject for r in s.ignore] == ["Garage AP", "* port 2", "Guest laptop"]
     assert all(r.reason for r in s.ignore)
 
 
@@ -60,7 +60,7 @@ def test_the_shipped_example_config_loads():
     ('[[ignore]]\nreason = "x"\n', "a code, a subject and/or a message"),
     ('[[ignore]]\nsubject = "x"\n', "a reason is required"),
     ('[[ignore]]\nsubject = "x"\nreason = "  "\n', "a reason is required"),
-    ('[[ignore]]\nsubject = "x"\nreason = "y"\nextra = 1\n', "only code, subject, message and reason"),
+    ('[[ignore]]\nsubject = "x"\nreason = "y"\nextra = 1\n', "only code, subject, message, reason and until"),
     ('[[ignore]]\nsubject = 1\nreason = "x"\n', "must be strings"),
     ('[[ignore]]\nmessage = true\nreason = "x"\n', "must be strings"),
     ('[[ignore]]\nsubject = "x"\nreason = []\n', "must be strings"),
