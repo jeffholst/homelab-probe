@@ -148,8 +148,7 @@ def problems(doc):
             options = attributes.get("options") or []
             if not options or not all(option.get("label") for option in options):
                 found.append(f"item {index}: checkboxes need options with labels")
-        else:
-            ids.append(item.get("id"))
+        ids.append(item.get("id"))
         if item.get("id") is not None and not re.fullmatch(r"[A-Za-z0-9_-]+", str(item["id"])):
             found.append(f"item {index}: bad id")
     named = [i for i in ids if i]
