@@ -1,6 +1,6 @@
 # Inventory, queries and exports
 
-The commands that list and export what is on the network: `query`, `export`, `snapshot` and `diff`, `new-clients`.
+The commands that list and export what is on the network: `query` (devices, clients, reservations, switch ports, networks and Wi-Fi networks), `export`, `snapshot` and `diff`, `new-clients`.
 
 ## Devices
 
@@ -77,6 +77,71 @@ It is a hint, not proof: virtual machines, containers, bridges, VPNs and some Io
 `query reservations` lists every enabled fixed IP reservation, including clients that are currently offline. Columns: Name, MAC Address, Reserved IP, Network, VLAN, Current IP, Status, Last Seen. It reads the legacy `stat/alluser` and `rest/networkconf` endpoints, since the Integration API does not expose reservations. Only clients with the reservation enabled are listed; disabled reservations keep a stale IP on the controller and are ignored.
 
 **`--offline`** keeps only the reservations whose client is not connected and was last seen at least `reserved_offline_warn_days` ago (default 1 day, from `./unifi-sentinel.toml` or `--config FILE`), or has no last-seen time, and adds an **Offline For** column (`6d`, `30h`, or `never seen`). It is the same rule the `diagnose` check uses, without severities and without the ignore list, so it shows the whole set. It only applies to `query reservations`; `--config` is only valid together with `--offline`.
+
+## Networks
+
+`query networks` lists the networks the controller serves, from the legacy `rest/networkconf`:
+
+```text
+uv run unifi-sentinel.py query networks
+Name           Purpose          VLAN  Subnet        Gateway    DHCP    DHCP Range                 Clients
+-------------  ---------------  ----  ------------  ---------  ------  -------------------------  -------
+Main           corporate        1     10.0.0.0/24   10.0.0.1   Server  10.0.0.100 - 10.0.0.200    1
+IoT            corporate        20    10.0.20.0/24  10.0.20.1  Server  10.0.20.100 - 10.0.20.200  0
+Internet 1     wan                                                                                0
+Remote Access  remote-user-vpn        10.0.99.0/24  10.0.99.1                                     0
+
+4 row(s)
+```
+
+- **Name** and **Purpose** (as the controller names it: `corporate`, `wan`, `remote-user-vpn`, ...).
+- **VLAN**: the tag when VLANs are on, `1` (the default untagged VLAN) when they are off, and blank for WAN and VPN networks, which do not say.
+- **Subnet** and **Gateway**: the network address with its prefix, and the gateway's own address on it (the controller stores them as one `ip_subnet` value). Blank for a WAN network; text that is not an address is shown as it came.
+- **DHCP** and **DHCP Range**: `Server` with the dynamic range (the range is blank if the controller serves DHCP but has no valid range), `Relay`, `Off`, or blank when the record says nothing (WAN and VPN networks).
+- **Clients**: the connected clients whose `network_id` is this network's id, of every kind. A client with no or an unknown network is counted nowhere. The cell is blank, not `0`, when the client list could not be read.
+
+Networks keep the controller's order. `--json` and `--csv` give the same columns (a number is a number, blank is `""`), and `-s TEXT` matches any cell. The network list is the whole answer, so if it cannot be read the command stops with exit code 3 and the warning names the endpoint, instead of printing an empty table. It reads only `rest/networkconf` and the connected clients (`stat/sta`), no device details.
+
+## Wi-Fi networks
+
+`query wlans` lists the Wi-Fi networks (SSIDs), from the legacy `rest/wlanconf`, with the VLAN of the network each one is on:
+
+```text
+uv run unifi-sentinel.py query wlans
+Name      Enabled  Security   Bands           Network  VLAN  Guest  Client Isolation  Hidden  Clients
+--------  -------  ---------  --------------  -------  ----  -----  ----------------  ------  -------
+HomeNet   Yes      WPA2/WPA3  2.4 GHz, 5 GHz  Main     1     No     No                No      1
+GuestNet  Yes      WPA2       5 GHz           IoT      20    Yes    No                No      0
+Lobby     Yes      Open                       Main     1     No     No                No      0
+OldCam    Yes      WEP                        Main     1     No     No                No      0
+Retired   No       Open                       Main     1     No     No                No      0
+Sensors   Yes      WPA3       5 GHz, 6 GHz    IoT      20    No     Yes               Yes     0
+
+6 row(s)
+```
+
+- **Name** is the SSID. **Enabled**, **Guest**, **Client Isolation** and **Hidden** are `Yes` or `No` (a flag the controller does not send reads as `No`, and a missing `enabled` as `Yes`, so a network is never hidden by a missing field).
+- **Security** is `Open`, `WEP`, `WPA`, `WPA2`, `WPA2/WPA3` (the mixed mode) or `WPA3`. A value this tool has not seen is shown as the controller wrote it, never guessed.
+- **Bands** is for example `2.4 GHz, 5 GHz`; blank when the network does not say.
+- **Network** and **VLAN** come from the network the SSID is attached to, joined by id (blank if the network list could not be read, with a warning).
+- **Clients** counts the connected clients that are on the SSID: those with an SSID whose `wlanconf_id` is this network's id, or, when a client has no id, whose SSID is the network's name. A client with no SSID is not counted, whatever else its record says: on the controller checked, a few clients that are not wired carry no SSID, access point or signal at all, so by their own record they are not on Wi-Fi. Blank when the client list could not be read.
+
+**The passphrase is never read.** The controller keeps it in the same record, and the code only looks at the fields above, so it cannot reach a table, `--json`, `--csv`, `--verbose` output, a search or an error message (a test makes the record raise if anything else is touched). `--json`, `--csv` and `-s` work as for networks. A site with no Wi-Fi network prints `0 row(s)`; if the settings cannot be read the command stops with exit code 3, not an empty table.
+
+## Clients on a network, SSID or access point
+
+`query clients` takes three filters for where a **connected** client is attached. Each is a case-insensitive substring and they combine with AND, and with `-s`:
+
+```bash
+uv run unifi-sentinel.py query clients --ssid guest              # on a Wi-Fi network whose name contains "guest"
+uv run unifi-sentinel.py query clients --network iot --ap garage   # on the IoT network and on the Garage AP
+```
+
+- `--network NAME`: the client's network. The name comes from the client's `network_id` (so a renamed network matches its new name), or from the client's own `network` text when the network list could not be read.
+- `--ssid NAME`: the SSID the client is on. Wired clients have none.
+- `--ap NAME`: the name of the access point the client is on (found by the access point's MAC address). Wired clients have none.
+
+A row with no connected-client record, an offline client from `--include-offline`, has no attachment and is dropped when any filter is used. A filter with no match prints `0 row(s)`; if the connected-client details (`stat/sta`) cannot be read the command stops with exit code 3 instead of filtering everything away. The filters are only valid with `query clients`, and an empty value is a usage error. `--network` also reads the network configuration (`rest/networkconf`); the others read nothing extra.
 
 ## Output files
 

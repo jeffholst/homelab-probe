@@ -13,7 +13,7 @@ UniFi Sentinel is a fork of [ericfitz/unifi-clients-export](https://github.com/e
 | Command | Description | |
 | ------- | ----------- | --- |
 | `export` | Export connected clients, UniFi devices and switch ports to CSV | [details](docs/inventory.md#output-files) |
-| `query` | List and filter devices, clients, DHCP reservations and switch ports (table, `--json` or `--csv`) | [details](docs/inventory.md#devices) |
+| `query` | List and filter devices, clients, DHCP reservations, switch ports, networks and Wi-Fi networks (table, `--json` or `--csv`) | [details](docs/inventory.md#devices) |
 | `snapshot` | Save the current inventory to a local JSON file, to compare later | [details](docs/inventory.md#snapshots-and-diff) |
 | `diff` | What changed: compare saved snapshots, or a snapshot against the live network | [details](docs/inventory.md#snapshots-and-diff) |
 | `topology` | Draw the uplink tree from the gateway down: ports, link speeds, client counts and problems | [details](docs/network.md#topology) |
@@ -30,7 +30,7 @@ UniFi Sentinel is a fork of [ericfitz/unifi-clients-export](https://github.com/e
 
 ## Features
 
-- **Inventory and exports**: clients, UniFi devices and switch ports as tables, JSON or CSV, with DHCP reservations, client groups, randomized-MAC detection, and snapshots that show what changed
+- **Inventory and exports**: clients, UniFi devices, switch ports, networks and Wi-Fi networks as tables, JSON or CSV, with DHCP reservations, client groups, randomized-MAC detection, and snapshots that show what changed
 - **Troubleshooting**: `diagnose` health checks with exit codes and stable finding codes (run only some with `--only`/`--skip`, or `--watch` to see what changed), `client` for one device, `topology`, `wifi`, `wan`, `events` and `firewall` views, and `audit` for risky settings
 - **Notifications**: ntfy, a webhook or email when a problem is new, worse or fixed, opt-in, with redaction
 - **Official API first**, read-only (every request is a GET, apart from one read-only event-log query), safe output for names and CSV cells, credentials kept in a `.env` file, `--site` to pick a site, a JSON Schema for every `--json` output and shell completion
@@ -111,6 +111,7 @@ uv run unifi-sentinel.py --site Lab diagnose --no-events      # another site for
 uv run unifi-sentinel.py export -o ./out --include-offline    # CSV files (long form: --output-dir); also previously seen clients
 uv run unifi-sentinel.py query clients -s printer --json      # filter (long form: --search), as JSON; --csv for a spreadsheet
 uv run unifi-sentinel.py query clients --include-offline      # also previously seen clients
+uv run unifi-sentinel.py query wlans                          # Wi-Fi networks (also: query networks; query clients --ssid guest)
 uv run unifi-sentinel.py snapshot                             # save the inventory to ./snapshots/
 uv run unifi-sentinel.py diff                                 # what changed since the newest snapshot?
 uv run unifi-sentinel.py topology --clients                   # how the gateway, switches and APs are wired

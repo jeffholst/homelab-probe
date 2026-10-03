@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/jeffholst/unifi-sentinel/main/docs/schemas/query-wlans.v1.schema.json",
+  "title": "query wlans",
+  "description": "Output of `unifi-sentinel query wlans --json`: one object per Wi-Fi network (SSID), in the controller's order. The passphrase is never part of it.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "Name": {
+        "type": "string",
+        "description": "The SSID."
+      },
+      "Enabled": {
+        "enum": [
+          "Yes",
+          "No"
+        ]
+      },
+      "Security": {
+        "type": "string",
+        "description": "Open, WEP, WPA, WPA2, WPA2/WPA3 or WPA3; any other value is shown as the controller wrote it."
+      },
+      "Bands": {
+        "type": "string",
+        "description": "For example '2.4 GHz, 5 GHz', or ''."
+      },
+      "Network": {
+        "type": "string",
+        "description": "The network the SSID is on, or '' when it cannot be resolved."
+      },
+      "VLAN": {
+        "type": [
+          "number",
+          "string"
+        ],
+        "description": "The VLAN of that network, or ''."
+      },
+      "Guest": {
+        "enum": [
+          "Yes",
+          "No"
+        ]
+      },
+      "Client Isolation": {
+        "enum": [
+          "Yes",
+          "No"
+        ]
+      },
+      "Hidden": {
+        "enum": [
+          "Yes",
+          "No"
+        ]
+      },
+      "Clients": {
+        "type": [
+          "number",
+          "string"
+        ],
+        "description": "Connected clients on the SSID; '' when the client list could not be read."
+      }
+    },
+    "required": [
+      "Bands",
+      "Client Isolation",
+      "Clients",
+      "Enabled",
+      "Guest",
+      "Hidden",
+      "Name",
+      "Network",
+      "Security",
+      "VLAN"
+    ]
+  }
+}

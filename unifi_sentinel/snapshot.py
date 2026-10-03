@@ -181,7 +181,8 @@ class Needs:
 
     ``offline``, ``reservations`` and ``groups`` all need the legacy ``stat/alluser`` list;
     ``reservations`` also reads the network configuration (names, VLANs) and ``groups`` the client
-    group definitions. ``firewall`` reads the zone-based firewall (policies, zones, zone matrix) and the
+    group definitions. ``networks`` reads the network configuration (``rest/networkconf``) alone.
+    ``firewall`` reads the zone-based firewall (policies, zones, zone matrix) and the
     port forwards, ``wlans`` the Wi-Fi network settings (``rest/wlanconf``). ``health`` is ``stat/health``
     (for ``diagnose`` and ``wan``), ``speedtests`` the speedtest history, ``neighbors`` the neighboring
     Wi-Fi networks, ``events`` the event log (None: not read). ``devices`` and ``clients`` can be deferred
@@ -204,6 +205,7 @@ class Needs:
     neighbors: bool = False
     firewall: bool = False
     wlans: bool = False
+    networks: bool = False
     events: Optional[EventQuery] = None
     users_required: bool = False
     devices: Optional[bool] = None
@@ -318,7 +320,7 @@ def _submit_extras(reads: "_Reads", needs: Needs, client: UniFiClient, site_ref:
             reads.submit("alluser", lambda notes: client.legacy_stat(site_ref, "alluser"))
         else:
             reads.submit("alluser", lambda notes: _legacy_or_empty(client, site_ref, "alluser", notes))
-    if needs.reservations:
+    if needs.reservations or needs.networks:
         reads.submit("networks", lambda notes: _legacy_rest_or_empty(client, site_ref, "networkconf", notes))
     if needs.health:
         reads.submit("health", lambda notes: _legacy_health_or_empty(client, site_ref, notes))
@@ -328,7 +330,7 @@ def _submit_extras(reads: "_Reads", needs: Needs, client: UniFiClient, site_ref:
         reads.submit("groups", lambda notes: _legacy_v2_or_empty(client, site_ref, "network-members-groups", notes))
     if needs.wlans:
         reads.submit("wlans", partial(_optional_part, lambda: client.legacy_rest(site_ref, "wlanconf"),
-                                      "Wi-Fi network settings", "the Wi-Fi checks were skipped"))
+                                      "Wi-Fi network settings", "whatever needs them was skipped"))
     if needs.firewall:
         classic = "this controller may use the classic firewall, which is not shown"
         for name, what, impact, read in (
@@ -372,7 +374,7 @@ def _apply_extras(snap: Snapshot, reads: "_Reads", needs: Needs, users: bool) ->
         snap.neighbors, snap.neighbors_available = reads.result("neighbors")
     if users and (needs.groups or needs.offline or needs.reservations):
         snap.all_users = reads.result("alluser")
-    if needs.reservations:
+    if needs.reservations or needs.networks:
         snap.networks = reads.result("networks")
     if needs.health:
         snap.health = reads.result("health")

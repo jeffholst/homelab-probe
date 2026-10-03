@@ -189,6 +189,10 @@ DOCUMENTS = {
                                        (["query", "reservations", "--json"], sparse_reservations)),
     "query-ports": cli_variants((["query", "ports", "--json"], None), (["query", "ports", "--down", "--json"], None),
                                 (["query", "ports", "--json"], sparse_ports)),
+    "query-networks": cli_variants((["query", "networks", "--json"], None), (["query", "networks", "-s", "iot", "--json"], None),
+                                   (["query", "networks", "--json"], None, fail_endpoints("stat/sta"))),
+    "query-wlans": cli_variants((["query", "wlans", "--json"], None), (["query", "wlans", "-s", "guest", "--json"], None),
+                                (["query", "wlans", "--json"], None, fail_endpoints("stat/sta"))),
     "new-clients": cli_variants((["new-clients", "--json"], None), (["new-clients", "-s", "printer", "--json"], None)),
     "events": cli_variants((["events", "--json"], None), (["events", "--client", "phone", "--json"], None),
                            (["events", "--since", "7d", "--severity", "high", "--json"], None)),
@@ -275,6 +279,9 @@ def test_degraded_and_sparse_variants_exercise_schema_fallbacks():
     assert any(row["Port Index"] == "" for row in ports)
     assert any(row["Port Index"] is None for row in ports)
 
+    for name in ("query-networks", "query-wlans"):       # the client list could not be read: counts are blank, not 0
+        assert all(row["Clients"] == "" for row in DOCUMENTS[name][-1]())
+
     reservations = DOCUMENTS["query-reservations"][-1]()
     assert any(row["VLAN"] == "" for row in reservations)
     assert any(row["VLAN"] is None for row in reservations)
@@ -344,7 +351,8 @@ def test_the_snapshot_file_and_the_webhook_payload_are_versioned_too():
 
 
 def test_the_plain_lists_have_no_version_field_and_say_so_in_their_schemas():
-    for name in ("query-all", "query-devices", "query-clients", "query-reservations", "query-ports", "new-clients", "events"):
+    for name in ("query-all", "query-devices", "query-clients", "query-reservations", "query-ports", "query-networks",
+                 "query-wlans", "new-clients", "events"):
         assert load(name)["type"] == "array" and "version" not in load(name).get("properties", {})
 
 

@@ -1,0 +1,10 @@
+Name  Enabled  Security  Bands  Network  VLAN  Guest  Client Isolation  Hidden  Clients
+---  ---  ---  ---  ---  ---  ---  ---  ---  ---
+HomeNet  Yes  WPA2/WPA3  2.4 GHz, 5 GHz  Main  1  No  No  No  1
+GuestNet  Yes  WPA2  5 GHz  IoT  20  Yes  No  No  0
+Lobby  Yes  Open  Main  1  No  No  No  0
+OldCam  Yes  WEP  Main  1  No  No  No  0
+Retired  No  Open  Main  1  No  No  No  0
+Sensors  Yes  WPA3  5 GHz, 6 GHz  IoT  20  No  Yes  Yes  0
+
+6 row(s)

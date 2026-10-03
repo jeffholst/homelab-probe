@@ -121,7 +121,8 @@ def test_format_findings_cannot_forge_a_finding_line():
 COMMANDS = [
     ["info"],
     ["query", "devices"], ["query", "clients", "--include-offline"], ["query", "ports"],
-    ["query", "reservations"],
+    ["query", "reservations"], ["query", "networks"], ["query", "wlans"],
+    ["query", "networks", "--csv"], ["query", "wlans", "--csv"],
     ["query", "clients", "--include-offline", "--csv"], ["query", "devices", "--csv"], ["query", "ports", "--csv"],
     ["query", "reservations", "--csv"],
     ["new-clients"],
@@ -160,7 +161,7 @@ def test_text_output_is_clean_with_hostile_names(fake_client, monkeypatch, capsy
     captured = capsys.readouterr()
     assert_clean(captured.out + captured.err, argv)
     assert captured.out.strip(), f"{argv} printed nothing"
-    shown = {"query devices": "Office Switch", "query clients": "desktop", "query ports": "Office",
+    shown = {"query devices": "Office Switch", "query clients": "desktop", "query ports": "Office", "query networks": "Main", "query wlans": "HomeNet",
              "new-clients": "old-printer", "topology": "Office Switch", "client": "desktop",
              "wifi": "Office AP", "events": "phone", "firewall": "Open Inbound", "audit": "Lobby"}.get(" ".join(argv[:2]) if argv[0] == "query" else argv[0])
     if shown:

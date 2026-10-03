@@ -39,6 +39,8 @@ SAMPLES = [
     ("Client view", "client_desktop"),
     ("diagnose", "diagnose"),
     ("new-clients", "new_clients"),
+    ("Networks", "query_networks"),
+    ("Wi-Fi networks", "query_wlans"),
     ("Event history", "events"),
 ]
 CSV_SAMPLES = [
@@ -47,7 +49,8 @@ CSV_SAMPLES = [
 ]
 COMMAND_DOC_SECTIONS = {
     "export": ("Output files",),
-    "query": ("Devices", "Switch ports", "DHCP reservations", "Randomized MAC addresses"),
+    "query": ("Devices", "Switch ports", "DHCP reservations", "Randomized MAC addresses", "Networks", "Wi-Fi networks",
+              "Clients on a network, SSID or access point"),
     "snapshot": ("Snapshots and diff",),
     "diff": ("Snapshots and diff",),
     "topology": ("Topology",),

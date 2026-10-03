@@ -66,7 +66,7 @@ Device - Dream Machine,Gateway,AA:00:00:00:00:01,10.0.0.1,UCG Max,Wired,,,2026-0
 Device - Switch,Office Switch,AA:00:00:00:00:02,10.0.0.2,USW-Lite-8-PoE,Wired,Gateway,2,2026-01-01 10:00:00,Online
 Device - Access Point,Office AP,AA:00:00:00:00:03,10.0.0.3,U7 Pro,Wired,Office Switch,2,2026-01-01 10:00:00,Online
 Device - Access Point,Garage AP,AA:00:00:00:00:04,10.0.0.4,U6 Pro,Wired,Office Switch,5,,Offline
-Client,old-printer,BB:00:00:00:00:03,10.0.0.50,,Wired,Office Switch,6,2026-10-02 17:28:19,Offline
+Client,old-printer,BB:00:00:00:00:03,10.0.0.50,,Wired,Office Switch,6,2026-10-03 16:52:17,Offline
 Client,old-tablet,BB:00:00:00:00:04,10.0.0.51,,Wireless,,,2025-12-06 05:46:40,Offline
 ```
 
@@ -97,7 +97,7 @@ Sample from synthetic data with `diagnose --no-events` (text labels are used whe
 Name         MAC Address        IP Address  Vendor                Connection Type  Where                        First Seen           Last Seen            Status   Private MAC
 -----------  -----------------  ----------  --------------------  ---------------  ---------------------------  -------------------  -------------------  -------  -----------
 old-tablet   BB:00:00:00:00:04  10.0.0.51                         Wireless                                      2025-06-15 15:06:40  2025-12-06 05:46:40  Offline
-old-printer  BB:00:00:00:00:03  10.0.0.50   Example Printers Inc  Wired            Wired, Office Switch port 6  2023-11-14 22:13:20  2026-10-02 17:27:59  Offline
+old-printer  BB:00:00:00:00:03  10.0.0.50   Example Printers Inc  Wired            Wired, Office Switch port 6  2023-11-14 22:13:20  2026-10-03 16:52:17  Offline
 
 2 client(s) in no group
 ```

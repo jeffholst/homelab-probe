@@ -231,7 +231,7 @@ def _run_export(ctx: Context) -> int:
 
 def _add_query(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("kind", nargs="?", default="all",
-                        choices=["all", "devices", "clients", "reservations", "ports"])
+                        choices=["all", "devices", "clients", "reservations", "ports", "networks", "wlans"])
     parser.add_argument("-s", "--search", default="",
                         help="Case-insensitive substring match on any field")
     parser.add_argument("--include-offline", action="store_true",
@@ -245,6 +245,12 @@ def _add_query(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--down", action="store_true", help="ports only: only ports that are down")
     parser.add_argument("--errors", action="store_true",
                         help="ports only: only ports with rx/tx errors")
+    parser.add_argument("--network", metavar="NAME",
+                        help="clients only: connected clients on a network (name, case-insensitive substring)")
+    parser.add_argument("--ssid", metavar="NAME",
+                        help="clients only: connected clients on a Wi-Fi network (SSID, case-insensitive substring)")
+    parser.add_argument("--ap", metavar="NAME",
+                        help="clients only: connected clients on an access point (name, case-insensitive substring)")
     parser.add_argument("--offline", action="store_true",
                         help="reservations only: only clients offline long enough for `diagnose` to report "
                              "them (reserved_offline_warn_days), or never seen")
@@ -258,6 +264,12 @@ def _check_query(parser: argparse.ArgumentParser, args: argparse.Namespace) -> N
         parser.error("--json and --csv cannot be combined")
     if args.kind != "ports" and (args.switch is not None or args.down or args.errors):
         parser.error("--switch, --down and --errors only apply to 'query ports'")
+    filters = {"--network": args.network, "--ssid": args.ssid, "--ap": args.ap}
+    if args.kind != "clients" and any(value is not None for value in filters.values()):
+        parser.error("--network, --ssid and --ap only apply to 'query clients'")
+    for flag, value in filters.items():
+        if value is not None and not value.strip():
+            parser.error(f"{flag} needs a name (an empty one would match everything)")
     if args.kind != "reservations" and (args.offline or args.config is not None):
         parser.error("--offline and --config only apply to 'query reservations'")
     if args.config is not None and not args.offline:
@@ -266,12 +278,26 @@ def _check_query(parser: argparse.ArgumentParser, args: argparse.Namespace) -> N
 
 def _run_query(ctx: Context) -> int:
     args = ctx.args
-    snap = collect_snapshot(
-        ctx.client, ctx.config.site,
-        Needs(offline=args.include_offline, reservations=args.kind == "reservations"))
+    if args.kind in ("networks", "wlans"):             # only the configuration, and the connected clients to count
+        needs = Needs(networks=True, wlans=args.kind == "wlans", devices=False, clients=False,
+                      device_extras=False, legacy_devices=False)
+    else:
+        needs = Needs(offline=args.include_offline, reservations=args.kind == "reservations",
+                      networks=args.network is not None)
+    snap = collect_snapshot(ctx.client, ctx.config.site, needs)
+    # The whole answer is that data, so an empty list from a failed read must not look like "there are none".
+    if args.kind == "networks" and not snap.networks:
+        raise UniFiAPIError("no networks were returned (legacy rest/networkconf could not be read, or is empty)")
+    if args.kind == "wlans" and snap.wlans is None:
+        raise UniFiAPIError("the Wi-Fi networks could not be read (legacy rest/wlanconf); see the warning above")
+    filtering = any(value is not None for value in (args.network, args.ssid, args.ap))
+    if filtering and snap.clients and not snap.legacy_clients:
+        raise UniFiAPIError("--network, --ssid and --ap need the connected-client details (legacy stat/sta), "
+                            "which could not be read; see the warning above")
     offline_days = ctx.settings.reserved_offline_warn_days if ctx.settings is not None and args.offline else None
     rows = query_rows(snap, args.kind, args.search, args.include_offline,
-                      args.switch or "", args.down, args.errors, offline_days)
+                      args.switch or "", args.down, args.errors, offline_days,
+                      args.network or "", args.ssid or "", args.ap or "")
     say(render_csv(rows, args.kind, args.offline) if args.csv else render(rows, args.json, args.kind, args.offline))
     return 0
 
@@ -814,7 +840,8 @@ def _always(args: argparse.Namespace) -> bool:
 
 COMMANDS: List[Command] = [
     Command("export", "Export clients, devices and switch ports to CSV", _add_export, _run_export),
-    Command("query", "List and filter devices, clients, reservations and switch ports", _add_query, _run_query,
+    Command("query", "List and filter devices, clients, reservations, switch ports, networks and Wi-Fi networks",
+            _add_query, _run_query,
             validate=_check_query, wants_settings=lambda args: bool(args.offline)),
     Command("new-clients", "List clients that are in no client group (all known clients)", _add_new_clients,
             _run_new_clients),

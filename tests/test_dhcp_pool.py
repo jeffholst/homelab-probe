@@ -77,7 +77,7 @@ def snapshot(fake_client, *, reservations=(), network=None, clients=()):
 
 def test_the_fixture_has_pools_and_no_reservation_inside_one(fake_client):
     snap = collect_snapshot(fake_client, "default", Needs(reservations=True))
-    assert [dhcp_pool(n)[0] for n in snap.networks] == ["ok", "ok"]
+    assert [dhcp_pool(n)[0] for n in snap.networks] == ["ok", "ok", "off", "off"]
     assert _pool_findings(snap) == []                                  # reservations are .10 and .50, pool is .100-.200
 
 

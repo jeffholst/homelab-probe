@@ -4,7 +4,7 @@
 - **Switch port mapping**: per-switch CSVs with port status, speed, duplex, PoE, connected client or device, and traffic counters
 - **Network topology**: which switch and port each client or device is attached to
 - **DHCP reservations**: list every fixed IP reservation, including offline clients, with network and VLAN
-- **Querying**: list and filter devices, clients, DHCP reservations and switch ports from the command line (table, JSON or CSV for a spreadsheet)
+- **Querying**: list and filter devices, clients, DHCP reservations, switch ports, networks (VLANs, subnets, DHCP) and Wi-Fi networks (security, bands, VLAN, client counts) from the command line (table, JSON or CSV for a spreadsheet), and find the clients on one network, SSID or access point (`query clients --network`, `--ssid`, `--ap`)
 - **Snapshots and diff**: save the inventory to a file and see exactly what changed since: new or missing devices and clients, IP, firmware, state, location, reservation and group changes
 - **Topology**: the uplink tree from the gateway down, with the port each device plugs into, negotiated link speeds (and links below what both ends support), client counts, and offline or flagged devices
 - **Wireless report**: each AP's radios (channel, width, power, clients, utilization, retries) and a channel plan from the neighboring networks your APs hear, with overlap-aware counts and plain observations
