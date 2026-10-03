@@ -1,0 +1,74 @@
+name: Bug report
+description: Something is wrong, missing or misleading in the output or the behavior
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. **This tool reads real data about your network. Remove all of it before you submit:**
+        MAC addresses, IP addresses, host names, device and client names, SSIDs, site IDs, your controller's address,
+        and above all your API key or `.env` file. Replace each with a made-up value (`aa:bb:cc:dd:ee:ff`,
+        `192.0.2.10`, `Office Switch`). A security problem does not belong here: see
+        [SECURITY.md](https://github.com/jeffholst/unifi-sentinel/blob/main/SECURITY.md).
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened, and what did you expect?
+      description: One or two sentences each. For a wrong finding, say what the controller shows instead.
+    validations:
+      required: true
+  - type: input
+    id: command
+    attributes:
+      label: The command and options
+      description: Exactly what you ran, for example `unifi-sentinel diagnose --only ports` (not the contents of `.env`).
+      placeholder: unifi-sentinel diagnose --only ports
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The output of `unifi-sentinel --version`.
+      placeholder: unifi-sentinel 0.2.0
+    validations:
+      required: true
+  - type: input
+    id: controller
+    attributes:
+      label: UniFi Network version and hardware
+      description: The Network application version (`unifi-sentinel info` shows it) and the models involved (gateway, switch, access point). Only 10.6.106 has been tested, so this matters.
+      placeholder: Network 10.6.106, a gateway, a 24-port switch and two access points
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How you run it
+      options:
+        - uv run unifi-sentinel.py (from a clone)
+        - pip install (from a clone or a tag)
+        - uv tool install
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version and operating system
+      placeholder: Python 3.12 on macOS 15
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+      description: The output or error, and for a slow run or an unexpected answer the same command with `--verbose` before it. It goes to stderr and never contains the API key, but it does contain addresses and IDs, so redact it.
+      render: text
+  - type: checkboxes
+    id: redacted
+    attributes:
+      label: Before you submit
+      options:
+        - label: I removed or replaced every real MAC address, IP address, host name, name, SSID, site ID, controller address and API key from this report.
+          required: true
+        - label: This is not a security problem (those go through SECURITY.md).
+          required: true

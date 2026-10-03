@@ -8,7 +8,7 @@ honest: the README stays short, every link resolves, every old anchor still exis
 import re
 
 import pytest
-from docs_support import DOCS, README, ROOT, anchors, doc_paths, duplicate_headings, headings
+from docs_support import DOCS, README, ROOT, anchors, doc_paths, duplicate_headings, headings, local_links
 
 from unifi_sentinel.commands import COMMANDS
 
@@ -104,22 +104,6 @@ def test_every_command_has_an_example_in_the_readme_itself():
 
 
 # -- links and anchors -------------------------------------------------------------------------------------------------
-
-LINK = re.compile(r"(?<!\!)\[[^\]]*\]\(([^)\s]+)\)")
-
-
-def local_links(path):
-    """(target file, anchor) for every relative link in a page; links inside code blocks are not links."""
-    text = re.sub(r"```.*?```", "", read(path), flags=re.S)
-    text = re.sub(r"`[^`\n]*`", "", text)
-    found = []
-    for target in LINK.findall(text):
-        if re.match(r"[a-z][a-z0-9+.-]*:", target):          # https:, mailto:, ...
-            continue
-        name, _, anchor = target.partition("#")
-        found.append((path if not name else (path.parent / name).resolve(), anchor, target))
-    return found
-
 
 @pytest.mark.parametrize("path", doc_paths(), ids=lambda p: p.relative_to(ROOT).as_posix())
 def test_every_relative_link_resolves_to_a_file_and_an_anchor(path):
