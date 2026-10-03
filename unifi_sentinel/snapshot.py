@@ -60,7 +60,7 @@ class Snapshot:
     neighbors: List[Dict[str, Any]] = field(default_factory=list)
     events_available: bool = False    # True when the event log was requested and could be read
     neighbors_available: bool = True
-    degraded: bool = False            # True when a requested optional collection read was unavailable
+    degraded: bool = False            # True when requested optional data may be incomplete
     firewall: Optional[FirewallData] = None     # set when the firewall was requested (Needs.firewall)
     # Wi-Fi network settings (legacy rest/wlanconf), when requested (Needs.wlans); None: not requested or unreadable.
     wlans: Optional[List[Dict[str, Any]]] = None
@@ -110,17 +110,21 @@ def _neighbors_or_empty(client: UniFiClient, site_ref: str, notes: List[str]) ->
 
 def _device_extras(
     client: UniFiClient, site_id: str, device: Dict[str, Any], notes: List[str]
-) -> tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
-    """One device's (detail, statistics). Either is None when the controller has none (an offline device may
-    not have statistics); statistics are not asked for when the detail is missing."""
+) -> tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]], bool]:
+    """One device's (detail, statistics, read_failed). An HTTP 404 can mean no detail or statistics for an offline
+    device; other read errors leave the corresponding check unavailable."""
     try:
         detail = client.device(site_id, device["id"])
-    except UniFiAPIError:
-        return None, None
+    except UniFiAPIError as e:
+        return None, None, _device_read_failed(e, device)
     try:
-        return detail, client.device_statistics(site_id, device["id"])
-    except UniFiAPIError:
-        return detail, None
+        return detail, client.device_statistics(site_id, device["id"]), False
+    except UniFiAPIError as e:
+        return detail, None, _device_read_failed(e, device)
+
+
+def _device_read_failed(error: UniFiAPIError, device: Dict[str, Any]) -> bool:
+    return not (device.get("state") == "OFFLINE" and str(error).startswith("HTTP 404 "))
 
 
 def _legacy_rest_or_empty(client: UniFiClient, site_ref: str, resource: str, notes: List[str]) -> List[Dict[str, Any]]:
@@ -338,11 +342,12 @@ def _submit_device_extras(reads: "_Reads", snap: Snapshot, client: UniFiClient) 
 def _apply_device_extras(snap: Snapshot, reads: "_Reads") -> None:
     failed = 0
     for i, device in enumerate(snap.devices):
-        detail, stats = reads.result(f"extras{i}")
+        detail, stats, read_failed = reads.result(f"extras{i}")
         if detail is not None:
             snap.device_details[device["id"]] = detail
         if stats is not None:
             snap.device_stats[device["id"]] = stats
+        snap.degraded = snap.degraded or read_failed
         if detail is None or stats is None:
             failed += 1
     if failed:

@@ -52,6 +52,7 @@ def all_online(fake_client):
     def step():
         for d in fake_client.session.fx["devices"]:
             d["state"] = "ONLINE"
+        fake_client.session.fx["device_stats"]["ap2"] = dict(fake_client.session.fx["device_stats"]["ap1"])
     return step
 
 
@@ -237,6 +238,44 @@ def test_an_unavailable_optional_collection_marks_the_pass_incomplete(fake_clien
     _, _, complete = commands._diagnose_once(Context(), DiagnoseSettings())
     assert not complete
     assert "stat/health unavailable" in capsys.readouterr().err
+
+
+def test_an_unavailable_device_statistics_read_marks_the_pass_incomplete(fake_client, monkeypatch, capsys):
+    from unifi_sentinel.client import UniFiAPIError
+    from unifi_sentinel.settings import DiagnoseSettings
+
+    def failed_statistics(site, device_id):
+        raise UniFiAPIError("HTTP 500 for device statistics")
+
+    monkeypatch.setattr(fake_client, "device_statistics", failed_statistics)
+
+    class Context:
+        client = fake_client
+        config = type("Config", (), {"site": "default"})()
+        args = type("Args", (), {"areas": None, "since": 86400})()
+
+    _, _, complete = commands._diagnose_once(Context(), DiagnoseSettings())
+    assert not complete
+    assert "detail/statistics unavailable" in capsys.readouterr().err
+
+
+def test_a_missing_statistics_record_for_an_online_device_is_incomplete(fake_client, monkeypatch, capsys):
+    from unifi_sentinel.client import UniFiAPIError
+    from unifi_sentinel.settings import DiagnoseSettings
+
+    def missing_statistics(site, device_id):
+        raise UniFiAPIError("HTTP 404 for device statistics")
+
+    monkeypatch.setattr(fake_client, "device_statistics", missing_statistics)
+
+    class Context:
+        client = fake_client
+        config = type("Config", (), {"site": "default"})()
+        args = type("Args", (), {"areas": None, "since": 86400})()
+
+    _, _, complete = commands._diagnose_once(Context(), DiagnoseSettings())
+    assert not complete
+    assert "detail/statistics unavailable" in capsys.readouterr().err
 
 
 def test_the_first_read_failing_is_an_error_as_for_any_command(fake_client, monkeypatch, capsys):

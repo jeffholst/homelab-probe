@@ -96,7 +96,7 @@ and `wep` Wi-Fi security values) the README says so.
 
 ### Fixed
 
-- An incomplete optional-collection pass in **`diagnose --watch`** no longer reports findings as recovered or resets the watch baseline.
+- An incomplete optional-data pass in **`diagnose --watch`** no longer reports findings as recovered or resets the watch baseline.
 - Notification setup errors link to the online guide, including for installed users outside a source checkout.
 - Switch ports are matched on switches that report no `mac_table_count`, and offline devices keep their last uplink.
 - A device's type is detected from its model when the legacy type is unavailable.
