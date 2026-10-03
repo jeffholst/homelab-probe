@@ -65,6 +65,30 @@ def expired_rules(rules: Tuple[IgnoreRule, ...],
 _DATE_TEXT = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 
 
+def _invalid_unquoted_until(text: str, error: Exception) -> Optional[int]:
+    """The TOML parser rejects an impossible bare date before ``_parse`` can name its ignore rule."""
+    line_number = getattr(error, "lineno", None)
+    if not isinstance(line_number, int):
+        match = re.search(r"\(at line ([0-9]+), column [0-9]+\)", str(error))
+        line_number = int(match.group(1)) if match else None
+    if line_number is None:
+        return None
+
+    rule_number = 0
+    for number, line in enumerate(text.splitlines(), 1):
+        if re.fullmatch(r"\s*\[\[\s*ignore\s*\]\]\s*(?:#.*)?", line):
+            rule_number += 1
+        if number != line_number:
+            continue
+        match = re.fullmatch(r"\s*until\s*=\s*([0-9]{4}-[0-9]{2}-[0-9]{2})\s*(?:#.*)?", line)
+        if match and rule_number:
+            try:
+                datetime.date.fromisoformat(match.group(1))
+            except ValueError:
+                return rule_number
+    return None
+
+
 def _parse_until(value: Any, number: int) -> datetime.date:
     """A date written as ``2026-10-10``: a TOML date or a string. Both Python versions get the same strict form
     (3.11 would also take ``20261010`` and week dates), and a date with a time is refused."""
@@ -261,6 +285,11 @@ def load_settings(path: Optional[Path] = None) -> DiagnoseSettings:
     try:
         data = tomllib.loads(text)
     except (tomllib.TOMLDecodeError, UnicodeDecodeError) as e:
+        rule_number = _invalid_unquoted_until(text, e)
+        if rule_number is not None:
+            raise ConfigError(
+                f"{path}: [[ignore]] #{rule_number}: until must be a valid date like 2026-10-10"
+            ) from e
         raise ConfigError(f"{path}: invalid TOML: {e}") from e
     try:
         return _parse(data)

@@ -61,9 +61,10 @@ def test_anything_but_a_date_is_a_config_error_that_names_the_rule(tmp_path, wri
         rules(tmp_path, rule_text(written))
 
 
-def test_an_impossible_unquoted_date_is_refused_by_the_toml_reader_itself(tmp_path):
-    with pytest.raises(ConfigError, match="invalid TOML"):
-        rules(tmp_path, rule_text("2026-02-30"))
+@pytest.mark.parametrize(("prefix", "rule_number"), [("", 1), (rule_text(f'"{LONG_AGO}"'), 2)])
+def test_an_impossible_unquoted_date_names_its_ignore_rule(tmp_path, prefix, rule_number):
+    with pytest.raises(ConfigError, match=rf"\[\[ignore\]\] #{rule_number}: until must be a valid date"):
+        rules(tmp_path, prefix + rule_text("2026-02-30"))
 
 
 @pytest.mark.parametrize("written", ["2026-10-10T12:00:00", "2026-10-10T12:00:00Z", "2026-10-10 12:00:00"])
@@ -234,6 +235,33 @@ def test_audit_warns_and_applies_the_date_the_same_way(fake_client, monkeypatch,
     assert "audit.wifi_open" in codes and 'code "audit.wifi_open", subject "Lobby" expired on 2000-01-01' in err
     codes, err = audit(FAR_AHEAD)
     assert "audit.wifi_open" not in codes and "expired" not in err
+
+
+@pytest.mark.parametrize(
+    ("command", "code", "subject"),
+    [("diagnose", "device.offline", "Garage AP"), ("audit", "audit.wifi_open", "Lobby")],
+)
+def test_initial_warning_and_filtering_use_the_same_date(
+    fake_client, monkeypatch, capsys, tmp_path, command, code, subject
+):
+    class Day(datetime.date):
+        calls = 0
+
+        @classmethod
+        def today(cls):
+            cls.calls += 1
+            return DATE(2026, 12, 31) if cls.calls == 1 else DATE(2027, 1, 1)
+
+    fake_datetime = types.SimpleNamespace(date=Day, datetime=datetime.datetime)
+    monkeypatch.setattr(commands, "datetime", fake_datetime)
+    monkeypatch.setattr(output_module, "datetime", fake_datetime)
+    monkeypatch.setattr("unifi_sentinel.settings.datetime", fake_datetime)
+    config = write(tmp_path, rule_text('"2026-12-31"', code=code, subject=subject))
+    run(fake_client, monkeypatch, [command, "--json", "--config", str(config)])
+    out = capsys.readouterr()
+    assert code not in [f["code"] for f in json.loads(out.out)["findings"]]
+    assert "expired" not in out.err
+    assert Day.calls == 1
 
 
 def test_an_expired_rule_lets_the_finding_reach_a_notification(fake_client, monkeypatch, capsys, tmp_path):

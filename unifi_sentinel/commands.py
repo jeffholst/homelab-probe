@@ -6,6 +6,7 @@ handler declares what it reads with a ``Needs``), analysis and rendering in the 
 """
 
 import argparse
+import datetime
 import sys
 import time
 from collections.abc import Callable
@@ -549,10 +550,10 @@ def _add_audit(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--json", action="store_true", help="Print the findings as JSON (with a stable code each)")
 
 
-def _warn_expired_rules(settings: DiagnoseSettings) -> None:
+def _warn_expired_rules(settings: DiagnoseSettings, today: Optional[datetime.date] = None) -> None:
     """One stderr line per ignore rule whose ``until`` date has passed: its findings are back, and the rule is
     stale. Only a warning: it never changes an exit code or what is on stdout."""
-    for rule, until in expired_rules(settings.ignore):
+    for rule, until in expired_rules(settings.ignore, today):
         say(f"Warning: the ignore rule for {rule.describe()} expired on {until.isoformat()} and no longer "
             f"applies; delete it or give it a later until date ({printable(rule.reason)})", file=sys.stderr)
 
@@ -560,10 +561,11 @@ def _warn_expired_rules(settings: DiagnoseSettings) -> None:
 def _run_audit(ctx: Context) -> int:
     args = ctx.args
     settings = ctx.settings or DiagnoseSettings()
-    _warn_expired_rules(settings)
+    today = datetime.date.today()
+    _warn_expired_rules(settings, today)
     snap = collect_snapshot(ctx.client, ctx.config.site,
                             Needs(offline=True, wlans=True, legacy_devices=False, device_extras=False))
-    findings, ignored = apply_ignores(audit(snap), settings.ignore)
+    findings, ignored = apply_ignores(audit(snap), settings.ignore, today)
     if args.json:
         say(findings_json(findings, ignored, args.show_ignored, AUDIT_AREAS))
     else:
@@ -735,11 +737,13 @@ def _notify(findings: List[Any], config: Any, settings: Any, args: argparse.Name
 WATCH_SLEEP = time.sleep          # looked up when used, so a test can replace the wait between passes
 
 
-def _diagnose_once(ctx: Context, settings: DiagnoseSettings) -> Tuple[List[Any], List[Any], bool]:
+def _diagnose_once(
+    ctx: Context, settings: DiagnoseSettings, today: Optional[datetime.date] = None
+) -> Tuple[List[Any], List[Any], bool]:
     """One pass of the checks: the findings that remain and those the ignore list suppressed."""
     areas = ctx.args.areas
     snap = collect_snapshot(ctx.client, ctx.config.site, needs_for(areas, ctx.args.since))
-    findings, ignored = apply_ignores(diagnose(snap, settings, areas=areas), settings.ignore)
+    findings, ignored = apply_ignores(diagnose(snap, settings, areas=areas), settings.ignore, today)
     return findings, ignored, not snap.degraded
 
 
@@ -781,9 +785,10 @@ def _watch_diagnose(ctx: Context, settings: DiagnoseSettings, first: List[Any], 
 def _run_diagnose(ctx: Context) -> int:
     args = ctx.args
     settings = ctx.settings or DiagnoseSettings()          # loaded for this command, so never None
-    _warn_expired_rules(settings)                          # once, also before a --watch loop
+    today = datetime.date.today()
+    _warn_expired_rules(settings, today)                   # once, also before a --watch loop
     areas = args.areas
-    findings, ignored, complete = _diagnose_once(ctx, settings)
+    findings, ignored, complete = _diagnose_once(ctx, settings, today)
     if args.json:
         say(findings_json(findings, ignored, args.show_ignored, areas))
     else:
