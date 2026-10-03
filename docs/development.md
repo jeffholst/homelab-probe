@@ -32,6 +32,7 @@ unifi_sentinel/
     output.py              ignoring findings, exit codes, text and JSON
   watch.py               diagnose --watch: what changed since the last pass (reuses the notification planner)
   notify.py              notifications: what changed since the last run, ntfy/webhook/email sending, state file
+  completion.py          shell completion scripts for bash, zsh and fish, generated from the argument parser
   settings.py            diagnose thresholds and ignore list (TOML)
   util.py                shared helpers: output safety (printable names, CSV formulas), numbers, MACs, times, plurals
   cli.py                 argument parser and main: loads the configuration, builds the client, runs a command

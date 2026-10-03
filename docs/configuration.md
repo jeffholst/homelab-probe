@@ -61,6 +61,23 @@ $ unifi-sentinel --verbose wan --json > wan.json
 - **`read ...`** lists what a snapshot collected (counts only), and the last line is the total number of requests, retries and time spent in requests (added up over all of them, so more than the wall time when they overlap). The last line is also printed when a request fails.
 - **Never logged:** the API key, response bodies, and query values. The paths do contain the site and device IDs, and the first line your controller's address, so **redact them before pasting the output into an issue**.
 
+## Shell completion
+
+`unifi-sentinel completion bash`, `completion zsh` and `completion fish` print a completion script for the installed `unifi-sentinel` command: it completes the commands, every option (with its short form), the fixed values (`--fail-on info warning critical`, the query kinds, the Wi-Fi bands, the `diagnose --only` and `--skip` areas one at a time, even in a comma list), and file names for the options that take a file. The command needs no `.env` and never contacts the controller. The scripts are generated from the program's own options, not written by hand, so a new option is completed as soon as it exists; a test checks that every command and option is in every script.
+
+```bash
+# bash: for this shell, or save it where bash-completion looks (for example ~/.local/share/bash-completion/completions/unifi-sentinel)
+source <(unifi-sentinel completion bash)
+
+# zsh: put it in a directory on $fpath, then restart the shell (or run compinit)
+unifi-sentinel completion zsh > "${fpath[1]}/_unifi-sentinel"
+
+# fish
+unifi-sentinel completion fish > ~/.config/fish/completions/unifi-sentinel.fish
+```
+
+It completes the `unifi-sentinel` command that `pip install .` or `uv tool install` creates, not `uv run unifi-sentinel.py` (there the shell sees `uv`). The bash script also works in the old bash 3.2 that macOS ships; free text values (a search, a client name) fall back to the shell's file name completion in bash. The zsh script uses `_arguments`, so descriptions of the options show next to the completions.
+
 ## Troubleshooting
 
 - **`CONTROLLER_URL is not set` / `API_KEY is not set`**: copy `example.env` to `.env` and fill it in, in the directory you run the command from, or point to it with `--env-file FILE` or `UNIFI_SENTINEL_ENV`.

@@ -24,10 +24,9 @@ UniFi Sentinel is a fork of [ericfitz/unifi-clients-export](https://github.com/e
 | `client` | Troubleshoot one client by name, MAC or IP: where it attaches, link quality and related findings | [details](docs/network.md#client-view) |
 | `new-clients` | List clients that are in no client group, to spot new devices | [details](docs/inventory.md#new-clients) |
 | `audit` | Configuration audit: Wi-Fi networks that are open or WPA2-only, default device names, firmware updates, unnamed clients | [details](docs/diagnose.md#audit) |
+| `completion` | Print a shell completion script for bash, zsh or fish | [details](docs/configuration.md#shell-completion) |
 | `diagnose` | Read-only health checks with 🛑 critical, ⚠️ warning and ℹ️ info findings (`--json` for scripts) | [details](docs/diagnose.md#diagnose) |
 | `info` | Show the controller application info and available sites       |  |
-
-The tool is still evolving; see open issues for planned reports, controller-version coverage, packaging, and release work.
 
 ## Features
 
@@ -112,8 +111,6 @@ uv run unifi-sentinel.py --site Lab diagnose --no-events      # another site for
 uv run unifi-sentinel.py export -o ./out --include-offline    # CSV files (long form: --output-dir); also previously seen clients
 uv run unifi-sentinel.py query clients -s printer --json      # filter (long form: --search), as JSON; --csv for a spreadsheet
 uv run unifi-sentinel.py query clients --include-offline      # also previously seen clients
-uv run unifi-sentinel.py query reservations --offline         # reserved clients that have been offline for a day or more
-uv run unifi-sentinel.py query ports --down --switch rack     # down ports on matching switches
 uv run unifi-sentinel.py snapshot                             # save the inventory to ./snapshots/
 uv run unifi-sentinel.py diff                                 # what changed since the newest snapshot?
 uv run unifi-sentinel.py topology --clients                   # how the gateway, switches and APs are wired
@@ -124,6 +121,7 @@ uv run unifi-sentinel.py events --since 7d --severity high    # recent serious e
 uv run unifi-sentinel.py client desktop                       # one client: attachment, link, findings
 uv run unifi-sentinel.py new-clients                          # clients in no client group
 uv run unifi-sentinel.py audit                                # settings that are probably not what you want
+uv run unifi-sentinel.py completion zsh                       # a completion script for bash, zsh or fish
 uv run unifi-sentinel.py diagnose                             # health checks (--json for scripts, --notify for alerts)
 uv run unifi-sentinel.py diagnose --only ports,wifi           # just those checks, reading only what they need
 uv run unifi-sentinel.py diagnose --watch 60                  # every minute, print only what changed (Ctrl-C to stop)
