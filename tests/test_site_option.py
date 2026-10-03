@@ -36,6 +36,10 @@ def test_the_option_beats_site_id_in_the_environment(fake_client, monkeypatch, c
     assert "Site 'no-such-site' not found" in capsys.readouterr().err
     assert run(fake_client, monkeypatch, "--site", "Default", "query", "devices", site_id="no-such-site") == 0
     assert "Gateway" in capsys.readouterr().out
+    assert run(fake_client, monkeypatch, "query", "devices", site_id="a/b") == cli.EXIT_ERROR
+    assert "SITE_ID" in capsys.readouterr().err
+    assert run(fake_client, monkeypatch, "--site", "Default", "query", "devices", site_id="a/b") == 0
+    assert "Gateway" in capsys.readouterr().out
 
 
 def test_the_option_selects_the_site_that_is_read(fake_client, monkeypatch, capsys):

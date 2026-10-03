@@ -101,13 +101,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     command.validate(parser, args)
     client: Optional[UniFiClient] = None
     try:
-        config = load_config(args.env_file)
+        config = load_config(args.env_file, site_override=args.site)
         if args.timeout is not None:
             config = replace(config, timeout=args.timeout)      # the command line beats .env
         if args.parallel is not None:
             config = replace(config, parallel=args.parallel)
-        if args.site is not None:
-            config = replace(config, site=args.site)                 # the command line beats SITE_ID
         if args.verbose:
             message = f"unifi-sentinel {__version__}: {_describe_connection(config)}"
             verbose(message.replace(config.api_key, "***"))

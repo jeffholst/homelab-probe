@@ -343,7 +343,7 @@ def find_env_file(explicit: Optional[Path] = None) -> Optional[Path]:
     return default if default.is_file() else None
 
 
-def load_config(env_file: Optional[Path] = None) -> Config:
+def load_config(env_file: Optional[Path] = None, site_override: Optional[str] = None) -> Config:
     """Load and validate configuration from the environment (and the ``.env`` file)."""
     path = find_env_file(env_file)
     warnings = []
@@ -385,7 +385,7 @@ def load_config(env_file: Optional[Path] = None) -> Config:
         notify_webhook_token=validate_notify_token("NOTIFY_WEBHOOK_TOKEN", os.getenv("NOTIFY_WEBHOOK_TOKEN")),
         controller_url=url,
         api_key=api_key,
-        site=validate_site(os.getenv("SITE_ID")),
+        site=site_override if site_override is not None else validate_site(os.getenv("SITE_ID")),
         verify_ssl=parse_verify(os.getenv("VERIFY_SSL")),
         timeout=parse_timeout(os.getenv("TIMEOUT")),
         parallel=parse_parallel(os.getenv("PARALLEL_REQUESTS")),
