@@ -19,14 +19,23 @@
       "TX Packets": {
         "type": [
           "number",
-          "string"
+          "string",
+          "null"
         ]
       },
       "Port Index": {
-        "type": "number"
+        "type": [
+          "number",
+          "string",
+          "null"
+        ]
       },
       "RX Errors": {
-        "type": "number"
+        "type": [
+          "number",
+          "string",
+          "null"
+        ]
       },
       "PoE Class": {
         "type": "string"
@@ -35,7 +44,11 @@
         "type": "string"
       },
       "TX Errors": {
-        "type": "number"
+        "type": [
+          "number",
+          "string",
+          "null"
+        ]
       },
       "Status": {
         "type": "string"
@@ -43,7 +56,8 @@
       "RX Packets": {
         "type": [
           "number",
-          "string"
+          "string",
+          "null"
         ]
       },
       "Full Duplex": {
@@ -53,10 +67,18 @@
         "type": "string"
       },
       "TX Bytes": {
-        "type": "number"
+        "type": [
+          "number",
+          "string",
+          "null"
+        ]
       },
       "RX Bytes": {
-        "type": "number"
+        "type": [
+          "number",
+          "string",
+          "null"
+        ]
       },
       "Connected Type": {
         "type": "string"

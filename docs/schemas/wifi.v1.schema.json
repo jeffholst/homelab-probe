@@ -104,13 +104,19 @@
               "type": "object",
               "properties": {
                 "neighbors": {
-                  "type": "number"
+                  "type": [
+                    "number",
+                    "null"
+                  ]
                 },
                 "channel": {
                   "type": "number"
                 },
                 "strong": {
-                  "type": "number"
+                  "type": [
+                    "number",
+                    "null"
+                  ]
                 },
                 "our_radios": {
                   "type": "array",
@@ -189,16 +195,28 @@
           "type": "boolean"
         },
         "total": {
-          "type": "number"
+          "type": [
+            "number",
+            "null"
+          ]
         },
         "hidden": {
-          "type": "number"
+          "type": [
+            "number",
+            "null"
+          ]
         },
         "open": {
-          "type": "number"
+          "type": [
+            "number",
+            "null"
+          ]
         },
         "strong": {
-          "type": "number"
+          "type": [
+            "number",
+            "null"
+          ]
         }
       },
       "required": [

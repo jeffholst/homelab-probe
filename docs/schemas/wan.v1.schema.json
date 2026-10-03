@@ -13,13 +13,19 @@
       "type": "object",
       "properties": {
         "latency_ms": {
-          "type": "number"
+          "type": [
+            "number",
+            "null"
+          ]
         },
         "internet_status": {
           "type": "string"
         },
         "drops": {
-          "type": "number"
+          "type": [
+            "number",
+            "null"
+          ]
         },
         "speedtest_status": {
           "type": "string"
@@ -63,13 +69,22 @@
                 "type": "string"
               },
               "latency_ms": {
-                "type": "number"
+                "type": [
+                  "number",
+                  "null"
+                ]
               },
               "upload_mbps": {
-                "type": "number"
+                "type": [
+                  "number",
+                  "null"
+                ]
               },
               "download_mbps": {
-                "type": "number"
+                "type": [
+                  "number",
+                  "null"
+                ]
               }
             },
             "required": [
@@ -137,7 +152,10 @@
               "type": "string"
             },
             "latency_ms": {
-              "type": "number"
+              "type": [
+                "number",
+                "null"
+              ]
             },
             "interface": {
               "type": "string"
@@ -146,13 +164,22 @@
               "type": "string"
             },
             "upload_mbps": {
-              "type": "number"
+              "type": [
+                "number",
+                "null"
+              ]
             },
             "time": {
-              "type": "number"
+              "type": [
+                "number",
+                "null"
+              ]
             },
             "download_mbps": {
-              "type": "number"
+              "type": [
+                "number",
+                "null"
+              ]
             }
           },
           "required": [
@@ -212,28 +239,49 @@
         "type": "object",
         "properties": {
           "latency_ms": {
-            "type": "number"
+            "type": [
+              "number",
+              "null"
+            ]
           },
           "tx_mbps": {
-            "type": "number"
+            "type": [
+              "number",
+              "null"
+            ]
           },
           "interface": {
             "type": "string"
           },
           "max_speed_mbps": {
-            "type": "number"
+            "type": [
+              "number",
+              "null"
+            ]
           },
           "speed_mbps": {
-            "type": "number"
+            "type": [
+              "number",
+              "null"
+            ]
           },
           "up": {
-            "type": "boolean"
+            "type": [
+              "boolean",
+              "null"
+            ]
           },
           "rx_mbps": {
-            "type": "number"
+            "type": [
+              "number",
+              "null"
+            ]
           },
           "full_duplex": {
-            "type": "boolean"
+            "type": [
+              "boolean",
+              "null"
+            ]
           },
           "port": {
             "type": "string"
@@ -284,13 +332,19 @@
         "type": "object",
         "properties": {
           "latency_ms": {
-            "type": "number"
+            "type": [
+              "number",
+              "null"
+            ]
           },
           "name": {
             "type": "string"
           },
           "availability": {
-            "type": "number"
+            "type": [
+              "number",
+              "null"
+            ]
           },
           "period_s": {
             "type": "number"
@@ -301,10 +355,16 @@
               "type": "object",
               "properties": {
                 "latency_ms": {
-                  "type": "number"
+                  "type": [
+                    "number",
+                    "null"
+                  ]
                 },
                 "availability": {
-                  "type": "number"
+                  "type": [
+                    "number",
+                    "null"
+                  ]
                 },
                 "alerts": {
                   "type": "boolean"

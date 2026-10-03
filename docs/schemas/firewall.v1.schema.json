@@ -177,7 +177,10 @@
       ]
     },
     "port_forwards": {
-      "type": "array",
+      "type": [
+        "array",
+        "null"
+      ],
       "items": {
         "type": "object",
         "properties": {

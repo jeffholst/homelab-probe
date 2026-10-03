@@ -31,12 +31,7 @@
           "ip": {
             "type": "string"
           }
-        },
-        "required": [
-          "id",
-          "ip",
-          "name"
-        ]
+        }
       },
       "Event": {
         "type": "string"
@@ -56,8 +51,7 @@
           "ip": {
             "type": "string"
           }
-        },
-        "required": []
+        }
       },
       "key": {
         "type": "string"

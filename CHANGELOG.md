@@ -21,7 +21,7 @@ always listed here.
   ones are added. They are what `--json` output and ignore rules (`[[ignore]] code = ...`) use.
 - **JSON documents** carry a `version` as their first key (every `--json` output that is an object, and the webhook
   payload, are version `1`; the plain lists of `query`, `new-clients` and `events` are bare arrays and have none),
-  and each has a JSON Schema in `docs/schemas/`. It changes only when a field is removed or renamed; new fields may appear without a new version.
+  and each has a JSON Schema in `docs/schemas/`. It changes when a field is removed, renamed or its meaning changes; new fields may appear without a new version.
 - **Saved snapshots** (`snapshot`, `diff`) have `schema_version` `1`; a file of another version is refused with a
   clear message, never misread.
 - The package never changes anything on the controller. Every request is a GET, with one read-only exception: the

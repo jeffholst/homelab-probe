@@ -23,7 +23,11 @@
         "type": "string"
       },
       "VLAN": {
-        "type": "number"
+        "type": [
+          "number",
+          "string",
+          "null"
+        ]
       },
       "Reserved IP": {
         "type": "string"

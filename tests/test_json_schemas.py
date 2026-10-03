@@ -12,7 +12,7 @@ import re
 import time
 
 import pytest
-from conftest import FakeSession
+from conftest import FakeResponse, FakeSession
 from docs_support import ROOT
 from golden_support import run_command
 from jsonschema import Draft202012Validator, ValidationError
@@ -69,9 +69,26 @@ def controller(change=None):
     return client
 
 
-def output(argv, change=None):
-    code, out, _ = run_command(controller(change), argv)
+def output(argv, change=None, configure=None):
+    client = controller(change)
+    if configure:
+        configure(client)
+    code, out, _ = run_command(client, argv)
     return json.loads(out)
+
+
+def fail_endpoints(*suffixes):
+    def configure(client):
+        get = client.session.get
+
+        def request(url, *args, **kwargs):
+            if any(url.endswith(suffix) for suffix in suffixes):
+                return FakeResponse(503, {})
+            return get(url, *args, **kwargs)
+
+        client.session.get = request
+
+    return configure
 
 
 def detach(fx):
@@ -84,6 +101,44 @@ def private_wan(fx):
 
 def no_speedtests(fx):
     fx["legacy_v2"]["speedtest"]["data"] = []
+
+
+def sparse_ports(fx):
+    for device in fx["legacy"]["device"]:
+        for index, port in enumerate(device.get("port_table") or []):
+            for key in ("port_idx", "rx_bytes", "tx_bytes", "rx_errors", "tx_errors"):
+                if index:
+                    port[key] = None
+                else:
+                    port.pop(key, None)
+
+
+def sparse_reservations(fx):
+    users = [u for u in fx["legacy"]["alluser"] if u.get("use_fixedip") and u.get("fixed_ip")]
+    users[0]["last_connection_network_id"] = "missing-network"
+    network = next(n for n in fx["legacy_rest"]["networkconf"] if n["_id"] == "net-2")
+    network.pop("vlan", None)
+
+
+def sparse_wan(fx):
+    for health in fx["legacy"]["health"]:
+        if health.get("subsystem") == "www":
+            health["latency"] = health["drops"] = None
+        if health.get("subsystem") == "wan":
+            for stats in health.get("uptime_stats", {}).values():
+                stats["availability"] = stats["latency_average"] = None
+                for monitors in (stats.get("monitors", []), stats.get("alerting_monitors", [])):
+                    for monitor in monitors:
+                        monitor["availability"] = monitor["latency_average"] = None
+    for device in fx["legacy"]["device"]:
+        for name, link in device.items():
+            if name.startswith("wan") and isinstance(link, dict):
+                link["up"] = link["full_duplex"] = None
+                for key in ("speed", "max_speed", "latency", "tx_bytes-r", "rx_bytes-r"):
+                    link.pop(key, None)
+    for test in fx["legacy_v2"]["speedtest"]["data"]:
+        for key in ("time", "download_mbps", "upload_mbps", "latency_ms"):
+            test.pop(key, None)
 
 
 def no_firewall(fx):
@@ -110,7 +165,18 @@ def churned():
 
 
 def cli_variants(*variants):
-    return [lambda argv=argv, change=change: output(argv, change) for argv, change in variants]
+    def make(argv, change, configure=None):
+        return lambda: output(argv, change, configure)
+    return [make(*variant) for variant in variants]
+
+
+def name_only_client_event(client):
+    event = next(e for e in client.session.events
+                 if e.get("event") == "CLIENT_ROAMED"
+                 and e.get("parameters", {}).get("CLIENT", {}).get("id") == "bb:00:00:00:00:02")
+    device = event["parameters"]["DEVICE_FROM"]
+    device.pop("id", None)
+    device.pop("ip", None)
 
 
 # name -> functions that each produce one real document
@@ -119,8 +185,10 @@ DOCUMENTS = {
     "query-devices": cli_variants((["query", "devices", "--json"], None), (["query", "devices", "-s", "switch", "--json"], None)),
     "query-clients": cli_variants((["query", "clients", "--json"], None), (["query", "clients", "--include-offline", "--json"], None)),
     "query-reservations": cli_variants((["query", "reservations", "--json"], None),
-                                       (["query", "reservations", "--offline", "--json"], very_offline)),
-    "query-ports": cli_variants((["query", "ports", "--json"], None), (["query", "ports", "--down", "--json"], None)),
+                                       (["query", "reservations", "--offline", "--json"], very_offline),
+                                       (["query", "reservations", "--json"], sparse_reservations)),
+    "query-ports": cli_variants((["query", "ports", "--json"], None), (["query", "ports", "--down", "--json"], None),
+                                (["query", "ports", "--json"], sparse_ports)),
     "new-clients": cli_variants((["new-clients", "--json"], None), (["new-clients", "-s", "printer", "--json"], None)),
     "events": cli_variants((["events", "--json"], None), (["events", "--client", "phone", "--json"], None),
                            (["events", "--since", "7d", "--severity", "high", "--json"], None)),
@@ -128,14 +196,17 @@ DOCUMENTS = {
     "topology": cli_variants((["topology", "--json"], None), (["topology", "--clients", "--json"], None),
                              (["topology", "--clients", "--json"], detach)),
     "wifi": cli_variants((["wifi", "--json"], None), (["wifi", "--all", "--json"], None), (["wifi", "--band", "2.4", "--json"], None),
-                         (["wifi", "--ap", "Office", "--json"], None), (["wifi", "--ap", "nothing-matches", "--json"], None)),
+                         (["wifi", "--ap", "Office", "--json"], None), (["wifi", "--ap", "nothing-matches", "--json"], None),
+                         (["wifi", "--json"], None, fail_endpoints("stat/rogueap"))),
     "wan": cli_variants((["wan", "--json"], None), (["wan", "--days", "90", "--json"], None), (["wan", "--json"], private_wan),
-                        (["wan", "--json"], no_speedtests)),
+                        (["wan", "--json"], no_speedtests), (["wan", "--json"], sparse_wan)),
     "firewall": cli_variants((["firewall", "--json"], None), (["firewall", "--all", "--zones", "--json"], None),
-                             (["firewall", "--search", "game", "--json"], None), (["firewall", "--json"], no_firewall)),
+                             (["firewall", "--search", "game", "--json"], None), (["firewall", "--json"], no_firewall),
+                             (["firewall", "--json"], None, fail_endpoints("rest/portforward"))),
     "client": cli_variants(*[(["client", who, "--json", *extra], None) for who in ("desktop", "phone", "old-printer", "old-tablet",
                                                                                    "bb:00:00:00:00:02")
-                             for extra in ([], ["--no-events"])]),
+                             for extra in ([], ["--no-events"])],
+                           (["client", "phone", "--json"], None, name_only_client_event)),
     "audit": cli_variants((["audit", "--json"], None), (["audit", "--show-ignored", "--json"], None)),
     "diagnose": cli_variants((["diagnose", "--json"], None), (["diagnose", "--show-ignored", "--json"], None),
                              (["diagnose", "--only", "ports", "--json"], None), (["diagnose", "--no-events", "--json"], None)),
@@ -186,6 +257,39 @@ def test_real_output_validates_and_declares_every_key_it_has(name, index):
     except ValidationError as e:
         pytest.fail(f"{name}: the output has something the schema does not declare: {e.message} at "
                     f"{'/'.join(str(p) for p in e.absolute_path)}")
+
+
+def test_event_schemas_accept_name_only_identities():
+    client_document = output(["client", "phone", "--json"], configure=name_only_client_event)
+    event = next(e for e in client_document["events"] if e["Event"] == "CLIENT_ROAMED")
+    assert set(event["device"]) == {"name"}
+    Draft202012Validator(strict(load("client"))).validate(client_document)
+    Draft202012Validator(strict(load("events"))["items"]).validate(event)
+
+
+def test_degraded_and_sparse_variants_exercise_schema_fallbacks():
+    firewall = DOCUMENTS["firewall"][-1]()
+    assert firewall["port_forwards"] is None
+
+    ports = DOCUMENTS["query-ports"][-1]()
+    assert any(row["Port Index"] == "" for row in ports)
+    assert any(row["Port Index"] is None for row in ports)
+
+    reservations = DOCUMENTS["query-reservations"][-1]()
+    assert any(row["VLAN"] == "" for row in reservations)
+    assert any(row["VLAN"] is None for row in reservations)
+
+    wifi_report = DOCUMENTS["wifi"][-1]()
+    assert wifi_report["neighbors"]["available"] is False
+    assert wifi_report["neighbors"]["total"] is None
+    assert any(channel["neighbors"] is None
+               for plan in wifi_report["plan"] for channel in plan["channels"])
+
+    wan_report = DOCUMENTS["wan"][-1]()
+    assert wan_report["now"]["latency_ms"] is None and wan_report["now"]["drops"] is None
+    assert wan_report["links"][0]["up"] is None
+    assert wan_report["monitoring"][0]["availability"] is None
+    assert wan_report["speedtests"]["last"]["download_mbps"] is None
 
 
 @pytest.mark.parametrize("name", sorted(DOCUMENTS))
