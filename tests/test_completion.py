@@ -3,6 +3,7 @@ run in a real bash (and the zsh one parsed by a real zsh) wherever they are inst
 
 import argparse
 import re
+import shlex
 import shutil
 import subprocess
 from pathlib import Path
@@ -128,6 +129,14 @@ def test_bash_completes_the_values_of_options_and_positionals(complete):
     assert complete([PROGRAM, "completion", ""], 2) == ["bash", "zsh", "fish"]
 
 
+def test_bash_does_not_repeat_a_consumed_positional(complete):
+    assert complete([PROGRAM, "query", "clients", ""], 3) == []
+    assert complete([PROGRAM, "query", "--search", "clients", ""], 4) == [
+        "all", "devices", "clients", "reservations", "ports",
+    ]
+    assert complete([PROGRAM, "completion", "bash", ""], 3) == []
+
+
 def test_bash_completes_one_area_at_a_time_in_a_comma_list(complete):
     assert complete([PROGRAM, "diagnose", "--only", "po"], 3) == ["ports"]
     assert complete([PROGRAM, "diagnose", "--only", "ports,w"], 3) == ["ports,wan", "ports,wifi"]
@@ -184,6 +193,26 @@ def test_the_zsh_script_describes_commands_and_options_natively():
     assert "_values -s , " in text                                    # the comma lists
 
 
+@pytest.mark.skipif(not ZSH, reason="zsh is not installed")
+def test_zsh_autoload_runs_the_generated_command_completion(tmp_path):
+    path = tmp_path / "_unifi-sentinel"
+    path.write_text(zsh_script(parser()))
+    probe = tmp_path / "probe.zsh"
+    probe.write_text(
+        f"fpath=({shlex.quote(str(tmp_path))} $fpath)\n"
+        "autoload -Uz _unifi-sentinel\n"
+        "_arguments() {\n"
+        '    if [[ "$*" == *"->args"* ]]; then state=args; line=(query); fi\n'
+        '    if [[ "$*" == *"--search"* ]]; then print command-options; fi\n'
+        "    return 0\n"
+        "}\n"
+        "_unifi-sentinel\n"
+    )
+    done = subprocess.run([ZSH, "-f", str(probe)], capture_output=True, text=True)
+    assert done.returncode == 0, done.stderr
+    assert "command-options" in done.stdout
+
+
 @pytest.mark.skipif(not FISH, reason="fish is not installed")
 def test_the_fish_script_has_valid_syntax(tmp_path):
     path = tmp_path / "c.fish"
@@ -193,14 +222,30 @@ def test_the_fish_script_has_valid_syntax(tmp_path):
 
 def test_the_fish_script_is_one_complete_command_per_line_with_balanced_quotes():
     lines = fish_script(parser()).splitlines()
-    commands = [line for line in lines if not line.startswith("#")]
+    commands = [line for line in lines if line.startswith("complete ")]
     assert commands[0] == f"complete -c {PROGRAM} -f"
     for line in commands:
         assert line.startswith(f"complete -c {PROGRAM}"), line
         assert len(re.findall(r"(?<!\\)'", line)) % 2 == 0, line
     assert any("-l fail-on -x -a 'info warning critical'" in line for line in commands)
+    assert any("-a '(__unifi_sentinel_comma_values " in line for line in commands)
     assert any("-l env-file -r -F" in line for line in commands)
     assert any("__fish_seen_subcommand_from diff" in line and line.endswith("-F") for line in commands)
+
+
+@pytest.mark.skipif(not FISH, reason="fish is not installed")
+def test_fish_completes_later_comma_list_items_and_only_unconsumed_positionals(tmp_path):
+    path = tmp_path / "unifi-sentinel.fish"
+    path.write_text(fish_script(parser()))
+
+    def reply(line):
+        command = f"source {shlex.quote(str(path))}; complete -C {shlex.quote(line)}"
+        done = subprocess.run([FISH, "-c", command], capture_output=True, text=True, check=True)
+        return done.stdout.splitlines()
+
+    assert any(item.endswith("ports,wan") for item in reply(f"{PROGRAM} diagnose --only ports,w"))
+    assert reply(f"{PROGRAM} query clients ") == []
+    assert "all" in reply(f"{PROGRAM} query ")
 
 
 # -- awkward help text ------------------------------------------------------------------------------------------------

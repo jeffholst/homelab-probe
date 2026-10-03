@@ -95,6 +95,7 @@ and `wep` Wi-Fi security values) the README says so.
 
 ### Fixed
 
+- Shell completions now dispatch correctly in zsh, stop offering consumed positional choices, and complete later items in fish comma lists.
 - Notification setup errors link to the online guide, including for installed users outside a source checkout.
 - Switch ports are matched on switches that report no `mac_table_count`, and offline devices keep their last uplink.
 - A device's type is detected from its model when the legacy type is unavailable.
