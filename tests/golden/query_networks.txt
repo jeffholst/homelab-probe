@@ -1,0 +1,8 @@
+Name  Purpose  VLAN  Subnet  Gateway  DHCP  DHCP Range  Clients
+---  ---  ---  ---  ---  ---  ---  ---
+Main  corporate  1  10.0.0.0/24  10.0.0.1  Server  10.0.0.100 - 10.0.0.200  1
+IoT  corporate  20  10.0.20.0/24  10.0.20.1  Server  10.0.20.100 - 10.0.20.200  0
+Internet 1  wan  0
+Remote Access  remote-user-vpn  10.0.99.0/24  10.0.99.1  0
+
+4 row(s)

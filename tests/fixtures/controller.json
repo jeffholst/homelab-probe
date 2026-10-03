@@ -367,6 +367,7 @@
         "ip": "10.0.0.11",
         "oui": "Example Mobile Co",
         "essid": "HomeNet",
+        "wlanconf_id": "wlan-1",
         "radio": "na",
         "channel": 36,
         "signal": -58,
@@ -708,6 +709,17 @@
         "dhcp_relay_enabled": false,
         "dhcpd_start": "10.0.20.100",
         "dhcpd_stop": "10.0.20.200"
+      },
+      {
+        "_id": "net-wan",
+        "name": "Internet 1",
+        "purpose": "wan"
+      },
+      {
+        "_id": "net-vpn",
+        "name": "Remote Access",
+        "purpose": "remote-user-vpn",
+        "ip_subnet": "10.0.99.1/24"
       }
     ],
     "portforward": [
@@ -773,7 +785,9 @@
         "hide_ssid": false,
         "networkconf_id": "net-1",
         "wpa_mode": "wpa2",
-        "wpa3_support": true
+        "wpa3_support": true,
+        "wpa3_transition": true,
+        "wlan_bands": ["2g", "5g"]
       },
       {
         "_id": "wlan-2",
@@ -785,7 +799,8 @@
         "hide_ssid": false,
         "networkconf_id": "net-2",
         "wpa_mode": "wpa2",
-        "wpa3_support": false
+        "wpa3_support": false,
+        "wlan_bands": ["5g"]
       },
       {
         "_id": "wlan-3",
@@ -816,6 +831,20 @@
         "l2_isolation": false,
         "hide_ssid": false,
         "networkconf_id": "net-1"
+      },
+      {
+        "_id": "wlan-6",
+        "name": "Sensors",
+        "enabled": true,
+        "security": "wpapsk",
+        "is_guest": false,
+        "l2_isolation": true,
+        "hide_ssid": true,
+        "networkconf_id": "net-2",
+        "wpa_mode": "wpa3",
+        "wpa3_support": true,
+        "wpa3_transition": false,
+        "wlan_bands": ["5g", "6g"]
       }
     ]
   },

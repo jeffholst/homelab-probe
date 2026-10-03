@@ -36,6 +36,8 @@ CASES = {
     "query_clients": ["query", "clients", "--include-offline"],
     "query_ports": ["query", "ports"],
     "query_reservations": ["query", "reservations"],
+    "query_networks": ["query", "networks"],
+    "query_wlans": ["query", "wlans"],
 }
 
 _TIME = re.compile(r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2})?")

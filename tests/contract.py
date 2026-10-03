@@ -71,7 +71,7 @@ CONTRACT: Dict[str, Endpoint] = {
         somewhere=("name", "hostname", "ip", "is_wired", "oui", "sw_mac", "sw_port", "ap_mac", "essid", "radio",
                    "channel", "signal", "noise", "satisfaction", "tx_rate", "rx_rate", "wifi_tx_attempts",
                    "wifi_tx_retries_percentage", "network", "network_id", "vlan"),
-        optional=("network_members_group_ids",)),
+        optional=("network_members_group_ids", "wlanconf_id")),
     "legacy/stat/alluser": Endpoint(
         always=("mac",),
         somewhere=("name", "hostname", "oui", "is_wired", "first_seen", "last_seen", "last_ip", "use_fixedip",
@@ -93,12 +93,17 @@ CONTRACT: Dict[str, Endpoint] = {
         optional=("center_channel", "center_freq", "ext_channel", "extension_channel", "secondary_channel")),
     "legacy/rest/networkconf": Endpoint(
         always=("_id", "name"),
-        somewhere=("ip_subnet", "vlan_enabled", "dhcpd_enabled", "dhcpd_start", "dhcpd_stop", "dhcp_relay_enabled"),
+        somewhere=("purpose", "ip_subnet", "vlan_enabled", "dhcpd_enabled", "dhcpd_start", "dhcpd_stop",
+                   "dhcp_relay_enabled"),
         optional=("vlan",)),
     # Wi-Fi networks (checked on Network 10.6.106: three WPA2/WPA3 networks). `security` is "wpapsk" there; "open" and
     # "wep" are the legacy API's other values and were not seen live. `wpa3_support` only appears on WPA networks.
-    "legacy/rest/wlanconf": Endpoint(always=("name", "security"), somewhere=("enabled", "is_guest", "l2_isolation"),
-                                     optional=("wpa3_support",)),
+    # `wlan_bands` is a list of "2g", "5g" and "6g"; `wpa3_transition` and `wpa_mode` come with WPA networks. The
+    # passphrase (`x_passphrase`) is in the same record and is deliberately never read.
+    "legacy/rest/wlanconf": Endpoint(
+        always=("_id", "name", "security"),
+        somewhere=("enabled", "is_guest", "l2_isolation", "hide_ssid", "networkconf_id", "wlan_bands"),
+        optional=("wpa3_support", "wpa3_transition", "wpa_mode")),
     "legacy/v2/network-members-groups": Endpoint(always=("id", "name")),
     "legacy/v2/speedtest": Endpoint(
         somewhere=("time", "download_mbps", "upload_mbps", "latency_ms", "interface_name", "wan_networkgroup")),

@@ -87,7 +87,7 @@ def test_unreadable_wifi_settings_are_reported_not_hidden(fake_client, monkeypat
 
     monkeypatch.setattr(fake_client, "legacy_rest", broken)
     snap = collect_snapshot(fake_client, "default", NEEDS)
-    assert snap.wlans is None and "Wi-Fi network settings unavailable; the Wi-Fi checks were skipped" in \
+    assert snap.wlans is None and "Wi-Fi network settings unavailable; whatever needs them was skipped" in \
         capsys.readouterr().err
     got = {(f.code, f.subject): f for f in audit(snap)}
     assert got["audit.wifi_unavailable", "Wi-Fi"].severity == "info"
@@ -98,7 +98,7 @@ def test_unreadable_wifi_settings_are_reported_not_hidden(fake_client, monkeypat
 def test_the_snapshot_reads_wifi_only_when_asked(fake_client):
     assert collect_snapshot(fake_client, "default").wlans is None
     snap = collect_snapshot(fake_client, "default", Needs(wlans=True))
-    assert len(snap.wlans) == 5 and "5 Wi-Fi networks" in describe_snapshot(snap)
+    assert len(snap.wlans) == 6 and "6 Wi-Fi networks" in describe_snapshot(snap)
     assert not any(path.endswith("/rest/wlanconf") for path in fake_client.session.calls[:0])
 
 

@@ -73,7 +73,7 @@ def test_the_spec_reads_choices_paths_and_flags_from_the_parser():
     assert options["--fail-on"].choices == ("info", "warning", "critical") and options["--fail-on"].takes_value
     assert options["--config"].path and options["--json"].takes_value is False
     assert options["--only"].comma_list and options["--only"].choices == tuple(AREA_NAMES)
-    assert next(c for c in s.commands if c.name == "query").choices == ("all", "devices", "clients", "reservations", "ports")
+    assert next(c for c in s.commands if c.name == "query").choices == ("all", "devices", "clients", "reservations", "ports", "networks", "wlans")
     assert next(c for c in s.commands if c.name == "diff").files
     assert next(c for c in s.commands if c.name == "completion").choices == SHELLS
     assert all(c.help for c in s.commands)
@@ -125,14 +125,14 @@ def test_bash_completes_the_values_of_options_and_positionals(complete):
     assert complete([PROGRAM, "audit", "--fail-on", ""], 3) == ["info", "warning"]
     assert complete([PROGRAM, "events", "--severity", "h"], 3) == ["high"]
     assert complete([PROGRAM, "wifi", "--band", ""], 3) == ["2.4", "5", "6"]
-    assert complete([PROGRAM, "query", ""], 2) == ["all", "devices", "clients", "reservations", "ports"]
+    assert complete([PROGRAM, "query", ""], 2) == ["all", "devices", "clients", "reservations", "ports", "networks", "wlans"]
     assert complete([PROGRAM, "completion", ""], 2) == ["bash", "zsh", "fish"]
 
 
 def test_bash_does_not_repeat_a_consumed_positional(complete):
     assert complete([PROGRAM, "query", "clients", ""], 3) == []
     assert complete([PROGRAM, "query", "--search", "clients", ""], 4) == [
-        "all", "devices", "clients", "reservations", "ports",
+        "all", "devices", "clients", "reservations", "ports", "networks", "wlans",
     ]
     assert complete([PROGRAM, "completion", "bash", ""], 3) == []
 

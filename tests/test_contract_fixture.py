@@ -14,7 +14,8 @@ from unifi_sentinel.client import UniFiClient
 # every command, so every field the program can read from the fixture is read
 COMMANDS = [["info"], ["export"], ["export", "--include-offline"], ["query", "devices"],
             ["query", "clients", "--include-offline"], ["query", "reservations"], ["query", "reservations", "--offline"],
-            ["query", "ports"], ["new-clients"], ["topology", "--clients"], ["wifi", "--all"], ["wan"], ["events"],
+            ["query", "ports"], ["query", "networks"], ["query", "wlans"],
+            ["query", "clients", "--network", "main", "--ssid", "home", "--ap", "office"], ["new-clients"], ["topology", "--clients"], ["wifi", "--all"], ["wan"], ["events"],
             ["events", "--since", "14d"], ["events", "--device", "no-such-device"],
             ["events", "--summary"], ["client", "desktop"], ["client", "phone"], ["client", "old-printer"],
             ["diagnose"], ["snapshot"], ["diff"], ["firewall", "--all", "--zones"], ["audit"]]

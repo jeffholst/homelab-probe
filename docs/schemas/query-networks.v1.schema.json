@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/jeffholst/unifi-sentinel/main/docs/schemas/query-networks.v1.schema.json",
+  "title": "query networks",
+  "description": "Output of `unifi-sentinel query networks --json`: one object per network, in the controller's order.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "Name": {
+        "type": "string"
+      },
+      "Purpose": {
+        "type": "string",
+        "description": "The controller's purpose: corporate, wan, remote-user-vpn, ..."
+      },
+      "VLAN": {
+        "type": [
+          "number",
+          "string"
+        ],
+        "description": "The VLAN tag, 1 when VLANs are off, '' for WAN and VPN networks."
+      },
+      "Subnet": {
+        "type": "string",
+        "description": "Network address with prefix, or ''."
+      },
+      "Gateway": {
+        "type": "string",
+        "description": "The gateway's address on the network, or ''."
+      },
+      "DHCP": {
+        "enum": [
+          "Server",
+          "Relay",
+          "Off",
+          ""
+        ]
+      },
+      "DHCP Range": {
+        "type": "string",
+        "description": "First and last dynamic address, or ''."
+      },
+      "Clients": {
+        "type": [
+          "number",
+          "string"
+        ],
+        "description": "Connected clients on the network; '' when the client list could not be read."
+      }
+    },
+    "required": [
+      "Clients",
+      "DHCP",
+      "DHCP Range",
+      "Gateway",
+      "Name",
+      "Purpose",
+      "Subnet",
+      "VLAN"
+    ]
+  }
+}
