@@ -184,7 +184,8 @@ class Needs:
     group definitions. ``firewall`` reads the zone-based firewall (policies, zones, zone matrix) and the
     port forwards, ``wlans`` the Wi-Fi network settings (``rest/wlanconf``). ``health`` is ``stat/health``
     (for ``diagnose`` and ``wan``), ``speedtests`` the speedtest history, ``neighbors`` the neighboring
-    Wi-Fi networks, ``events`` the event log (None: not read). Device details and legacy devices are part
+    Wi-Fi networks, ``events`` the event log (None: not read). ``devices`` and ``clients`` can be deferred
+    when checks do not use them. Device details and legacy devices are part
     of a normal collection; set their fields to False to defer them, or True in ``extend_snapshot`` to read
     them later. Device statistics can be deferred independently of details, and legacy client records can be
     deferred independently of the required connected-client list.
@@ -205,6 +206,8 @@ class Needs:
     wlans: bool = False
     events: Optional[EventQuery] = None
     users_required: bool = False
+    devices: Optional[bool] = None
+    clients: Optional[bool] = None
     device_extras: Optional[bool] = None
     device_stats: Optional[bool] = None
     legacy_devices: Optional[bool] = None
@@ -403,17 +406,21 @@ def collect_snapshot(
     with client.parallel() as pool:
         reads = _Reads(pool)
         try:
-            reads.submit("devices", lambda notes: client.devices(site_id))
-            reads.submit("clients", lambda notes: client.clients(site_id))
+            if needs.devices is not False:
+                reads.submit("devices", lambda notes: client.devices(site_id))
+            if needs.clients is not False:
+                reads.submit("clients", lambda notes: client.clients(site_id))
             if needs.legacy_devices is not False:
                 reads.submit("legacy_devices", lambda notes: _legacy_or_empty(client, site_ref, "device", notes))
             if needs.legacy_clients is not False:
                 reads.submit("legacy_clients", lambda notes: _legacy_or_empty(client, site_ref, "sta", notes))
             _submit_extras(reads, needs, client, site_ref, now_ms, users=True)
-            snap.devices = reads.result("devices")
+            if needs.devices is not False:
+                snap.devices = reads.result("devices")
             if needs.device_extras is not False:
                 _submit_device_extras(reads, snap, client, needs.device_stats is not False)
-            snap.clients = reads.result("clients")
+            if needs.clients is not False:
+                snap.clients = reads.result("clients")
             if needs.legacy_devices is not False:
                 snap.legacy_devices = reads.result("legacy_devices")
             if needs.legacy_clients is not False:

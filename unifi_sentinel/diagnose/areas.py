@@ -98,6 +98,8 @@ def needs_for(areas: Optional[Iterable[str]], since_seconds: int) -> Needs:
     """What the selected areas (None: all of them) read from the controller."""
     chosen = set(AREA_NAMES if areas is None else areas)
     return Needs(
+        devices=bool(chosen & {"devices", "clients", "reservations", "ports", "wifi", "events"}),
+        clients=bool(chosen & {"clients", "reservations"}),
         reservations=bool(chosen & {"reservations", "events"}),      # an IP conflict names who holds the reservation
         health=bool(chosen & {"health", "wan", "devices"}),
         speedtests="wan" in chosen,
