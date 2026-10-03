@@ -11,9 +11,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 if sys.version_info >= (3, 11):
-    import tomllib
+    import tomllib  # pragma: no cover  (only one of the two imports runs on a given Python; neither can count)
 else:  # Python 3.10
-    import tomli as tomllib  # pragma: no cover  (only runs on Python 3.10, which CI covers)
+    import tomli as tomllib  # pragma: no cover
 
 from .config import ConfigError
 from .util import printable

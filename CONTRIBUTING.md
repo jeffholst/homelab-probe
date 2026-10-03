@@ -21,7 +21,7 @@ uv run mypy                 # clean, and blocking in CI
 uv lock --check             # after changing a dependency, run `uv lock` and commit uv.lock
 ```
 
-CI runs all of these on every pull request, with the tests on Python 3.10 to 3.13. Line and branch coverage is 100%, so a new branch needs a test. Write a test, then break the code it guards and watch the test fail.
+CI runs all of these on every pull request, with the tests on Python 3.10 to 3.13. Line and branch coverage is 100% and CI checks it (`uv run coverage run -m pytest`, then `uv run coverage report`), so a new branch needs a test. Write a test, then break the code it guards and watch the test fail.
 
 ## What a good pull request has
 

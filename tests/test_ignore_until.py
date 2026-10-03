@@ -10,6 +10,7 @@ from docs_support import ROOT
 from jsonschema import Draft202012Validator
 
 from unifi_sentinel import cli, commands
+from unifi_sentinel import settings as settings_module
 from unifi_sentinel.audit import AUDIT_AREAS
 from unifi_sentinel.config import ConfigError
 from unifi_sentinel.diagnose import Finding, apply_ignores, findings_json, format_ignored
@@ -89,6 +90,70 @@ def test_until_alone_is_not_a_rule_and_a_reason_is_still_required(tmp_path):
 def test_the_other_fields_must_still_be_strings(tmp_path):
     with pytest.raises(ConfigError, match="must be strings"):
         rules(tmp_path, '[[ignore]]\nsubject = 5\nuntil = 2026-10-10\nreason = "x"\n')
+
+
+# -- naming the rule of an impossible bare date, whatever the Python version -----------------------------------------
+# The TOML reader refuses `until = 2026-02-30` itself, and what its error carries depends on the Python version:
+# 3.14 has a `lineno`, earlier ones only the text "(at line N, column M)". These make the reader fail with stand-ins
+# for both, so neither path depends on the version that runs the suite.
+
+TWO_RULES = (
+    '[[ignore]]\ncode = "device.offline"\nreason = "one"\n\n'            # lines 1 to 4
+    '[[ignore]] # the second\nsubject = "x"\nuntil = 2026-02-30 # impossible\nreason = "two"\n'
+)
+
+
+class ReaderError(settings_module.tomllib.TOMLDecodeError):
+    """What the TOML reader raises, with or without the `lineno` newer Pythons give it."""
+
+    def __init__(self, message, lineno=None):
+        Exception.__init__(self, message)
+        if lineno is not None:
+            self.lineno = lineno
+
+
+def fail_reading(monkeypatch, tmp_path, error, text=TWO_RULES):
+    def reader(_text):
+        raise error
+    monkeypatch.setattr(settings_module.tomllib, "loads", reader)
+    with pytest.raises(ConfigError) as caught:
+        load_settings(write(tmp_path, text))
+    return str(caught.value)
+
+
+@pytest.mark.parametrize("error", [
+    ReaderError("Invalid date or datetime", lineno=7),                           # the attribute, as Python 3.14 has it
+    ReaderError("Invalid date or datetime (at line 7, column 9)"),               # the message, as 3.10 to 3.13 have it
+    ReaderError("Invalid date or datetime (at line 7, column 9)", lineno="7"),   # an attribute that is no int: the text
+])
+def test_the_rule_of_an_impossible_bare_date_is_named_from_either_kind_of_error(monkeypatch, tmp_path, error):
+    assert "[[ignore]] #2: until must be a valid date like 2026-10-10" in fail_reading(monkeypatch, tmp_path, error)
+
+
+@pytest.mark.parametrize("error", [
+    ReaderError("bad", lineno=1), ReaderError("bad", lineno=2), ReaderError("bad", lineno=99),   # not an until line
+    ReaderError("bad", lineno=0),
+    ReaderError("bad (at line 2, column 9)"), ReaderError("bad"), ReaderError("bad (at line x, column 9)"),
+    ReaderError(""),
+])
+def test_any_other_reader_error_is_plain_invalid_toml(monkeypatch, tmp_path, error):
+    message = fail_reading(monkeypatch, tmp_path, error)
+    assert "invalid TOML" in message and "until must be" not in message
+
+
+def test_a_valid_date_on_the_reported_line_is_not_blamed(monkeypatch, tmp_path):
+    valid = TWO_RULES.replace("2026-02-30", "2026-02-28")
+    assert "invalid TOML" in fail_reading(monkeypatch, tmp_path, ReaderError("bad", lineno=7), valid)
+
+
+def test_a_date_line_before_any_rule_is_not_a_rule(monkeypatch, tmp_path):
+    text = "until = 2026-02-30\n" + TWO_RULES
+    assert "invalid TOML" in fail_reading(monkeypatch, tmp_path, ReaderError("bad", lineno=1), text)
+
+
+def test_the_real_reader_names_the_rule_too(tmp_path):
+    with pytest.raises(ConfigError, match=r"#2: until must be a valid date"):
+        load_settings(write(tmp_path, TWO_RULES))
 
 
 # -- when a rule applies -----------------------------------------------------------------------------------------
