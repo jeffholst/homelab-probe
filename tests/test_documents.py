@@ -22,12 +22,16 @@ from homelab_probe.documents import (
     Document,
     audit_document,
     client_document,
+    diagnose_document,
+    diff_document,
     doctor_document,
     events_document,
+    export_document,
     firewall_document,
     info_document,
     new_clients_document,
     query_document,
+    snapshot_document,
     topology_document,
     wan_document,
     wifi_document,
@@ -444,6 +448,125 @@ def test_a_degraded_read_of_the_query_is_in_the_document_and_not_printed_when_qu
     assert document.warnings and capsys.readouterr().err == ""
     loud = query_document(fake_client, "default", "clients", include_offline=True)
     assert capsys.readouterr().err == "".join(f"Warning: {w}\n" for w in loud.warnings) and loud.warnings
+
+
+# -- diagnose, snapshot, diff and export -------------------------------------------------------------------
+
+def test_the_diagnose_document_is_what_diagnose_json_prints(fake_client, frozen):
+    from homelab_probe.diagnose import AREA_NAMES
+
+    cases = [(["diagnose", "--json"], None), (["diagnose", "--json", "--no-events"], [a for a in AREA_NAMES if a != "events"]),
+             (["diagnose", "--json", "--only", "wan,wifi"], ["wan", "wifi"]),
+             (["diagnose", "--json", "--skip", "wifi"], [a for a in AREA_NAMES if a != "wifi"])]
+    for argv, areas in cases:
+        code, out, err = run_command(fake_client, argv)
+        with utc():
+            document = diagnose_document(fake_client, "default", areas=areas, echo=False)
+        assert code in (0, 1, 2) and document.name == "diagnose", argv
+        assert err == "".join(f"Warning: {w}\n" for w in document.warnings), argv
+        assert document.data == json.loads(out) and document.to_json() == out.rstrip("\n"), argv
+        assert document.data["areas"] == (areas or list(AREA_NAMES)) and document.meta["complete"] is True
+
+
+def test_the_diagnose_text_comes_from_its_document_with_the_checked_note_and_the_ignored_list(fake_client, frozen,
+                                                                                               tmp_path):
+    from homelab_probe.diagnose import AREA_NAMES, render_findings
+
+    config = tmp_path / "hlp.toml"
+    config.write_text('[[ignore]]\ncode = "device.offline"\nreason = "spare"\n')
+    ignoring = DiagnoseSettings(ignore=(IgnoreRule(code="device.offline", reason="spare"),))
+    no_events = [a for a in AREA_NAMES if a != "events"]
+    cases = [  # argv, settings, areas, show_ignored, checked note
+        (["--no-events"], None, no_events, False, False),
+        (["--only", "devices,wan", "--show-ignored", "--config", str(config)], ignoring, ["devices", "wan"], True, True),
+        (["--skip", "wifi", "--config", str(config)], ignoring, [a for a in AREA_NAMES if a != "wifi"], False, True),
+    ]
+    for argv, settings, areas, show_ignored, checked in cases:
+        _, out, _ = run_command(fake_client, ["diagnose", "--no-emoji", *argv])
+        with utc():
+            data = diagnose_document(fake_client, "default", settings, areas, show_ignored=show_ignored,
+                                     echo=False).data
+        assert out.rstrip("\n") == render_findings(data, False, show_ignored, checked), argv
+        assert ("Checked: " in out) is checked and ("Ignored (" in out) is show_ignored, argv
+
+
+def test_the_snapshot_document_is_the_saved_file(fake_client, tmp_path, frozen):
+    from homelab_probe.history import list_snapshots, load_snapshot
+
+    code, out, _ = run_command(fake_client, ["snapshot", "--dir", str(tmp_path / "saved")])
+    (saved,) = list_snapshots(tmp_path / "saved")
+    with utc():
+        document = snapshot_document(fake_client, "default", echo=False)
+    on_disk, live = load_snapshot(saved), document.data
+    assert code == 0 and document.name == "snapshot"
+    on_disk["captured_at"] = live["captured_at"] = ""                 # the one value that is the time of the call
+    assert live == on_disk and live["controller"]["application_version"] == "10.0.0"
+    json.dumps(document.data)
+
+
+def test_a_failing_version_lookup_leaves_the_version_blank_not_the_snapshot_unsaved(fake_client):
+    def no_info():
+        raise UniFiAPIError("HTTP 500")
+
+    fake_client.info = no_info
+    assert snapshot_document(fake_client, "default", echo=False).data["controller"]["application_version"] == ""
+
+
+def test_the_diff_document_is_what_diff_json_prints(fake_client, tmp_path, frozen):
+    from homelab_probe.history import list_snapshots, load_snapshot
+
+    saved_dir = tmp_path / "saved"
+    run_command(fake_client, ["snapshot", "--dir", str(saved_dir)])
+    fake_client.session.fx["devices"][1]["name"] = "Renamed Switch"
+    code, out, err = run_command(fake_client, ["diff", "--dir", str(saved_dir), "--json"])
+    old = load_snapshot(list_snapshots(saved_dir)[0])
+    with utc():
+        live = diff_document(fake_client, "default", old, echo=False)
+    assert code == 0 and live.name == "diff" and list(live.data)[0] == "version"
+    assert live.warnings and err == "".join(f"Warning: {w}\n" for w in live.warnings)   # the live read's, as data
+    assert live.data == json.loads(out) and live.data["devices"]["changed"]
+    newer = snapshot_document(fake_client, "default", echo=False).data
+    both = diff_document(fake_client, "default", old, newer)           # two records: nothing is read
+    assert both.data["devices"] == live.data["devices"] and both.warnings == []
+
+
+def test_the_diff_text_is_rendered_from_its_document(fake_client, tmp_path, frozen):
+    from homelab_probe.history import list_snapshots, load_snapshot, render_diff
+
+    saved_dir = tmp_path / "saved"
+    run_command(fake_client, ["snapshot", "--dir", str(saved_dir)])
+    fake_client.session.fx["devices"][1]["name"] = "Renamed Switch"
+    _, out, _ = run_command(fake_client, ["diff", "--dir", str(saved_dir)])
+    old = load_snapshot(list_snapshots(saved_dir)[0])
+    with utc():
+        document = diff_document(fake_client, "default", old, echo=False)
+    assert out.splitlines()[2:] == render_diff(document.data, "x", "y").splitlines()[2:]
+
+
+def test_the_export_document_and_the_files_are_built_from_the_same_rows(fake_client, tmp_path, frozen):
+    import csv
+
+    from homelab_probe.export import JSON_FILENAME
+
+    run_command(fake_client, ["export", "--format", "json", "-o", str(tmp_path / "j")])
+    run_command(fake_client, ["export", "-o", str(tmp_path / "c")])
+    with utc():
+        document = export_document(fake_client, "default", echo=False)
+    assert document.name == "export" and document.data == json.loads((tmp_path / "j" / JSON_FILENAME).read_text())
+    assert [r["Name"] for r in document.meta["rows"]] == [
+        r["Name"] for r in csv.DictReader((tmp_path / "c" / "unifi_clients.csv").open(newline=""))]
+    assert document.meta["connected"] == (4, 2) and document.meta["site"]["name"]
+    offline = export_document(fake_client, "default", include_offline=True, echo=False)
+    assert len(offline.meta["rows"]) > len(document.meta["rows"])
+
+
+def test_the_snapshot_functions_that_take_a_snapshot_still_agree_with_the_document_builders(fake_client):
+    from homelab_probe.export import export_data, inventory_rows, switch_ports
+    from homelab_probe.export import export_document as export_of_snapshot
+    from homelab_probe.snapshot import Needs, collect_snapshot
+
+    snap = collect_snapshot(fake_client, "default", Needs(offline=False))
+    assert export_of_snapshot(snap) == export_data(inventory_rows(snap), switch_ports(snap))
 
 
 # -- info and doctor --------------------------------------------------------------------------------

@@ -21,17 +21,19 @@ in a DEBUG record. This module imports only the standard library and this packag
 import datetime
 import json
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from . import logs
 from .audit import AUDIT_AREAS, audit
 from .client import UniFiAPIError, UniFiClient
 from .client_view import build_client_detail, client_data, find_clients
-from .diagnose import apply_ignores, findings_document
+from .diagnose import apply_ignores, diagnose, findings_document, needs_for
 from .doctor import Check
 from .doctor import to_dict as doctor_dict
 from .events import DEFAULT_LIMIT, DEFAULT_SINCE, events_data, fetch_events, make_filter, parse_duration
+from .export import export_data, inventory_rows, switch_ports
 from .firewall import build_firewall
+from .history import SnapshotRecord, capture, diff_data, diff_snapshots
 from .new_clients import new_clients_data
 from .new_clients import report as new_clients_report
 from .query import query_data, query_rows
@@ -223,6 +225,64 @@ def new_clients_document(client: UniFiClient, site: str, search: str = "", echo:
         snap = collect_snapshot(client, site, NEW_CLIENTS_NEEDS)
         rows = new_clients_report(snap, search)
     return Document("new-clients", new_clients_data(rows), [logs.scrub(w) for w in warnings])
+
+
+# -- diagnose ---------------------------------------------------------------------------------------
+
+def diagnose_document(client: UniFiClient, site: str, settings: Optional[DiagnoseSettings] = None,
+                      areas: Optional[Sequence[str]] = None, since: int = parse_duration(DEFAULT_SINCE),
+                      show_ignored: bool = False, echo: bool = True,
+                      today: Optional[datetime.date] = None) -> Document:
+    """The health checks of ``areas`` (all of them by default) after the ignore list: the dict that ``diagnose
+    --json`` prints. ``areas`` also say what is read (see ``needs_for``). ``meta["complete"]`` is False when an
+    optional read failed, so a caller that compares passes (``--watch``) can skip a pass that missed data."""
+    settings = settings or DiagnoseSettings()
+    with logs.collect_warnings(quiet=not echo) as warnings:
+        snap = collect_snapshot(client, site, needs_for(areas, since))
+        findings, ignored = apply_ignores(diagnose(snap, settings, areas=areas), settings.ignore, today)
+    return Document("diagnose", findings_document(findings, ignored, show_ignored, areas),
+                    [logs.scrub(w) for w in warnings], {"complete": not snap.degraded})
+
+
+# -- snapshot and diff ------------------------------------------------------------------------------
+
+# `snapshot` and `diff` record offline clients, reservations and groups, and must not save or compare a record that
+# silently lacks them, so the client history is required.
+INVENTORY_NEEDS = Needs(reservations=True, groups=True, users_required=True)
+
+
+def snapshot_document(client: UniFiClient, site: str, echo: bool = True) -> Document:
+    """The network as it is right now, as a snapshot record (the content of a snapshot file)."""
+    with logs.collect_warnings(quiet=not echo) as warnings:
+        try:
+            version = str(client.info().get("applicationVersion") or "")
+        except UniFiAPIError:
+            version = ""
+        record = capture(collect_snapshot(client, site, INVENTORY_NEEDS), version)
+    return Document("snapshot", record, [logs.scrub(w) for w in warnings])
+
+
+def diff_document(client: UniFiClient, site: str, old: SnapshotRecord, new: Optional[SnapshotRecord] = None,
+                  echo: bool = True) -> Document:
+    """What changed between two saved snapshots, or between ``old`` and the network right now (``new`` None)."""
+    if new is not None:
+        return Document("diff", diff_data(diff_snapshots(old, new)))
+    live = snapshot_document(client, site, echo)
+    return Document("diff", diff_data(diff_snapshots(old, live.data)), live.warnings)
+
+
+# -- export -----------------------------------------------------------------------------------------
+
+def export_document(client: UniFiClient, site: str, include_offline: bool = False, echo: bool = True) -> Document:
+    """The inventory as the one JSON document (see ``export.export_data``). ``meta`` has what the CSV files hold
+    (``rows`` of ``unifi_clients.csv``, ``switches`` for the per-switch files) and what the command reports (the
+    ``site`` and the ``connected`` counts); the JSON file and the CSV files are built from the same rows."""
+    with logs.collect_warnings(quiet=not echo) as warnings:
+        snap = collect_snapshot(client, site, Needs(offline=include_offline))
+        rows, switches = inventory_rows(snap), switch_ports(snap)
+    return Document("export", export_data(rows, switches), [logs.scrub(w) for w in warnings],
+                    {"rows": rows, "switches": switches, "site": snap.site,
+                     "connected": (len(snap.devices), len(snap.clients))})
 
 
 # -- info ---------------------------------------------------------------------------------------------

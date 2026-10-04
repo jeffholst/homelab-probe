@@ -6,7 +6,7 @@ import re
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .snapshot import Snapshot
 from .util import csv_safe, format_time, normalize_mac, printable, record_for
@@ -294,43 +294,53 @@ def inventory_rows(snap: Snapshot) -> List[Dict[str, Any]]:
     return rows + build_offline_clients(snap.clients, snap.devices, snap.all_users)
 
 
-def export_document(snap: Snapshot) -> Dict[str, Any]:
+def switch_ports(snap: Snapshot) -> Dict[str, Tuple[str, List[Dict[str, Any]]]]:
+    """Switch MAC -> (name, port rows): one ``switch_<name>.csv`` each."""
+    return build_switch_ports(snap.legacy_devices, snap.legacy_clients)
+
+
+def export_data(rows: List[Dict[str, Any]], switches: Dict[str, Tuple[str, List[Dict[str, Any]]]]) -> Dict[str, Any]:
     """The same data as the CSV files, as one document: ``devices`` and ``clients`` are the rows of
     ``unifi_clients.csv`` (same columns, split by their Type), ``switches`` one entry per switch with its ``ports``
     (the rows of its ``switch_<name>.csv``). Values are raw, as in every ``--json`` output: JSON escapes control
     characters itself, and only CSV needs the spreadsheet-formula guard."""
-    rows = inventory_rows(snap)
     return {
         "version": JSON_VERSION,
         "devices": [r for r in rows if r["Type"].startswith("Device")],
         "clients": [r for r in rows if r["Type"] == "Client"],
-        "switches": [{"name": name, "mac": mac, "ports": ports}
-                     for mac, (name, ports) in build_switch_ports(snap.legacy_devices, snap.legacy_clients).items()],
+        "switches": [{"name": name, "mac": mac, "ports": ports} for mac, (name, ports) in switches.items()],
     }
 
 
-def run_export(snap: Snapshot, output_dir: Path, fmt: str = "csv") -> None:
-    """Write the inventory: one CSV for the inventory and one per switch (``csv``), or one JSON file (``json``).
-    ``snap.all_users`` (if collected) adds previously seen, not-connected clients."""
-    print(f"Site: {printable(snap.site.get('name'))} ({printable(snap.site.get('id'))})")
-    print(f"Found {len(snap.devices)} device(s), {len(snap.clients)} connected client(s)")
+def export_document(snap: Snapshot) -> Dict[str, Any]:
+    """``export_data`` of a snapshot."""
+    return export_data(inventory_rows(snap), switch_ports(snap))
+
+
+def write_export(data: Dict[str, Any], rows: List[Dict[str, Any]],
+                 switches: Dict[str, Tuple[str, List[Dict[str, Any]]]], site: Dict[str, Any],
+                 connected: Tuple[int, int], output_dir: Path, fmt: str = "csv",
+                 echo: Callable[[str], None] = print) -> None:
+    """Write the inventory: one CSV for the inventory and one per switch (``csv``), or the document as one JSON file
+    (``json``). ``rows`` and ``switches`` are what the CSV files hold, ``data`` what the JSON file holds (all built
+    from the same snapshot), ``connected`` the counts of connected devices and clients; each step is announced with
+    ``echo``."""
+    echo(f"Site: {printable(site.get('name'))} ({printable(site.get('id'))})")
+    echo(f"Found {connected[0]} device(s), {connected[1]} connected client(s)")
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
     if fmt == "json":
-        document = export_document(snap)
         path = output_dir / JSON_FILENAME
-        path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
-        print(f"Wrote {len(document['devices'])} device(s), {len(document['clients'])} client(s) and "
-              f"{len(document['switches'])} switch(es) -> {path}")
+        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        echo(f"Wrote {len(data['devices'])} device(s), {len(data['clients'])} client(s) and "
+             f"{len(data['switches'])} switch(es) -> {path}")
         return
 
-    rows = inventory_rows(snap)
     inventory_path = output_dir / "unifi_clients.csv"
     _write_csv(inventory_path, INVENTORY_COLUMNS, rows)
-    print(f"Wrote {len(rows)} entries -> {inventory_path}")
+    echo(f"Wrote {len(rows)} entries -> {inventory_path}")
 
-    switches = build_switch_ports(snap.legacy_devices, snap.legacy_clients)
     name_counts = Counter(name for name, _ in switches.values())
     for mac, (name, port_rows) in switches.items():
         safe = re.sub(r"[^\w \-]", "_", name)
@@ -338,4 +348,12 @@ def run_export(snap: Snapshot, output_dir: Path, fmt: str = "csv") -> None:
             safe += "_" + re.sub(r"[^\w \-]", "_", mac)
         path = output_dir / f"switch_{safe}.csv"
         _write_csv(path, list(port_rows[0].keys()), port_rows)
-        print(f"   -> {path} ({len(port_rows)} ports)")
+        echo(f"   -> {path} ({len(port_rows)} ports)")
+
+
+def run_export(snap: Snapshot, output_dir: Path, fmt: str = "csv") -> None:
+    """Write the export of a snapshot (see ``write_export``), printing what was written. ``snap.all_users`` (if
+    collected) adds previously seen, not-connected clients."""
+    rows, switches = inventory_rows(snap), switch_ports(snap)
+    write_export(export_data(rows, switches), rows, switches, snap.site, (len(snap.devices), len(snap.clients)),
+                 output_dir, fmt)

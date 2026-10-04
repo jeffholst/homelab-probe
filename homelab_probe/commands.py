@@ -26,14 +26,9 @@ from .diagnose import (
     CRITICAL,
     INFO,
     WARNING,
-    apply_ignores,
-    diagnose,
+    Finding,
     exit_code,
     findings_from_document,
-    findings_json,
-    format_findings,
-    format_ignored,
-    needs_for,
     parse_areas,
     render_findings,
     stream_supports_emoji,
@@ -42,14 +37,18 @@ from .doctor import Options as DoctorOptions
 from .doctor import exit_failed, run_checks
 from .doctor import render as render_doctor
 from .documents import (
+    Document,
     audit_document,
     client_document,
+    diagnose_document,
+    diff_document,
     doctor_document,
     events_document,
     firewall_document,
     info_document,
     new_clients_document,
     query_document,
+    snapshot_document,
     topology_document,
     wan_document,
     wifi_document,
@@ -59,10 +58,6 @@ from .export import EXPORT_FORMATS, JSON_FILENAME, run_export
 from .firewall import render_text as render_firewall
 from .history import (
     DEFAULT_DIR,
-    SnapshotRecord,
-    capture,
-    diff_json,
-    diff_snapshots,
     label_for,
     list_snapshots,
     load_snapshot,
@@ -411,20 +406,6 @@ def _run_topology(ctx: Context) -> int:
 
 # -- snapshot and diff --------------------------------------------------------------------------------
 
-# `snapshot` and `diff` record offline clients, reservations and groups, and must not save or compare a
-# record that silently lacks them, so the client history is required.
-INVENTORY_NEEDS = Needs(reservations=True, groups=True, users_required=True)
-
-
-def _live_inventory(client: UniFiClient, config: Any) -> SnapshotRecord:
-    """The network as it is right now, as a snapshot record."""
-    try:
-        version = str(client.info().get("applicationVersion") or "")
-    except UniFiAPIError:
-        version = ""
-    return capture(collect_snapshot(client, config.site, INVENTORY_NEEDS), version)
-
-
 def _add_snapshot(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("-o", "--output", type=Path, metavar="FILE",
                         help="Write to this file instead of a timestamped one in --dir")
@@ -437,7 +418,7 @@ def _add_snapshot(parser: argparse.ArgumentParser) -> None:
 
 def _run_snapshot(ctx: Context) -> int:
     args = ctx.args
-    record = _live_inventory(ctx.client, ctx.config)
+    record = snapshot_document(ctx.client, ctx.config.site).data
     path = save_snapshot(record, args.output, args.dir, args.force)
     say(f"Saved {len(record['devices'])} devices, {len(record['clients'])} clients and "
         f"{len(record['reservations'])} reservations to {path}")
@@ -486,14 +467,11 @@ def _run_diff(ctx: Context) -> int:
         new_path = resolve(args.refs[1], args.dir) if len(args.refs) == 2 else None
 
     old = load_snapshot(old_path)
-    if new_path:
-        new = load_snapshot(new_path)
-        new_label = label_for(new, new_path.name)
-    else:
-        new, new_label = _live_inventory(ctx.client, ctx.config), "the network right now"
-    result = diff_snapshots(old, new)
-    say(diff_json(result) if args.json
-        else render_diff(result, label_for(old, old_path.name), new_label, args.all))
+    new = load_snapshot(new_path) if new_path else None
+    new_label = label_for(new, new_path.name) if new is not None and new_path else "the network right now"
+    document = diff_document(ctx.client, ctx.config.site, old, new)
+    say(document.to_json() if args.json
+        else render_diff(document.data, label_for(old, old_path.name), new_label, args.all))
     return 0
 
 
@@ -776,12 +754,13 @@ WATCH_SLEEP = time.sleep          # looked up when used, so a test can replace t
 
 def _diagnose_once(
     ctx: Context, settings: DiagnoseSettings, today: Optional[datetime.date] = None
-) -> Tuple[List[Any], List[Any], bool]:
-    """One pass of the checks: the findings that remain and those the ignore list suppressed."""
-    areas = ctx.args.areas
-    snap = collect_snapshot(ctx.client, ctx.config.site, needs_for(areas, ctx.args.since))
-    findings, ignored = apply_ignores(diagnose(snap, settings, areas=areas), settings.ignore, today)
-    return findings, ignored, not snap.degraded
+) -> Tuple[List[Finding], Document, bool]:
+    """One pass of the checks: the findings that remain, the document they are in (which also says what the ignore
+    list suppressed) and whether every optional read worked."""
+    args = ctx.args
+    document = diagnose_document(ctx.client, ctx.config.site, settings, args.areas, args.since, args.show_ignored,
+                                 today=today)
+    return findings_from_document(document.data), document, document.meta["complete"]
 
 
 def _watch_diagnose(ctx: Context, settings: DiagnoseSettings, first: List[Any], first_complete: bool) -> int:
@@ -832,16 +811,13 @@ def _run_diagnose(ctx: Context) -> int:
     today = datetime.date.today()
     _warn_expired_rules(settings, today)                   # once, also before a --watch loop
     areas = args.areas
-    findings, ignored, complete = _diagnose_once(ctx, settings, today)
+    findings, document, complete = _diagnose_once(ctx, settings, today)
     if args.json:
-        say(findings_json(findings, ignored, args.show_ignored, areas))
+        say(document.to_json())
     else:
         emoji = not args.no_emoji and stream_supports_emoji(sys.stdout)
-        say(format_findings(findings, emoji, len(ignored)))
-        if areas is not None and (args.only or args.skip):       # --no-events alone prints what it always did
-            say(f"Checked: {', '.join(areas)} (not checked: {', '.join(a for a in AREA_NAMES if a not in areas)})")
-        if args.show_ignored and ignored:
-            say("\n" + format_ignored(ignored))
+        checked_note = areas is not None and bool(args.only or args.skip)    # --no-events alone: as it always did
+        say(render_findings(document.data, emoji, args.show_ignored, checked_note))
     if args.watch is not None:
         return _watch_diagnose(ctx, settings, findings, complete)
     code = exit_code(findings, args.fail_on)

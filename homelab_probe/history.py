@@ -464,7 +464,8 @@ def _section(kind: str, title: str, part: DiffPart, fields: List[Tuple[str, str]
     return [title] + lines + [""] if lines else []
 
 
-def render_diff(diff: Diff, old_label: str, new_label: str, show_all: bool = False) -> str:
+def render_diff(diff: Mapping[str, Any], old_label: str, new_label: str, show_all: bool = False) -> str:
+    """The text of a diff: ``diff_snapshots`` or its ``diff_data`` document (the ``version`` is not used)."""
     diff, old_label, new_label = clean_data(diff), clean_data(old_label), clean_data(new_label)
     out = [f"Comparing {old_label} -> {new_label}", ""]
     if not diff["same_site"]:
@@ -481,9 +482,14 @@ def render_diff(diff: Diff, old_label: str, new_label: str, show_all: bool = Fal
     return "\n".join(out + sections).rstrip() + f"\n\n{diff['total']} change(s)"
 
 
+def diff_data(diff: Diff) -> Dict[str, Any]:
+    """What ``diff --json`` prints: the diff with its format version first."""
+    return {"version": JSON_VERSION, **diff}
+
+
 def diff_json(diff: Diff) -> str:
-    """``diff --json``: the diff with its format version first."""
-    return json.dumps({"version": JSON_VERSION, **diff}, indent=2)
+    """``diff_data`` as text."""
+    return json.dumps(diff_data(diff), indent=2)
 
 
 def label_for(record: SnapshotRecord, name: str) -> str:

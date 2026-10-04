@@ -129,10 +129,14 @@ def findings_from_document(document: Dict[str, Any]) -> List[Finding]:
     return [Finding.from_dict(f) for f in document["findings"]]
 
 
-def render_findings(document: Dict[str, Any], emoji: bool = True, show_ignored: bool = False) -> str:
-    """The text of ``audit`` from its document: the findings, then (with ``show_ignored``) what the ignore list
-    suppressed."""
+def render_findings(document: Dict[str, Any], emoji: bool = True, show_ignored: bool = False,
+                    show_checked: bool = False) -> str:
+    """The text of ``diagnose`` and ``audit`` from their document: the findings, then (with ``show_checked``) which
+    areas were and were not checked, then (with ``show_ignored``) what the ignore list suppressed."""
     text = format_findings(findings_from_document(document), emoji, document["summary"]["ignored"])
+    if show_checked:
+        checked = document["areas"]
+        text += f"\nChecked: {', '.join(checked)} (not checked: {', '.join(a for a in AREA_NAMES if a not in checked)})"
     if show_ignored and document.get("ignored"):
         text += "\n\n" + format_ignored_rows(document["ignored"])
     return text
