@@ -108,7 +108,7 @@ DEMO_REFUSED = {
 def _check_demo(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     """``--demo`` runs on synthetic data and touches nothing of the user's: refuse what would read or write it."""
     if args.env_file is not None:
-        parser.error("--demo does not read a settings file: drop --env-file")
+        parser.error("--demo does not read an environment file: drop --env-file")
     if args.command in DEMO_REFUSED:
         parser.error(f"--demo cannot be used with {args.command}: {DEMO_REFUSED[args.command]}")
     if any(getattr(args, name, False) for name in ("notify", "notify_dry_run", "notify_baseline")):
