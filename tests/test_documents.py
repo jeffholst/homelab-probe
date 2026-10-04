@@ -182,13 +182,18 @@ def test_the_text_of_the_other_reports_is_rendered_from_their_documents(fake_cli
          lambda: render_topology(topology_document(fake_client, "default", with_clients=True, echo=False).data,
                                  False, True)),
         (["firewall", "--zones", "--no-emoji"],
-         lambda: render_firewall(firewall_document(fake_client, "default", echo=False).data, True, False)),
+         lambda: _render_firewall_document(fake_client, render_firewall)),
         (["audit", "--no-emoji"], lambda: render_findings(audit_document(fake_client, "default", echo=False).data,
                                                           False)),
     ]
     for argv, expected in cases:
         _, out, _ = run_command(fake_client, argv)
         assert out.rstrip("\n") == expected(), argv
+
+
+def _render_firewall_document(fake_client, render_firewall):
+    document = firewall_document(fake_client, "default", echo=False)
+    return render_firewall(document.data, True, False, zone_names=document.zone_names)
 
 
 def test_every_new_document_reads_exactly_what_its_command_declares():
@@ -251,11 +256,12 @@ def test_findings_come_back_from_a_document_as_findings(fake_client):
                                                  "mac": ""}]})[0].target_mac is None
 
 
-def test_a_firewall_zone_without_an_id_has_a_null_id_and_keeps_its_name(fake_client):
+def test_firewall_zone_ids_stay_out_of_json_and_are_available_to_text(fake_client):
     fake_client.session.fx["legacy_v2"]["firewall/zone"][0].pop("_id")
-    data = firewall_document(fake_client, "default", echo=False).data
-    assert data["zones"][0]["id"] is None and data["zones"][1]["id"]
-    json.dumps(data)
+    document = firewall_document(fake_client, "default", echo=False)
+    assert all("id" not in zone for zone in document.data["zones"])
+    assert "z-int" not in document.zone_names and document.zone_names["z-ext"] == "External"
+    json.dumps(document.data)
 
 
 # -- info and doctor --------------------------------------------------------------------------------

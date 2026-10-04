@@ -54,6 +54,13 @@ class Document:
         return json.dumps(self.data, indent=2)
 
 
+@dataclass(frozen=True)
+class FirewallDocument(Document):
+    """Firewall JSON data plus the zone names needed only by its text renderer."""
+
+    zone_names: Dict[str, str] = field(default_factory=dict)
+
+
 # -- wan ----------------------------------------------------------------------------------------------
 
 WAN_NEEDS = Needs(health=True, speedtests=True)
@@ -103,12 +110,13 @@ FIREWALL_NEEDS = Needs(firewall=True, reservations=True)
 
 
 def firewall_document(client: UniFiClient, site: str, show_all: bool = False, search: str = "",
-                      echo: bool = True) -> Document:
+                      echo: bool = True) -> FirewallDocument:
     """Zone-based firewall policies, zones, the zone matrix and port forwards, with their findings."""
     with logs.collect_warnings(quiet=not echo) as warnings:
         snap = collect_snapshot(client, site, FIREWALL_NEEDS)
         report = build_firewall(snap, show_all, search)
-    return Document("firewall", report, [logs.scrub(w) for w in warnings])
+    zone_names = report.pop("_zone_names")
+    return FirewallDocument("firewall", report, [logs.scrub(w) for w in warnings], zone_names)
 
 
 # -- audit --------------------------------------------------------------------------------------------

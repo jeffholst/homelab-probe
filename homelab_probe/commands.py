@@ -569,7 +569,8 @@ def _run_firewall(ctx: Context) -> int:
     args = ctx.args
     document = firewall_document(ctx.client, ctx.config.site, args.all, args.search)
     emoji = not args.no_emoji and stream_supports_emoji(sys.stdout)
-    say(document.to_json() if args.json else render_firewall(document.data, args.zones, emoji))
+    say(document.to_json() if args.json else
+        render_firewall(document.data, args.zones, emoji, zone_names=document.zone_names))
     return 0
 
 
