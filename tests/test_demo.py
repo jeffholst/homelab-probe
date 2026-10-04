@@ -116,7 +116,7 @@ def test_a_named_settings_file_is_used(hostile_machine, capsys, monkeypatch, tmp
 
 
 @pytest.mark.parametrize("argv, fragment", [
-    (["--env-file", "x.env", "info"], "--demo does not read a settings file"),
+    (["--env-file", "x.env", "info"], "--demo does not read an environment file"),
     (["doctor"], "cannot be used with doctor"),
     (["snapshot"], "cannot be used with snapshot"),
     (["diff"], "cannot be used with diff"),
