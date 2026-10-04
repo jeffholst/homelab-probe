@@ -78,6 +78,7 @@ Sample from synthetic data with `diagnose --no-events` (text labels are used whe
 ```text
 [CRITICAL] Gateway: reports that it is overheating
 [WARNING ] Garage AP: device is offline
+[WARNING ] Gateway Backup: storage 97.5% used
 [WARNING ] Office Switch: CPU utilization 95%
 [WARNING ] Office Switch: PoE budget 41.6 W of 52 W used (80%)
 [WARNING ] Office Switch: uplink to Gateway negotiated at 100 Mbps but both ends support 1000 Mbps
@@ -90,7 +91,7 @@ Sample from synthetic data with `diagnose --no-events` (text labels are used whe
 [INFO    ] Office Switch port 2: negotiated at 100 Mbps
 [INFO    ] wlan: wlan subsystem reports warning: 1 device(s) disconnected (see the device findings)
 
-1 critical, 10 warnings, 2 info
+1 critical, 11 warnings, 2 info
 ```
 
 ### new-clients

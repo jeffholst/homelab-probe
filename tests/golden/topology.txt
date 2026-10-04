@@ -1,10 +1,11 @@
-Gateway (UCG Max)  [CRITICAL]
+Gateway (UCG Max)  [CRITICAL x2]
 `-- port 2 -> Office Switch (100 Mbps, supports 1000)  1 client  [WARNING x8]
     +-- port 2 -> Office AP  1 client
     `-- port 5 -> Garage AP  [OFFLINE]  [WARNING]
 
 Findings on these devices:
   [CRITICAL] Gateway: reports that it is overheating
+  [WARNING ] Gateway Backup: storage 97.5% used
   [WARNING ] Office Switch: CPU utilization 95%
   [WARNING ] Office Switch: PoE budget 41.6 W of 52 W used (80%)
   [WARNING ] Office Switch: uplink to Gateway negotiated at 100 Mbps but both ends support 1000 Mbps

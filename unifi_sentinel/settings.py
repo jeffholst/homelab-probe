@@ -109,6 +109,8 @@ def _parse_until(value: Any, number: int) -> datetime.date:
 class DiagnoseSettings:
     resource_warn_pct: float = 90        # CPU/memory at or above: warning
     resource_critical_pct: float = 98    # CPU/memory at or above: critical
+    storage_warn_pct: float = 90         # a device's storage used at or above: warning
+    storage_critical_pct: float = 98     # a device's storage used at or above: critical
     slow_link_mbps: int = 100            # ports negotiated at or below: info
     wan_latency_warn_ms: float = 100     # internet latency at or above: warning
     wan_drops_warn: int = 10             # internet drops at or above: warning (heuristic)
@@ -161,7 +163,8 @@ def _parse(data: Dict[str, Any]) -> DiagnoseSettings:
     thresholds = data.get("thresholds", {})
     if not isinstance(thresholds, dict):
         raise ConfigError("[thresholds] must be a table")
-    known = {"resource_warn_pct", "resource_critical_pct", "slow_link_mbps",
+    known = {"resource_warn_pct", "resource_critical_pct", "storage_warn_pct", "storage_critical_pct",
+             "slow_link_mbps",
              "wan_latency_warn_ms", "wan_drops_warn", "wan_availability_warn_pct",
              "wan_speed_drop_pct", "link_flap_count", "port_drop_pct",
              "min_packets_for_drop_pct", "poe_warn_pct", "poe_critical_pct",
@@ -177,6 +180,11 @@ def _parse(data: Dict[str, Any]) -> DiagnoseSettings:
                        thresholds.get("resource_critical_pct", defaults.resource_critical_pct), 0, 100)
     if warn > critical:
         raise ConfigError("[thresholds] resource_warn_pct must not exceed resource_critical_pct")
+    storage_warn = _number("storage_warn_pct", thresholds.get("storage_warn_pct", defaults.storage_warn_pct), 0, 100)
+    storage_critical = _number("storage_critical_pct",
+                               thresholds.get("storage_critical_pct", defaults.storage_critical_pct), 0, 100)
+    if storage_warn > storage_critical:
+        raise ConfigError("[thresholds] storage_warn_pct must not exceed storage_critical_pct")
     slow = _number("slow_link_mbps", thresholds.get("slow_link_mbps", defaults.slow_link_mbps), 0)
     latency = _number("wan_latency_warn_ms",
                       thresholds.get("wan_latency_warn_ms", defaults.wan_latency_warn_ms), 0)
@@ -252,6 +260,7 @@ def _parse(data: Dict[str, Any]) -> DiagnoseSettings:
 
     return DiagnoseSettings(
         resource_warn_pct=warn, resource_critical_pct=critical, slow_link_mbps=int(slow),
+        storage_warn_pct=storage_warn, storage_critical_pct=storage_critical,
         wan_latency_warn_ms=latency, wan_drops_warn=int(drops), wan_availability_warn_pct=availability,
         wan_speed_drop_pct=speed_drop, event_flap_count=int(event_flaps),
         link_flap_count=int(flaps), port_drop_pct=drop_pct,

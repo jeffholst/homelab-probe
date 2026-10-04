@@ -196,7 +196,7 @@ def test_the_ignore_list_hides_findings_from_the_tree(fake_client):
 def test_ascii_and_unicode_trees(fixture_tree):
     ascii_text = render_text(fixture_tree, emoji=False)
     assert ascii_text.splitlines()[:5] == [
-        "Gateway (UCG Max)   [CRITICAL]",
+        "Gateway (UCG Max)   [CRITICAL x2]",
         "`-- port 2 -> Office Switch (100 Mbps, supports 1000)   1 client   [WARNING x8]",
         "    +-- port 2 -> Office AP   1 client",
         "    `-- port 5 -> Garage AP   [OFFLINE]   [WARNING]",
@@ -248,7 +248,7 @@ def _run(fake_client, monkeypatch, argv):
 def test_cli_topology_text_clients_and_json(fake_client, monkeypatch, capsys):
     assert _run(fake_client, monkeypatch, ["topology", "--no-emoji"]) == 0
     out = capsys.readouterr().out
-    assert out.startswith("Gateway (UCG Max)   [CRITICAL]\n`-- port 2 -> Office Switch") and "desktop" not in out
+    assert out.startswith("Gateway (UCG Max)   [CRITICAL x2]\n`-- port 2 -> Office Switch") and "desktop" not in out
 
     assert _run(fake_client, monkeypatch, ["topology", "--no-emoji", "--clients"]) == 0
     assert "- port 3: desktop" in capsys.readouterr().out

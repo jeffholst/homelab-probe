@@ -11,7 +11,7 @@
   ],
   "summary": {
     "critical": 1,
-    "warning": 10,
+    "warning": 11,
     "info": 2,
     "ignored": 0
   },
@@ -29,6 +29,13 @@
       "subject": "Garage AP",
       "message": "device is offline",
       "mac": "AA:00:00:00:00:04"
+    },
+    {
+      "severity": "warning",
+      "code": "device.storage",
+      "subject": "Gateway Backup",
+      "message": "storage 97.5% used",
+      "mac": "AA:00:00:00:00:01"
     },
     {
       "severity": "warning",
