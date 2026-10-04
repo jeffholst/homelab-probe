@@ -180,8 +180,7 @@ def test_a_successful_empty_legacy_device_read_does_not_report_unavailable(fake_
     assert not any(f["code"] == "controller.legacy_unavailable" for f in findings)
 
 
-def test_when_the_legacy_data_is_unreadable_the_one_notice_says_both_checks_were_skipped(fake_client, monkeypatch,
-                                                                                        capsys):
+def test_when_the_legacy_data_is_unreadable_the_notice_lists_every_skipped_check(fake_client, monkeypatch, capsys):
     legacy_stat = fake_client.legacy_stat
 
     def fail_device_read(site_ref, resource):
@@ -190,9 +189,12 @@ def test_when_the_legacy_data_is_unreadable_the_one_notice_says_both_checks_were
         return legacy_stat(site_ref, resource)
 
     monkeypatch.setattr(fake_client, "legacy_stat", fail_device_read)
-    _, findings = findings_json(fake_client, monkeypatch, capsys)
+    _, out, err = run(fake_client, monkeypatch, capsys, "diagnose", "--no-events", "--json")
+    findings = json.loads(out)["findings"]
     (notice,) = [f for f in findings if f["code"] == "controller.legacy_unavailable"]
-    assert notice["message"] == "legacy device data unavailable; port, overheating and storage checks were skipped"
+    message = "port, overheating, storage and recent-reboot checks were skipped"
+    assert notice["message"] == f"legacy device data unavailable; {message}"
+    assert f"legacy stat/device unavailable; {message}" in err
     assert overheating(findings) == []
 
 

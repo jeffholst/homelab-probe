@@ -1,13 +1,14 @@
-"""Checks on UniFi devices: offline devices, overheating, CPU or memory use, and storage that is nearly full."""
+"""Checks on UniFi devices: offline devices, overheating, CPU or memory use, full storage, recent restarts."""
 
 import math
 from typing import Any, Dict, List, Optional
 
 from ..export import device_type_label
+from ..query import format_uptime
 from ..settings import DiagnoseSettings
 from ..snapshot import Snapshot
 from ..util import normalize_mac, number, record_for
-from .model import CRITICAL, GATEWAY_TYPES, WARNING, Finding
+from .model import CRITICAL, GATEWAY_TYPES, INFO, WARNING, Finding
 
 
 def _uplink_parents(snap: Snapshot) -> Dict[str, int]:
@@ -127,4 +128,25 @@ def _storage_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Findin
             findings.append(Finding(
                 CRITICAL if pct >= settings.storage_critical_pct else WARNING, f"{device} {label}",
                 f"storage {_percent_text(pct)}% used", mac, code="device.storage"))
+    return findings
+
+
+def _recent_reboot_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]:
+    """An online device that has been up for less than ``recent_reboot_minutes`` (legacy ``uptime``, in seconds),
+    information: a restart nobody asked for is easy to miss otherwise. A firmware update causes one too and is not
+    told apart, a restart is a restart. A device with no uptime (an offline one has none), a value that is not a
+    finite non-negative number, or an offline device gives nothing. The finding lasts as long as the device is
+    "recent", so a run an hour later no longer shows it."""
+    online = {normalize_mac(d.get("macAddress")): d for d in snap.devices if d.get("state") == "ONLINE"}
+    limit = settings.recent_reboot_minutes * 60
+    findings: List[Finding] = []
+    for legacy in snap.legacy_devices:
+        mac = normalize_mac(legacy.get("mac"))
+        device = online.get(mac)
+        uptime = number(legacy.get("uptime"))
+        if device is None or uptime is None or not 0 <= uptime < limit:      # NaN and the infinities fail this too
+            continue
+        name = device.get("name") or legacy.get("name") or mac or "?"
+        findings.append(Finding(INFO, name, f"restarted {format_uptime(uptime)} ago", mac,
+                                code="device.recent_reboot"))
     return findings

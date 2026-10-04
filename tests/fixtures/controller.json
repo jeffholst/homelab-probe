@@ -309,6 +309,7 @@
         "type": "uap",
         "name": "Office AP",
         "model": "U7 Pro",
+        "uptime": 300,
         "uplink": {
           "uplink_mac": "aa:00:00:00:00:02",
           "uplink_remote_port": 2,

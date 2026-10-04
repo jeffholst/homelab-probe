@@ -12,7 +12,7 @@
   "summary": {
     "critical": 1,
     "warning": 11,
-    "info": 2,
+    "info": 3,
     "ignored": 0
   },
   "findings": [
@@ -99,6 +99,13 @@
       "subject": "old-printer",
       "message": "reserved IP 10.0.0.50 is outside network IoT (10.0.20.1/24)",
       "mac": ""
+    },
+    {
+      "severity": "info",
+      "code": "device.recent_reboot",
+      "subject": "Office AP",
+      "message": "restarted <age> ago",
+      "mac": "AA:00:00:00:00:03"
     },
     {
       "severity": "info",

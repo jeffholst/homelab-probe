@@ -50,7 +50,8 @@ and `wep` Wi-Fi security values) the README says so.
   (save the inventory and see exactly what changed), `completion` (shell completion scripts for bash, zsh and fish, generated from the parser), `diagnose` and `info`.
 - **`diagnose` checks:** offline devices (critical for a gateway or a device others uplink through), a device that reports it is
   overheating (`device.overheating`, critical), CPU and memory, a device's storage nearly full (`device.storage`, the
-  gateway lists it; `storage_warn_pct` and `storage_critical_pct`),
+  gateway lists it; `storage_warn_pct` and `storage_critical_pct`), a device that restarted recently
+  (`device.recent_reboot`, information; `recent_reboot_minutes`),
   controller health subsystems, internet latency, drops, availability and speedtest drops, double NAT and
   carrier-grade NAT, clients without an IP or with a link-local one, duplicate IPs, DHCP reservations (mismatch,
   outside the subnet, duplicate, in use by another device, inside the DHCP pool, offline too long, never seen,
@@ -119,8 +120,9 @@ and `wep` Wi-Fi security values) the README says so.
 - Correct handling of 2.4 GHz channel 14 and the U-NII-4 channels (165 to 177) in the Wi-Fi channel plan.
 - MAC addresses are compared in any spelling (`aa:bb:...`, `AA-BB-...`, `aabb.ccdd.eeff`, no separators); several
   checks used to treat two spellings of one address as different devices.
-- Warnings say what was really skipped when an optional read fails, and a command whose answer would be wrong
-  without the client history (`new-clients`, `snapshot`, `diff`) fails instead of printing a misleading result.
+- Warnings say what was really skipped when an optional read fails, including recent-reboot detection when
+  `stat/device` is unavailable, and a command whose answer would be wrong without the client history
+  (`new-clients`, `snapshot`, `diff`) fails instead of printing a misleading result.
 - A file that cannot be read or written ends a command with `ERROR: <reason> (<path>)` and exit code 3, not a
   traceback.
 
