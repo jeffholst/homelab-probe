@@ -24,6 +24,7 @@ CODES = {
     "device.memory_high": "device memory utilization at or above the warning threshold",
     "device.overheating": "an online UniFi device reports that it is overheating",
     "device.storage": "a device's storage (the gateway lists it) is used at or above the warning threshold",
+    "device.recent_reboot": "an online UniFi device has been up for less than the recent-restart threshold",
     "controller.pending_adoption": "devices waiting to be adopted",
     "controller.legacy_unavailable": "legacy device data could not be read, so the port, overheating and storage "
                                      "checks were skipped",

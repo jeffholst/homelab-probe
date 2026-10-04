@@ -50,7 +50,8 @@ and `wep` Wi-Fi security values) the README says so.
   (save the inventory and see exactly what changed), `completion` (shell completion scripts for bash, zsh and fish, generated from the parser), `diagnose` and `info`.
 - **`diagnose` checks:** offline devices (critical for a gateway or a device others uplink through), a device that reports it is
   overheating (`device.overheating`, critical), CPU and memory, a device's storage nearly full (`device.storage`, the
-  gateway lists it; `storage_warn_pct` and `storage_critical_pct`),
+  gateway lists it; `storage_warn_pct` and `storage_critical_pct`), a device that restarted recently
+  (`device.recent_reboot`, information; `recent_reboot_minutes`),
   controller health subsystems, internet latency, drops, availability and speedtest drops, double NAT and
   carrier-grade NAT, clients without an IP or with a link-local one, duplicate IPs, DHCP reservations (mismatch,
   outside the subnet, duplicate, in use by another device, inside the DHCP pool, offline too long, never seen,

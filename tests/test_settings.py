@@ -209,6 +209,9 @@ reason = "known IP conflict from the event log"
 [[ignore]]
 subject = "Gateway Backup"
 reason = "synthetic nearly-full storage entry"
+[[ignore]]
+code = "device.recent_reboot"
+reason = "the access point restarted a few minutes ago"
 ''')
     code = _run(fake_client, monkeypatch, ["diagnose", "--no-emoji", "--config", str(cfg)])
     out = capsys.readouterr().out

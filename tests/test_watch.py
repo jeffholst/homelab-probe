@@ -111,7 +111,9 @@ def test_a_fixed_problem_is_reported_once_with_the_time(fake_client, monkeypatch
 def test_a_new_problem_is_reported(fake_client, monkeypatch, capsys):
     run(fake_client, monkeypatch, Script(set_state(fake_client, "Office AP", "OFFLINE")))
     got = lines(capsys.readouterr())
-    assert len(got) == 1 and re.fullmatch(rf"{STAMP}  \[(WARNING|CRITICAL)\] NEW  Office AP: .*offline.*", got[0])
+    # the access point is also no longer "up for 5 minutes": that information finding is over (RECOVERED)
+    assert len(got) == 2 and re.fullmatch(rf"{STAMP}  \[(WARNING|CRITICAL)\] NEW  Office AP: .*offline.*", got[0])
+    assert re.fullmatch(rf"{STAMP}  \[OK\] RECOVERED  Office AP \(device.recent_reboot\)", got[1])
 
 
 def untimed(captured):

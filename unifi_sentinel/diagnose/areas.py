@@ -17,7 +17,13 @@ from typing import List, Optional, Tuple
 from ..settings import DiagnoseSettings
 from ..snapshot import EventQuery, Needs, Snapshot
 from .addresses import _client_ip_findings, _duplicate_ip_findings, _private_mac_findings
-from .devices import _offline_device_findings, _overheating_findings, _resource_findings, _storage_findings
+from .devices import (
+    _offline_device_findings,
+    _overheating_findings,
+    _recent_reboot_findings,
+    _resource_findings,
+    _storage_findings,
+)
 from .event_checks import _event_findings
 from .health import _health_findings, _wan_findings
 from .model import CODES, Finding
@@ -62,6 +68,7 @@ CHECKS: List[Tuple[Check, Tuple[str, ...]]] = [
     (lambda snap, settings, now: _resource_findings(snap, settings), ("devices",)),
     (lambda snap, settings, now: _overheating_findings(snap), ("devices",)),
     (lambda snap, settings, now: _storage_findings(snap, settings), ("devices",)),
+    (lambda snap, settings, now: _recent_reboot_findings(snap, settings), ("devices",)),
     (lambda snap, settings, now: _health_findings(snap, settings), ("health", "devices")),
     (lambda snap, settings, now: _wan_findings(snap, settings), ("wan",)),
     (lambda snap, settings, now: _client_ip_findings(snap), ("clients",)),

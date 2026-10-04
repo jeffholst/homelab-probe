@@ -7,6 +7,7 @@ resource_warn_pct = 90       # CPU or memory at or above this: warning
 resource_critical_pct = 98   # CPU or memory at or above this: critical
 storage_warn_pct = 90        # a device's storage (the gateway's) used at or above this: warning
 storage_critical_pct = 98    # ... and this: critical
+recent_reboot_minutes = 60   # a device up for less than this many minutes: info (it restarted recently)
 slow_link_mbps = 100         # ports negotiated at or below this speed: info
 wan_latency_warn_ms = 100    # internet latency at or above this: warning
 wan_drops_warn = 10          # internet drops at or above this: warning (heuristic)

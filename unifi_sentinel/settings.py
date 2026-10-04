@@ -111,6 +111,7 @@ class DiagnoseSettings:
     resource_critical_pct: float = 98    # CPU/memory at or above: critical
     storage_warn_pct: float = 90         # a device's storage used at or above: warning
     storage_critical_pct: float = 98     # a device's storage used at or above: critical
+    recent_reboot_minutes: int = 60      # a device up for less than this: info (it restarted recently)
     slow_link_mbps: int = 100            # ports negotiated at or below: info
     wan_latency_warn_ms: float = 100     # internet latency at or above: warning
     wan_drops_warn: int = 10             # internet drops at or above: warning (heuristic)
@@ -164,7 +165,7 @@ def _parse(data: Dict[str, Any]) -> DiagnoseSettings:
     if not isinstance(thresholds, dict):
         raise ConfigError("[thresholds] must be a table")
     known = {"resource_warn_pct", "resource_critical_pct", "storage_warn_pct", "storage_critical_pct",
-             "slow_link_mbps",
+             "recent_reboot_minutes", "slow_link_mbps",
              "wan_latency_warn_ms", "wan_drops_warn", "wan_availability_warn_pct",
              "wan_speed_drop_pct", "link_flap_count", "port_drop_pct",
              "min_packets_for_drop_pct", "poe_warn_pct", "poe_critical_pct",
@@ -185,6 +186,8 @@ def _parse(data: Dict[str, Any]) -> DiagnoseSettings:
                                thresholds.get("storage_critical_pct", defaults.storage_critical_pct), 0, 100)
     if storage_warn > storage_critical:
         raise ConfigError("[thresholds] storage_warn_pct must not exceed storage_critical_pct")
+    reboot_minutes = _number("recent_reboot_minutes",
+                             thresholds.get("recent_reboot_minutes", defaults.recent_reboot_minutes), 1)
     slow = _number("slow_link_mbps", thresholds.get("slow_link_mbps", defaults.slow_link_mbps), 0)
     latency = _number("wan_latency_warn_ms",
                       thresholds.get("wan_latency_warn_ms", defaults.wan_latency_warn_ms), 0)
@@ -228,7 +231,7 @@ def _parse(data: Dict[str, Any]) -> DiagnoseSettings:
                            thresholds.get("notify_repeat_hours", defaults.notify_repeat_hours), 0, 24 * 365)
     for name, value in (("wan_drops_warn", drops), ("link_flap_count", flaps),
                         ("min_packets_for_drop_pct", min_packets), ("wifi_min_attempts", min_attempts),
-                        ("event_flap_count", event_flaps)):
+                        ("event_flap_count", event_flaps), ("recent_reboot_minutes", reboot_minutes)):
         if value != int(value):
             raise ConfigError(f"[thresholds] {name} must be a whole number")
 
@@ -261,6 +264,7 @@ def _parse(data: Dict[str, Any]) -> DiagnoseSettings:
     return DiagnoseSettings(
         resource_warn_pct=warn, resource_critical_pct=critical, slow_link_mbps=int(slow),
         storage_warn_pct=storage_warn, storage_critical_pct=storage_critical,
+        recent_reboot_minutes=int(reboot_minutes),
         wan_latency_warn_ms=latency, wan_drops_warn=int(drops), wan_availability_warn_pct=availability,
         wan_speed_drop_pct=speed_drop, event_flap_count=int(event_flaps),
         link_flap_count=int(flaps), port_drop_pct=drop_pct,
