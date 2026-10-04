@@ -134,6 +134,8 @@ COMMANDS = {
     "info": (["info"], set()),
     "export": (["export"], BASE),
     "export offline": (["export", "--include-offline"], BASE | {"alluser"}),
+    "export json": (["export", "--format", "json"], BASE),
+    "export json offline": (["export", "--format", "json", "--include-offline"], BASE | {"alluser"}),
     "query devices": (["query", "devices"], BASE),
     "query clients offline": (["query", "clients", "--include-offline"], BASE | {"alluser"}),
     "query reservations": (["query", "reservations"], BASE | {"alluser", "networkconf"}),

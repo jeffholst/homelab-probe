@@ -1,5 +1,7 @@
 *.csv
 !tests/golden/*.csv
+# `export --format json`: real MACs and IPs, like the CSV files
+unifi_inventory.json
 __pycache__
 __pycache__/**
 

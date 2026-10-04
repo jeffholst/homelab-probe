@@ -36,7 +36,7 @@ from .diagnose import (
     stream_supports_emoji,
 )
 from .events import DEFAULT_LIMIT, DEFAULT_SINCE, SEVERITIES, fetch_events, make_filter, parse_duration, render_events
-from .export import run_export
+from .export import EXPORT_FORMATS, JSON_FILENAME, run_export
 from .firewall import build_firewall
 from .firewall import render_text as render_firewall
 from .firewall import to_json as firewall_json
@@ -216,14 +216,17 @@ def _run_info(ctx: Context) -> int:
 
 def _add_export(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("-o", "--output-dir", type=Path, default=Path("."),
-                        help="Directory for CSV files (default: current directory)")
+                        help="Directory for the files (default: current directory)")
+    parser.add_argument("--format", choices=EXPORT_FORMATS, default="csv",
+                        help="csv: unifi_clients.csv and one CSV per switch (default); json: one file, "
+                             f"{JSON_FILENAME}, with the same data")
     parser.add_argument("--include-offline", action="store_true",
                         help="Also list previously seen clients that are not connected")
 
 
 def _run_export(ctx: Context) -> int:
     snap = collect_snapshot(ctx.client, ctx.config.site, Needs(offline=ctx.args.include_offline))
-    run_export(snap, ctx.args.output_dir)
+    run_export(snap, ctx.args.output_dir, ctx.args.format)
     return 0
 
 

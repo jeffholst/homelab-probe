@@ -10,6 +10,7 @@ uv run unifi-sentinel.py info
 uv run unifi-sentinel.py export
 uv run unifi-sentinel.py export -o ./out   # write CSVs to a directory (long form: --output-dir)
 uv run unifi-sentinel.py export --include-offline   # also list previously seen clients
+uv run unifi-sentinel.py export --format json -o ./out   # one file, unifi_inventory.json, instead of the CSVs
 uv run unifi-sentinel.py query devices               # UniFi devices with firmware and uptime
 uv run unifi-sentinel.py query clients -s printer --json   # filter (long form: --search), JSON output
 uv run unifi-sentinel.py query clients --include-offline   # also previously seen clients

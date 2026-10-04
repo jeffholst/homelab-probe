@@ -1,0 +1,215 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/jeffholst/unifi-sentinel/main/docs/schemas/export.v1.schema.json",
+  "title": "export --format json",
+  "description": "The file `unifi_inventory.json` that `unifi-sentinel export --format json` writes: the data of `unifi_clients.csv` and of the per-switch CSV files in one document. Values are raw, not spreadsheet-safe.",
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "devices": {
+      "type": "array",
+      "description": "The rows of unifi_clients.csv whose Type starts with 'Device'.",
+      "items": {
+        "$ref": "#/$defs/row"
+      }
+    },
+    "clients": {
+      "type": "array",
+      "description": "The rows of unifi_clients.csv whose Type is 'Client' (offline ones last, with --include-offline).",
+      "items": {
+        "$ref": "#/$defs/row"
+      }
+    },
+    "switches": {
+      "type": "array",
+      "description": "One entry per switch with a port table.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "mac": {
+            "type": "string",
+            "description": "Upper-case MAC of the switch, or its position when it has none."
+          },
+          "ports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/port"
+            }
+          }
+        },
+        "required": [
+          "mac",
+          "name",
+          "ports"
+        ]
+      }
+    }
+  },
+  "required": [
+    "clients",
+    "devices",
+    "switches",
+    "version"
+  ],
+  "$defs": {
+    "row": {
+      "type": "object",
+      "properties": {
+        "MAC Address": {
+          "type": "string"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "Connection Type": {
+          "type": "string"
+        },
+        "Port": {
+          "type": "string"
+        },
+        "Switch": {
+          "type": "string"
+        },
+        "IP Address": {
+          "type": "string"
+        },
+        "Last Seen": {
+          "type": "string"
+        },
+        "Status": {
+          "type": "string"
+        },
+        "Model": {
+          "type": "string"
+        },
+        "Type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Connection Type",
+        "IP Address",
+        "Last Seen",
+        "MAC Address",
+        "Model",
+        "Name",
+        "Port",
+        "Status",
+        "Switch",
+        "Type"
+      ]
+    },
+    "port": {
+      "type": "object",
+      "properties": {
+        "Connected Name": {
+          "type": "string"
+        },
+        "Connected Model": {
+          "type": "string"
+        },
+        "PoE Enabled": {
+          "type": "string"
+        },
+        "TX Packets": {
+          "type": [
+            "number",
+            "string",
+            "null"
+          ]
+        },
+        "Port Index": {
+          "type": [
+            "number",
+            "string",
+            "null"
+          ]
+        },
+        "RX Errors": {
+          "type": [
+            "number",
+            "string",
+            "null"
+          ]
+        },
+        "PoE Class": {
+          "type": "string"
+        },
+        "Port": {
+          "type": "string"
+        },
+        "TX Errors": {
+          "type": [
+            "number",
+            "string",
+            "null"
+          ]
+        },
+        "Status": {
+          "type": "string"
+        },
+        "RX Packets": {
+          "type": [
+            "number",
+            "string",
+            "null"
+          ]
+        },
+        "Full Duplex": {
+          "type": "string"
+        },
+        "PoE Power (W)": {
+          "type": "string"
+        },
+        "TX Bytes": {
+          "type": [
+            "number",
+            "string",
+            "null"
+          ]
+        },
+        "RX Bytes": {
+          "type": [
+            "number",
+            "string",
+            "null"
+          ]
+        },
+        "Connected Type": {
+          "type": "string"
+        },
+        "Connected MAC": {
+          "type": "string"
+        },
+        "Speed": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Connected MAC",
+        "Connected Model",
+        "Connected Name",
+        "Connected Type",
+        "Full Duplex",
+        "PoE Class",
+        "PoE Enabled",
+        "PoE Power (W)",
+        "Port",
+        "Port Index",
+        "RX Bytes",
+        "RX Errors",
+        "RX Packets",
+        "Speed",
+        "Status",
+        "TX Bytes",
+        "TX Errors",
+        "TX Packets"
+      ]
+    }
+  }
+}

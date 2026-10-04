@@ -37,7 +37,8 @@ and `wep` Wi-Fi security values) the README says so.
 
 ### Added
 
-- **Commands:** `export --include-offline` (also the previously seen clients), `query` (devices, clients, DHCP reservations, switch ports, networks and Wi-Fi networks as a table, `--json` or
+- **Commands:** `export --include-offline` (also the previously seen clients) and `export --format json` (the same data as
+  one `unifi_inventory.json`, with a JSON Schema), `query` (devices, clients, DHCP reservations, switch ports, networks and Wi-Fi networks as a table, `--json` or
   `--csv`; `query clients --network`, `--ssid` and `--ap` find the clients on one network, SSID or access point),
   `client` (one client: where it attaches through the whole uplink chain, link quality, addressing, recent events
   and findings), `new-clients` (clients in no client group), `topology` (the uplink tree with ports, negotiated
