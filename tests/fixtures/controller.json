@@ -208,7 +208,7 @@
         "model": "UCG Max",
         "overheating": true,
         "storage": [
-          {"mount_point": "/data", "name": "Backup", "size": 4000000000, "type": "eMMC", "used": 264000000},
+          {"mount_point": "/data", "name": "Backup", "size": 4000000000, "type": "eMMC", "used": 3900000000},
           {"mount_point": "/tmp", "name": "Temporary", "size": 2000000000, "type": "other", "used": 2000000},
           {"mount_point": "/var/log", "size": 1000000000, "type": "other", "used": 1000000}
         ],

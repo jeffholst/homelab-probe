@@ -73,6 +73,13 @@ def test_the_percentage_shows_one_decimal_cut_off_not_rounded(used, shown):
     assert finding.message == f"storage {shown}% used"
 
 
+def test_a_large_storage_entry_one_byte_below_critical_stays_below_it():
+    size = 4_000_000_000_000
+    used = 3_919_999_999_999
+    (finding,) = found(entry(used, size=size))
+    assert finding.severity == "warning" and finding.message == "storage 97.9% used"
+
+
 def test_a_figure_below_a_threshold_never_reads_as_that_threshold():
     (finding,) = found(entry(97.96))                                   # a warning: the critical level is 98
     assert finding.severity == "warning" and finding.message == "storage 97.9% used"
@@ -171,8 +178,10 @@ def test_a_devices_storage_is_judged_whatever_its_state():
 
 # -- in the command ---------------------------------------------------------------------------------------------
 
-def test_the_fixture_gateway_has_storage_with_room_to_spare(fake_client, monkeypatch, capsys):
-    assert storage_findings(fake_client, monkeypatch, capsys) == []
+def test_the_fixture_gateway_demonstrates_a_nearly_full_storage_entry(fake_client, monkeypatch, capsys):
+    (finding,) = storage_findings(fake_client, monkeypatch, capsys)
+    assert (finding["severity"], finding["subject"], finding["message"]) == (
+        "warning", "Gateway Backup", "storage 97.5% used")
     entries = fake_client.session.fx["legacy"]["device"][GATEWAY]["storage"]
     assert [e.get("name") for e in entries] == ["Backup", "Temporary", None]
 
@@ -190,7 +199,11 @@ def test_a_critical_entry_and_the_nameless_entry(fake_client, monkeypatch, capsy
     fill(fake_client, 1, 1990000000, 2000000000)                       # Temporary at 99.5%
     fill(fake_client, 2, 960000000, 1000000000)                        # the entry without a name: its mount point
     result = {f["subject"]: f["severity"] for f in storage_findings(fake_client, monkeypatch, capsys)}
-    assert result == {"Gateway Temporary": "critical", "Gateway /var/log": "warning"}
+    assert result == {
+        "Gateway Backup": "warning",
+        "Gateway Temporary": "critical",
+        "Gateway /var/log": "warning",
+    }
 
 
 def test_the_thresholds_can_be_set_in_the_settings_file(fake_client, monkeypatch, capsys, tmp_path):

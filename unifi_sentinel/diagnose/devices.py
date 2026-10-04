@@ -102,7 +102,7 @@ def _used_pct(entry: Dict[str, Any]) -> Optional[float]:
 def _percent_text(pct: float) -> str:
     """``97.5`` or ``95``: one decimal, cut off rather than rounded, so a figure below a threshold never reads as
     the threshold (97.96% is a warning at a critical level of 98 and is shown as 97.9)."""
-    shown = int(pct * 10 + 1e-9) / 10
+    shown = int(pct * 10) / 10
     return f"{shown:g}"
 
 
