@@ -148,7 +148,7 @@ unifi-sentinel --demo topology
 unifi-sentinel --demo --verbose wifi
 ```
 
-A demo run **touches nothing of yours**:
+A demo run does not use your controller configuration or send data:
 
 - No `.env`, environment variable, `--env-file`, `UNIFI_SENTINEL_ENV` or `unifi-sentinel.toml` is read (a settings file is used only if you name it with `--config`), so a real address or API key in your environment cannot end up in a demo.
 - No controller is contacted: the address is on the `.invalid` top-level domain, which never resolves, and the answers come from the data packaged with the tool (`unifi_sentinel/demo/controller.json`).
