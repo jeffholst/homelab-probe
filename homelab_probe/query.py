@@ -321,10 +321,14 @@ def render_csv(rows: List[Dict[str, Any]], kind: str = "all", offline: bool = Fa
     return out.getvalue().rstrip("\n")
 
 
-def render(rows: List[Dict[str, Any]], as_json: bool, kind: str = "all", offline: bool = False) -> str:
-    if as_json:
-        columns = data_columns(kind, offline)
-        return json.dumps([{c: r.get(c, "") for c in columns} for r in rows], indent=2)
+def query_data(rows: List[Dict[str, Any]], kind: str = "all", offline: bool = False) -> List[Dict[str, Any]]:
+    """What ``query --json`` prints: a bare array with every column of ``kind`` in each row."""
+    columns = data_columns(kind, offline)
+    return [{c: r.get(c, "") for c in columns} for r in rows]
+
+
+def render_table(rows: List[Dict[str, Any]], kind: str = "all", offline: bool = False) -> str:
+    """The table of ``query`` from its rows (the table shows some of the columns of ``query_data``)."""
     columns = {
         "reservations": OFFLINE_RESERVATION_COLUMNS if offline else RESERVATION_COLUMNS,
         "ports": PORT_TABLE_COLUMNS,
@@ -334,3 +338,8 @@ def render(rows: List[Dict[str, Any]], as_json: bool, kind: str = "all", offline
         "clients": TABLE_COLUMNS + CLIENT_EXTRA_COLUMNS,
     }.get(kind, TABLE_COLUMNS)
     return format_table(rows, columns) + f"\n\n{len(rows)} row(s)"
+
+
+def render(rows: List[Dict[str, Any]], as_json: bool, kind: str = "all", offline: bool = False) -> str:
+    """``query_data`` as JSON or the table, for a caller that has rows rather than a document."""
+    return json.dumps(query_data(rows, kind, offline), indent=2) if as_json else render_table(rows, kind, offline)

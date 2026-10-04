@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from . import logs
 from .client import UniFiAPIError, UniFiClient
-from .client_view import build_client_detail, find_clients, render_candidates, render_detail, to_json
+from .client_view import render_candidates, render_detail
 from .completion import SHELLS
 from .completion import script as completion_script
 from .config import Config, ConfigError
@@ -43,14 +43,18 @@ from .doctor import exit_failed, run_checks
 from .doctor import render as render_doctor
 from .documents import (
     audit_document,
+    client_document,
     doctor_document,
+    events_document,
     firewall_document,
     info_document,
+    new_clients_document,
+    query_document,
     topology_document,
     wan_document,
     wifi_document,
 )
-from .events import DEFAULT_LIMIT, DEFAULT_SINCE, SEVERITIES, fetch_events, make_filter, parse_duration, render_events
+from .events import DEFAULT_LIMIT, DEFAULT_SINCE, SEVERITIES, parse_duration, render_events_text
 from .export import EXPORT_FORMATS, JSON_FILENAME, run_export
 from .firewall import render_text as render_firewall
 from .history import (
@@ -67,8 +71,7 @@ from .history import (
     resolve,
     save_snapshot,
 )
-from .new_clients import render as render_new_clients
-from .new_clients import report as new_clients_report
+from .new_clients import render_table as render_new_clients
 from .notify import (
     DEFAULT_STATE_FILE,
     baseline,
@@ -79,9 +82,9 @@ from .notify import (
     save_state,
     send,
 )
-from .query import query_rows, render, render_csv
+from .query import render_csv, render_table
 from .settings import DiagnoseSettings, expired_rules
-from .snapshot import EventQuery, Needs, collect_event_snapshot, collect_snapshot, extend_snapshot, warn
+from .snapshot import EventQuery, Needs, collect_snapshot, warn
 from .topology import render_text as render_topology
 from .util import printable, safe_output
 from .wan import DEFAULT_DAYS
@@ -293,27 +296,15 @@ def _check_query(parser: argparse.ArgumentParser, args: argparse.Namespace) -> N
 
 def _run_query(ctx: Context) -> int:
     args = ctx.args
-    if args.kind in ("networks", "wlans"):             # only the configuration, and the connected clients to count
-        needs = Needs(networks=True, wlans=args.kind == "wlans", devices=False, clients=False,
-                      device_extras=False, legacy_devices=False)
+    document = query_document(ctx.client, ctx.config.site, args.kind, args.search, args.include_offline,
+                              args.switch or "", args.down, args.errors, args.offline, ctx.settings,
+                              args.network, args.ssid, args.ap)
+    if args.json:
+        say(document.to_json())
+    elif args.csv:
+        say(render_csv(document.data, args.kind, args.offline))
     else:
-        needs = Needs(offline=args.include_offline, reservations=args.kind == "reservations",
-                      networks=args.network is not None)
-    snap = collect_snapshot(ctx.client, ctx.config.site, needs)
-    # The whole answer is that data, so an empty list from a failed read must not look like "there are none".
-    if args.kind == "networks" and not snap.networks_available:
-        raise UniFiAPIError("no networks were returned (legacy rest/networkconf could not be read)")
-    if args.kind == "wlans" and snap.wlans is None:
-        raise UniFiAPIError("the Wi-Fi networks could not be read (legacy rest/wlanconf); see the warning above")
-    filtering = any(value is not None for value in (args.network, args.ssid, args.ap))
-    if filtering and not snap.legacy_clients_available:
-        raise UniFiAPIError("--network, --ssid and --ap need the connected-client details (legacy stat/sta), "
-                            "which could not be read; see the warning above")
-    offline_days = ctx.settings.reserved_offline_warn_days if ctx.settings is not None and args.offline else None
-    rows = query_rows(snap, args.kind, args.search, args.include_offline,
-                      args.switch or "", args.down, args.errors, offline_days,
-                      args.network or "", args.ssid or "", args.ap or "")
-    say(render_csv(rows, args.kind, args.offline) if args.csv else render(rows, args.json, args.kind, args.offline))
+        say(render_table(document.data, args.kind, args.offline))
     return 0
 
 
@@ -326,8 +317,8 @@ def _add_new_clients(parser: argparse.ArgumentParser) -> None:
 
 
 def _run_new_clients(ctx: Context) -> int:
-    snap = collect_snapshot(ctx.client, ctx.config.site, Needs(groups=True, users_required=True))
-    say(render_new_clients(new_clients_report(snap, ctx.args.search), ctx.args.json))
+    document = new_clients_document(ctx.client, ctx.config.site, ctx.args.search)
+    say(document.to_json() if ctx.args.json else render_new_clients(document.data))
     return 0
 
 
@@ -358,13 +349,12 @@ def _add_events(parser: argparse.ArgumentParser) -> None:
 
 def _run_events(ctx: Context) -> int:
     args = ctx.args
-    snap = collect_event_snapshot(
+    document = events_document(
         ctx.client, ctx.config.site,
-        EventQuery(args.since, tuple(args.category or ()), tuple(args.severity or ()), args.search))
-    events, more = fetch_events(
-        snap, predicate=make_filter(args.client, args.device, args.event),
-        limit=0 if args.summary else args.limit)  # a summary counts the whole window
-    say(render_events(events, more, args.json, args.summary, snap.events_truncated))
+        EventQuery(args.since, tuple(args.category or ()), tuple(args.severity or ()), args.search),
+        args.client, args.device, args.event, args.limit, args.summary)
+    say(document.to_json() if args.json
+        else render_events_text(document.data, args.summary, document.meta["more"], document.meta["cap_truncated"]))
     return 0
 
 
@@ -387,20 +377,13 @@ def _add_client(parser: argparse.ArgumentParser) -> None:
 
 def _run_client(ctx: Context) -> int:
     args = ctx.args
-    # Look the client up in the cheap data first (the devices, the connected clients and the client history);
-    # the network configuration, the groups and the event log (a POST) are read only for a client that matched.
-    snap = collect_snapshot(ctx.client, ctx.config.site,
-                            Needs(offline=True, device_extras=False, legacy_devices=False))
-    matches = find_clients(snap, args.query)
-    if len(matches) != 1:
-        say(render_candidates(args.query, matches), file=sys.stderr)
+    document = client_document(ctx.client, ctx.config.site, args.query, ctx.settings, args.since,
+                               not args.no_events)
+    if not document.data:
+        say(render_candidates(args.query, document.meta["matches"]), file=sys.stderr)
         return EXIT_NO_MATCH
-    extend_snapshot(ctx.client, snap,
-                    Needs(reservations=True, groups=True, device_extras=True, legacy_devices=True,
-                          events=None if args.no_events else EventQuery(args.since)))
-    detail = build_client_detail(snap, matches[0], ctx.settings)
     emoji = not args.no_emoji and stream_supports_emoji(sys.stdout)
-    say(to_json(detail) if args.json else render_detail(detail, emoji))
+    say(document.to_json() if args.json else render_detail(document.data, emoji))
     return 0
 
 
