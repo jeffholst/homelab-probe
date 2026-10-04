@@ -2,6 +2,7 @@
 
 import ast
 import contextlib
+import datetime
 import io
 import json
 import os
@@ -15,9 +16,19 @@ from golden_support import run_command
 
 from homelab_probe import documents, logs
 from homelab_probe.client import UniFiAPIError
+from homelab_probe.diagnose import Finding, findings_from_document
 from homelab_probe.doctor import CHECKS, OK, make
-from homelab_probe.documents import Document, doctor_document, info_document, wan_document
-from homelab_probe.settings import DiagnoseSettings
+from homelab_probe.documents import (
+    Document,
+    audit_document,
+    doctor_document,
+    firewall_document,
+    info_document,
+    topology_document,
+    wan_document,
+    wifi_document,
+)
+from homelab_probe.settings import DiagnoseSettings, IgnoreRule
 
 PACKAGE = Path(__file__).resolve().parent.parent / "homelab_probe"
 NOW_MS = 1_800_000_000_000
@@ -131,6 +142,126 @@ def _capture(level):
     stream = io.StringIO()
     logs.configure("json", level, stream=stream)
     return stream
+
+
+# -- wifi, topology, firewall and audit ----------------------------------------------------------------
+
+REPORTS = {
+    "wifi": (["wifi", "--json"], lambda c: wifi_document(c, "default", echo=False)),
+    "topology": (["topology", "--json"], lambda c: topology_document(c, "default", echo=False)),
+    "topology-clients": (["topology", "--json", "--clients"],
+                         lambda c: topology_document(c, "default", with_clients=True, echo=False)),
+    "firewall": (["firewall", "--json"], lambda c: firewall_document(c, "default", echo=False)),
+    "firewall-all": (["firewall", "--json", "--all", "--search", "block"],
+                     lambda c: firewall_document(c, "default", True, "block", echo=False)),
+    "audit": (["audit", "--json"], lambda c: audit_document(c, "default", echo=False)),
+}
+
+
+@pytest.mark.parametrize("name", REPORTS)
+def test_each_document_is_what_the_json_output_prints(fake_client, name):
+    argv, make = REPORTS[name]
+    code, out, err = run_command(fake_client, argv)
+    document = make(fake_client)
+    assert document.name == argv[0] and code in (0, 1)
+    assert err == "".join(f"Warning: {w}\n" for w in document.warnings)
+    assert document.data == json.loads(out) and document.to_json() == out.rstrip("\n")
+    assert list(document.data)[0] == "version"
+    json.dumps(document.data)
+
+
+def test_the_text_of_the_other_reports_is_rendered_from_their_documents(fake_client):
+    from homelab_probe.diagnose import render_findings
+    from homelab_probe.firewall import render_text as render_firewall
+    from homelab_probe.topology import render_text as render_topology
+    from homelab_probe.wifi import render_text as render_wifi
+
+    cases = [
+        (["wifi", "--all"], lambda: render_wifi(wifi_document(fake_client, "default", echo=False).data, True, "")),
+        (["topology", "--no-emoji", "--clients"],
+         lambda: render_topology(topology_document(fake_client, "default", with_clients=True, echo=False).data,
+                                 False, True)),
+        (["firewall", "--zones", "--no-emoji"],
+         lambda: _render_firewall_document(fake_client, render_firewall)),
+        (["audit", "--no-emoji"], lambda: render_findings(audit_document(fake_client, "default", echo=False).data,
+                                                          False)),
+    ]
+    for argv, expected in cases:
+        _, out, _ = run_command(fake_client, argv)
+        assert out.rstrip("\n") == expected(), argv
+
+
+def _render_firewall_document(fake_client, render_firewall):
+    document = firewall_document(fake_client, "default", echo=False)
+    return render_firewall(document.data, True, False, zone_names=document.zone_names)
+
+
+def test_every_new_document_reads_exactly_what_its_command_declares():
+    assert documents.WIFI_NEEDS.neighbors and documents.FIREWALL_NEEDS.firewall and documents.FIREWALL_NEEDS.reservations
+    assert documents.AUDIT_NEEDS.wlans and documents.AUDIT_NEEDS.offline and not documents.AUDIT_NEEDS.legacy_devices
+    assert documents.TOPOLOGY_NEEDS == documents.TOPOLOGY_NEEDS.__class__()
+
+
+def test_the_firewall_document_carries_its_degraded_reads_as_data(fake_client, capsys):
+    real = fake_client.legacy_rest
+
+    def broken(site_ref, resource):
+        if resource == "portforward":
+            raise UniFiAPIError("HTTP 503")
+        return real(site_ref, resource)
+
+    fake_client.legacy_rest = broken
+    document = firewall_document(fake_client, "default", echo=False)
+    assert any(w.startswith("port forwards unavailable") for w in document.warnings)
+    assert capsys.readouterr().err == ""                              # quiet: nothing printed, all in the document
+    printed = firewall_document(fake_client, "default")
+    assert capsys.readouterr().err == "".join(f"Warning: {w}\n" for w in printed.warnings)
+
+
+def test_the_audit_document_says_when_the_wifi_settings_could_not_be_read(fake_client, capsys):
+    real = fake_client.legacy_rest
+
+    def broken(site_ref, resource):
+        if resource == "wlanconf":
+            raise UniFiAPIError("HTTP 500")
+        return real(site_ref, resource)
+
+    fake_client.legacy_rest = broken
+    document = audit_document(fake_client, "default", echo=False)
+    assert any(w.startswith("Wi-Fi network settings unavailable") for w in document.warnings)
+    assert "audit.wifi_unavailable" in {f["code"] for f in document.data["findings"]}
+    assert capsys.readouterr().err == ""
+
+
+def test_the_audit_document_applies_the_ignore_list_as_of_today(fake_client):
+    rule = IgnoreRule(subject="Lobby", message="open network", reason="on purpose", until=datetime.date(2030, 1, 1))
+    settings = DiagnoseSettings(ignore=(rule,))
+    plain = audit_document(fake_client, "default", settings, echo=False, today=datetime.date(2029, 12, 31))
+    assert plain.data["summary"]["ignored"] == 1 and "ignored" not in plain.data
+    listed = audit_document(fake_client, "default", settings, show_ignored=True, echo=False,
+                            today=datetime.date(2029, 12, 31))
+    assert listed.data["ignored"] == [{**listed.data["ignored"][0], "reason": "on purpose", "until": "2030-01-01"}]
+    expired = audit_document(fake_client, "default", settings, show_ignored=True, echo=False,
+                             today=datetime.date(2030, 1, 2))
+    assert expired.data["summary"]["ignored"] == 0 and expired.data["ignored"] == []
+    assert len(expired.data["findings"]) == len(plain.data["findings"]) + 1
+
+
+def test_findings_come_back_from_a_document_as_findings(fake_client):
+    data = audit_document(fake_client, "default", echo=False).data
+    findings = findings_from_document(data)
+    assert [f.to_dict() for f in findings] == data["findings"]
+    assert all(isinstance(f, Finding) and f.code for f in findings)
+    assert findings_from_document({"findings": [{"severity": "info", "code": "x", "subject": "s", "message": "m",
+                                                 "mac": ""}]})[0].target_mac is None
+
+
+def test_firewall_zone_ids_stay_out_of_json_and_are_available_to_text(fake_client):
+    fake_client.session.fx["legacy_v2"]["firewall/zone"][0].pop("_id")
+    document = firewall_document(fake_client, "default", echo=False)
+    assert all("id" not in zone for zone in document.data["zones"])
+    assert "z-int" not in document.zone_names and document.zone_names["z-ext"] == "External"
+    json.dumps(document.data)
 
 
 # -- info and doctor --------------------------------------------------------------------------------

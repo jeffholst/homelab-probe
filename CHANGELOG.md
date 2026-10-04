@@ -118,6 +118,7 @@ and `wep` Wi-Fi security values) the README says so.
 - **`--show-ignored` lists each finding's code**, so it can be copied into an ignore rule.
 - The version is written in one place, `homelab_probe.__version__`.
 - **Documentation:** the README is now a short quickstart (what it is, install, configure, the commands with one example each, the exit codes) and the detail is in `docs/` (diagnose and audit, notifications, inventory, network views, configuration and troubleshooting, running on a schedule, examples, features, development). Historical README anchors remain at their original URLs, and output samples are generated from the checked-in fixture.
+- **`wifi`, `topology`, `firewall` and `audit` build a document first** (the dict that `--json` prints, plus the warnings of the read), like `wan`, and the text output is rendered from it; the text and `--json` output are unchanged except for one additive key: each `firewall --json` zone now has an `id` (the key of the matrix cells, so a consumer can name the columns; `null` when the controller sent none).
 
 ### Fixed
 

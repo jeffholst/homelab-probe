@@ -178,7 +178,7 @@ Findings
 - **Port forwards** (legacy `rest/portforward`): name, whether it is on, protocol, external port, the internal address and port, the WAN interface, and the only source address it accepts (blank for any).
 - **Policies:** only the ones you defined by default, because a zone-based controller also holds a long list of built-in ones (`--all` shows them too, marked by the count of what is hidden). Columns: the rule's action, whether it is on, the zone the traffic comes **From** and goes **To**, what the **Source** and **Destination** match (`any`, the networks by name, addresses, or the kind of target, each with its port when it matches one; `not` in front when the match is inverted), the protocol and how many times the rule has matched (`Hits`, blank when it never did). Ordered by zone pair, then the controller's rule order.
 - **`--zones`** adds each zone with its networks and the **zone matrix**: for traffic from the row's zone into the column's zone, `A` allows all, `B` blocks all, `R` allows return traffic only, `C` means custom rules decide and `-` that nothing is defined.
-- **`--search TEXT`** keeps the policies and port forwards with that text in any column; `--json` prints the same data (`version`, `style`, `policies`, `port_forwards`, `zones`, `matrix`, `findings` and `notes`) with the names untouched.
+- **`--search TEXT`** keeps the policies and port forwards with that text in any column; `--json` prints the same data (`version`, `style`, `policies`, `port_forwards`, `zones`, `matrix`, `findings` and `notes`) with the names untouched; each zone also has its `id`, which is what the cells of a matrix row are keyed by.
 - **Findings:**
 
   | Code | Severity | Meaning |

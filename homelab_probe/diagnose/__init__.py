@@ -36,9 +36,12 @@ from .output import (
     JSON_VERSION,
     apply_ignores,
     exit_code,
+    findings_document,
+    findings_from_document,
     findings_json,
     format_findings,
     format_ignored,
+    render_findings,
     stream_supports_emoji,
 )
 from .ports import uplink_speeds
@@ -49,8 +52,8 @@ __all__ = [
     "AREAS", "AREA_NAMES", "area_of", "codes_of", "needs_for", "parse_areas",
     "BANDS", "CODES", "CRITICAL", "DEVICE_SUBSYSTEMS", "EMOJI", "EXIT_CRITICAL", "EXIT_OK", "EXIT_WARNING",
     "GATEWAY_TYPES", "INFO", "JSON_VERSION", "LINK_LOCAL_PREFIX", "SEVERITY_ORDER", "WARNING", "Finding",
-    "apply_ignores", "diagnose", "exit_code", "findings_json", "format_findings", "format_ignored",
-    "stream_supports_emoji", "uplink_speeds",
+    "apply_ignores", "diagnose", "exit_code", "findings_document", "findings_from_document", "findings_json",
+    "format_findings", "format_ignored", "render_findings", "stream_supports_emoji", "uplink_speeds",
     # the individual checks, importable for focused tests
     "_event_findings", "_offline_reservation_findings", "_pool_findings", "_private_mac_findings",
 ]

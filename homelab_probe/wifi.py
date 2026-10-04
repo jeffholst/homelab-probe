@@ -6,7 +6,6 @@ setting. Neighboring networks are other people's: their names are shown as the
 controller reports them, so be careful where you paste the output.
 """
 
-import json
 import re
 from typing import Any, Dict, List, Optional, Tuple, TypedDict
 
@@ -394,7 +393,3 @@ def render_text(wifi: Dict[str, Any], show_all: bool = False, ap: str = "") -> s
     if wifi["observations"]:
         lines += ["", "Observations"] + [f"  - {o}" for o in wifi["observations"]]
     return "\n".join(lines)
-
-
-def to_json(wifi: Dict[str, Any]) -> str:
-    return json.dumps({"version": JSON_VERSION, **wifi}, indent=2)

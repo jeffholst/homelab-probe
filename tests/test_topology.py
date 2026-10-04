@@ -4,9 +4,10 @@ import pytest
 
 from homelab_probe import cli
 from homelab_probe.diagnose import Finding
+from homelab_probe.documents import topology_document
 from homelab_probe.settings import DiagnoseSettings, IgnoreRule
 from homelab_probe.snapshot import Snapshot, collect_snapshot
-from homelab_probe.topology import _assign_findings, build_topology, render_text, to_json
+from homelab_probe.topology import _assign_findings, build_topology, render_text
 
 
 def dev(mac, name, parent=None, port=None, speed=None, kind="usw", own=None, **kw):
@@ -227,8 +228,8 @@ def test_clients_listing_lines_up_with_the_child_connectors(fixture_tree):
     assert lines[3].startswith("    +-- port 2 -> Office AP")
 
 
-def test_json_is_nested_and_complete(fixture_tree):
-    parsed = json.loads(to_json(fixture_tree))
+def test_json_is_nested_and_complete(fake_client):
+    parsed = json.loads(topology_document(fake_client, "default", with_clients=True, echo=False).to_json())
     assert set(parsed) == {"version", "roots", "unattached", "summary"}
     node = parsed["roots"][0]["children"][0]
     assert {"name", "mac", "type", "model", "online", "parent", "parent_port", "speed_mbps",

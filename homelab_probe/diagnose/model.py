@@ -83,6 +83,11 @@ class Finding:
     target_mac: Optional[str] = None
     code: str = ""   # a key of CODES; empty only for findings built outside the checks (tests)
 
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Finding":
+        """The inverse of ``to_dict``: a finding back from its JSON form."""
+        return cls(data["severity"], data["subject"], data["message"], data["mac"] or None, data["code"])
+
     def to_dict(self) -> Dict[str, Any]:
         """The JSON form used by ``diagnose --json`` and by the ``client`` and ``topology`` views."""
         return {"severity": self.severity, "code": self.code, "subject": self.subject,
