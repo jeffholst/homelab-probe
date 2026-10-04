@@ -229,7 +229,10 @@ def test_when_the_legacy_data_is_unreadable_there_is_no_finding_and_the_one_noti
     _, out, _ = run(fake_client, monkeypatch, capsys, "diagnose", "--no-events", "--json")
     findings = json.loads(out)["findings"]
     assert not [f for f in findings if f["code"] == "device.recent_reboot"]
-    assert [f["code"] for f in findings].count("controller.legacy_unavailable") == 1
+    (notice,) = [f for f in findings if f["code"] == "controller.legacy_unavailable"]
+    assert notice["message"] == (
+        "legacy device data unavailable; port, overheating, storage and recent-reboot checks were skipped"
+    )
 
 
 def test_the_client_view_lists_it_for_a_device_on_the_clients_path(fake_client, monkeypatch, capsys):

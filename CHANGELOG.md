@@ -120,8 +120,9 @@ and `wep` Wi-Fi security values) the README says so.
 - Correct handling of 2.4 GHz channel 14 and the U-NII-4 channels (165 to 177) in the Wi-Fi channel plan.
 - MAC addresses are compared in any spelling (`aa:bb:...`, `AA-BB-...`, `aabb.ccdd.eeff`, no separators); several
   checks used to treat two spellings of one address as different devices.
-- Warnings say what was really skipped when an optional read fails, and a command whose answer would be wrong
-  without the client history (`new-clients`, `snapshot`, `diff`) fails instead of printing a misleading result.
+- Warnings say what was really skipped when an optional read fails, including recent-reboot detection when
+  `stat/device` is unavailable, and a command whose answer would be wrong without the client history
+  (`new-clients`, `snapshot`, `diff`) fails instead of printing a misleading result.
 - A file that cannot be read or written ends a command with `ERROR: <reason> (<path>)` and exit code 3, not a
   traceback.
 

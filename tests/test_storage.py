@@ -274,7 +274,7 @@ def test_when_the_legacy_data_is_unreadable_there_is_one_notice_and_no_finding(f
     findings = json.loads(out)["findings"]
     assert not [f for f in findings if f["code"] == "device.storage"]
     (notice,) = [f for f in findings if f["code"] == "controller.legacy_unavailable"]
-    assert "port, overheating and storage checks were skipped" in notice["message"]
+    assert "port, overheating, storage and recent-reboot checks were skipped" in notice["message"]
 
 
 # -- the settings --------------------------------------------------------------------------------------------------
