@@ -1,11 +1,12 @@
-"""Checks on UniFi devices: offline devices, overheating, and CPU or memory use."""
+"""Checks on UniFi devices: offline devices, overheating, CPU or memory use, and storage that is nearly full."""
 
-from typing import Dict, List
+import math
+from typing import Any, Dict, List, Optional
 
 from ..export import device_type_label
 from ..settings import DiagnoseSettings
 from ..snapshot import Snapshot
-from ..util import normalize_mac, record_for
+from ..util import normalize_mac, number, record_for
 from .model import CRITICAL, GATEWAY_TYPES, WARNING, Finding
 
 
@@ -83,4 +84,47 @@ def _overheating_findings(snap: Snapshot) -> List[Finding]:
             continue
         name = device.get("name") or legacy.get("name") or mac or "?"
         findings.append(Finding(CRITICAL, name, "reports that it is overheating", mac, code="device.overheating"))
+    return findings
+
+
+def _used_pct(entry: Dict[str, Any]) -> Optional[float]:
+    """How full one ``storage`` entry is, as a percentage, or None when its numbers cannot be trusted: ``size`` and
+    ``used`` must be finite numbers, ``size`` positive, ``used`` neither negative nor above ``size`` (that would
+    mean the two are not counted the same way, and a wrong critical is worse than none)."""
+    size, used = number(entry.get("size")), number(entry.get("used"))
+    if size is None or used is None or not math.isfinite(size) or not math.isfinite(used):
+        return None
+    if size <= 0 or used < 0 or used > size:
+        return None
+    return 100 * used / size
+
+
+def _percent_text(pct: float) -> str:
+    """``97.5`` or ``95``: one decimal, cut off rather than rounded, so a figure below a threshold never reads as
+    the threshold (97.96% is a warning at a critical level of 98 and is shown as 97.9)."""
+    shown = int(pct * 10 + 1e-9) / 10
+    return f"{shown:g}"
+
+
+def _storage_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Finding]:
+    """A device's storage (the gateway lists it in its legacy ``storage`` entries) at or above the thresholds,
+    critical from the higher one. One finding per entry; the entries have a ``name`` (``Backup``, ``Temporary``),
+    which is part of the subject so an ignore rule can tell them apart. A device without ``storage`` has nothing
+    to judge."""
+    names = {normalize_mac(d.get("macAddress")): d.get("name") for d in snap.devices}
+    findings: List[Finding] = []
+    for legacy in snap.legacy_devices:
+        mac = normalize_mac(legacy.get("mac"))
+        device = names.get(mac) or legacy.get("name") or mac or "?"
+        entries = legacy.get("storage")
+        for entry in entries if isinstance(entries, list) else []:
+            if not isinstance(entry, dict):
+                continue
+            label = str(entry.get("name") or entry.get("mount_point") or "storage")
+            pct = _used_pct(entry)
+            if pct is None or pct < settings.storage_warn_pct:
+                continue
+            findings.append(Finding(
+                CRITICAL if pct >= settings.storage_critical_pct else WARNING, f"{device} {label}",
+                f"storage {_percent_text(pct)}% used", mac, code="device.storage"))
     return findings

@@ -192,7 +192,7 @@ def test_when_the_legacy_data_is_unreadable_the_one_notice_says_both_checks_were
     monkeypatch.setattr(fake_client, "legacy_stat", fail_device_read)
     _, findings = findings_json(fake_client, monkeypatch, capsys)
     (notice,) = [f for f in findings if f["code"] == "controller.legacy_unavailable"]
-    assert notice["message"] == "legacy device data unavailable; port and overheating checks were skipped"
+    assert notice["message"] == "legacy device data unavailable; port, overheating and storage checks were skipped"
     assert overheating(findings) == []
 
 

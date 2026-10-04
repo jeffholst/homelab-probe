@@ -180,6 +180,10 @@ def overheating(fx):
     fx["legacy"]["device"][0]["overheating"] = True
 
 
+def full_storage(fx):
+    fx["legacy"]["device"][0]["storage"][0]["used"] = fx["legacy"]["device"][0]["storage"][0]["size"]
+
+
 def cli_variants(*variants):
     def make(argv, change, configure=None):
         return lambda: output(argv, change, configure)
@@ -232,6 +236,7 @@ DOCUMENTS = {
     "audit": cli_variants((["audit", "--json"], None), (["audit", "--show-ignored", "--json"], None)),
     "diagnose": cli_variants((["diagnose", "--json"], None), (["diagnose", "--show-ignored", "--json"], None),
                              (["diagnose", "--only", "devices", "--json"], overheating),
+                             (["diagnose", "--only", "devices", "--json"], full_storage),
                              (["diagnose", "--only", "ports", "--json"], None), (["diagnose", "--no-events", "--json"], None)),
     "snapshot": [lambda: inventory_snapshot()],
     "diff": [lambda: json.loads(history.diff_json(diff_snapshots(inventory_snapshot(), inventory_snapshot()))),

@@ -98,7 +98,7 @@ def _legacy_devices_or_empty(
     try:
         return client.legacy_stat(site_ref, "device"), True
     except UniFiAPIError as e:
-        notes.append(f"legacy stat/device unavailable; port and overheating checks were skipped: {e}")
+        notes.append(f"legacy stat/device unavailable; port, overheating and storage checks were skipped: {e}")
         return [], False
 
 

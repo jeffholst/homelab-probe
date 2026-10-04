@@ -114,10 +114,11 @@ def _uplink_speed_findings(snap: Snapshot) -> List[Finding]:
 
 
 def _legacy_unavailable_findings(snap: Snapshot) -> List[Finding]:
-    """One info line when the legacy device data could not be read, because the port and overheating checks need it."""
+    """One info line when the legacy device data could not be read: the port, overheating and storage checks need it."""
     if snap.legacy_devices_available:
         return []
-    return [Finding(INFO, "controller", "legacy device data unavailable; port and overheating checks were skipped",
+    return [Finding(INFO, "controller",
+                    "legacy device data unavailable; port, overheating and storage checks were skipped",
                     code="controller.legacy_unavailable")]
 
 
