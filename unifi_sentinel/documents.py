@@ -58,7 +58,7 @@ def wan_document(client: UniFiClient, site: str, days: int = DEFAULT_DAYS,
     with logs.collect_warnings(quiet=not echo) as warnings:
         snap = collect_snapshot(client, site, WAN_NEEDS)
         report = build_wan(snap, days, settings, now_ms)
-    return Document("wan", {"version": WAN_JSON_VERSION, **report}, list(warnings))
+    return Document("wan", {"version": WAN_JSON_VERSION, **report}, [logs.scrub(w) for w in warnings])
 
 
 # -- info ---------------------------------------------------------------------------------------------
