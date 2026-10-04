@@ -77,7 +77,7 @@ def test_only_warnings_and_criticals_flag_a_device(fixture_tree):
                    for n in flat(fixture_tree["roots"]) for f in n["findings"])
     garage = switch["children"][1]
     assert [f["message"] for f in garage["findings"]] == ["device is offline"]
-    assert fixture_tree["summary"] == {"devices": 4, "offline": 1, "with_findings": 2, "below_max": 1,
+    assert fixture_tree["summary"] == {"devices": 4, "offline": 1, "with_findings": 3, "below_max": 1,
                                        "unattached": 0, "clients": 2}
 
 
@@ -196,7 +196,7 @@ def test_the_ignore_list_hides_findings_from_the_tree(fake_client):
 def test_ascii_and_unicode_trees(fixture_tree):
     ascii_text = render_text(fixture_tree, emoji=False)
     assert ascii_text.splitlines()[:5] == [
-        "Gateway (UCG Max)",
+        "Gateway (UCG Max)   [CRITICAL]",
         "`-- port 2 -> Office Switch (100 Mbps, supports 1000)   1 client   [WARNING x8]",
         "    +-- port 2 -> Office AP   1 client",
         "    `-- port 5 -> Garage AP   [OFFLINE]   [WARNING]",
@@ -212,7 +212,7 @@ def test_summary_findings_section_and_unattached_section(fixture_tree):
     assert "Findings on these devices:" in text
     assert "  [WARNING ] Garage AP: device is offline" in text
     assert text.rstrip().splitlines()[-1] == (
-        "4 devices, 2 clients, 1 offline, 1 link(s) below capability, 2 with findings")
+        "4 devices, 2 clients, 1 offline, 1 link(s) below capability, 3 with findings")
     t = tree([GW, dev("B1", "Lonely")])
     out = render_text(t, emoji=False)
     assert "Unattached (not reachable from a gateway):" in out
@@ -248,7 +248,7 @@ def _run(fake_client, monkeypatch, argv):
 def test_cli_topology_text_clients_and_json(fake_client, monkeypatch, capsys):
     assert _run(fake_client, monkeypatch, ["topology", "--no-emoji"]) == 0
     out = capsys.readouterr().out
-    assert out.startswith("Gateway (UCG Max)\n`-- port 2 -> Office Switch") and "desktop" not in out
+    assert out.startswith("Gateway (UCG Max)   [CRITICAL]\n`-- port 2 -> Office Switch") and "desktop" not in out
 
     assert _run(fake_client, monkeypatch, ["topology", "--no-emoji", "--clients"]) == 0
     assert "- port 3: desktop" in capsys.readouterr().out

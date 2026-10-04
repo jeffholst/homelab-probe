@@ -73,7 +73,7 @@ def test_every_check_is_registered_with_every_area_it_can_emit():
 
 def test_the_registry_runs_the_checks_in_the_documented_order():
     assert list(_registered()) == [
-        "_offline_device_findings", "_resource_findings", "_health_findings", "_wan_findings", "_client_ip_findings",
+        "_offline_device_findings", "_resource_findings", "_overheating_findings", "_health_findings", "_wan_findings", "_client_ip_findings",
         "_reservation_findings", "_pool_findings", "_offline_reservation_findings", "_private_mac_findings",
         "_duplicate_ip_findings", "_legacy_unavailable_findings", "_port_basic_findings", "_port_health_findings",
         "_uplink_speed_findings", "_wifi_findings", "_event_findings"]

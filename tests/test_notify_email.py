@@ -402,6 +402,7 @@ def email_env(monkeypatch, **extra):
 
 
 def run(fake_client, monkeypatch, *argv, plain=None):
+    fake_client.session.fx["legacy"]["device"][0]["overheating"] = False
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     monkeypatch.setattr(notify_module.smtplib, "SMTP", plain or FakeSMTP())
     return cli.main(["diagnose", "--no-events", "--json", "--notify", *argv])

@@ -1,4 +1,4 @@
-"""Checks on UniFi devices: offline devices and CPU or memory use."""
+"""Checks on UniFi devices: offline devices, overheating, and CPU or memory use."""
 
 from typing import Dict, List
 
@@ -66,4 +66,21 @@ def _resource_findings(snap: Snapshot, settings: DiagnoseSettings) -> List[Findi
                     f"{label} utilization {st[key]:.0f}%",
                     normalize_mac(d.get("macAddress")),
                     code="device.cpu_high" if key == "cpuUtilizationPct" else "device.memory_high"))
+    return findings
+
+
+def _overheating_findings(snap: Snapshot) -> List[Finding]:
+    """A device that says it is overheating (the legacy ``overheating`` flag), critical: a device that cannot cool
+    itself can shut down. Access points and some switches do not have the flag, and a missing or non-boolean
+    value means "unknown", never a finding. Only online devices count: the legacy record of an offline device
+    keeps what it last reported."""
+    online = {normalize_mac(d.get("macAddress")): d for d in snap.devices if d.get("state") == "ONLINE"}
+    findings: List[Finding] = []
+    for legacy in snap.legacy_devices:
+        mac = normalize_mac(legacy.get("mac"))
+        device = online.get(mac)
+        if legacy.get("overheating") is not True or device is None:
+            continue
+        name = device.get("name") or legacy.get("name") or mac or "?"
+        findings.append(Finding(CRITICAL, name, "reports that it is overheating", mac, code="device.overheating"))
     return findings

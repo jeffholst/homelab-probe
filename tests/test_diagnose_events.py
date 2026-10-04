@@ -193,6 +193,7 @@ def test_event_flap_count_loads_defaults_and_validates(tmp_path):
 # -- command line ------------------------------------------------------------
 
 def _run(fake_client, monkeypatch, argv):
+    fake_client.session.fx["legacy"]["device"][0]["overheating"] = False
     monkeypatch.setenv("CONTROLLER_URL", "https://controller")
     monkeypatch.setenv("API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))

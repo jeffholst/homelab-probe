@@ -213,6 +213,7 @@ def test_query_rows_and_render_add_the_column_only_for_offline(fake_client):
 # -- the command line -----------------------------------------------------------------------------
 
 def run(fake_client, monkeypatch, argv):
+    fake_client.session.fx["legacy"]["device"][0]["overheating"] = False
     monkeypatch.setenv("CONTROLLER_URL", "https://controller")
     monkeypatch.setenv("API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))

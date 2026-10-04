@@ -173,6 +173,7 @@ def test_exit_code_by_severity_and_threshold():
 
 def _run_cli(fake_client, monkeypatch, argv):
     from unifi_sentinel import cli
+    fake_client.session.fx["legacy"]["device"][0]["overheating"] = False
     monkeypatch.setenv("CONTROLLER_URL", "https://controller")
     monkeypatch.setenv("API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, cfg: fake_client))

@@ -7,12 +7,13 @@ The commands that show how the network is wired and how it is doing: `topology`,
 `topology` draws how the network is wired, so a broken or slow path is visible at a glance:
 
 ```text
-Gateway (UCG Max)
+Gateway (UCG Max)   [CRITICAL]
 `-- port 2 -> Office Switch (100 Mbps, supports 1000)   1 client   [WARNING x8]
     +-- port 2 -> Office AP   1 client
     `-- port 5 -> Garage AP   [OFFLINE]   [WARNING]
 
 Findings on these devices:
+  [CRITICAL] Gateway: reports that it is overheating
   [WARNING ] Office Switch: CPU utilization 95%
   [WARNING ] Office Switch: PoE budget 41.6 W of 52 W used (80%)
   [WARNING ] Office Switch: uplink to Gateway negotiated at 100 Mbps but both ends support 1000 Mbps
@@ -23,7 +24,7 @@ Findings on these devices:
   [WARNING ] Office Switch port 2: STP state is blocking, not forwarding
   [WARNING ] Garage AP: device is offline
 
-4 devices, 2 clients, 1 offline, 1 link(s) below capability, 2 with findings
+4 devices, 2 clients, 1 offline, 1 link(s) below capability, 3 with findings
 ```
 
 Each line is `port N -> device`, where N is the **parent's** port the device plugs into, followed by the negotiated link speed, the number of connected clients (wired by switch port, wireless by AP), and flags.
@@ -249,11 +250,12 @@ Recent events (last 24h, newest first):
   2026-10-02 02:12:28  CLIENT_CONNECTED_WIRED: desktop connected to Main on Office Switch Port 3.
 
 Related findings:
+[CRITICAL] Gateway: reports that it is overheating
 [WARNING ] Office Switch: CPU utilization 95%
 [WARNING ] Office Switch: PoE budget 41.6 W of 52 W used (80%)
 [WARNING ] Office Switch: uplink to Gateway negotiated at 100 Mbps but both ends support 1000 Mbps
 
-3 warnings
+1 critical, 3 warnings
 ```
 
 - **Finding the client:** an exact MAC (any separator or case), an exact IP, a single exact name, then a case-insensitive part of a name or hostname (or a MAC fragment of six or more hex digits). It looks across every client the controller knows, connected or not, but never UniFi devices. If several clients match it lists up to 20 of them and exits with code 4 instead of guessing; no match also exits 4.

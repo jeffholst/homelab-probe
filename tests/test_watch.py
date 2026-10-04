@@ -27,6 +27,7 @@ class Script:
 
 
 def run(fake_client, monkeypatch, script, *argv, interval="30"):
+    fake_client.session.fx["legacy"]["device"][0]["overheating"] = False
     monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
     monkeypatch.setenv("API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
@@ -35,6 +36,7 @@ def run(fake_client, monkeypatch, script, *argv, interval="30"):
 
 
 def plain(fake_client, monkeypatch, capsys, *extra):
+    fake_client.session.fx["legacy"]["device"][0]["overheating"] = False
     monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
     monkeypatch.setenv("API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))

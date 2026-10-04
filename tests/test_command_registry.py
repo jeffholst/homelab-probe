@@ -12,6 +12,7 @@ EXPECTED = ["export", "query", "new-clients", "events", "client", "topology", "s
 
 
 def run(fake_client, monkeypatch, argv):
+    fake_client.session.fx["legacy"]["device"][0]["overheating"] = False
     monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
     monkeypatch.setenv("API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))

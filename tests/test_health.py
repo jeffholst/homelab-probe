@@ -129,6 +129,7 @@ def test_health_endpoint_failure_degrades_with_a_warning(fake_client, monkeypatc
 
 def test_cli_diagnose_shows_the_explained_wlan_status_and_keeps_the_exit_code(
         fake_client, monkeypatch, capsys):
+    fake_client.session.fx["legacy"]["device"][0]["overheating"] = False
     monkeypatch.setenv("CONTROLLER_URL", "https://controller")
     monkeypatch.setenv("API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))

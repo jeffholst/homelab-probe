@@ -52,7 +52,7 @@ def test_only_the_fields_of_the_contract_are_kept(recorded):
     assert set(fixture["info"]) <= {"applicationVersion"}
     for device in fixture["legacy"]["device"]:
         assert set(device) <= {"mac", "type", "name", "model", "uptime", "uplink", "port_table", "radio_table_stats",
-                               "vap_table", "wan1", "total_max_power", "total_used_power"}
+                               "vap_table", "wan1", "total_max_power", "total_used_power", "overheating"}
 
 
 def test_the_recording_can_be_replayed_and_gives_the_same_findings(recorded):

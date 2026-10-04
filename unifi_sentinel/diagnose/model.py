@@ -22,8 +22,10 @@ CODES = {
     "device.offline": "a UniFi device is not online (critical for a gateway or a device that others uplink through)",
     "device.cpu_high": "device CPU utilization at or above the warning threshold",
     "device.memory_high": "device memory utilization at or above the warning threshold",
+    "device.overheating": "an online UniFi device reports that it is overheating",
     "controller.pending_adoption": "devices waiting to be adopted",
-    "controller.legacy_unavailable": "legacy device data could not be read, so port checks were skipped",
+    "controller.legacy_unavailable": "legacy device data could not be read, so the port and overheating checks "
+                                     "were skipped",
     "health.subsystem": "a controller health subsystem is in a warning or error state",
     "health.device_subsystem": "lan/wlan subsystem status that only reflects disconnected devices",
     "internet.latency": "internet latency at or above the threshold",
