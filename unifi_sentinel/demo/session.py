@@ -57,7 +57,13 @@ class DemoSession:
             {**{k: v for k, v in e.items() if k != "age_s"}, "timestamp": int(now - e["age_s"] * 1000)}
             for e in self.fx.get("system_log", [])]
 
-    def post(self, url, json=None, verify=True, timeout=None):
+    def post(
+        self,
+        url: str,
+        json: Any = None,
+        verify: bool | str = True,
+        timeout: Optional[float] = None,
+    ) -> FakeResponse:
         path = "/" + url.split("://", 1)[1].split("/", 1)[1]
         self.posts.append((path, json))
         if self.status:
