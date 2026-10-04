@@ -274,12 +274,22 @@ def _notify_checks(config: Optional[Config]) -> List[Check]:
     if config is None:
         return [make("notify.configured", SKIP, "skipped: the required settings are not valid"),
                 make("notify.dry_run", SKIP, "skipped: the required settings are not valid")]
-    kinds = [d.kind for d in destinations_from_config(config)]
+    destinations = destinations_from_config(config)
+    kinds = [d.kind for d in destinations]
     if not kinds:
         return [make("notify.configured", INFO, "no destination configured (optional: `diagnose --notify`)"),
                 make("notify.dry_run", SKIP, "skipped: nothing to send to")]
+    plaintext = [d.kind for d in destinations
+                 if (d.url and urlsplit(d.url).scheme.lower() == "http")
+                 or (d.smtp is not None and d.smtp.security == "none")]
+    status = WARN if plaintext else OK
+    message = f"configured: {', '.join(kinds)}"
+    fix = ""
+    if plaintext:
+        message += f"; unencrypted: {', '.join(plaintext)}"
+        fix = "use HTTPS for ntfy and webhooks, and STARTTLS or implicit TLS for email"
     title, _ = render_text([Event("new", "warning", "device.offline", "Sample device", "device is offline")])
-    return [make("notify.configured", OK, f"configured: {', '.join(kinds)}"),
+    return [make("notify.configured", status, message, fix),
             make("notify.dry_run", OK, f"would send one message to {', '.join(kinds)} titled '{title}'; "
                  "nothing was sent")]
 
