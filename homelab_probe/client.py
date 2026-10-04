@@ -58,12 +58,15 @@ def _segment(value: str) -> str:
 class UniFiAPIError(Exception):
     """Raised for connection failures and non-2xx responses. ``kind`` says which (``tls``, ``unauthorized``,
     ``forbidden``, ``timeout``, ``connection``, ``request``, ``http``, ``bad_body`` or ``site``) and ``status`` is the
-    HTTP status when there was one, so a caller can explain a failure without matching the wording of the message."""
+    HTTP status when there was one. TLS failures may also have a structured ``tls_reason``, so a caller can explain a
+    failure without matching the wording of the message."""
 
-    def __init__(self, message: str = "", *, kind: str = "", status: Optional[int] = None) -> None:
+    def __init__(self, message: str = "", *, kind: str = "", status: Optional[int] = None,
+                 tls_reason: Optional[str] = None) -> None:
         super().__init__(message)
         self.kind = kind
         self.status = status
+        self.tls_reason = tls_reason
 
 
 class UniFiClient:
@@ -165,7 +168,7 @@ class UniFiClient:
                     resp = send()
             except requests.exceptions.SSLError as e:
                 self._note(label, started, "TLS certificate verification failed")
-                raise self._tls_error() from e
+                raise self._tls_error(e) from e
             except requests.exceptions.Timeout as e:
                 self._note(label, started, "timed out")
                 failure = UniFiAPIError(
@@ -260,12 +263,27 @@ class UniFiClient:
         key = self.session.headers.get("X-API-KEY")
         return text.replace(key, "***") if isinstance(key, str) and key else text
 
-    def _tls_error(self) -> UniFiAPIError:
+    def _tls_error(self, error: requests.exceptions.SSLError) -> UniFiAPIError:
+        detail = self._redact(str(error))
         if isinstance(self.verify_ssl, str):
+            if "invalid CA certificate" in detail:
+                return UniFiAPIError(
+                    f"TLS certificate verification failed for {self.base_url}: the verification chain contains "
+                    f"a certificate that is not usable as a CA certificate. Check the certificate chain and trust "
+                    f"configuration, or set UNIFI_VERIFY_SSL=false if you accept an unverified lab connection.",
+                    kind="tls", tls_reason="invalid_ca"
+                )
+            if "IP address mismatch" in detail or "Hostname mismatch" in detail:
+                return UniFiAPIError(
+                    f"TLS certificate verification failed for {self.base_url}: the controller certificate is trusted "
+                    f"by {self.verify_ssl} (UNIFI_VERIFY_SSL), but it is not valid for this UNIFI_URL host name or "
+                    f"address. Use a URL named in the certificate, or install a certificate whose subjectAltName "
+                    f"includes this host.", kind="tls", tls_reason="hostname_mismatch"
+                )
             return UniFiAPIError(
-                f"TLS certificate verification failed for {self.base_url}: the certificate is not signed "
-                f"by anything in the CA bundle {self.verify_ssl} (UNIFI_VERIFY_SSL). Use the CA that signed the "
-                f"controller's certificate, or its own certificate file.", kind="tls"
+                f"TLS certificate verification failed for {self.base_url} using the CA bundle in "
+                f"UNIFI_VERIFY_SSL. Check the certificate chain and trust configuration.", kind="tls",
+                tls_reason="untrusted"
             )
         return UniFiAPIError(
             f"TLS certificate verification failed for {self.base_url}. Install a "

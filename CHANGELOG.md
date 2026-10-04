@@ -122,6 +122,9 @@ and `wep` Wi-Fi security values) the README says so.
 
 ### Fixed
 
+- TLS failures with `UNIFI_VERIFY_SSL` pointing at a certificate file now distinguish a missing signing CA, a
+  certificate that is not usable as a CA bundle, and a host-name/SAN mismatch, instead of always saying the
+  certificate was not signed by the bundle.
 - Empty network inventories are now reported as zero rows, and client filters and WLAN/network client counts use
   explicit `stat/sta` availability instead of inferring failures from empty results or unrelated degraded reads.
 - Shell completions now dispatch correctly in zsh, stop offering consumed positional choices, and complete later items in fish comma lists.

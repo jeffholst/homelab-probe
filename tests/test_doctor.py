@@ -291,10 +291,30 @@ def test_an_unreachable_controller_fails_with_the_cause_explained_and_the_rest_s
 
 def test_the_certificate_explanation_depends_on_whether_a_ca_file_is_set():
     config = Config(controller_url=URL, api_key=KEY, verify_ssl=True)
-    assert "self-signed" in explain(UniFiAPIError("", kind="tls"), config)[1]
+    fix = explain(UniFiAPIError("", kind="tls"), config)[1]
+    assert "private CA" in fix and "self-signed leaf" in fix
     pinned = Config(controller_url=URL, api_key=KEY, verify_ssl="/x/ca.pem")
     message, fix = explain(UniFiAPIError("", kind="tls"), pinned)
-    assert "CA bundle" in message and "/x/ca.pem" not in message and "CA that signed it" in fix
+    assert "configured CA bundle" in message and "/x/ca.pem" not in message
+    assert "certificate chain" in fix and "CA that signed it" not in fix
+
+
+def test_the_system_trust_hint_separates_private_cas_from_self_signed_leaves(configured):
+    fix = checks_of(configured)["config.tls"].fix
+    assert "private CA" in fix and "self-signed leaf" in fix
+
+
+@pytest.mark.parametrize("reason, fragment", [
+    ("hostname_mismatch", "does not match the UNIFI_URL host name"),
+    ("invalid_ca", "not usable as a CA certificate"),
+    ("untrusted", "configured CA bundle"),
+])
+def test_doctor_explains_structured_tls_reasons_without_using_error_text(reason, fragment):
+    config = Config(controller_url=URL, api_key=KEY, verify_ssl="/x/ca.pem")
+    message, fix = explain(UniFiAPIError("sensitive raw TLS detail", kind="tls", tls_reason=reason), config)
+    assert fragment in message
+    assert fix
+    assert "sensitive raw TLS detail" not in message + fix
 
 
 def test_every_failure_kind_has_a_fix_where_the_user_can_act(configured):
