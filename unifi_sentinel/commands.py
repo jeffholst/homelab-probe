@@ -7,7 +7,6 @@ handler declares what it reads with a ``Needs``), analysis and rendering in the 
 
 import argparse
 import datetime
-import json
 import logging
 import sys
 import time
@@ -41,7 +40,7 @@ from .diagnose import (
 from .doctor import Options as DoctorOptions
 from .doctor import exit_failed, run_checks
 from .doctor import render as render_doctor
-from .doctor import to_dict as doctor_dict
+from .documents import doctor_document, info_document, wan_document
 from .events import DEFAULT_LIMIT, DEFAULT_SINCE, SEVERITIES, fetch_events, make_filter, parse_duration, render_events
 from .export import EXPORT_FORMATS, JSON_FILENAME, run_export
 from .firewall import build_firewall
@@ -80,9 +79,8 @@ from .topology import build_topology
 from .topology import render_text as render_topology
 from .topology import to_json as topology_json
 from .util import printable, safe_output
-from .wan import DEFAULT_DAYS, build_wan
+from .wan import DEFAULT_DAYS
 from .wan import render_text as render_wan
-from .wan import to_json as wan_json
 from .watch import MAX_SECONDS, MIN_SECONDS
 from .watch import changes as watch_changes
 from .watch import start as watch_start
@@ -215,10 +213,10 @@ def _add_info(parser: argparse.ArgumentParser) -> None:
 
 
 def _run_info(ctx: Context) -> int:
-    say(f"Application: {ctx.client.info()}")
-    for s in ctx.client.sites():
-        say(f"Site: {printable(s.get('name'))} ref={printable(s.get('internalReference'))} "
-            f"id={printable(s.get('id'))}")
+    document = info_document(ctx.client)
+    say(f"Application: {document.data['application']}")
+    for s in document.data["sites"]:
+        say(f"Site: {printable(s['name'])} ref={printable(s['ref'])} id={printable(s['id'])}")
     return 0
 
 
@@ -546,9 +544,8 @@ def _add_wan(parser: argparse.ArgumentParser) -> None:
 
 
 def _run_wan(ctx: Context) -> int:
-    snap = collect_snapshot(ctx.client, ctx.config.site, Needs(health=True, speedtests=True))
-    report = build_wan(snap, ctx.args.days, ctx.settings)
-    say(wan_json(report) if ctx.args.json else render_wan(report))
+    document = wan_document(ctx.client, ctx.config.site, ctx.args.days, ctx.settings)
+    say(document.to_json() if ctx.args.json else render_wan(document.data))
     return 0
 
 
@@ -632,7 +629,7 @@ def _run_doctor(args: argparse.Namespace) -> int:
     checks = run_checks(DoctorOptions(env_file=args.env_file, site=args.site, timeout=args.timeout,
                                       parallel=args.parallel, config=args.config, offline=args.offline,
                                       events=not args.no_events))
-    say(json.dumps(doctor_dict(checks), indent=2) if args.json else render_doctor(checks))
+    say(doctor_document(checks).to_json() if args.json else render_doctor(checks))
     return EXIT_ERROR if exit_failed(checks) else 0
 
 
