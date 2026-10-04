@@ -194,6 +194,16 @@ def test_json_output_is_valid_and_has_no_raw_control_characters(fake_client, mon
     json.loads(out)
 
 
+def test_the_json_export_is_valid_escaped_and_clean_on_the_terminal(fake_client, monkeypatch, capsys, tmp_path):
+    fake_client.session.fx = poison(fake_client.session.fx)
+    run(fake_client, monkeypatch, ["export", "--format", "json", "-o", str(tmp_path)])
+    captured = capsys.readouterr()
+    assert_clean(captured.out + captured.err, ["export", "--format", "json"])
+    text = (tmp_path / "unifi_inventory.json").read_text(encoding="utf-8")
+    assert "\x1b" not in text and "\u202e" not in text and "\\u001b" in text      # JSON escapes them itself
+    assert "\x1b" in json.loads(text)["clients"][0]["Name"]                         # raw once decoded, like every --json
+
+
 def test_unmatched_client_query_is_not_echoed_raw(fake_client, monkeypatch, capsys):
     assert run(fake_client, monkeypatch, ["client", "\x1b[2Jnobody\nx"]) == cli.EXIT_NO_MATCH
     assert_clean(capsys.readouterr().err, "client")

@@ -148,7 +148,22 @@ A row with no connected-client record, an offline client from `--include-offline
 1. **`unifi_clients.csv`**: master inventory of connected clients and UniFi devices. Columns: Type, Name, MAC Address, IP Address, Model, Connection Type, Switch, Port, Last Seen, Status. By default only currently connected clients are listed; pass `--include-offline` to add previously seen clients with Status `Offline` (from the legacy `stat/alluser` endpoint).
 2. **`switch_<name>.csv`**: one file per switch with port status, speed, duplex, PoE, connected client or device, and traffic counters.
 
+`--format json` writes the same data as one file instead (below).
+
 CSV files are ignored by git.
+
+### `--format json`: the same data in one file
+
+`export --format json` writes one file, **`unifi_inventory.json`**, into the output directory (`-o`, as for the CSV files) instead of the CSV files; it does not touch CSV files that are already there. It holds the same data, with the same `--include-offline`, as an object with a `version` (1, as every JSON object of the tool, with a [schema](schemas.md)) and three lists:
+
+- **`devices`** and **`clients`**: the rows of `unifi_clients.csv`, with the same columns (Type, Name, MAC Address, IP Address, Model, Connection Type, Switch, Port, Last Seen, Status), split by their Type. Offline clients come last in `clients`.
+- **`switches`**: one entry per switch that has a port table, with its `name`, its `mac` and its `ports`, the rows of that switch's `switch_<name>.csv` (numbers stay numbers, as in `query ports --json`). Two switches with the same name are two entries, told apart by `mac`.
+
+```bash
+uv run unifi-sentinel.py export --format json -o ./out --include-offline
+```
+
+Unlike the CSV files, the values are **raw**: a name that starts with `=`, `+`, `-` or `@` is not changed, because JSON is not opened as a spreadsheet, and control characters are escaped by the JSON itself (`\u001b`). The default stays `--format csv`, and its files are byte for byte what they were. `unifi_inventory.json` is git-ignored like the CSV files, because it holds real MAC and IP addresses.
 
 ### Names in exports and output
 

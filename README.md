@@ -12,7 +12,7 @@ UniFi Sentinel is a fork of [ericfitz/unifi-clients-export](https://github.com/e
 
 | Command | Description | |
 | ------- | ----------- | --- |
-| `export` | Export connected clients, UniFi devices and switch ports to CSV | [details](docs/inventory.md#output-files) |
+| `export` | Export connected clients, UniFi devices and switch ports to CSV or JSON | [details](docs/inventory.md#output-files) |
 | `query` | List and filter devices, clients, DHCP reservations, switch ports, networks and Wi-Fi networks (table, `--json` or `--csv`) | [details](docs/inventory.md#devices) |
 | `snapshot` | Save the current inventory to a local JSON file, to compare later | [details](docs/inventory.md#snapshots-and-diff) |
 | `diff` | What changed: compare saved snapshots, or a snapshot against the live network | [details](docs/inventory.md#snapshots-and-diff) |
@@ -108,7 +108,7 @@ Either installs the `unifi-sentinel` command (its `--version` option shows which
 ```bash
 uv run unifi-sentinel.py info                                 # the controller's version and its sites
 uv run unifi-sentinel.py --site Lab diagnose --no-events      # another site for this run (beats SITE_ID)
-uv run unifi-sentinel.py export -o ./out --include-offline    # CSV files (long form: --output-dir); also previously seen clients
+uv run unifi-sentinel.py export -o ./out --include-offline    # CSV files (--output-dir; --format json for one JSON file); also offline clients
 uv run unifi-sentinel.py query clients -s printer --json      # filter (long form: --search), as JSON; --csv for a spreadsheet
 uv run unifi-sentinel.py query clients --include-offline      # also previously seen clients
 uv run unifi-sentinel.py query wlans                          # Wi-Fi networks (also: query networks; query clients --ssid guest)
@@ -188,7 +188,7 @@ Clients that use a private Wi-Fi MAC address are flagged in `query clients`, `ne
 
 ### Output files
 
-`export` writes the inventory and one CSV per switch; names are cleaned and formula-like cells neutralized. [Details](docs/inventory.md#output-files).
+`export` writes the inventory and one CSV per switch (or one JSON file with `--format json`); names are cleaned and formula-like cells neutralized. [Details](docs/inventory.md#output-files).
 
 ### Exit codes
 

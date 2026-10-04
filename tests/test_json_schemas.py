@@ -9,7 +9,9 @@ variant is missing, never silently.
 import copy
 import json
 import re
+import tempfile
 import time
+from pathlib import Path
 
 import pytest
 from conftest import FakeResponse, FakeSession
@@ -19,6 +21,7 @@ from jsonschema import Draft202012Validator, ValidationError
 
 from unifi_sentinel import cli, events, history, topology, wan, wifi
 from unifi_sentinel import client_view as client_view_module
+from unifi_sentinel import export as export_module
 from unifi_sentinel import firewall as firewall_module
 from unifi_sentinel.client import UniFiClient
 from unifi_sentinel.diagnose import JSON_VERSION as FINDINGS_VERSION
@@ -75,6 +78,15 @@ def output(argv, change=None, configure=None):
         configure(client)
     code, out, _ = run_command(client, argv)
     return json.loads(out)
+
+
+def export_file(argv, change=None):
+    """The JSON file `export --format json` writes (it writes a file, not stdout)."""
+    client = controller(change)
+    with tempfile.TemporaryDirectory() as directory:
+        code, _, _ = run_command(client, ["export", "--format", "json", "-o", directory, *argv])
+        assert code == 0
+        return json.loads((Path(directory) / export_module.JSON_FILENAME).read_text(encoding="utf-8"))
 
 
 def fail_endpoints(*suffixes):
@@ -197,6 +209,8 @@ DOCUMENTS = {
                                    (["query", "networks", "--json"], None, fail_endpoints("stat/sta"))),
     "query-wlans": cli_variants((["query", "wlans", "--json"], None), (["query", "wlans", "-s", "guest", "--json"], None),
                                 (["query", "wlans", "--json"], None, fail_endpoints("stat/sta"))),
+    "export": [lambda: export_file([]), lambda: export_file(["--include-offline"]),
+               lambda: export_file([], sparse_ports)],
     "new-clients": cli_variants((["new-clients", "--json"], None), (["new-clients", "-s", "printer", "--json"], None)),
     "events": cli_variants((["events", "--json"], None), (["events", "--client", "phone", "--json"], None),
                            (["events", "--since", "7d", "--severity", "high", "--json"], None)),
@@ -339,6 +353,7 @@ VERSIONS = {
     "diagnose": FINDINGS_VERSION, "audit": FINDINGS_VERSION, "firewall": firewall_module.JSON_VERSION,
     "topology": topology.JSON_VERSION, "wifi": wifi.JSON_VERSION, "wan": wan.JSON_VERSION,
     "client": client_view_module.JSON_VERSION, "events-summary": events.JSON_VERSION, "diff": history.JSON_VERSION,
+    "export": export_module.JSON_VERSION,
 }
 
 
