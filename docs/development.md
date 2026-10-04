@@ -31,6 +31,7 @@ unifi_sentinel/
     event_checks.py        the event log (conflicts, disconnects, roaming, unreachable devices)
     output.py              ignoring findings, exit codes, text and JSON
   watch.py               diagnose --watch: what changed since the last pass (reuses the notification planner)
+  doctor.py              the doctor checks of the tool's own setup (versions, files, settings, controller, endpoints)
   notify.py              notifications: what changed since the last run, ntfy/webhook/email sending, state file
   completion.py          shell completion scripts for bash, zsh and fish, generated from the argument parser
   settings.py            diagnose thresholds and ignore list (TOML)

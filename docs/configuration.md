@@ -41,6 +41,68 @@ VERIFY_SSL=true
 - **When a read fails:** required data stops the command with exit code 3; optional data warns and the command carries on with less. The list of connected clients and devices is required everywhere. Every legacy read is optional, **including the client history (`stat/alluser`)** for `query`, `client`, `diagnose` and the other reports (they warn that offline clients and reservations are unavailable), except for the two commands whose answer would be wrong without it: `new-clients` and `snapshot`/`diff` stop with exit code 3, so they never print a misleading list or save an incomplete snapshot.
 - **`SITE_ID`:** a site name may contain spaces and non-ASCII letters, but not `/`, `\`, `?`, `#` or control characters, and at most 128 characters; it is also percent-encoded wherever it appears in a URL. **`--site NAME|REF|UUID`** (before the command, like `--timeout`) chooses the site for one run and beats `SITE_ID`: `unifi-sentinel --site Lab diagnose`. It takes the same three kinds of value and is checked the same way (a bad or empty value is a usage error, exit code 64, before any request); an unknown site stops the command with exit code 3 and lists the sites there are (`unifi-sentinel info` shows them). Every command that reads a site uses it. Saved snapshots and the notification state are not kept apart by site, so with several sites give each its own `--notify-state FILE` and `snapshot --dir DIRECTORY`.
 
+## Checking your setup: `doctor`
+
+`doctor` checks the **tool**, where `diagnose` checks the network: is it installed and configured right, are the settings safe, does the controller answer, accept the API key and have the site, and which optional endpoints does it offer? Run it first when something does not work, and paste its output into an issue.
+
+```bash
+unifi-sentinel doctor                 # everything, including the controller
+unifi-sentinel doctor --offline       # only the installation and the settings files
+unifi-sentinel --env-file lab.env --site Lab doctor --json
+```
+
+It never stops at a broken setup (that is what it reports): the settings problems are checks that **fail**, and the controller checks after them are **skipped** with the reason. Each line has a status: `OK`, `WARN` (works, but look at it: a `.env` other users can read, certificate checking turned off, an optional endpoint missing, an expired ignore rule), `FAIL` (something every command needs does not work), `SKIP` (not run, and why) or `INFO`. Most lines come with the thing to do about it. The exit code is `0` unless a check **failed**, then `3` (the code for configuration and connection errors; `1` and `2` stay reserved for findings).
+
+Abridged output (the sample is from the synthetic controller; a real one has one line for each check below):
+
+```text
+Configuration
+  [OK  ] Required settings: CONTROLLER_URL and API_KEY are set and valid
+  [WARN] TLS verification: certificate checking is off: the key is sent without checking who answers
+         -> trust the controller's certificate with VERIFY_SSL=/path/to/its-certificate.pem
+
+Controller
+  [OK  ] Controller address: https, port 443 (the host is not shown)
+  [OK  ] Controller and API key: answered, and accepted the API key
+  [INFO] Controller version: UniFi Network 10.0.0; this tool was tested on 10.6.106 only, so a field may differ ...
+  [OK  ] Site: found (1 site on the controller)
+
+What the controller offers
+  [OK  ] Devices (Integration API): 4 records
+  [WARN] Client history (stat/alluser): unavailable (HTTP 404): without it, offline clients, reservations, `new-clients`, `snapshot` and `diff`
+  [OK  ] Event log (the one read-only POST): answered (4 events in the last hour)
+
+1 warning ... 
+```
+
+**What it will not do.** It does not change anything: no setting, no file, nothing on the controller. The controller checks make **one GET per read, without retries** (the first attempt tells the truth about a flaky link), and one event-log query for the last hour (the single read-only POST the tool is approved to send; `--no-events` skips it). The notification check is a **dry run**: it builds the message and names the destination kinds, and sends nothing.
+
+**Safe to paste.** The API key is never shown. The controller's host name or address is replaced by `<controller>` everywhere, notification destinations are named by kind only (never a URL, topic, token, host or address), and a failed request is explained from what kind of failure it was, never by repeating the error text that has the address in it. File paths are your own. Options: `--offline`, `--no-events`, `--config FILE` (the settings file to check), `--json` (a [versioned document](schemas.md) with the same checks), and the global `--env-file`, `--site`, `--timeout` and `--parallel`, which `doctor` applies as the other commands do.
+
+**The checks.** The ids are stable (never renamed or reused), so a script can rely on them:
+
+| Check | What it looks at |
+| ----- | ---------------- |
+| `install.version` | the tool, Python and `requests` versions (information) |
+| `config.env_file` | the `.env` file that was found (current directory, `--env-file` or `UNIFI_SENTINEL_ENV`), or that the settings come from the environment; an explicit file that does not exist fails |
+| `config.env_permissions` | that only you can read the `.env` (it holds the API key) |
+| `config.settings_file` | `unifi-sentinel.toml` (or `--config FILE`): found, valid, how many ignore rules and how many have expired |
+| `config.environment` | that `CONTROLLER_URL` and `API_KEY` are set and valid (the first problem found, in the words of the usual error) |
+| `config.tls` | whether certificates are verified, against what, and a warning when checking is off or the URL is plain `http://` |
+| `config.limits` | the timeout, the number of parallel reads and the site that will be used |
+| `notify.configured` | which notification destinations are configured, by kind only |
+| `notify.dry_run` | that a message can be built for them; **nothing is sent** |
+| `controller.address` | the scheme and port of `CONTROLLER_URL` (the host is never shown) |
+| `controller.reachable` | that the controller answers and accepts the API key, with the usual causes explained (certificate, key rejected, no permission, timeout, no connection, not the controller) |
+| `controller.version` | the Network version, and a note when it is not the one this tool was tested on |
+| `controller.site` | that the site exists (and how many sites there are) |
+| `endpoint.integration_devices`, `endpoint.integration_clients` | the two reads every command needs (a failure here is a failed check) |
+| `endpoint.integration_device_detail`, `endpoint.integration_device_stats` | the per-device reads, tried on the first device |
+| `endpoint.stat_device`, `endpoint.stat_sta`, `endpoint.stat_alluser`, `endpoint.stat_health`, `endpoint.rest_networkconf`, `endpoint.rest_wlanconf`, `endpoint.stat_rogueap` | the legacy reads the commands use for data the Integration API lacks |
+| `endpoint.v2_speedtest`, `endpoint.v2_groups`, `endpoint.v2_firewall_policies`, `endpoint.v2_firewall_zone`, `endpoint.v2_firewall_matrix`, `endpoint.rest_portforward` | the v2 and port forward reads |
+| `endpoint.events` | the event log, with one query for the last hour (the one read-only POST of the tool) |
+
+
 ## Finding your site: `info`
 
 `info` is the quickest way to test your settings: it reads the controller's application info and its sites, nothing else, so a wrong address, key or certificate shows up here first. The sample is from the synthetic fixture:

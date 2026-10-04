@@ -21,6 +21,7 @@ from jsonschema import Draft202012Validator, ValidationError
 
 from unifi_sentinel import cli, events, history, topology, wan, wifi
 from unifi_sentinel import client_view as client_view_module
+from unifi_sentinel import doctor as doctor_module
 from unifi_sentinel import export as export_module
 from unifi_sentinel import firewall as firewall_module
 from unifi_sentinel.client import UniFiClient
@@ -213,6 +214,9 @@ DOCUMENTS = {
                                    (["query", "networks", "--json"], None, fail_endpoints("stat/sta"))),
     "query-wlans": cli_variants((["query", "wlans", "--json"], None), (["query", "wlans", "-s", "guest", "--json"], None),
                                 (["query", "wlans", "--json"], None, fail_endpoints("stat/sta"))),
+    "doctor": cli_variants((["doctor", "--json"], None), (["doctor", "--json", "--offline"], None),
+                           (["doctor", "--json", "--no-events"], None),
+                           (["doctor", "--json"], None, fail_endpoints("stat/alluser", "rest/wlanconf"))),
     "export": [lambda: export_file([]), lambda: export_file(["--include-offline"]),
                lambda: export_file([], sparse_ports)],
     "new-clients": cli_variants((["new-clients", "--json"], None), (["new-clients", "-s", "printer", "--json"], None)),
@@ -358,7 +362,7 @@ VERSIONS = {
     "diagnose": FINDINGS_VERSION, "audit": FINDINGS_VERSION, "firewall": firewall_module.JSON_VERSION,
     "topology": topology.JSON_VERSION, "wifi": wifi.JSON_VERSION, "wan": wan.JSON_VERSION,
     "client": client_view_module.JSON_VERSION, "events-summary": events.JSON_VERSION, "diff": history.JSON_VERSION,
-    "export": export_module.JSON_VERSION,
+    "export": export_module.JSON_VERSION, "doctor": doctor_module.JSON_VERSION,
 }
 
 
@@ -383,7 +387,7 @@ def test_the_plain_lists_have_no_version_field_and_say_so_in_their_schemas():
 
 # -- every --json command has a schema ---------------------------------------------------------------------------
 
-COMMAND_OF = {"query": "query-all", "new-clients": "new-clients", "events": "events", "topology": "topology", "wifi": "wifi",
+COMMAND_OF = {"doctor": "doctor", "query": "query-all", "new-clients": "new-clients", "events": "events", "topology": "topology", "wifi": "wifi",
               "wan": "wan", "firewall": "firewall", "client": "client", "audit": "audit", "diagnose": "diagnose",
               "diff": "diff"}
 

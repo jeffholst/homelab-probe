@@ -119,7 +119,7 @@ def test_format_findings_cannot_forge_a_finding_line():
 # -- every command's text output, with hostile names ----------------------------
 
 COMMANDS = [
-    ["info"],
+    ["info"], ["doctor"],
     ["query", "devices"], ["query", "clients", "--include-offline"], ["query", "ports"],
     ["query", "reservations"], ["query", "networks"], ["query", "wlans"],
     ["query", "networks", "--csv"], ["query", "wlans", "--csv"],

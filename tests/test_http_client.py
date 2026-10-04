@@ -188,6 +188,45 @@ def test_the_key_never_appears_in_the_new_messages():
 
 # -- TLS, CA bundles and the timeout reaching the library --------------------------------------------
 
+@pytest.mark.parametrize("outcome, kind, status", [
+    (requests.exceptions.SSLError("bad certificate"), "tls", None),
+    (requests.exceptions.ReadTimeout("slow"), "timeout", None),
+    (requests.exceptions.ConnectionError("refused"), "connection", None),
+    (requests.exceptions.InvalidURL("bad"), "request", None),
+    (OSError("cannot read the CA bundle"), "request", None),
+    (Response(401, text="no"), "unauthorized", 401),
+    (Response(403, text="no"), "forbidden", 403),
+    (Response(404, text="gone"), "http", 404),
+    (Response(500, text="boom"), "http", 500),
+    (Response(200, not_json=True), "bad_body", None),
+])
+def test_every_failure_says_what_kind_it_was_so_a_caller_need_not_read_the_message(outcome, kind, status):
+    client, _ = make(outcome, retries=0)
+    with pytest.raises(UniFiAPIError) as caught:
+        client.info()
+    assert (caught.value.kind, caught.value.status) == (kind, status)
+
+
+def test_a_ca_bundle_tls_failure_and_an_unknown_site_and_a_bad_event_log_have_their_kinds(tmp_path):
+    client, _ = make(requests.exceptions.SSLError("x"), retries=0, verify_ssl=str(tmp_path))
+    with pytest.raises(UniFiAPIError) as caught:
+        client.info()
+    assert caught.value.kind == "tls"
+    client, _ = make(ok({"data": [{"id": "s1", "internalReference": "default", "name": "Default"}]}))
+    with pytest.raises(UniFiAPIError) as caught:
+        client.resolve_site("elsewhere")
+    assert (caught.value.kind, caught.value.status) == ("site", None)
+    client, _ = make(Response(200, {"unexpected": True}))
+    with pytest.raises(UniFiAPIError) as caught:
+        client.system_log("default", {})
+    assert caught.value.kind == "bad_body"
+
+
+def test_an_error_built_by_hand_has_no_kind_and_no_status():
+    error = UniFiAPIError("plain")
+    assert (str(error), error.kind, error.status) == ("plain", "", None)
+
+
 def test_the_timeout_and_verify_setting_reach_every_request(tmp_path):
     bundle = tmp_path / "ca.pem"
     bundle.write_text("x")

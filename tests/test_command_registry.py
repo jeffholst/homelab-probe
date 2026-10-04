@@ -8,7 +8,7 @@ from unifi_sentinel import cli
 from unifi_sentinel.commands import COMMANDS, COMMANDS_BY_NAME, Command, Context
 
 EXPECTED = ["export", "query", "new-clients", "events", "client", "topology", "snapshot", "diff", "wifi", "wan",
-            "firewall", "audit", "completion", "diagnose", "info"]
+            "firewall", "audit", "doctor", "completion", "diagnose", "info"]
 
 
 def run(fake_client, monkeypatch, argv):

@@ -47,7 +47,9 @@ and `wep` Wi-Fi security values) the README says so.
   `events` (event history with filters and a summary), `firewall` (policies, port forwards and the zone matrix of
   the zone-based firewall, with findings), `audit` (configuration findings: open, WEP and WPA2-only Wi-Fi, guest
   networks without client isolation, default device names, firmware updates, unnamed clients), `snapshot` and `diff`
-  (save the inventory and see exactly what changed), `completion` (shell completion scripts for bash, zsh and fish, generated from the parser), `diagnose` and `info`.
+  (save the inventory and see exactly what changed), `completion` (shell completion scripts for bash, zsh and fish, generated from the parser), `doctor` (checks the
+  installation, the settings and that the controller answers, with stable check ids and no secrets or addresses in its
+  output), `diagnose` and `info`.
 - **`diagnose` checks:** offline devices (critical for a gateway or a device others uplink through), a device that reports it is
   overheating (`device.overheating`, critical), CPU and memory, a device's storage nearly full (`device.storage`, the
   gateway lists it; `storage_warn_pct` and `storage_critical_pct`), a device that restarted recently

@@ -17,6 +17,7 @@ Every `--json` output of the tool, the snapshot files and the webhook payload ha
 | `query devices --json` | devices (a bare array) | [`query-devices.v1.schema.json`](schemas/query-devices.v1.schema.json) |
 | `query clients --json` | clients (a bare array) | [`query-clients.v1.schema.json`](schemas/query-clients.v1.schema.json) |
 | `query reservations --json` | reservations (a bare array) | [`query-reservations.v1.schema.json`](schemas/query-reservations.v1.schema.json) |
+| `doctor --json` | the checks of the installation, the settings and the controller | [`doctor.v1.schema.json`](schemas/doctor.v1.schema.json) |
 | `export --format json` | the file `unifi_inventory.json`: devices, clients and switches with their ports | [`export.v1.schema.json`](schemas/export.v1.schema.json) |
 | `query ports --json` | switch ports (a bare array) | [`query-ports.v1.schema.json`](schemas/query-ports.v1.schema.json) |
 | `query networks --json` | networks (a bare array) | [`query-networks.v1.schema.json`](schemas/query-networks.v1.schema.json) |
