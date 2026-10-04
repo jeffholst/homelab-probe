@@ -31,6 +31,7 @@ unifi_sentinel/
     event_checks.py        the event log (conflicts, disconnects, roaming, unreachable devices)
     output.py              ignoring findings, exit codes, text and JSON
   documents.py           documents: the dict a command prints with --json plus the warnings of its read (wan, info and doctor so far)
+  demo/                  the synthetic controller: controller.json and DemoSession (the tests' fake controller and what --demo serves)
   logs.py                the logger tree: command-line, text and JSON formats, the redaction filter, ids, the events list, the warnings sink
   watch.py               diagnose --watch: what changed since the last pass (reuses the notification planner)
   doctor.py              the doctor checks of the tool's own setup (versions, files, settings, controller, endpoints)
@@ -41,8 +42,8 @@ unifi_sentinel/
   cli.py                 argument parser and main: loads the configuration, builds the client, runs a command
   commands.py            the commands: each one's arguments, checks and handler, and the registry
 tests/
-  conftest.py            FakeSession: a fake controller served from the fixture
-  fixtures/controller.json   synthetic, sanitized controller data
+  conftest.py            the isolation fixture; FakeSession is demo.DemoSession
+  (the synthetic controller data is unifi_sentinel/demo/controller.json)
   contract.py            the fields the code reads from each endpoint (the table behind the shape and live checks)
   field_tracking.py      finds those fields by recording which keys each command touches
   test_live_contract.py  opt-in (pytest -m live): the same table against a real controller, GET only

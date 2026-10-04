@@ -255,10 +255,10 @@ def test_the_numbers_and_rules_it_states_match_the_project():
 
 def test_the_rules_it_repeats_are_the_rules_of_claude_md():
     claude, contributing = read(ROOT / "CLAUDE.md"), read(CONTRIBUTING)
-    for rule in ("normalize_mac", "never rename or reuse", "tests/fixtures/controller.json"):
+    for rule in ("normalize_mac", "never rename or reuse", "unifi_sentinel/demo/controller.json"):
         assert rule in claude, f"CLAUDE.md no longer says {rule!r}"
     assert "normalize_mac" in contributing and "never renamed or reused" in contributing
-    assert "tests/fixtures/controller.json" in contributing
+    assert "unifi_sentinel/demo/controller.json" in contributing
 
 
 # -- no real data in anything that tells people to remove it -----------------------------------------------------------

@@ -45,7 +45,7 @@ def fixture_records(name):
 
 @pytest.mark.parametrize("name", sorted(CONTRACT))
 def test_the_fixture_has_every_field_of_the_contract(name):
-    assert problems(name, fixture_records(name)) == [], f"extend tests/fixtures/controller.json for {name}"
+    assert problems(name, fixture_records(name)) == [], f"extend unifi_sentinel/demo/controller.json for {name}"
 
 
 def paths_read(tmp_path, monkeypatch):

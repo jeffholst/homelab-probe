@@ -60,14 +60,24 @@ def test_the_command_line_reports_the_package_version(capsys):
 
 @pytest.mark.skipif(shutil.which("uv") is None, reason="needs uv to build a wheel")
 def test_a_built_wheel_carries_the_same_version(tmp_path):
-    result = subprocess.run(["uv", "build", "--wheel", "--out-dir", str(tmp_path), str(ROOT)], capture_output=True,
-                            text=True, timeout=300)
+    # Built from a copy with only what a build reads: a stale build/ or *.egg-info next to the sources (git-ignored,
+    # left by an earlier build) makes setuptools include files that pyproject.toml no longer asks for.
+    source = tmp_path / "source"
+    source.mkdir()
+    for name in ("pyproject.toml", "README.md", "LICENSE"):
+        if (ROOT / name).exists():
+            shutil.copy(ROOT / name, source / name)
+    shutil.copytree(ROOT / "unifi_sentinel", source / "unifi_sentinel", ignore=shutil.ignore_patterns("__pycache__"))
+    result = subprocess.run(["uv", "build", "--wheel", "--out-dir", str(tmp_path / "dist"), str(source)],
+                            capture_output=True, text=True, timeout=300)
     assert result.returncode == 0, result.stderr
-    (wheel,) = tmp_path.glob("*.whl")
+    (wheel,) = (tmp_path / "dist").glob("*.whl")
     assert wheel.name.startswith(f"unifi_sentinel-{__version__}-")
     metadata = zipfile.ZipFile(wheel).read(f"unifi_sentinel-{__version__}.dist-info/METADATA").decode("utf-8")
     assert f"Version: {__version__}" in metadata
     assert "Name: unifi-sentinel" in metadata
+    names = zipfile.ZipFile(wheel).namelist()
+    assert "unifi_sentinel/demo/controller.json" in names and "unifi_sentinel/demo/session.py" in names   # --demo
 
 
 # -- wifi: channel 14 and U-NII-4 ---------------------------------------------------------------------------------

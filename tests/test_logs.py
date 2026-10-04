@@ -375,7 +375,7 @@ def test_a_snapshot_collection_returns_its_warnings_as_data(fake_client, capsys)
 # -- personal data -------------------------------------------------------------------------------------------
 
 def fixture_identifiers():
-    data = json.loads((ROOT / "tests" / "fixtures" / "controller.json").read_text())
+    data = json.loads((ROOT / "unifi_sentinel" / "demo" / "controller.json").read_text())
     found = set()
 
     def walk(node, key=""):

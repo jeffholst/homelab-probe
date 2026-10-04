@@ -138,6 +138,25 @@ $ unifi-sentinel --verbose wan --json > wan.json
 - **Never logged:** the API key, response bodies, and query values. The paths do contain the site and device IDs, and the first line your controller's address, so **redact them before pasting the output into an issue**.
 - **Same lines, other formats:** these lines are the `DEBUG` records of the tool's logger. `LOG_LEVEL` and `LOG_FORMAT=text|json` (see [Logging](logging.md)) give them with a timestamp and fields, or as JSON lines for a log collector.
 
+## Trying it without a controller: `--demo`
+
+`--demo` (before the command) runs the command on the synthetic network that the tests use: four devices, two clients, some neighbors, events and speedtests, with ages relative to now so it always looks recent. It is for a first look, for screenshots and for building on the tool without a controller at hand.
+
+```bash
+unifi-sentinel --demo diagnose
+unifi-sentinel --demo topology
+unifi-sentinel --demo --verbose wifi
+```
+
+A demo run does not use your controller configuration or send data:
+
+- No `.env`, environment variable, `--env-file`, `UNIFI_SENTINEL_ENV` or `unifi-sentinel.toml` is read (a settings file is used only if you name it with `--config`), so a real address or API key in your environment cannot end up in a demo.
+- No controller is contacted: the address is on the `.invalid` top-level domain, which never resolves, and the answers come from the data packaged with the tool (`unifi_sentinel/demo/controller.json`).
+- Nothing can be sent: `--notify` is refused. `doctor` (it checks your real setup), `snapshot` and `diff` (they would mix synthetic data into your own saved snapshots) are refused too. All of these are usage errors (exit code 64).
+- Except for the controller-independent `completion` command, a line on stderr says `Demo mode: synthetic data, no controller is contacted.`, so stdout (and `--json`) stays clean and nobody mistakes the output for a real network.
+
+`--site` is accepted (the demo has one site, `default`), as are `--timeout`, `--parallel` and `--verbose`. The data is the same on every run, apart from the ages, so it is also what the sample output in this documentation is made from.
+
 ## Shell completion
 
 `unifi-sentinel completion bash`, `completion zsh` and `completion fish` print a completion script for the installed `unifi-sentinel` command: it completes the commands, every option (with its short form), the fixed values (`--fail-on info warning critical`, the query kinds, the Wi-Fi bands, the `diagnose --only` and `--skip` areas one at a time, even in a comma list), and file names for the options that take a file. The command needs no `.env` and never contacts the controller. The scripts are generated from the program's own options, not written by hand, so a new option is completed as soon as it exists; a test checks that every command and option is in every script.
