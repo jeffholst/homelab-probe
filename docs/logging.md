@@ -66,6 +66,10 @@ Every record passes one filter before it is written, whichever format is in use:
 
 They show as `[redacted]`. This is a safety net, not a licence: the code does not pass secrets to the logger in the first place, and a test pushes poisoned values through every channel (message, arguments, fields, exceptions, headers) in all three formats.
 
+## Warnings as data
+
+The warnings of a degraded read are also available as a list: `logs.collect_warnings()` returns them in the order they were issued, and `documents.py` puts them next to the data of a command. By default they are still shown as `Warning: ...`; a caller that returns them to its own client (the web interface, later) asks for `quiet=True`, and then they are only in the list and in a `DEBUG` record.
+
 ## Docker and compose
 
 The official image will set `LOG_FORMAT=json` and write to stderr, so `docker logs` and the log driver see one JSON object per line. Until then, for the container in [Running on a schedule](scheduling.md#docker):

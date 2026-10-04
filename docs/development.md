@@ -30,6 +30,7 @@ unifi_sentinel/
     ports.py  wireless.py  switch ports and uplinks; Wi-Fi quality
     event_checks.py        the event log (conflicts, disconnects, roaming, unreachable devices)
     output.py              ignoring findings, exit codes, text and JSON
+  documents.py           documents: the dict a command prints with --json plus the warnings of its read (wan, info and doctor so far)
   logs.py                the logger tree: command-line, text and JSON formats, the redaction filter, ids, the events list, the warnings sink
   watch.py               diagnose --watch: what changed since the last pass (reuses the notification planner)
   doctor.py              the doctor checks of the tool's own setup (versions, files, settings, controller, endpoints)

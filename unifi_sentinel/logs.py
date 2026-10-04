@@ -65,6 +65,7 @@ _request_id: contextvars.ContextVar[str] = contextvars.ContextVar("unifi_sentine
 _user: contextvars.ContextVar[str] = contextvars.ContextVar("unifi_sentinel_user", default="")
 _site: contextvars.ContextVar[str] = contextvars.ContextVar("unifi_sentinel_site", default="")
 _sink: contextvars.ContextVar[Optional[List[str]]] = contextvars.ContextVar("unifi_sentinel_sink", default=None)
+_quiet: contextvars.ContextVar[bool] = contextvars.ContextVar("unifi_sentinel_quiet", default=False)
 
 
 def new_id() -> str:
@@ -278,6 +279,7 @@ def reset() -> None:
     for var in (_request_id, _user, _site):
         var.set("")
     _sink.set(None)
+    _quiet.set(False)
 
 
 # -- emitting ----------------------------------------------------------------------------------------------
@@ -300,19 +302,21 @@ def warn(message: str) -> None:
     sink = _sink.get()
     if sink is not None:
         sink.append(printable(message))
-    log_event(_log, logging.WARNING, "warning", message)
+    log_event(_log, logging.DEBUG if _quiet.get() else logging.WARNING, "warning", message)
 
 
 @contextmanager
-def collect_warnings() -> Iterator[List[str]]:
-    """The warnings of the block as data, in the order they were issued (the printed text is unchanged). A
-    document built for the API returns them next to its data instead of leaving them in stderr."""
+def collect_warnings(quiet: bool = False) -> Iterator[List[str]]:
+    """The warnings of the block as data, in the order they were issued. By default they are still shown as
+    before (the printed text is unchanged); with ``quiet=True`` they are only in the list and a DEBUG record, for
+    a caller (an API) that returns them to its own client instead of printing them."""
     messages: List[str] = []
-    token = _sink.set(messages)
+    sink_token, quiet_token = _sink.set(messages), _quiet.set(quiet)
     try:
         yield messages
     finally:
-        _sink.reset(token)
+        _quiet.reset(quiet_token)
+        _sink.reset(sink_token)
 
 
 configure()
