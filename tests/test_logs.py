@@ -336,6 +336,11 @@ def test_a_run_gets_its_own_request_id_and_site(fake_client, monkeypatch, capsys
     requests_logged = [r for r in lines if r["event"] == "http.request"]
     assert requests_logged and len({r["request_id"] for r in requests_logged}) == 1
     assert re.fullmatch(r"[0-9a-f]{12}", requests_logged[0]["request_id"]) and requests_logged[0]["site"] == "default"
+    run_id = requests_logged[0]["request_id"]
+    run_records = [r for r in lines if r["event"] in {"http.request", "snapshot.read", "run.settings", "run.summary"}]
+    assert {r["request_id"] for r in run_records} == {run_id}
+    assert {r["site"] for r in run_records} == {"default"}
+    assert {"run.settings", "run.summary"} <= {r["event"] for r in run_records}
     assert logs.scrub(f"x {API_KEY} y") == "x [redacted] y"       # the run registered its key
 
 
@@ -415,8 +420,9 @@ def test_info_and_above_never_carry_client_names_macs_or_addresses_and_debug_has
         for value in identifiers:
             assert value.lower() not in text.lower(), (argv, value)
         assert "controller.example" not in text
-    debug = "\n".join(run_logged(fake_client, monkeypatch, capsys, "DEBUG", ["--verbose", "info"]))
+    debug = "\n".join(run_logged(fake_client, monkeypatch, capsys, "DEBUG", ["info"]))
     assert "controller.example" in debug and '"event": "run.settings"' in debug
+    assert '"event": "run.summary"' in debug
 
 
 # -- notifications and the watch loop ----------------------------------------------------------------------------
