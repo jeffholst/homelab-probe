@@ -10,7 +10,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any, List, Optional
 
-from . import __version__
+from . import __version__, logs
 from .client import UniFiAPIError, UniFiClient
 from .commands import (
     COMMANDS,
@@ -99,6 +99,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = parser.parse_args(argv)
     command = COMMANDS_BY_NAME[args.command]
     command.validate(parser, args)
+    logs.reset()                                            # a fresh logger state for this run
+    logs.configure("cli", "DEBUG" if args.verbose else "WARNING")
     if command.run_local is not None:                       # needs no .env and no controller
         return command.run_local(args)
     client: Optional[UniFiClient] = None
@@ -108,6 +110,9 @@ def main(argv: Optional[List[str]] = None) -> int:
             config = replace(config, timeout=args.timeout)      # the command line beats .env
         if args.parallel is not None:
             config = replace(config, parallel=args.parallel)
+        logs.register_secrets(*config.secret_values())
+        if config.log_format or config.log_level:
+            logs.configure(config.log_format or "cli", "DEBUG" if args.verbose else config.log_level or "WARNING")
         if args.verbose:
             message = f"unifi-sentinel {__version__}: {_describe_connection(config)}"
             verbose(message.replace(config.api_key, "***"))
@@ -117,9 +122,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         settings = load_settings(getattr(args, "config", None)) if command.wants_settings(args) else None
         command.prepare(args, config)
         client = UniFiClient.from_config(config)
-        if args.verbose:
-            client.trace = verbose
-        return command.run(Context(args, config, settings, client))
+        with logs.bind(request_id=logs.new_id(), site=config.site):
+            return command.run(Context(args, config, settings, client))
     except (ConfigError, UniFiAPIError) as e:
         say(f"ERROR: {e}", file=sys.stderr)
         return EXIT_ERROR
@@ -128,7 +132,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         return EXIT_ERROR
     finally:
         if args.verbose and client is not None and client.attempts_made:
-            verbose(client.summary())
+            verbose(client.summary(), "run.summary")
 
 
 if __name__ == "__main__":

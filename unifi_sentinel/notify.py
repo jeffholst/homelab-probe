@@ -19,6 +19,7 @@ and a password is never sent over an unencrypted connection.
 """
 
 import json
+import logging
 import os
 import smtplib
 import ssl
@@ -35,7 +36,10 @@ import requests
 
 from .config import Config, SmtpSettings
 from .diagnose import CODES, CRITICAL, INFO, SEVERITY_ORDER, WARNING, Finding, area_of
+from .logs import log_event
 from .util import printable
+
+_log = logging.getLogger(__name__)
 
 STATE_VERSION = 1
 DEFAULT_STATE_FILE = "snapshots/notify-state.json"     # the git-ignored directory that holds saved inventories
@@ -295,6 +299,18 @@ def _send_email(smtp: SmtpSettings, title: str, body: str, timeout: float,
     return True, "sent"
 
 
+def _report(kind: str, outcome: Tuple[bool, str], started: float, trace: Optional[Callable[[str], None]]) -> None:
+    """Log how one destination went: the kind, a fixed reason and the time, never the URL, a recipient or the
+    message. ``trace`` (when given) gets the same line as text."""
+    delivered, reason = outcome
+    millis = (time.perf_counter() - started) * 1000
+    line = f"notify {kind} -> {reason} ({millis:.0f} ms)"
+    log_event(_log, logging.INFO if delivered else logging.WARNING, "notify.delivery", line,
+              destination=kind, delivered=delivered, reason=reason, duration_ms=round(millis))
+    if trace is not None:
+        trace(line)
+
+
 def send(destinations: List[Destination], events: List[Event], redact: bool, timeout: float,
          post: Optional[Callable[..., Any]] = None,
          trace: Optional[Callable[[str], None]] = None,
@@ -318,8 +334,7 @@ def send(destinations: List[Destination], events: List[Event], redact: bool, tim
             outcome = _send_email(dest.smtp, title, body, timeout, smtp_plain or smtplib.SMTP,
                                   smtp_ssl or smtplib.SMTP_SSL)
             results.append((dest.kind, *outcome))
-            if trace is not None:
-                trace(f"notify {dest.kind} -> {outcome[1]} ({(time.perf_counter() - started) * 1000:.0f} ms)")
+            _report(dest.kind, outcome, started, trace)
             continue
         headers: Dict[str, str] = {}
         if dest.token:
@@ -344,8 +359,7 @@ def send(destinations: List[Destination], events: List[Event], redact: bool, tim
             status = getattr(response, "status_code", 0)
             outcome = (200 <= status < 300, f"HTTP {status}")
         results.append((dest.kind, *outcome))
-        if trace is not None:
-            trace(f"notify {dest.kind} -> {outcome[1]} ({(time.perf_counter() - started) * 1000:.0f} ms)")
+        _report(dest.kind, outcome, started, trace)
     return results
 
 

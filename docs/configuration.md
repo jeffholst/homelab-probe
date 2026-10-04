@@ -21,6 +21,8 @@ VERIFY_SSL=true
 | `VERIFY_SSL`     | No       | `true`    | `true`/`yes`/`1`/`on`, `false`/`no`/`0`/`off` (any case), or the path of a CA bundle |
 | `TIMEOUT`        | No       | `15`      | Seconds to wait for each request, 1 to 600 (also `--timeout SECONDS` before the command) |
 | `PARALLEL_REQUESTS` | No    | `6`       | How many requests to make at once, 1 to 16; 1 means one by one (also `--parallel N` before the command) |
+| `LOG_LEVEL`      | No       | `WARNING` | `DEBUG`, `INFO`, `WARNING` or `ERROR` (any case); `--verbose` means `DEBUG` ([logging](logging.md)) |
+| `LOG_FORMAT`     | No       | (command line) | `text` or `json` for one record per line with fields; unset keeps the command-line format ([logging](logging.md)) |
 | `NOTIFY_NTFY_URL` | No      | -         | Full ntfy topic URL for `diagnose --notify` (a secret, `https://` only) |
 | `NOTIFY_NTFY_TOKEN` | No    | -         | ntfy access token, sent as a bearer token |
 | `NOTIFY_WEBHOOK_URL` | No   | -         | Generic webhook URL for `diagnose --notify` (a secret, `https://` only) |
@@ -134,6 +136,7 @@ $ unifi-sentinel --verbose wan --json > wan.json
 - **One line per request attempt:** method, path (with the paging parameters), the HTTP status or what went wrong (`timed out`, `connection error`, `TLS certificate verification failed`), and the time in milliseconds. A retry shows the wait and the attempt number. The event-log `POST` shows the names of the query fields, never their values.
 - **`read ...`** lists what a snapshot collected (counts only), and the last line is the total number of requests, retries and time spent in requests (added up over all of them, so more than the wall time when they overlap). The last line is also printed when a request fails.
 - **Never logged:** the API key, response bodies, and query values. The paths do contain the site and device IDs, and the first line your controller's address, so **redact them before pasting the output into an issue**.
+- **Same lines, other formats:** these lines are the `DEBUG` records of the tool's logger. `LOG_LEVEL` and `LOG_FORMAT=text|json` (see [Logging](logging.md)) give them with a timestamp and fields, or as JSON lines for a log collector.
 
 ## Shell completion
 

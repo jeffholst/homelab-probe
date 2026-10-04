@@ -1,6 +1,6 @@
 """Data layer: one consistent read of the controller, independent of output format."""
 
-import sys
+import contextvars
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -9,14 +9,10 @@ from functools import partial
 from typing import Any, Dict, List, Optional, Tuple
 
 from .client import UniFiAPIError, UniFiClient
-from .util import printable
+from .logs import warn
 
 EVENT_PAGE_SIZE = 500   # events requested per system-log page
 MAX_EVENTS = 20_000     # never read more than this many events in one run
-
-
-def warn(msg: str) -> None:
-    print(f"Warning: {printable(msg)}", file=sys.stderr)
 
 
 @dataclass
@@ -316,7 +312,8 @@ class _Reads:
         if self._pool is None:
             self._futures[name] = (True, task(notes))
         else:
-            self._futures[name] = (False, self._pool.submit(task, notes))
+            # the worker runs in a copy of this context, so its log records carry the run's request id
+            self._futures[name] = (False, self._pool.submit(contextvars.copy_context().run, task, notes))
 
     def result(self, name: str) -> Any:
         done, value = self._futures[name]
@@ -460,8 +457,8 @@ def collect_snapshot(
         finally:
             reads.show_warnings(_WARNING_ORDER)
     snap.degraded = snap.degraded or any(notes for name, notes in reads.notes.items() if name != "extras")
-    if client.trace is not None:
-        client.trace(describe_snapshot(snap))
+    if client.tracing():
+        client.debug(describe_snapshot(snap), "snapshot.read")
     return snap
 
 
@@ -487,8 +484,8 @@ def extend_snapshot(client: UniFiClient, snap: Snapshot, needs: Needs, now_ms: O
         finally:
             reads.show_warnings(_WARNING_ORDER)
     snap.degraded = snap.degraded or any(notes for name, notes in reads.notes.items() if name != "extras")
-    if client.trace is not None:
-        client.trace(describe_snapshot(snap))
+    if client.tracing():
+        client.debug(describe_snapshot(snap), "snapshot.read")
 
 
 def collect_event_snapshot(
@@ -514,6 +511,6 @@ def collect_event_snapshot(
         events_available=available,
         degraded=not available,
     )
-    if client.trace is not None:
-        client.trace(describe_snapshot(snap))
+    if client.tracing():
+        client.debug(describe_snapshot(snap), "snapshot.read")
     return snap

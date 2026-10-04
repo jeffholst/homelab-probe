@@ -251,6 +251,18 @@ def test_destinations_are_named_by_kind_and_nothing_is_sent(monkeypatch, configu
     assert "unifi-sentinel: 1 problem(s)" in found["notify.dry_run"].message
 
 
+def test_unencrypted_destinations_are_a_warning_that_names_them(monkeypatch, configured):
+    monkeypatch.setenv("ALLOW_INSECURE_HTTP", "true")
+    monkeypatch.setenv("NOTIFY_NTFY_URL", "http://ntfy.lab/a-long-random-topic")
+    monkeypatch.setenv("NOTIFY_SMTP_HOST", "smtp.lab")
+    monkeypatch.setenv("NOTIFY_SMTP_SECURITY", "none")
+    monkeypatch.setenv("NOTIFY_EMAIL_FROM", "alerts@lab.example")
+    monkeypatch.setenv("NOTIFY_EMAIL_TO", "me@lab.example")
+    found = checks_of(configured)["notify.configured"]
+    assert found.status == WARN and found.message == "configured: ntfy, email; unencrypted: ntfy, email"
+    assert "HTTPS" in found.fix
+
+
 # -- the controller ------------------------------------------------------------------------------------------------
 
 @pytest.mark.parametrize("error, fragment", [

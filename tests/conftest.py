@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from unifi_sentinel import logs
 from unifi_sentinel.client import UniFiClient
 
 FIXTURE = json.loads((Path(__file__).parent / "fixtures" / "controller.json").read_text())
@@ -118,7 +119,8 @@ def _system_log(events, q):
 CONFIG_VARIABLES = ("CONTROLLER_URL", "API_KEY", "SITE_ID", "VERIFY_SSL", "ALLOW_INSECURE_HTTP", "TIMEOUT",
                     "PARALLEL_REQUESTS", "UNIFI_SENTINEL_ENV", "NOTIFY_NTFY_URL", "NOTIFY_NTFY_TOKEN", "NOTIFY_WEBHOOK_URL",
                     "NOTIFY_WEBHOOK_TOKEN", "NOTIFY_SMTP_HOST", "NOTIFY_SMTP_PORT", "NOTIFY_SMTP_SECURITY",
-                    "NOTIFY_SMTP_USER", "NOTIFY_SMTP_PASSWORD", "NOTIFY_EMAIL_FROM", "NOTIFY_EMAIL_TO")
+                    "NOTIFY_SMTP_USER", "NOTIFY_SMTP_PASSWORD", "NOTIFY_EMAIL_FROM", "NOTIFY_EMAIL_TO", "LOG_LEVEL",
+                    "LOG_FORMAT")
 
 
 @pytest.fixture(autouse=True)
@@ -139,7 +141,9 @@ def _isolated_environment(request, tmp_path, monkeypatch):
     for name in CONFIG_VARIABLES:
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr("unifi_sentinel.client.RETRY_BACKOFF_S", 0)    # retries must not make the suite wait
+    logs.reset()                   # the logger, its secrets and its context are process-wide
     yield
+    logs.reset()
     os.environ.clear()
     os.environ.update(saved)
 
