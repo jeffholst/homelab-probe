@@ -8,7 +8,7 @@ does, with GET requests and the one approved read-only event log query (the reco
 else). From what came back it keeps only the fields ``tests/contract.py`` lists (nothing else the controller says
 about itself, its users or its keys is ever written), replaces every MAC, address, id and name with a synthetic
 one (``tools/sanitize.py``), proves nothing real is left (the leak check), and writes the result in the shape of
-``tests/fixtures/controller.json``, owner-only, to ``tools/recorded/controller.json`` (git-ignored).
+``unifi_sentinel/demo/controller.json``, owner-only, to ``tools/recorded/controller.json`` (git-ignored).
 
 The recording is for checking the contract and reproducing a problem on realistic data; it does not replace the
 hand-written fixture, which the tests depend on name by name. Output to the terminal is counts and field names,
@@ -61,7 +61,7 @@ def _specs(endpoint: str) -> List[List[str]]:
 
 
 def build_fixture(exchanges: List[Tuple[str, str, Any]], now_ms: float) -> Dict[str, Any]:
-    """The recorded responses in the shape of ``tests/fixtures/controller.json``, reduced to the contract.
+    """The recorded responses in the shape of ``unifi_sentinel/demo/controller.json``, reduced to the contract.
 
     Times become ages (``age_s``, ``last_seen_age_s``), as the fixture stores them, so the recording stays
     current whenever it is replayed."""

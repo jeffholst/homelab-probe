@@ -90,7 +90,8 @@ class UniFiClient:
         self.workers = max(1, workers)         # requests in flight at once during a parallel read (1: one by one)
         self._lock = threading.Lock()          # guards the counters and the trace output across threads
         self._in_parallel = False
-        self.session = requests.Session()
+        # a ``requests.Session``, or anything with its ``get``/``post``/``headers`` (the demo and the tests replace it)
+        self.session: Any = requests.Session()
         if self.workers > 1:
             adapter = HTTPAdapter(pool_connections=self.workers, pool_maxsize=self.workers)
             self.session.mount("https://", adapter)

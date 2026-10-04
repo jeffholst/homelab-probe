@@ -58,6 +58,9 @@ version = {attr = "unifi_sentinel.__version__"}   # the one place the version is
 [tool.setuptools.packages.find]
 include = ["unifi_sentinel*"]
 
+[tool.setuptools.package-data]
+"unifi_sentinel.demo" = ["controller.json"]     # the synthetic controller that --demo serves
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["tests", "tools"]

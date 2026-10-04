@@ -37,6 +37,7 @@ and `wep` Wi-Fi security values) the README says so.
 
 ### Added
 
+- **`--demo`** (before the command): runs any command on the packaged synthetic network, with no `.env`, environment variable or settings file read, no controller contacted and nothing sent (`--notify`, `doctor`, `snapshot` and `diff` are refused with exit code 64). See [docs/configuration.md](docs/configuration.md#trying-it-without-a-controller---demo).
 - **Commands:** `export --include-offline` (also the previously seen clients) and `export --format json` (the same data as
   one `unifi_inventory.json`, with a JSON Schema), `query` (devices, clients, DHCP reservations, switch ports, networks and Wi-Fi networks as a table, `--json` or
   `--csv`; `query clients --network`, `--ssid` and `--ap` find the clients on one network, SSID or access point),
