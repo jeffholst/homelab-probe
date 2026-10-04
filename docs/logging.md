@@ -2,7 +2,7 @@
 
 What the tool says *about itself*, as opposed to its output: a degraded read, a request to the controller, the outcome of a notification. Command output (tables, JSON, CSV) is not logging and never changes with the settings on this page.
 
-Everything is written to **stderr**, one record per line, by the `unifi_sentinel` logger tree (the Python standard library, no extra dependency). A record is always a single clean line: line breaks and control characters in names are removed, a very long text is cut at 2,000 characters, and nothing secret is ever written (see [What never appears](#what-never-appears)).
+Everything is written to **stderr**, one record per line, by the `homelab_probe` logger tree (the Python standard library, no extra dependency). A record is always a single clean line: line breaks and control characters in names are removed, a very long text is cut at 2,000 characters, and nothing secret is ever written (see [What never appears](#what-never-appears)).
 
 ## Levels
 
@@ -28,15 +28,15 @@ The default is `WARNING`. `--verbose` (before the command) means `DEBUG`. `LOG_L
 An invalid value is a configuration error (exit code 3).
 
 ```text
-2026-10-04T06:07:42.429Z INFO    unifi_sentinel.notify notify.delivery notify ntfy -> HTTP 200 (212 ms) request_id=3f9c2a71b0de site=default destination=ntfy delivered=true reason="HTTP 200" duration_ms=212
-2026-10-04T06:07:42.430Z WARNING unifi_sentinel.logs warning legacy stat/health unavailable, controller health and WAN checks were skipped: HTTP 500 request_id=3f9c2a71b0de site=default
+2026-10-04T06:07:42.429Z INFO    homelab_probe.notify notify.delivery notify ntfy -> HTTP 200 (212 ms) request_id=3f9c2a71b0de site=default destination=ntfy delivered=true reason="HTTP 200" duration_ms=212
+2026-10-04T06:07:42.430Z WARNING homelab_probe.logs warning legacy stat/health unavailable, controller health and WAN checks were skipped: HTTP 500 request_id=3f9c2a71b0de site=default
 ```
 
 ```json
-{"ts": "2026-10-04T06:07:42.429Z", "level": "INFO", "logger": "unifi_sentinel.notify", "msg": "notify ntfy -> HTTP 200 (212 ms)", "event": "notify.delivery", "request_id": "3f9c2a71b0de", "user": null, "site": "default", "destination": "ntfy", "delivered": true, "reason": "HTTP 200", "duration_ms": 212}
+{"ts": "2026-10-04T06:07:42.429Z", "level": "INFO", "logger": "homelab_probe.notify", "msg": "notify ntfy -> HTTP 200 (212 ms)", "event": "notify.delivery", "request_id": "3f9c2a71b0de", "user": null, "site": "default", "destination": "ntfy", "delivered": true, "reason": "HTTP 200", "duration_ms": 212}
 ```
 
-The JSON fields are always `ts` (UTC, ISO 8601, milliseconds, `Z`), `level`, `logger`, `msg`, `event`, `request_id`, `user` and `site` (`null` when there is none), followed by the event's own fields. A field named like one of those is renamed with a `field_` prefix. Non-ASCII characters are escaped, so one record is one line in any tool.
+The `logger` field is the module's name under `homelab_probe` (for example `homelab_probe.client`). The JSON fields are always `ts` (UTC, ISO 8601, milliseconds, `Z`), `level`, `logger`, `msg`, `event`, `request_id`, `user` and `site` (`null` when there is none), followed by the event's own fields. A field named like one of those is renamed with a `field_` prefix. Non-ASCII characters are escaped, so one record is one line in any tool.
 
 - **`request_id`** is a random id of the run (twelve hex digits). It is carried into every record of the run, including those from the threads of a parallel read, so the lines of one run can be picked out of a shared log. `site` is the site the run reads. `user` is empty until the web interface adds accounts.
 - **`event`** is a stable name, never renamed or reused; a collector can filter on it. The names are in the next table, and a test fails if the code emits one that is not listed, or one is listed that nothing emits.
@@ -76,7 +76,7 @@ The official image will set `LOG_FORMAT=json` and write to stderr, so `docker lo
 
 ```yaml
 services:
-  sentinel:
+  hlp:
     environment:
       LOG_FORMAT: json
       LOG_LEVEL: INFO
@@ -87,13 +87,13 @@ services:
         max-file: "5"
 ```
 
-`docker compose logs --no-log-prefix sentinel | jq 'select(.level != "INFO")'` then shows only the warnings.
+`docker compose logs --no-log-prefix hlp | jq 'select(.level != "INFO")'` then shows only the warnings.
 
 ## Turning DEBUG on safely
 
 ```bash
-unifi-sentinel --verbose wan > wan.json 2> wan.log      # one run, then read or redact wan.log
-LOG_LEVEL=DEBUG LOG_FORMAT=json unifi-sentinel wan      # the same as JSON lines
+hlp --verbose wan > wan.json 2> wan.log      # one run, then read or redact wan.log
+LOG_LEVEL=DEBUG LOG_FORMAT=json hlp wan      # the same as JSON lines
 ```
 
 `DEBUG` shows every request path, the controller's address and the site: fine for you, redact them before sharing. The API key is never in it. Do not leave `DEBUG` on in a scheduled job that writes to a shared log.

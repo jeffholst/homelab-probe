@@ -11,12 +11,12 @@ The commands that list and export what is on the network: `query` (devices, clie
 When something breaks, the first question is "what changed since it last worked?". `snapshot` saves the inventory, and `diff` compares.
 
 ```bash
-uv run unifi-sentinel.py snapshot                         # now: ./snapshots/snapshot-20261001-011530Z.json
+uv run hlp.py snapshot                         # now: ./snapshots/snapshot-20261001-011530Z.json
 # ...later, when something is wrong...
-uv run unifi-sentinel.py diff                             # the newest snapshot against the network right now
-uv run unifi-sentinel.py diff --last-two                  # the two newest snapshots (no controller needed)
-uv run unifi-sentinel.py diff snapshot-20260929-080000Z.json   # a named snapshot against now
-uv run unifi-sentinel.py diff OLD.json NEW.json           # two files
+uv run hlp.py diff                             # the newest snapshot against the network right now
+uv run hlp.py diff --last-two                  # the two newest snapshots (no controller needed)
+uv run hlp.py diff snapshot-20260929-080000Z.json   # a named snapshot against now
+uv run hlp.py diff OLD.json NEW.json           # two files
 ```
 
 ```text
@@ -76,14 +76,14 @@ It is a hint, not proof: virtual machines, containers, bridges, VPNs and some Io
 
 `query reservations` lists every enabled fixed IP reservation, including clients that are currently offline. Columns: Name, MAC Address, Reserved IP, Network, VLAN, Current IP, Status, Last Seen. It reads the legacy `stat/alluser` and `rest/networkconf` endpoints, since the Integration API does not expose reservations. Only clients with the reservation enabled are listed; disabled reservations keep a stale IP on the controller and are ignored.
 
-**`--offline`** keeps only the reservations whose client is not connected and was last seen at least `reserved_offline_warn_days` ago (default 1 day, from `./unifi-sentinel.toml` or `--config FILE`), or has no last-seen time, and adds an **Offline For** column (`6d`, `30h`, or `never seen`). It is the same rule the `diagnose` check uses, without severities and without the ignore list, so it shows the whole set. It only applies to `query reservations`; `--config` is only valid together with `--offline`.
+**`--offline`** keeps only the reservations whose client is not connected and was last seen at least `reserved_offline_warn_days` ago (default 1 day, from `./hlp.toml` or `--config FILE`), or has no last-seen time, and adds an **Offline For** column (`6d`, `30h`, or `never seen`). It is the same rule the `diagnose` check uses, without severities and without the ignore list, so it shows the whole set. It only applies to `query reservations`; `--config` is only valid together with `--offline`.
 
 ## Networks
 
 `query networks` lists the networks the controller serves, from the legacy `rest/networkconf`:
 
 ```text
-uv run unifi-sentinel.py query networks
+uv run hlp.py query networks
 Name           Purpose          VLAN  Subnet        Gateway    DHCP    DHCP Range                 Clients
 -------------  ---------------  ----  ------------  ---------  ------  -------------------------  -------
 Main           corporate        1     10.0.0.0/24   10.0.0.1   Server  10.0.0.100 - 10.0.0.200    1
@@ -107,7 +107,7 @@ Networks keep the controller's order. `--json` and `--csv` give the same columns
 `query wlans` lists the Wi-Fi networks (SSIDs), from the legacy `rest/wlanconf`, with the VLAN of the network each one is on:
 
 ```text
-uv run unifi-sentinel.py query wlans
+uv run hlp.py query wlans
 Name      Enabled  Security   Bands           Network  VLAN  Guest  Client Isolation  Hidden  Clients
 --------  -------  ---------  --------------  -------  ----  -----  ----------------  ------  -------
 HomeNet   Yes      WPA2/WPA3  2.4 GHz, 5 GHz  Main     1     No     No                No      1
@@ -133,8 +133,8 @@ Sensors   Yes      WPA3       5 GHz, 6 GHz    IoT      20    No     Yes         
 `query clients` takes three filters for where a **connected** client is attached. Each is a case-insensitive substring and they combine with AND, and with `-s`:
 
 ```bash
-uv run unifi-sentinel.py query clients --ssid guest              # on a Wi-Fi network whose name contains "guest"
-uv run unifi-sentinel.py query clients --network iot --ap garage   # on the IoT network and on the Garage AP
+uv run hlp.py query clients --ssid guest              # on a Wi-Fi network whose name contains "guest"
+uv run hlp.py query clients --network iot --ap garage   # on the IoT network and on the Garage AP
 ```
 
 - `--network NAME`: the client's network. The name comes from the client's `network_id` (so a renamed network matches its new name), or from the client's own `network` text when the network list could not be read.
@@ -160,7 +160,7 @@ CSV files are ignored by git.
 - **`switches`**: one entry per switch that has a port table, with its `name`, its `mac` and its `ports`, the rows of that switch's `switch_<name>.csv` (numbers stay numbers, as in `query ports --json`). Two switches with the same name are two entries, told apart by `mac`.
 
 ```bash
-uv run unifi-sentinel.py export --format json -o ./out --include-offline
+uv run hlp.py export --format json -o ./out --include-offline
 ```
 
 Unlike the CSV files, the values are **raw**: a name that starts with `=`, `+`, `-` or `@` is not changed, because JSON is not opened as a spreadsheet, and control characters are escaped by the JSON itself (`\u001b`). The default stays `--format csv`, and its files are byte for byte what they were. `unifi_inventory.json` is git-ignored like the CSV files, because it holds real MAC and IP addresses.

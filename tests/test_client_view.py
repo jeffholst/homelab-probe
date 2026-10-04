@@ -2,9 +2,9 @@ import json
 
 import pytest
 
-from unifi_sentinel import cli
-from unifi_sentinel.client import UniFiAPIError
-from unifi_sentinel.client_view import (
+from homelab_probe import cli
+from homelab_probe.client import UniFiAPIError
+from homelab_probe.client_view import (
     MAX_CLIENT_EVENTS,
     MAX_DEVICE_EVENTS,
     _related,
@@ -16,9 +16,9 @@ from unifi_sentinel.client_view import (
     render_detail,
     to_json,
 )
-from unifi_sentinel.diagnose import Finding
-from unifi_sentinel.settings import DiagnoseSettings, IgnoreRule
-from unifi_sentinel.snapshot import EventQuery, Needs, Snapshot, collect_snapshot
+from homelab_probe.diagnose import Finding
+from homelab_probe.settings import DiagnoseSettings, IgnoreRule
+from homelab_probe.snapshot import EventQuery, Needs, Snapshot, collect_snapshot
 
 
 @pytest.fixture
@@ -301,7 +301,7 @@ def test_the_client_list_is_capped_and_says_how_to_see_the_rest():
     d = detail_for(snap_with(events, window=7 * 86400), "pc")
     assert len(d["events"]) == MAX_CLIENT_EVENTS and d["events_omitted"]["client"] == 3
     text = render_detail(d, emoji=False)
-    assert "... and 3 more; run: unifi-sentinel events --client CC:01 --since 7d" in text
+    assert "... and 3 more; run: hlp events --client CC:01 --since 7d" in text
     assert [e["timestamp"] for e in d["events"]] == sorted((e["timestamp"] for e in d["events"]), reverse=True)
 
 
@@ -393,8 +393,8 @@ def test_the_snapshot_says_whether_the_event_log_was_read(fake_client, monkeypat
 
 
 def _run(fake_client, monkeypatch, argv):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     return cli.main(argv)
 

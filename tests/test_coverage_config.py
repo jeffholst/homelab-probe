@@ -32,7 +32,7 @@ def commands(job):
 
 def test_the_settings_measure_branches_of_the_package_and_fail_under_one_hundred():
     coverage = PYPROJECT["tool"]["coverage"]
-    assert coverage["run"] == {"branch": True, "source": ["unifi_sentinel"]}
+    assert coverage["run"] == {"branch": True, "source": ["homelab_probe"]}
     assert coverage["report"]["fail_under"] == 100 and coverage["report"]["show_missing"] is True
 
 

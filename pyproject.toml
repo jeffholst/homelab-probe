@@ -3,9 +3,9 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "unifi-sentinel"
+name = "homelab-probe"
 dynamic = ["version"]
-description = "Query, troubleshoot and inventory a UniFi Network controller"
+description = "Probe a homelab: query, troubleshoot and inventory a UniFi Network controller"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "Apache-2.0"}
@@ -13,7 +13,7 @@ authors = [
     {name = "Jeff Holst"},
     {name = "Eric Fitzgerald"}
 ]
-keywords = ["unifi", "ubiquiti", "network", "monitoring", "troubleshooting", "inventory", "diagnostics"]
+keywords = ["homelab", "unifi", "ubiquiti", "network", "monitoring", "troubleshooting", "inventory", "diagnostics"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: System Administrators",
@@ -46,20 +46,20 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/jeffholst/unifi-sentinel"
-Issues = "https://github.com/jeffholst/unifi-sentinel/issues"
+Homepage = "https://github.com/jeffholst/homelab-probe"
+Issues = "https://github.com/jeffholst/homelab-probe/issues"
 
 [project.scripts]
-unifi-sentinel = "unifi_sentinel.cli:main"
+hlp = "homelab_probe.cli:main"
 
 [tool.setuptools.dynamic]
-version = {attr = "unifi_sentinel.__version__"}   # the one place the version is written
+version = {attr = "homelab_probe.__version__"}   # the one place the version is written
 
 [tool.setuptools.packages.find]
-include = ["unifi_sentinel*"]
+include = ["homelab_probe*"]
 
 [tool.setuptools.package-data]
-"unifi_sentinel.demo" = ["controller.json"]     # the synthetic controller that --demo serves
+"homelab_probe.demo" = ["controller.json"]     # the synthetic controller that --demo serves
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -70,7 +70,7 @@ markers = ["live: reads a real controller (GET only; credentials from the enviro
 
 [tool.coverage.run]
 branch = true
-source = ["unifi_sentinel"]
+source = ["homelab_probe"]
 
 [tool.coverage.report]
 show_missing = true
@@ -95,10 +95,10 @@ ignore = [
 "tests/*" = ["E501"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["unifi_sentinel"]
+known-first-party = ["homelab_probe"]
 
 [tool.mypy]
-files = ["unifi_sentinel"]
+files = ["homelab_probe"]
 warn_unused_configs = true
 check_untyped_defs = true
 warn_unused_ignores = true

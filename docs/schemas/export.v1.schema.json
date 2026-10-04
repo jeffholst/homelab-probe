@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/jeffholst/unifi-sentinel/main/docs/schemas/export.v1.schema.json",
+  "$id": "https://raw.githubusercontent.com/jeffholst/homelab-probe/main/docs/schemas/export.v1.schema.json",
   "title": "export --format json",
-  "description": "The file `unifi_inventory.json` that `unifi-sentinel export --format json` writes: the data of `unifi_clients.csv` and of the per-switch CSV files in one document. Values are raw, not spreadsheet-safe.",
+  "description": "The file `unifi_inventory.json` that `hlp export --format json` writes: the data of `unifi_clients.csv` and of the per-switch CSV files in one document. Values are raw, not spreadsheet-safe.",
   "type": "object",
   "properties": {
     "version": {

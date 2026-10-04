@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/jeffholst/unifi-sentinel/main/docs/schemas/firewall.v1.schema.json",
+  "$id": "https://raw.githubusercontent.com/jeffholst/homelab-probe/main/docs/schemas/firewall.v1.schema.json",
   "title": "firewall",
-  "description": "Output of `unifi-sentinel firewall --json`.",
+  "description": "Output of `hlp firewall --json`.",
   "type": "object",
   "properties": {
     "version": {

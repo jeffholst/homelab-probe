@@ -10,36 +10,36 @@ import sys
 
 import pytest
 
-from unifi_sentinel import cli, commands
-from unifi_sentinel import wan as wan_module
-from unifi_sentinel.client import UniFiAPIError
-from unifi_sentinel.client_view import _link_text, build_client_detail, find_clients, known_clients, render_detail
-from unifi_sentinel.config import ConfigError
-from unifi_sentinel.diagnose import _event_findings
-from unifi_sentinel.events import local_time
-from unifi_sentinel.export import device_type_label
-from unifi_sentinel.notify import Event, _priority, empty_state, plan
-from unifi_sentinel.reservations import build_reservations
-from unifi_sentinel.settings import DiagnoseSettings, load_settings
-from unifi_sentinel.snapshot import Needs, collect_snapshot
-from unifi_sentinel.util import format_time
-from unifi_sentinel.wifi import span_mhz
+from homelab_probe import cli, commands
+from homelab_probe import wan as wan_module
+from homelab_probe.client import UniFiAPIError
+from homelab_probe.client_view import _link_text, build_client_detail, find_clients, known_clients, render_detail
+from homelab_probe.config import ConfigError
+from homelab_probe.diagnose import _event_findings
+from homelab_probe.events import local_time
+from homelab_probe.export import device_type_label
+from homelab_probe.notify import Event, _priority, empty_state, plan
+from homelab_probe.reservations import build_reservations
+from homelab_probe.settings import DiagnoseSettings, load_settings
+from homelab_probe.snapshot import Needs, collect_snapshot
+from homelab_probe.util import format_time
+from homelab_probe.wifi import span_mhz
 
 
 def run(fake_client, monkeypatch, argv):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     return cli.main(argv)
 
 
 # -- cli -------------------------------------------------------------------------------------------
 
-@pytest.mark.filterwarnings("ignore:'unifi_sentinel.cli' found in sys.modules:RuntimeWarning")
+@pytest.mark.filterwarnings("ignore:'homelab_probe.cli' found in sys.modules:RuntimeWarning")
 def test_the_module_can_be_run_as_a_script(monkeypatch, capsys):
-    monkeypatch.setattr(sys, "argv", ["unifi-sentinel", "--version"])
+    monkeypatch.setattr(sys, "argv", ["hlp", "--version"])
     with pytest.raises(SystemExit) as caught:
-        runpy.run_module("unifi_sentinel.cli", run_name="__main__")
+        runpy.run_module("homelab_probe.cli", run_name="__main__")
     assert caught.value.code == 0 and capsys.readouterr().out.strip()
 
 
@@ -103,7 +103,7 @@ def test_a_device_with_an_unknown_model_is_typed_by_its_features_then_its_legacy
 
 
 def test_a_wired_client_without_a_switch_port_has_a_blank_port(fake_client):
-    from unifi_sentinel.export import build_inventory
+    from homelab_probe.export import build_inventory
     snap = collect_snapshot(fake_client, "default")
     for sta in snap.legacy_clients:
         if sta.get("mac") == "bb:00:00:00:00:01":
@@ -149,7 +149,7 @@ def test_a_failed_network_config_read_warns_and_carries_on(fake_client, monkeypa
 
 
 def test_ntfy_priority_for_an_info_only_message(fake_client):
-    from unifi_sentinel.diagnose import INFO, Finding
+    from homelab_probe.diagnose import INFO, Finding
     events, _ = plan([Finding(INFO, "Office Switch port 2", "negotiated at 100 Mbps", code="port.slow_link")],
                      empty_state(), 0, min_severity=INFO)
     assert _priority(events) == ("3", "information_source")
@@ -272,14 +272,14 @@ def test_an_unreachable_event_with_only_an_address_is_counted_by_that_address(fa
 
 
 def test_a_milder_finding_listed_after_a_worse_one_with_the_same_identity_changes_nothing():
-    from unifi_sentinel.diagnose import CRITICAL, WARNING, Finding
+    from homelab_probe.diagnose import CRITICAL, WARNING, Finding
     found = [Finding(CRITICAL, "GW", "down", code="device.offline"), Finding(WARNING, "GW", "slow", code="device.offline")]
     events, state = plan(found, empty_state(), 0)
     assert [(e.severity, e.message) for e in events] == [(CRITICAL, "down")] and len(state["active"]) == 1
 
 
 def test_device_details_skip_rows_that_are_not_devices_or_not_known(fake_client):
-    from unifi_sentinel.query import _add_device_details
+    from homelab_probe.query import _add_device_details
     snap = collect_snapshot(fake_client, "default")
     rows = [{"Type": "Client", "MAC Address": "BB:00:00:00:00:01"},
             {"Type": "Device - Switch", "MAC Address": "FF:FF:FF:FF:FF:01"}]
@@ -288,7 +288,7 @@ def test_device_details_skip_rows_that_are_not_devices_or_not_known(fake_client)
 
 
 def test_wireless_clients_without_an_access_point_are_not_counted_on_one(fake_client):
-    from unifi_sentinel.topology import build_topology
+    from homelab_probe.topology import build_topology
     snap = collect_snapshot(fake_client, "default")
 
     def ap_counts(tree):
@@ -305,7 +305,7 @@ def test_wireless_clients_without_an_access_point_are_not_counted_on_one(fake_cl
 
 
 def test_a_link_with_a_speed_but_no_known_capability_shows_only_the_speed(fake_client):
-    from unifi_sentinel.topology import build_topology, render_text
+    from homelab_probe.topology import build_topology, render_text
     tree = build_topology(collect_snapshot(fake_client, "default"))
 
     def visit(nodes):
@@ -320,7 +320,7 @@ def test_a_link_with_a_speed_but_no_known_capability_shows_only_the_speed(fake_c
 
 
 def test_speedtest_statistics_that_are_missing_are_left_out(fake_client):
-    from unifi_sentinel.wan import build_wan, render_text
+    from homelab_probe.wan import build_wan, render_text
     for test in fake_client.session.fx["legacy_v2"]["speedtest"]["data"]:
         test.pop("latency_ms", None)
     snap = collect_snapshot(fake_client, "default", Needs(health=True, speedtests=True))
@@ -329,7 +329,7 @@ def test_speedtest_statistics_that_are_missing_are_left_out(fake_client):
 
 
 def test_an_uplink_known_only_by_its_own_port_names_that_port(fake_client):
-    from unifi_sentinel.client_view import DeviceIndex, _uplink_chain
+    from homelab_probe.client_view import DeviceIndex, _uplink_chain
     snap = collect_snapshot(fake_client, "default")
     for device in snap.legacy_devices:
         if device["mac"] == "aa:00:00:00:00:03":

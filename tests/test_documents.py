@@ -13,19 +13,19 @@ from pathlib import Path
 import pytest
 from golden_support import run_command
 
-from unifi_sentinel import documents, logs
-from unifi_sentinel.client import UniFiAPIError
-from unifi_sentinel.doctor import CHECKS, OK, make
-from unifi_sentinel.documents import Document, doctor_document, info_document, wan_document
-from unifi_sentinel.settings import DiagnoseSettings
+from homelab_probe import documents, logs
+from homelab_probe.client import UniFiAPIError
+from homelab_probe.doctor import CHECKS, OK, make
+from homelab_probe.documents import Document, doctor_document, info_document, wan_document
+from homelab_probe.settings import DiagnoseSettings
 
-PACKAGE = Path(__file__).resolve().parent.parent / "unifi_sentinel"
+PACKAGE = Path(__file__).resolve().parent.parent / "homelab_probe"
 NOW_MS = 1_800_000_000_000
 
 
 def freeze_time(monkeypatch):
     """``wan`` ages its speedtests from the clock; pin it so two runs can be compared."""
-    monkeypatch.setattr("unifi_sentinel.wan.time", types.SimpleNamespace(time=lambda: NOW_MS / 1000))
+    monkeypatch.setattr("homelab_probe.wan.time", types.SimpleNamespace(time=lambda: NOW_MS / 1000))
 
 
 @contextlib.contextmanager
@@ -72,7 +72,7 @@ def test_the_wan_document_is_what_wan_json_prints(fake_client, monkeypatch):
 
 
 def test_the_text_output_is_rendered_from_the_document(fake_client, monkeypatch):
-    from unifi_sentinel.wan import render_text
+    from homelab_probe.wan import render_text
 
     freeze_time(monkeypatch)
     code, out, _ = run_command(fake_client, ["wan"])
@@ -159,7 +159,7 @@ def test_the_doctor_document_is_its_json(capsys):
 
 
 def test_the_doctor_command_prints_its_document(capsys):
-    from unifi_sentinel import cli
+    from homelab_probe import cli
 
     cli.main(["doctor", "--json", "--no-events"])
     printed = json.loads(capsys.readouterr().out)

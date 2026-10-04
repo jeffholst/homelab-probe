@@ -1,8 +1,8 @@
 blank_issues_enabled: true
 contact_links:
   - name: Report a security vulnerability
-    url: https://github.com/jeffholst/unifi-sentinel/security/advisories/new
+    url: https://github.com/jeffholst/homelab-probe/security/advisories/new
     about: Do not open a public issue for a security problem. Read SECURITY.md first; it says what to include and what to remove.
   - name: Troubleshooting
-    url: https://github.com/jeffholst/unifi-sentinel/blob/main/docs/configuration.md#troubleshooting
+    url: https://github.com/jeffholst/homelab-probe/blob/main/docs/configuration.md#troubleshooting
     about: The usual error messages and what they mean (certificates, API keys, timeouts, unavailable data).

@@ -20,13 +20,13 @@ import time
 import pytest
 from docs_support import README, ROOT, anchors, headings, local_links
 
-from unifi_sentinel import cli, notify
-from unifi_sentinel.commands import COMMANDS, EXIT_ERROR
-from unifi_sentinel.diagnose.model import EXIT_CRITICAL, EXIT_WARNING
+from homelab_probe import cli, notify
+from homelab_probe.commands import COMMANDS, EXIT_ERROR
+from homelab_probe.diagnose.model import EXIT_CRITICAL, EXIT_WARNING
 
 PAGE = ROOT / "docs" / "scheduling.md"
 TEXT = PAGE.read_text(encoding="utf-8")
-INSTALL_DIR = "/opt/unifi-sentinel"
+INSTALL_DIR = "/opt/homelab-probe"
 INTERVAL_MINUTES = 15
 FINDINGS = {EXIT_WARNING, EXIT_CRITICAL}
 
@@ -94,7 +94,7 @@ def test_the_commands_the_page_gives_parse_with_the_real_parser():
     seen = []
     names = "|".join(c.name for c in COMMANDS)
     for line in TEXT.splitlines():
-        match = re.search(rf"(?:venv/bin/|\s)unifi-sentinel ((?:{names})\b[^;&|>#`]*)", line)
+        match = re.search(rf"(?:venv/bin/|\s)hlp ((?:{names})\b[^;&|>#`]*)", line)
         if match:
             seen.append(shlex.split(match.group(1)))
     assert {"--notify", "--notify-baseline", "--fail-on"} <= {word for words in seen for word in words}
@@ -104,8 +104,8 @@ def test_the_commands_the_page_gives_parse_with_the_real_parser():
 
 def test_the_installation_creates_a_user_writable_directory_before_cloning():
     instructions = section("Before you pick a scheduler")
-    create_directory = 'sudo install -d -o "$(id -un)" /opt/unifi-sentinel'
-    clone = "git clone https://github.com/jeffholst/unifi-sentinel /opt/unifi-sentinel"
+    create_directory = 'sudo install -d -o "$(id -un)" /opt/homelab-probe'
+    clone = "git clone https://github.com/jeffholst/homelab-probe /opt/homelab-probe"
     assert instructions.index(create_directory) < instructions.index(clone)
 
 
@@ -125,7 +125,7 @@ def test_the_cron_line_runs_every_fifteen_minutes_like_the_other_schedulers():
     assert plistlib.loads(blocks("xml")[0].encode())["StartInterval"] == INTERVAL_MINUTES * 60
 
 
-LOCK = "/tmp/unifi-sentinel.lock"
+LOCK = "/tmp/homelab-probe.lock"
 FLOCK_STAND_IN = """#!/bin/sh
 # util-linux `flock -n LOCKFILE COMMAND...` without the lock, so the rest of the line runs where flock is missing (macOS)
 [ "$1" = "-n" ] || exit 64
@@ -159,18 +159,18 @@ def run_cron(command, path):
 @pytest.mark.parametrize("code", [0, 1, 2, 3, 4, 64, 127])
 def test_the_cron_line_prints_only_when_the_tool_could_not_run(tmp_path, code):
     """The line is run as written, with a stub in place of the tool: findings stay silent, an error is one line."""
-    stub = tmp_path / "venv" / "bin" / "unifi-sentinel"
+    stub = tmp_path / "venv" / "bin" / "hlp"
     stub.parent.mkdir(parents=True)
     (tmp_path / "snapshots").mkdir()
     stub.write_text(f"#!/bin/sh\necho findings\necho 'Notification: nothing new' >&2\nexit {code}\n")
     stub.chmod(stub.stat().st_mode | stat.S_IXUSR)
     done = run_cron(cron_command(tmp_path, tmp_path), cron_path(tmp_path))
-    log = (tmp_path / "snapshots" / "unifi-sentinel.log").read_text()
+    log = (tmp_path / "snapshots" / "homelab-probe.log").read_text()
     assert log == "Notification: nothing new\n" and "findings" not in done.stdout + done.stderr
     if code in (0, *FINDINGS):
         assert done.stdout == "" and done.stderr == ""
     else:
-        assert done.stdout == f"unifi-sentinel failed (exit {code}), see snapshots/unifi-sentinel.log\n"
+        assert done.stdout == f"hlp failed (exit {code}), see snapshots/homelab-probe.log\n"
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="cron and sh")
@@ -182,12 +182,12 @@ def test_the_cron_line_reports_shell_setup_failures(tmp_path, failure):
     if failure == "log path":
         snapshots = project / "snapshots"
         snapshots.mkdir()
-        (snapshots / "unifi-sentinel.log").mkdir()
-        message = "unifi-sentinel failed: snapshots/unifi-sentinel.log is not writable\n"
+        (snapshots / "homelab-probe.log").mkdir()
+        message = "hlp failed: snapshots/homelab-probe.log is not writable\n"
     elif failure == "snapshots directory":
-        message = "unifi-sentinel failed: snapshots/unifi-sentinel.log is not writable\n"
+        message = "hlp failed: snapshots/homelab-probe.log is not writable\n"
     else:
-        message = f"unifi-sentinel failed: cannot enter {project}\n"
+        message = f"hlp failed: cannot enter {project}\n"
     done = run_cron(cron_command(project, tmp_path), cron_path(tmp_path))
     assert done.returncode == EXIT_ERROR
     assert done.stdout == message
@@ -203,7 +203,7 @@ def test_the_cron_line_is_wrapped_in_the_lock_the_page_describes():
 def test_a_second_run_that_finds_the_lock_held_exits_at_once_and_runs_nothing(tmp_path):
     """The one test of the real lock: the first run is still going when the second starts."""
     started, ran = tmp_path / "started", tmp_path / "ran"
-    stub = tmp_path / "venv" / "bin" / "unifi-sentinel"
+    stub = tmp_path / "venv" / "bin" / "hlp"
     stub.parent.mkdir(parents=True)
     (tmp_path / "snapshots").mkdir()
     stub.write_text(f"#!/bin/sh\necho x >> {ran}\n: > {started}\nsleep 3\nexit 0\n")
@@ -230,7 +230,7 @@ def test_the_cron_line_threshold_is_the_first_exit_code_that_is_an_error():
 
 
 def test_the_cron_line_runs_the_documented_command_with_notifications():
-    args = parse_cli(shlex.split(re.search(r"unifi-sentinel (diagnose[^>;]*)", crontab_line()).group(1)))
+    args = parse_cli(shlex.split(re.search(r"hlp (diagnose[^>;]*)", crontab_line()).group(1)))
     assert args.command == "diagnose" and args.notify is True
 
 
@@ -241,7 +241,7 @@ def test_the_service_runs_the_installed_command_from_the_project_directory():
     assert service.get("Service", "Type") == "oneshot"
     directory = service.get("Service", "WorkingDirectory")
     command = shlex.split(service.get("Service", "ExecStart"))
-    assert directory == INSTALL_DIR and command[0] == f"{directory}/venv/bin/unifi-sentinel"
+    assert directory == INSTALL_DIR and command[0] == f"{directory}/venv/bin/hlp"
     assert parse_cli(command[1:]).notify is True
     assert service.get("Unit", "After") == "network-online.target" == service.get("Unit", "Wants")
 
@@ -263,7 +263,7 @@ def test_the_timer_is_installed_into_timers_target_and_names_its_interval():
 
 def test_the_systemd_commands_name_the_files_the_page_saves():
     commands = blocks("bash", section("systemd timer"))[0]
-    for name in ("unifi-sentinel.service", "unifi-sentinel.timer"):
+    for name in ("homelab-probe.service", "homelab-probe.timer"):
         assert name in commands and f"`{name}`" in section("systemd timer")
 
 
@@ -272,8 +272,8 @@ def test_the_docker_run_in_the_unit_example_matches_the_docker_section():
     unit_line = re.search(r"ExecStart=(/usr/bin/docker run [^`]*)", docker).group(1)
     run_lines = [line for line in blocks("bash", docker)[0].splitlines() if line.startswith("docker run")]
     assert unit_line.split()[:3] == ["/usr/bin/docker", "run", "--rm"]
-    assert "-v unifi-sentinel-state:/data/snapshots" in unit_line
-    assert all("-v unifi-sentinel-state:/data/snapshots" in line for line in run_lines)
+    assert "-v homelab-probe-state:/data/snapshots" in unit_line
+    assert all("-v homelab-probe-state:/data/snapshots" in line for line in run_lines)
 
 
 # -- launchd -------------------------------------------------------------------------------------------------------
@@ -281,8 +281,8 @@ def test_the_docker_run_in_the_unit_example_matches_the_docker_section():
 def test_the_plist_is_valid_and_runs_the_documented_command():
     plist = plistlib.loads(blocks("xml")[0].encode())
     program, *arguments = plist["ProgramArguments"]
-    assert program.endswith("/venv/bin/unifi-sentinel") and parse_cli(arguments).notify is True
-    assert plist["WorkingDirectory"] == program[: -len("/venv/bin/unifi-sentinel")]
+    assert program.endswith("/venv/bin/hlp") and parse_cli(arguments).notify is True
+    assert plist["WorkingDirectory"] == program[: -len("/venv/bin/hlp")]
     assert plist["StandardErrorPath"].startswith(plist["WorkingDirectory"] + "/snapshots/")
     assert plist["StandardOutPath"] == "/dev/null"
     assert set(plist) == {"Label", "ProgramArguments", "WorkingDirectory", "StartInterval", "StandardOutPath",
@@ -313,7 +313,7 @@ def test_the_dockerfile_installs_only_what_the_package_needs_and_runs_as_a_norma
     for *sources, _target in copied:
         for source in sources:
             assert (ROOT / source).exists(), source
-    assert [c[:-1] for c in copied] == [["pyproject.toml", "README.md"], ["unifi_sentinel"]]
+    assert [c[:-1] for c in copied] == [["pyproject.toml", "README.md"], ["homelab_probe"]]
     user = dict(steps)["USER"]
     assert user not in ("root", "0")
     assert re.search(rf"useradd .*--uid 10001 .*\b{user}\b", " ".join(a for n, a in steps if n == "RUN"))
@@ -330,8 +330,8 @@ def test_the_image_uses_a_python_the_project_supports():
 
 def test_the_entry_point_and_default_command_are_real():
     steps = dict(instructions())
-    assert json.loads(steps["ENTRYPOINT"]) == ["unifi-sentinel"]
-    assert 'unifi-sentinel = "unifi_sentinel.cli:main"' in (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    assert json.loads(steps["ENTRYPOINT"]) == ["hlp"]
+    assert 'hlp = "homelab_probe.cli:main"' in (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     args = parse_cli(json.loads(steps["CMD"]))
     assert args.command == "diagnose" and args.notify is True and args.fail_on == "critical"
 
@@ -341,7 +341,7 @@ def test_the_volume_is_where_the_program_keeps_its_notification_state():
     steps = instructions()
     workdir = [arguments for name, arguments in steps if name == "WORKDIR"][-1]
     state = f"{workdir}/{notify.DEFAULT_STATE_FILE}"
-    mount = re.search(r"-v unifi-sentinel-state:(\S+)", section("Docker")).group(1)
+    mount = re.search(r"-v homelab-probe-state:(\S+)", section("Docker")).group(1)
     assert state.startswith(mount + "/")
     assert re.search(rf"mkdir -p {re.escape(mount)}\b", " ".join(a for n, a in steps if n == "RUN"))
 

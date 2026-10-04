@@ -9,10 +9,10 @@ import pytest
 from conftest import FakeResponse
 from docs_support import ROOT
 
-from unifi_sentinel import cli
-from unifi_sentinel.client import UniFiAPIError
-from unifi_sentinel.config import Config
-from unifi_sentinel.doctor import (
+from homelab_probe import cli
+from homelab_probe.client import UniFiAPIError
+from homelab_probe.config import Config
+from homelab_probe.doctor import (
     CHECKS,
     FAIL,
     INFO,
@@ -43,8 +43,8 @@ NOTIFY = {"NOTIFY_NTFY_URL": "https://ntfy.example/topic-super-secret", "NOTIFY_
 
 @pytest.fixture
 def configured(monkeypatch, fake_client):
-    monkeypatch.setenv("CONTROLLER_URL", URL)
-    monkeypatch.setenv("API_KEY", KEY)
+    monkeypatch.setenv("UNIFI_URL", URL)
+    monkeypatch.setenv("UNIFI_API_KEY", KEY)
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, config: fake_client))
     return fake_client
 
@@ -88,7 +88,7 @@ def test_a_healthy_setup_runs_every_check_once_in_order_and_exits_zero(configure
 
 def test_the_statuses_of_a_healthy_setup_on_the_fake_controller(configured):
     found = checks_of(configured)
-    assert found["install.version"].status == INFO and "unifi-sentinel" in found["install.version"].message
+    assert found["install.version"].status == INFO and "hlp" in found["install.version"].message
     assert found["config.env_file"].status == INFO and found["config.env_permissions"].status == SKIP
     assert found["config.settings_file"].status == INFO
     assert found["config.environment"].status == OK and found["config.tls"].status == OK
@@ -128,7 +128,7 @@ def test_without_any_settings_it_still_reports_and_contacts_nothing(monkeypatch,
     code, out, _ = run(capsys)
     found = {c.id: c for c in run_checks(Options())}
     assert code == 3 and found["config.environment"].status == FAIL
-    assert "CONTROLLER_URL is not set" in found["config.environment"].message
+    assert "UNIFI_URL is not set" in found["config.environment"].message
     assert found["config.env_file"].status == WARN
     assert fake_client.session.calls == [] and fake_client.session.posts == []
     assert all(found[i].status == SKIP for i in found if i.startswith(("controller.", "endpoint.", "notify.dry")))
@@ -137,16 +137,16 @@ def test_without_any_settings_it_still_reports_and_contacts_nothing(monkeypatch,
 
 
 def test_the_placeholder_key_fails_the_required_settings(monkeypatch, fake_client):
-    monkeypatch.setenv("CONTROLLER_URL", URL)
-    monkeypatch.setenv("API_KEY", "your-api-key-here")
+    monkeypatch.setenv("UNIFI_URL", URL)
+    monkeypatch.setenv("UNIFI_API_KEY", "your-api-key-here")
     found = checks_of(fake_client)
-    assert found["config.environment"].status == FAIL and "API_KEY" in found["config.environment"].message
+    assert found["config.environment"].status == FAIL and "UNIFI_API_KEY" in found["config.environment"].message
 
 
 @pytest.mark.parametrize("url", ["not a url", "ftp://host", "https://user:pw@host", "http://host", "https://host?x=1"])
 def test_a_bad_controller_url_fails_without_echoing_it(monkeypatch, fake_client, url):
-    monkeypatch.setenv("CONTROLLER_URL", url)
-    monkeypatch.setenv("API_KEY", KEY)
+    monkeypatch.setenv("UNIFI_URL", url)
+    monkeypatch.setenv("UNIFI_API_KEY", KEY)
     message = checks_of(fake_client)["config.environment"].message
     assert checks_of(fake_client)["config.environment"].status == FAIL
     for secret in ("user:pw", "?x=1"):
@@ -155,7 +155,7 @@ def test_a_bad_controller_url_fails_without_echoing_it(monkeypatch, fake_client,
 
 def test_the_env_file_is_found_and_its_permissions_are_checked(configured, tmp_path):
     env = tmp_path / "cwd" / ".env"
-    env.write_text(f"CONTROLLER_URL={URL}\nAPI_KEY={KEY}\n")
+    env.write_text(f"UNIFI_URL={URL}\nUNIFI_API_KEY={KEY}\n")
     os.chdir(env.parent)
     if sys.platform.startswith("win"):
         pytest.skip("modes mean little on Windows")
@@ -169,7 +169,7 @@ def test_the_env_file_is_found_and_its_permissions_are_checked(configured, tmp_p
 
 def test_on_windows_the_permissions_are_not_checked(configured, tmp_path, monkeypatch):
     env = tmp_path / "cwd" / ".env"
-    env.write_text(f"CONTROLLER_URL={URL}\nAPI_KEY={KEY}\n")
+    env.write_text(f"UNIFI_URL={URL}\nUNIFI_API_KEY={KEY}\n")
     os.chdir(env.parent)
     env.chmod(0o644)
     monkeypatch.setattr(sys, "platform", "win32")
@@ -186,7 +186,7 @@ def test_an_env_file_named_but_missing_fails_and_skips_the_settings(monkeypatch,
 
 def test_an_explicit_env_file_is_used(monkeypatch, fake_client, tmp_path):
     env = tmp_path / "lab.env"
-    env.write_text(f"CONTROLLER_URL={URL}\nAPI_KEY={KEY}\nVERIFY_SSL=false\n")
+    env.write_text(f"UNIFI_URL={URL}\nUNIFI_API_KEY={KEY}\nUNIFI_VERIFY_SSL=false\n")
     env.chmod(0o600)
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, config: fake_client))
     found = checks_of(fake_client, env_file=env, offline=True)
@@ -194,7 +194,7 @@ def test_an_explicit_env_file_is_used(monkeypatch, fake_client, tmp_path):
 
 
 def test_the_settings_file_valid_invalid_and_with_expired_rules(configured, tmp_path):
-    cfg = tmp_path / "unifi-sentinel.toml"
+    cfg = tmp_path / "hlp.toml"
     cfg.write_text('[[ignore]]\ncode = "device.offline"\nreason = "spare"\n')
     found = checks_of(configured, config=cfg)["config.settings_file"]
     assert found.status == OK and "1 ignore rule" in found.message
@@ -209,20 +209,20 @@ def test_the_settings_file_valid_invalid_and_with_expired_rules(configured, tmp_
 
 def test_a_settings_file_in_the_current_directory_is_found(configured, tmp_path):
     os.chdir(tmp_path)
-    (tmp_path / "unifi-sentinel.toml").write_text("[thresholds]\nresource_warn_pct = 80\n")
+    (tmp_path / "hlp.toml").write_text("[thresholds]\nresource_warn_pct = 80\n")
     assert checks_of(configured)["config.settings_file"].status == OK
 
 
 def test_tls_warnings_for_no_checking_a_ca_file_and_plain_http(monkeypatch, configured, tmp_path):
-    monkeypatch.setenv("VERIFY_SSL", "false")
+    monkeypatch.setenv("UNIFI_VERIFY_SSL", "false")
     assert checks_of(configured)["config.tls"].status == WARN
     ca = tmp_path / "ca.pem"
     ca.write_text("x")
-    monkeypatch.setenv("VERIFY_SSL", str(ca))
+    monkeypatch.setenv("UNIFI_VERIFY_SSL", str(ca))
     found = checks_of(configured)["config.tls"]
     assert found.status == OK and str(ca) in found.message
-    monkeypatch.delenv("VERIFY_SSL")
-    monkeypatch.setenv("CONTROLLER_URL", "http://controller.lab")
+    monkeypatch.delenv("UNIFI_VERIFY_SSL")
+    monkeypatch.setenv("UNIFI_URL", "http://controller.lab")
     monkeypatch.setenv("ALLOW_INSECURE_HTTP", "true")
     found = checks_of(configured)["config.tls"]
     assert found.status == WARN and "clear text" in found.message
@@ -248,7 +248,7 @@ def test_destinations_are_named_by_kind_and_nothing_is_sent(monkeypatch, configu
     found = checks_of(configured)
     assert found["notify.configured"].status == OK and found["notify.configured"].message == "configured: ntfy, webhook, email"
     assert found["notify.dry_run"].status == OK and "nothing was sent" in found["notify.dry_run"].message
-    assert "unifi-sentinel: 1 problem(s)" in found["notify.dry_run"].message
+    assert "hlp: 1 problem(s)" in found["notify.dry_run"].message
 
 
 def test_unencrypted_destinations_are_a_warning_that_names_them(monkeypatch, configured):
@@ -307,7 +307,7 @@ def test_a_missing_site_fails_with_the_count_and_skips_the_reads(configured):
     found = checks_of(configured, site="Nope")
     assert found["controller.reachable"].status == OK
     assert found["controller.site"].status == FAIL and "'Nope' was not found; the controller has 1 site" in found["controller.site"].message
-    assert "unifi-sentinel info" in found["controller.site"].fix
+    assert "hlp info" in found["controller.site"].fix
     assert all(found[f"endpoint.{r.id}"].status == SKIP for r in READERS) and found["endpoint.events"].status == SKIP
 
 
@@ -366,7 +366,7 @@ def test_offline_contacts_nothing_and_no_events_sends_no_post(configured, capsys
 
 
 def test_a_failed_check_makes_the_exit_code_three_and_a_warning_does_not(configured, monkeypatch, capsys):
-    monkeypatch.setenv("VERIFY_SSL", "false")
+    monkeypatch.setenv("UNIFI_VERIFY_SSL", "false")
     assert run(capsys)[0] == 0
     monkeypatch.setattr(configured, "info", lambda: (_ for _ in ()).throw(UniFiAPIError("x", kind="timeout")))
     assert run(capsys)[0] == 3
@@ -396,8 +396,8 @@ def test_no_secret_and_no_host_is_ever_printed(monkeypatch, configured, capsys):
 
 
 def test_the_scrubber_is_a_second_safety_net_for_any_text(monkeypatch):
-    monkeypatch.setenv("API_KEY", KEY)
-    monkeypatch.setenv("CONTROLLER_URL", URL)
+    monkeypatch.setenv("UNIFI_API_KEY", KEY)
+    monkeypatch.setenv("UNIFI_URL", URL)
     monkeypatch.setenv("NOTIFY_NTFY_URL", NOTIFY["NOTIFY_NTFY_URL"])
     text = f"{KEY} {URL}/proxy {HOST}:8443 {HOST} {NOTIFY['NOTIFY_NTFY_URL']}"
     cleaned = scrub(text)
@@ -407,8 +407,8 @@ def test_the_scrubber_is_a_second_safety_net_for_any_text(monkeypatch):
 
 
 def test_short_values_are_not_scrubbed_into_the_text(monkeypatch):
-    monkeypatch.setenv("API_KEY", "ab")
-    monkeypatch.setenv("CONTROLLER_URL", "x")
+    monkeypatch.setenv("UNIFI_API_KEY", "ab")
+    monkeypatch.setenv("UNIFI_URL", "x")
     assert scrub("a b c ab x") == "a b c ab x"
 
 
@@ -443,10 +443,10 @@ def test_the_json_document_has_the_checks_and_a_consistent_summary(configured, c
 
 
 def test_the_text_groups_the_checks_in_sections_and_shows_the_fixes(configured, monkeypatch, capsys):
-    monkeypatch.setenv("VERIFY_SSL", "false")
+    monkeypatch.setenv("UNIFI_VERIFY_SSL", "false")
     _, out, _ = run(capsys)
     headings = [line for line in out.splitlines() if line and not line.startswith(" ")]
-    assert headings[:6] == ["UniFi Sentinel doctor", "Installation", "Configuration", "Notifications", "Controller",
+    assert headings[:6] == ["Homelab Probe doctor", "Installation", "Configuration", "Notifications", "Controller",
                             "What the controller offers"]
     assert "[WARN] TLS verification: certificate checking is off" in out and "         -> trust the controller's" in out
     assert out.rstrip().splitlines()[-1] == "Nothing is broken, but see the warnings."

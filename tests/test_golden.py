@@ -36,7 +36,7 @@ def test_output_matches_the_golden_file(fake_client, name):
     if actual != expected:
         diff = "\n".join(difflib.unified_diff(expected.splitlines(), actual.splitlines(),
                                               f"golden/{path.name}", "actual", lineterm=""))
-        pytest.fail(f"`unifi-sentinel {' '.join(CASES[name])}` changed:\n{diff}\n\n"
+        pytest.fail(f"`hlp {' '.join(CASES[name])}` changed:\n{diff}\n\n"
                     "If this is intended: UPDATE_GOLDEN=1 uv run pytest tests/test_golden.py, review the diff, "
                     "and update the README sample if there is one.")
 
@@ -60,7 +60,7 @@ def test_the_normaliser_hides_only_what_changes_between_runs():
 def test_the_output_is_stable_between_two_runs(fake_client):
     from conftest import FakeSession
 
-    from unifi_sentinel.client import UniFiClient
+    from homelab_probe.client import UniFiClient
     other = UniFiClient("https://controller", "key")
     other.session = FakeSession()
     for name in ("diagnose_with_events", "wan", "events"):

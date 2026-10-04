@@ -70,7 +70,7 @@ def _site(text: str) -> str:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = _Parser(
-        prog="unifi-sentinel",
+        prog="hlp",
         description="Query, troubleshoot and inventory a UniFi Network controller.",
     )
     parser.add_argument("--version", action="version", version=__version__)
@@ -83,16 +83,16 @@ def build_parser() -> argparse.ArgumentParser:
                              "--notify)")
     parser.add_argument("--timeout", type=_timeout, metavar="SECONDS",
                         help="Seconds to wait for each request to the controller (before the command; "
-                             "default: TIMEOUT from .env, else 15)")
+                             "default: UNIFI_TIMEOUT from .env, else 15)")
     parser.add_argument("--parallel", type=_parallel, metavar="N",
                         help="How many requests to make at once (before the command; 1 means one by one; "
-                             "default: PARALLEL_REQUESTS from .env, else 6)")
+                             "default: UNIFI_PARALLEL_REQUESTS from .env, else 6)")
     parser.add_argument("--site", type=_site, metavar="NAME|REF|UUID",
                         help="Which site to read: its name, internal reference (such as default) or UUID "
-                             "(before the command; default: SITE_ID from .env, else default)")
+                             "(before the command; default: UNIFI_SITE_ID from .env, else default)")
     parser.add_argument("--env-file", type=Path, metavar="FILE",
                         help="Read settings from this .env file (before the command). Default: "
-                             "$UNIFI_SENTINEL_ENV, else ./.env in the current directory")
+                             "$HLP_ENV, else ./.env in the current directory")
     sub = parser.add_subparsers(dest="command", required=True)
     for command in COMMANDS:
         command.add_arguments(sub.add_parser(command.name, help=command.help))
@@ -142,7 +142,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             if config.log_format or config.log_level:
                 logs.configure(config.log_format or "cli", "DEBUG" if args.verbose else config.log_level or "WARNING")
         with logs.bind(request_id=logs.new_id(), site=config.site):
-            message = f"unifi-sentinel {__version__}: " + (
+            message = f"hlp {__version__}: " + (
                 "demo mode, synthetic data, no controller is contacted" if args.demo else _describe_connection(config))
             verbose(message.replace(config.api_key, "***"))
             for message in config.warnings:
@@ -150,7 +150,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             if args.demo:
                 say("Demo mode: synthetic data, no controller is contacted.", file=sys.stderr)
             # Load the settings first so a bad settings file fails before any API call. A demo uses the defaults
-            # unless a file is named: an unifi-sentinel.toml in the current directory is the user's, not the demo's.
+            # unless a file is named: an hlp.toml in the current directory is the user's, not the demo's.
             wants = command.wants_settings(args)
             if wants and args.demo and getattr(args, "config", None) is None:
                 settings: Optional[DiagnoseSettings] = DiagnoseSettings()

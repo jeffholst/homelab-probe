@@ -7,20 +7,20 @@ Every setting, how the `.env` file is found, what `--verbose` shows, and what to
 Edit `.env`:
 
 ```env
-CONTROLLER_URL=https://your-controller-ip:443
-API_KEY=your-api-key-here
-SITE_ID=default
-VERIFY_SSL=true
+UNIFI_URL=https://your-controller-ip:443
+UNIFI_API_KEY=your-api-key-here
+UNIFI_SITE_ID=default
+UNIFI_VERIFY_SSL=true
 ```
 
 | Variable         | Required | Default   | Description                                                        |
 | ---------------- | -------- | --------- | ------------------------------------------------------------------ |
-| `CONTROLLER_URL` | Yes      | -         | Controller URL (include protocol and port)                         |
-| `API_KEY`        | Yes      | -         | API key from the controller                                        |
-| `SITE_ID`        | No       | `default` | Site name, internal reference (e.g. `default`) or UUID (also `--site NAME\|REF\|UUID` before the command) |
-| `VERIFY_SSL`     | No       | `true`    | `true`/`yes`/`1`/`on`, `false`/`no`/`0`/`off` (any case), or the path of a CA bundle |
-| `TIMEOUT`        | No       | `15`      | Seconds to wait for each request, 1 to 600 (also `--timeout SECONDS` before the command) |
-| `PARALLEL_REQUESTS` | No    | `6`       | How many requests to make at once, 1 to 16; 1 means one by one (also `--parallel N` before the command) |
+| `UNIFI_URL` | Yes      | -         | Controller URL (include protocol and port)                         |
+| `UNIFI_API_KEY`        | Yes      | -         | API key from the controller                                        |
+| `UNIFI_SITE_ID`        | No       | `default` | Site name, internal reference (e.g. `default`) or UUID (also `--site NAME\|REF\|UUID` before the command) |
+| `UNIFI_VERIFY_SSL`     | No       | `true`    | `true`/`yes`/`1`/`on`, `false`/`no`/`0`/`off` (any case), or the path of a CA bundle |
+| `UNIFI_TIMEOUT`        | No       | `15`      | Seconds to wait for each request, 1 to 600 (also `--timeout SECONDS` before the command) |
+| `UNIFI_PARALLEL_REQUESTS` | No    | `6`       | How many requests to make at once, 1 to 16; 1 means one by one (also `--parallel N` before the command) |
 | `LOG_LEVEL`      | No       | `WARNING` | `DEBUG`, `INFO`, `WARNING` or `ERROR` (any case); `--verbose` means `DEBUG` ([logging](logging.md)) |
 | `LOG_FORMAT`     | No       | (command line) | `text` or `json` for one record per line with fields; unset keeps the command-line format ([logging](logging.md)) |
 | `NOTIFY_NTFY_URL` | No      | -         | Full ntfy topic URL for `diagnose --notify` (a secret, `https://` only) |
@@ -32,25 +32,25 @@ VERIFY_SSL=true
 | `NOTIFY_SMTP_SECURITY` | No | `starttls` | `starttls`, `ssl`, or `none` (plain, lab opt-in only, never with a password) |
 | `NOTIFY_SMTP_USER`, `NOTIFY_SMTP_PASSWORD` | No | - | Login, both or neither (a secret; an app password for a provider) |
 | `NOTIFY_EMAIL_FROM`, `NOTIFY_EMAIL_TO` | With a host | - | Sender, and one or more recipients separated by commas (plain `name@host` addresses) |
-| `ALLOW_INSECURE_HTTP` | No  | `false`   | Lab-only opt-in to an `http://` controller URL (same words as `VERIFY_SSL`) |
+| `ALLOW_INSECURE_HTTP` | No  | `false`   | Lab-only opt-in to an `http://` controller URL (same words as `UNIFI_VERIFY_SSL`) |
 
-- **Where the `.env` file is found**, first match wins: the file given with `--env-file FILE` (before the command, for example `unifi-sentinel --env-file lab.env diagnose`); the file named by the `UNIFI_SENTINEL_ENV` environment variable; `.env` in the **current directory**. Parent directories and the installed package's directory are not searched, so an installed copy (`pip install .`) works from whichever directory holds your `.env`, an unrelated project's `.env` is never picked up, and running from a subdirectory of the project does not find the project's `.env` (use `--env-file` or run from the project root). A file named with `--env-file` or `UNIFI_SENTINEL_ENV` must exist. Real environment variables always take precedence over values in the file. The `unifi-sentinel.toml` settings file for `diagnose` is likewise read from the current directory.
-- **`VERIFY_SSL`:** the example file ships with `true`. **The better fix for a self-signed certificate is to trust it instead of turning checking off:** point `VERIFY_SSL` at the certificate file (or at the CA that signed it) in PEM format, for example `VERIFY_SSL=/home/me/unifi-ca.pem` (a `~` is expanded, and a relative path is relative to the directory you run from; a directory of certificates also works). The path must exist and be readable, or the command stops with a message naming it, and a word that is neither a yes/no word nor a path is an error. You can export the certificate from your browser's certificate viewer while looking at the controller's address. A UniFi controller usually has a self-signed certificate, so the first run may fail with `TLS certificate verification failed`; then trust that certificate as described next, install a trusted certificate on the controller, or as a last resort set `VERIFY_SSL=false`, which sends your API key without checking who answers (acceptable on a trusted home network, not elsewhere). An unset or empty value verifies certificates. Any other word than the ones above is an error that lists the accepted words, so a typo such as `off-ish` can never silently mean "verify".
+- **Where the `.env` file is found**, first match wins: the file given with `--env-file FILE` (before the command, for example `hlp --env-file lab.env diagnose`); the file named by the `HLP_ENV` environment variable; `.env` in the **current directory**. Parent directories and the installed package's directory are not searched, so an installed copy (`pip install .`) works from whichever directory holds your `.env`, an unrelated project's `.env` is never picked up, and running from a subdirectory of the project does not find the project's `.env` (use `--env-file` or run from the project root). A file named with `--env-file` or `HLP_ENV` must exist. Real environment variables always take precedence over values in the file. The `hlp.toml` settings file for `diagnose` is likewise read from the current directory.
+- **`UNIFI_VERIFY_SSL`:** the example file ships with `true`. **The better fix for a self-signed certificate is to trust it instead of turning checking off:** point `UNIFI_VERIFY_SSL` at the certificate file (or at the CA that signed it) in PEM format, for example `UNIFI_VERIFY_SSL=/home/me/unifi-ca.pem` (a `~` is expanded, and a relative path is relative to the directory you run from; a directory of certificates also works). The path must exist and be readable, or the command stops with a message naming it, and a word that is neither a yes/no word nor a path is an error. You can export the certificate from your browser's certificate viewer while looking at the controller's address. A UniFi controller usually has a self-signed certificate, so the first run may fail with `TLS certificate verification failed`; then trust that certificate as described next, install a trusted certificate on the controller, or as a last resort set `UNIFI_VERIFY_SSL=false`, which sends your API key without checking who answers (acceptable on a trusted home network, not elsewhere). An unset or empty value verifies certificates. Any other word than the ones above is an error that lists the accepted words, so a typo such as `off-ish` can never silently mean "verify".
 - **Protecting the API key:** the key is a credential for your controller, so keep `.env` private with `chmod 600 .env`. If the file that was read is accessible to your group or to other users (any of the group or other permission bits set), the command prints one warning that names the file and the `chmod 600` fix, and carries on. It is only a warning, and it is skipped on Windows where file modes mean little. A symlink is judged by the file it points to. The key is never printed: error messages, warnings and `repr()` of the configuration leave it out, and if a server or proxy echoes it back in an error body it is replaced with `***`.
-- **`CONTROLLER_URL`:** it needs a scheme and a host (`https://host` or `https://host:port`; a trailing slash is removed). An `http://` URL is refused, because the API key is sent in a header of every request and would travel in clear text; use `https://` (with `VERIFY_SSL=false` for a self-signed certificate). For a lab network you trust you can opt in with `ALLOW_INSECURE_HTTP=true`; every run then prints a warning that the key travels in clear text. A URL containing a user name, password, query (`?`), fragment (`#`), space, backslash or control character is refused.
-- **Timeouts and retries:** every request waits at most `TIMEOUT` seconds (default 15; `--timeout SECONDS` before the command overrides `.env`; a slow gateway may need more). A `GET` that fails with a connection error, a timeout or an HTTP 502, 503 or 504 is **retried twice** with a growing pause (0.5 s, then 1 s), so one brief blip no longer fails the command; anything else (a bad key, a 403, a 404 or 500, a certificate failure, a malformed answer) is reported at once, because trying again cannot change it. The single event-log `POST` is never retried. A message that says `(after 3 attempts)` means the retries were used up. A `403 Forbidden` means the API key is valid but not allowed to make that request.
-- **Speed:** the reads a command needs do not depend on each other, so they run side by side: up to `PARALLEL_REQUESTS` at once (default 6; `--parallel N` before the command overrides it; `1` reads one request at a time, the old behavior, which is also handy when reading `--verbose` output). The result is identical either way: the same requests are made, the output keeps the controller's order, and warnings are shown in a fixed order. Still GET only (plus the one event-log query). The analysis itself is linear in the number of clients (8,000 clients take a few hundredths of a second instead of seconds). `client` looks the client up in the devices, the connected clients and the client history first, and reads the network configuration, the groups and the event log (a POST) only for a client that matched, so a name that matches nothing costs three reads and sends no POST. What each command reads is pinned by a test (`tests/test_needs.py`).
+- **`UNIFI_URL`:** it needs a scheme and a host (`https://host` or `https://host:port`; a trailing slash is removed). An `http://` URL is refused, because the API key is sent in a header of every request and would travel in clear text; use `https://` (with `UNIFI_VERIFY_SSL=false` for a self-signed certificate). For a lab network you trust you can opt in with `ALLOW_INSECURE_HTTP=true`; every run then prints a warning that the key travels in clear text. A URL containing a user name, password, query (`?`), fragment (`#`), space, backslash or control character is refused.
+- **Timeouts and retries:** every request waits at most `UNIFI_TIMEOUT` seconds (default 15; `--timeout SECONDS` before the command overrides `.env`; a slow gateway may need more). A `GET` that fails with a connection error, a timeout or an HTTP 502, 503 or 504 is **retried twice** with a growing pause (0.5 s, then 1 s), so one brief blip no longer fails the command; anything else (a bad key, a 403, a 404 or 500, a certificate failure, a malformed answer) is reported at once, because trying again cannot change it. The single event-log `POST` is never retried. A message that says `(after 3 attempts)` means the retries were used up. A `403 Forbidden` means the API key is valid but not allowed to make that request.
+- **Speed:** the reads a command needs do not depend on each other, so they run side by side: up to `UNIFI_PARALLEL_REQUESTS` at once (default 6; `--parallel N` before the command overrides it; `1` reads one request at a time, the old behavior, which is also handy when reading `--verbose` output). The result is identical either way: the same requests are made, the output keeps the controller's order, and warnings are shown in a fixed order. Still GET only (plus the one event-log query). The analysis itself is linear in the number of clients (8,000 clients take a few hundredths of a second instead of seconds). `client` looks the client up in the devices, the connected clients and the client history first, and reads the network configuration, the groups and the event log (a POST) only for a client that matched, so a name that matches nothing costs three reads and sends no POST. What each command reads is pinned by a test (`tests/test_needs.py`).
 - **When a read fails:** required data stops the command with exit code 3; optional data warns and the command carries on with less. The list of connected clients and devices is required everywhere. Every legacy read is optional, **including the client history (`stat/alluser`)** for `query`, `client`, `diagnose` and the other reports (they warn that offline clients and reservations are unavailable), except for the two commands whose answer would be wrong without it: `new-clients` and `snapshot`/`diff` stop with exit code 3, so they never print a misleading list or save an incomplete snapshot.
-- **`SITE_ID`:** a site name may contain spaces and non-ASCII letters, but not `/`, `\`, `?`, `#` or control characters, and at most 128 characters; it is also percent-encoded wherever it appears in a URL. **`--site NAME|REF|UUID`** (before the command, like `--timeout`) chooses the site for one run and beats `SITE_ID`: `unifi-sentinel --site Lab diagnose`. It takes the same three kinds of value and is checked the same way (a bad or empty value is a usage error, exit code 64, before any request); an unknown site stops the command with exit code 3 and lists the sites there are (`unifi-sentinel info` shows them). Every command that reads a site uses it. Saved snapshots and the notification state are not kept apart by site, so with several sites give each its own `--notify-state FILE` and `snapshot --dir DIRECTORY`.
+- **`UNIFI_SITE_ID`:** a site name may contain spaces and non-ASCII letters, but not `/`, `\`, `?`, `#` or control characters, and at most 128 characters; it is also percent-encoded wherever it appears in a URL. **`--site NAME|REF|UUID`** (before the command, like `--timeout`) chooses the site for one run and beats `UNIFI_SITE_ID`: `hlp --site Lab diagnose`. It takes the same three kinds of value and is checked the same way (a bad or empty value is a usage error, exit code 64, before any request); an unknown site stops the command with exit code 3 and lists the sites there are (`hlp info` shows them). Every command that reads a site uses it. Saved snapshots and the notification state are not kept apart by site, so with several sites give each its own `--notify-state FILE` and `snapshot --dir DIRECTORY`.
 
 ## Checking your setup: `doctor`
 
 `doctor` checks the **tool**, where `diagnose` checks the network: is it installed and configured right, are the settings safe, does the controller answer, accept the API key and have the site, and which optional endpoints does it offer? Run it first when something does not work, and paste its output into an issue.
 
 ```bash
-unifi-sentinel doctor                 # everything, including the controller
-unifi-sentinel doctor --offline       # only the installation and the settings files
-unifi-sentinel --env-file lab.env --site Lab doctor --json
+hlp doctor                 # everything, including the controller
+hlp doctor --offline       # only the installation and the settings files
+hlp --env-file lab.env --site Lab doctor --json
 ```
 
 It never stops at a broken setup (that is what it reports): the settings problems are checks that **fail**, and the controller checks after them are **skipped** with the reason. Each line has a status: `OK`, `WARN` (works, but look at it: a `.env` other users can read, certificate checking turned off, an optional endpoint missing, an expired ignore rule), `FAIL` (something every command needs does not work), `SKIP` (not run, and why) or `INFO`. Most lines come with the thing to do about it. The exit code is `0` unless a check **failed**, then `3` (the code for configuration and connection errors; `1` and `2` stay reserved for findings).
@@ -59,9 +59,9 @@ Abridged output (the sample is from the synthetic controller; a real one has one
 
 ```text
 Configuration
-  [OK  ] Required settings: CONTROLLER_URL and API_KEY are set and valid
+  [OK  ] Required settings: UNIFI_URL and UNIFI_API_KEY are set and valid
   [WARN] TLS verification: certificate checking is off: the key is sent without checking who answers
-         -> trust the controller's certificate with VERIFY_SSL=/path/to/its-certificate.pem
+         -> trust the controller's certificate with UNIFI_VERIFY_SSL=/path/to/its-certificate.pem
 
 Controller
   [OK  ] Controller address: https, port 443 (the host is not shown)
@@ -86,15 +86,15 @@ What the controller offers
 | Check | What it looks at |
 | ----- | ---------------- |
 | `install.version` | the tool, Python and `requests` versions (information) |
-| `config.env_file` | the `.env` file that was found (current directory, `--env-file` or `UNIFI_SENTINEL_ENV`), or that the settings come from the environment; an explicit file that does not exist fails |
+| `config.env_file` | the `.env` file that was found (current directory, `--env-file` or `HLP_ENV`), or that the settings come from the environment; an explicit file that does not exist fails |
 | `config.env_permissions` | that only you can read the `.env` (it holds the API key) |
-| `config.settings_file` | `unifi-sentinel.toml` (or `--config FILE`): found, valid, how many ignore rules and how many have expired |
-| `config.environment` | that `CONTROLLER_URL` and `API_KEY` are set and valid (the first problem found, in the words of the usual error) |
+| `config.settings_file` | `hlp.toml` (or `--config FILE`): found, valid, how many ignore rules and how many have expired |
+| `config.environment` | that `UNIFI_URL` and `UNIFI_API_KEY` are set and valid (the first problem found, in the words of the usual error) |
 | `config.tls` | whether certificates are verified, against what, and a warning when checking is off or the URL is plain `http://` |
 | `config.limits` | the timeout, the number of parallel reads and the site that will be used |
 | `notify.configured` | which notification destinations are configured, by kind only |
 | `notify.dry_run` | that a message can be built for them; **nothing is sent** |
-| `controller.address` | the scheme and port of `CONTROLLER_URL` (the host is never shown) |
+| `controller.address` | the scheme and port of `UNIFI_URL` (the host is never shown) |
 | `controller.reachable` | that the controller answers and accepts the API key, with the usual causes explained (certificate, key rejected, no permission, timeout, no connection, not the controller) |
 | `controller.version` | the Network version, and a note when it is not the one this tool was tested on |
 | `controller.site` | that the site exists (and how many sites there are) |
@@ -110,20 +110,20 @@ What the controller offers
 `info` is the quickest way to test your settings: it reads the controller's application info and its sites, nothing else, so a wrong address, key or certificate shows up here first. The sample is from the synthetic fixture:
 
 ```text
-$ unifi-sentinel info
+$ hlp info
 Application: {'applicationVersion': '10.0.0'}
 Site: Default ref=default id=site-1
 ```
 
-There is one `Site:` line per site, with its name, internal reference (`ref`) and UUID (`id`). Any of the three is a valid `SITE_ID` or `--site` value; for any other command an unknown one stops it with exit code 3 and lists these. Names are cleaned of control characters before they are printed. `info` has no options of its own and reads only the two Integration API endpoints (every request is a GET).
+There is one `Site:` line per site, with its name, internal reference (`ref`) and UUID (`id`). Any of the three is a valid `UNIFI_SITE_ID` or `--site` value; for any other command an unknown one stops it with exit code 3 and lists these. Names are cleaned of control characters before they are printed. `info` has no options of its own and reads only the two Integration API endpoints (every request is a GET).
 
 ## Seeing what the tool does: `--verbose`
 
 `--verbose` (or `--debug`), given before the command, logs to **stderr** what the tool does, so the normal output on stdout is unchanged and can still be piped. It is the tool for diagnosing a slow run, a failing request or an undocumented endpoint:
 
 ```text
-$ unifi-sentinel --verbose wan --json > wan.json
-[verbose] unifi-sentinel 0.2.0: settings from /home/me/unifi-sentinel/.env; controller https://192.168.1.1:443, site default, timeout 15 s, TLS verification off
+$ hlp --verbose wan --json > wan.json
+[verbose] hlp 0.2.0: settings from /home/me/homelab-probe/.env; controller https://192.168.1.1:443, site default, timeout 15 s, TLS verification off
 [verbose] GET /proxy/network/integration/v1/sites?offset=0&limit=200 -> 200 (41 ms)
 [verbose] GET /proxy/network/api/s/default/stat/health -> 503 (35 ms)
 [verbose] GET /proxy/network/api/s/default/stat/health -> retrying in 0.5 s (attempt 2 of 3)
@@ -143,15 +143,15 @@ $ unifi-sentinel --verbose wan --json > wan.json
 `--demo` (before the command) runs the command on the synthetic network that the tests use: four devices, two clients, some neighbors, events and speedtests, with ages relative to now so it always looks recent. It is for a first look, for screenshots and for building on the tool without a controller at hand.
 
 ```bash
-unifi-sentinel --demo diagnose
-unifi-sentinel --demo topology
-unifi-sentinel --demo --verbose wifi
+hlp --demo diagnose
+hlp --demo topology
+hlp --demo --verbose wifi
 ```
 
 A demo run does not use your controller configuration or send data:
 
-- No `.env`, environment variable, `--env-file`, `UNIFI_SENTINEL_ENV` or `unifi-sentinel.toml` is read (a settings file is used only if you name it with `--config`), so a real address or API key in your environment cannot end up in a demo.
-- No controller is contacted: the address is on the `.invalid` top-level domain, which never resolves, and the answers come from the data packaged with the tool (`unifi_sentinel/demo/controller.json`).
+- No `.env`, environment variable, `--env-file`, `HLP_ENV` or `hlp.toml` is read (a settings file is used only if you name it with `--config`), so a real address or API key in your environment cannot end up in a demo.
+- No controller is contacted: the address is on the `.invalid` top-level domain, which never resolves, and the answers come from the data packaged with the tool (`homelab_probe/demo/controller.json`).
 - Nothing can be sent: `--notify` is refused. `doctor` (it checks your real setup), `snapshot` and `diff` (they would mix synthetic data into your own saved snapshots) are refused too. All of these are usage errors (exit code 64).
 - Except for the controller-independent `completion` command, a line on stderr says `Demo mode: synthetic data, no controller is contacted.`, so stdout (and `--json`) stays clean and nobody mistakes the output for a real network.
 
@@ -159,34 +159,34 @@ A demo run does not use your controller configuration or send data:
 
 ## Shell completion
 
-`unifi-sentinel completion bash`, `completion zsh` and `completion fish` print a completion script for the installed `unifi-sentinel` command: it completes the commands, every option (with its short form), the fixed values (`--fail-on info warning critical`, the query kinds, the Wi-Fi bands, the `diagnose --only` and `--skip` areas one at a time, even in a comma list), and file names for the options that take a file. The command needs no `.env` and never contacts the controller. The scripts are generated from the program's own options, not written by hand, so a new option is completed as soon as it exists; a test checks that every command and option is in every script.
+`hlp completion bash`, `completion zsh` and `completion fish` print a completion script for the installed `hlp` command: it completes the commands, every option (with its short form), the fixed values (`--fail-on info warning critical`, the query kinds, the Wi-Fi bands, the `diagnose --only` and `--skip` areas one at a time, even in a comma list), and file names for the options that take a file. The command needs no `.env` and never contacts the controller. The scripts are generated from the program's own options, not written by hand, so a new option is completed as soon as it exists; a test checks that every command and option is in every script.
 
 ```bash
-# bash: for this shell, or save it where bash-completion looks (for example ~/.local/share/bash-completion/completions/unifi-sentinel)
-source <(unifi-sentinel completion bash)
+# bash: for this shell, or save it where bash-completion looks (for example ~/.local/share/bash-completion/completions/hlp)
+source <(hlp completion bash)
 
 # zsh: put it in a directory on $fpath, then restart the shell (or run compinit)
-unifi-sentinel completion zsh > "${fpath[1]}/_unifi-sentinel"
+hlp completion zsh > "${fpath[1]}/_hlp"
 
 # fish
-unifi-sentinel completion fish > ~/.config/fish/completions/unifi-sentinel.fish
+hlp completion fish > ~/.config/fish/completions/hlp.fish
 ```
 
-It completes the `unifi-sentinel` command that `pip install .` or `uv tool install` creates, not `uv run unifi-sentinel.py` (there the shell sees `uv`). The bash script also works in the old bash 3.2 that macOS ships; free text values (a search, a client name) fall back to the shell's file name completion in bash. The zsh script uses `_arguments`, so descriptions of the options show next to the completions.
+It completes the `hlp` command that `pip install .` or `uv tool install` creates, not `uv run hlp.py` (there the shell sees `uv`). The bash script also works in the old bash 3.2 that macOS ships; free text values (a search, a client name) fall back to the shell's file name completion in bash. The zsh script uses `_arguments`, so descriptions of the options show next to the completions.
 
 ## Troubleshooting
 
-- **`CONTROLLER_URL is not set` / `API_KEY is not set`**: copy `example.env` to `.env` and fill it in, in the directory you run the command from, or point to it with `--env-file FILE` or `UNIFI_SENTINEL_ENV`.
-- **`CONTROLLER_URL uses http://`**: use `https://` (the API key would be sent in clear text), or set `ALLOW_INSECURE_HTTP=true` for a trusted lab network.
+- **`UNIFI_URL is not set` / `UNIFI_API_KEY is not set`**: copy `example.env` to `.env` and fill it in, in the directory you run the command from, or point to it with `--env-file FILE` or `HLP_ENV`.
+- **`UNIFI_URL uses http://`**: use `https://` (the API key would be sent in clear text), or set `ALLOW_INSECURE_HTTP=true` for a trusted lab network.
 - **`... is accessible to other users`**: run the `chmod 600` command in the warning; the file holds your API key. On a file system that does not keep Unix permissions (a Windows drive mounted in WSL, some network shares) the mode cannot be changed and the warning stays; keep the file on a normal Linux or macOS file system, or in your home directory.
-- **`env file not found`**: the file named with `--env-file` or `UNIFI_SENTINEL_ENV` does not exist.
-- **`VERIFY_SSL must be one of ...` / `SITE_ID ... cannot be part of a site name`**: fix the value in `.env`; the message lists what is accepted.
+- **`env file not found`**: the file named with `--env-file` or `HLP_ENV` does not exist.
+- **`UNIFI_VERIFY_SSL must be one of ...` / `UNIFI_SITE_ID ... cannot be part of a site name`**: fix the value in `.env`; the message lists what is accepted.
 - **`401 Unauthorized`**: the API key is invalid or was revoked; create a new one.
-- **`TLS certificate verification failed`**: for a self-signed certificate point `VERIFY_SSL` at the certificate (or CA) file, or install a valid certificate on the controller; `VERIFY_SSL=false` skips the check and is a last resort. If `VERIFY_SSL` already names a file, the message says the certificate is not signed by anything in it.
+- **`TLS certificate verification failed`**: for a self-signed certificate point `UNIFI_VERIFY_SSL` at the certificate (or CA) file, or install a valid certificate on the controller; `UNIFI_VERIFY_SSL=false` skips the check and is a last resort. If `UNIFI_VERIFY_SSL` already names a file, the message says the certificate is not signed by anything in it.
 - **A command is slow or fails and you want to see why**: run it again with `--verbose` (see above) to see each request, its status and time, and any retries.
-- **Connection errors or timeouts**: check `CONTROLLER_URL` and that the controller is reachable from this machine. `timed out after 15 s (after 3 attempts)` means a slow gateway: raise `TIMEOUT` or pass `--timeout 60`.
+- **Connection errors or timeouts**: check `UNIFI_URL` and that the controller is reachable from this machine. `timed out after 15 s (after 3 attempts)` means a slow gateway: raise `UNIFI_TIMEOUT` or pass `--timeout 60`.
 - **`403 Forbidden`**: the API key is valid but lacks access to that request; check the key under Settings > Control Plane > Integrations.
-- **`VERIFY_SSL names a CA bundle that does not exist`**: fix the path (it is relative to the directory you run from).
+- **`UNIFI_VERIFY_SSL names a CA bundle that does not exist`**: fix the path (it is relative to the directory you run from).
 - **`Site '...' not found`**: run `info` to list site names, references and IDs.
 - **`... unavailable` warnings**: the tool degrades instead of failing. The rest of the command still runs, with less data:
   - `legacy stat/... unavailable`: switch port mapping, port counters and offline clients are incomplete

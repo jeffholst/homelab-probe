@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 from unittest import mock
 
-from unifi_sentinel import cli
+from homelab_probe import cli
 
 GOLDEN = Path(__file__).parent / "golden"
 
@@ -65,7 +65,7 @@ def run_command(fake_client, argv):
     os.environ["TZ"] = "UTC"
     if hasattr(time, "tzset"):
         time.tzset()
-    os.environ.update(CONTROLLER_URL="https://controller.example", API_KEY="key")
+    os.environ.update(UNIFI_URL="https://controller.example", UNIFI_API_KEY="key")
     out, err = io.StringIO(), io.StringIO()
     try:
         with mock.patch.object(cli.UniFiClient, "from_config", classmethod(lambda cls, cfg: fake_client)), \
@@ -78,6 +78,6 @@ def run_command(fake_client, argv):
             os.environ["TZ"] = previous
         if hasattr(time, "tzset"):
             time.tzset()
-        os.environ.pop("CONTROLLER_URL", None)
-        os.environ.pop("API_KEY", None)
+        os.environ.pop("UNIFI_URL", None)
+        os.environ.pop("UNIFI_API_KEY", None)
     return code, out.getvalue(), err.getvalue()

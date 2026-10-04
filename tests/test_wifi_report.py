@@ -2,11 +2,11 @@ import json
 
 import pytest
 
-from unifi_sentinel import cli
-from unifi_sentinel.client import UniFiAPIError
-from unifi_sentinel.client_view import DeviceIndex
-from unifi_sentinel.snapshot import Needs, Snapshot, collect_snapshot
-from unifi_sentinel.wifi import (
+from homelab_probe import cli
+from homelab_probe.client import UniFiAPIError
+from homelab_probe.client_view import DeviceIndex
+from homelab_probe.snapshot import Needs, Snapshot, collect_snapshot
+from homelab_probe.wifi import (
     DEFAULT_MIN_SIGNAL,
     NAMES_PER_CHANNEL,
     build_wifi,
@@ -298,8 +298,8 @@ def test_missing_data_still_renders_and_json_is_complete(report):
 # -- command line -----------------------------------------------------------------
 
 def _run(fake_client, monkeypatch, argv):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     return cli.main(argv)
 

@@ -1,4 +1,4 @@
-"""Internet health: `unifi-sentinel wan`.
+"""Internet health: `hlp wan`.
 
 Answers "is it my internet or my LAN?" from data the controller already keeps:
 the WAN and internet subsystems of `stat/health` (including the controller's own

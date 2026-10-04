@@ -5,11 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from unifi_sentinel import cli
-from unifi_sentinel import client as client_module
-from unifi_sentinel import snapshot as snapshot_module
-from unifi_sentinel.client import SYSTEM_LOG_PATH, UniFiAPIError, UniFiClient
-from unifi_sentinel.events import (
+from homelab_probe import cli
+from homelab_probe import client as client_module
+from homelab_probe import snapshot as snapshot_module
+from homelab_probe.client import SYSTEM_LOG_PATH, UniFiAPIError, UniFiClient
+from homelab_probe.events import (
     event_json,
     event_row,
     fetch_events,
@@ -19,7 +19,7 @@ from unifi_sentinel.events import (
     render_message,
     summarize,
 )
-from unifi_sentinel.snapshot import EventQuery, collect_event_snapshot
+from homelab_probe.snapshot import EventQuery, collect_event_snapshot
 
 SYSTEM_LOG = "/proxy/network/v2/api/site/default/system-log/all"
 DAY = 86400
@@ -257,8 +257,8 @@ def test_unresolved_placeholders_render_readably(fake_client):
 # -- command line ----------------------------------------------------------
 
 def _run(fake_client, monkeypatch, argv):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     return cli.main(argv)
 

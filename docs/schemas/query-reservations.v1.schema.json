@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/jeffholst/unifi-sentinel/main/docs/schemas/query-reservations.v1.schema.json",
+  "$id": "https://raw.githubusercontent.com/jeffholst/homelab-probe/main/docs/schemas/query-reservations.v1.schema.json",
   "title": "query reservations",
-  "description": "Output of `unifi-sentinel query reservations --json` (`Offline For` only with `--offline`).",
+  "description": "Output of `hlp query reservations --json` (`Offline For` only with `--offline`).",
   "type": "array",
   "items": {
     "type": "object",

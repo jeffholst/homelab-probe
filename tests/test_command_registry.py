@@ -4,8 +4,8 @@ import dataclasses
 
 import pytest
 
-from unifi_sentinel import cli
-from unifi_sentinel.commands import COMMANDS, COMMANDS_BY_NAME, Command, Context
+from homelab_probe import cli
+from homelab_probe.commands import COMMANDS, COMMANDS_BY_NAME, Command, Context
 
 EXPECTED = ["export", "query", "new-clients", "events", "client", "topology", "snapshot", "diff", "wifi", "wan",
             "firewall", "audit", "doctor", "completion", "diagnose", "info"]
@@ -13,8 +13,8 @@ EXPECTED = ["export", "query", "new-clients", "events", "client", "topology", "s
 
 def run(fake_client, monkeypatch, argv):
     fake_client.session.fx["legacy"]["device"][0]["overheating"] = False
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     return cli.main(argv)
 
@@ -29,7 +29,7 @@ def test_the_parser_is_built_from_the_registry():
     action = next(a for a in parser._actions if a.dest == "command")
     assert list(action.choices) == EXPECTED
     for command in COMMANDS:
-        assert action.choices[command.name].format_help().startswith(f"usage: unifi-sentinel {command.name}")
+        assert action.choices[command.name].format_help().startswith(f"usage: hlp {command.name}")
         assert command.help[0].isupper()
 
 
@@ -66,7 +66,7 @@ def test_commands_that_do_not_use_the_settings_file_do_not_have_the_option(name)
 
 
 def test_validation_hooks_run_before_the_configuration_is_loaded(monkeypatch, tmp_path):
-    monkeypatch.delenv("CONTROLLER_URL", raising=False)
+    monkeypatch.delenv("UNIFI_URL", raising=False)
     with pytest.raises(SystemExit) as caught:                 # a usage error (64), not the missing-config error (3)
         cli.main(["diff", "a", "b", "c"])
     assert caught.value.code == cli.EXIT_USAGE

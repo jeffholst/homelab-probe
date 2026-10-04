@@ -2,10 +2,10 @@ import re
 
 import pytest
 
-from unifi_sentinel.config import ConfigError
-from unifi_sentinel.diagnose import diagnose
-from unifi_sentinel.settings import DiagnoseSettings, load_settings
-from unifi_sentinel.snapshot import Snapshot, collect_snapshot
+from homelab_probe.config import ConfigError
+from homelab_probe.diagnose import diagnose
+from homelab_probe.settings import DiagnoseSettings, load_settings
+from homelab_probe.snapshot import Snapshot, collect_snapshot
 
 
 def port(idx, **kw):

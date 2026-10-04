@@ -1,4 +1,4 @@
-"""Wireless report: `unifi-sentinel wifi`.
+"""Wireless report: `hlp wifi`.
 
 Shows each access point's radios and a channel plan built from the neighboring networks
 the APs hear, with plain observations. It only describes; it never suggests changing a

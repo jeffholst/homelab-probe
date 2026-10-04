@@ -1,4 +1,4 @@
-"""Single-client troubleshooting view: `unifi-sentinel client <name|mac|ip>`."""
+"""Single-client troubleshooting view: `hlp client <name|mac|ip>`."""
 
 import ipaddress
 import json
@@ -410,7 +410,7 @@ def _events_text(detail: Dict[str, Any], mac: str) -> List[str]:
     more = detail["events_omitted"]["client"]
     if more:
         count = f"at least {more}" if detail["events_truncated"] else str(more)
-        lines.append(f"  ... and {count} more; run: unifi-sentinel events --client {mac} --since {window}")
+        lines.append(f"  ... and {count} more; run: hlp events --client {mac} --since {window}")
     if detail["device_events"]:
         lines += ["", "Events about the devices it depends on:"]
         lines += [line(e) for e in detail["device_events"]]

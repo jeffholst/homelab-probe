@@ -3,13 +3,13 @@ import re
 
 import pytest
 
-from unifi_sentinel import cli
-from unifi_sentinel.client import UniFiAPIError
-from unifi_sentinel.config import ConfigError
-from unifi_sentinel.diagnose import diagnose
-from unifi_sentinel.settings import DiagnoseSettings, load_settings
-from unifi_sentinel.snapshot import Needs, Snapshot, collect_snapshot
-from unifi_sentinel.wan import (
+from homelab_probe import cli
+from homelab_probe.client import UniFiAPIError
+from homelab_probe.config import ConfigError
+from homelab_probe.diagnose import diagnose
+from homelab_probe.settings import DiagnoseSettings, load_settings
+from homelab_probe.snapshot import Needs, Snapshot, collect_snapshot
+from homelab_probe.wan import (
     MIN_SPEEDTESTS,
     build_wan,
     describe_age,
@@ -286,8 +286,8 @@ def test_unknown_link_status_is_not_rendered_as_down():
 
 def _run(fake_client, monkeypatch, argv):
     fake_client.session.fx["legacy"]["device"][0]["overheating"] = False
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     return cli.main(argv)
 

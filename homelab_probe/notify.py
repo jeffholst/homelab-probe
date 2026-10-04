@@ -183,7 +183,7 @@ def render_text(events: List[Event], redact: bool = False) -> Tuple[str, str]:
     problems = sum(e.kind != "recovered" for e in events)
     recovered = len(events) - problems
     bits = ([f"{problems} problem(s)"] if problems else []) + ([f"{recovered} recovered"] if recovered else [])
-    title = "unifi-sentinel: " + ", ".join(bits)
+    title = "hlp: " + ", ".join(bits)
 
     lines: List[str] = []
     if redact:
@@ -215,7 +215,7 @@ def render_payload(events: List[Event], redact: bool = False) -> Dict[str, Any]:
         if not redact:
             item.update(subject=e.subject, message=e.message)
         items.append(item)
-    return {"source": "unifi-sentinel", "version": 1, "redacted": redact, "title": title,
+    return {"source": "homelab-probe", "version": 1, "redacted": redact, "title": title,
             "text": f"{title}\n{body}", "events": items}
 
 

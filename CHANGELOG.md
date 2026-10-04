@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to UniFi Sentinel are listed here, newest first. The format follows
+All notable changes to Homelab Probe are listed here, newest first. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the version numbers follow
 [Semantic Versioning](https://semver.org/) as far as a 0.x project can: while the major version is 0, a minor
 version may change behavior, and anything that does is listed under **Changed**.
@@ -67,7 +67,7 @@ and `wep` Wi-Fi security values) the README says so.
   `--json` with a stable code per finding; `--only` and `--skip` to run a subset of the checks (by area: `devices`,
   `health`, `wan`, `clients`, `reservations`, `ports`, `wifi`, `events`), reading only the data those checks need;
   `--since`, `--no-events`, `--show-ignored`, `--no-emoji`.
-- **Settings file** (`unifi-sentinel.toml`): thresholds for every check and an ignore list. A rule matches a finding
+- **Settings file** (`hlp.toml`): thresholds for every check and an ignore list. A rule matches a finding
   by `code` (exact), `subject` (case-insensitive, wildcards), `message` (substring) or any combination, with a
   required `reason`; an unknown code is an error that suggests the closest one. A rule may carry `until = 2026-12-31`,
   the last day it applies: after that the findings come back, `diagnose` and `audit` warn on stderr about the expired
@@ -82,8 +82,8 @@ and `wep` Wi-Fi security values) the README says so.
   `client`, `diff` and `events --summary` documents (additive).
 - **`--verbose` / `--debug`:** every request (method, path, status, milliseconds, retries) and what was read, on
   stderr, never the API key.
-- **`--parallel N` / `PARALLEL_REQUESTS`** (default 6), `--site NAME|REF|UUID` (beats `SITE_ID`) and `--timeout` / `TIMEOUT`, `--env-file` /
-  `UNIFI_SENTINEL_ENV`, `VERIFY_SSL` as a CA bundle path.
+- **`--parallel N` / `UNIFI_PARALLEL_REQUESTS`** (default 6), `--site NAME|REF|UUID` (beats `UNIFI_SITE_ID`) and `--timeout` / `UNIFI_TIMEOUT`, `--env-file` /
+  `HLP_ENV`, `UNIFI_VERIFY_SSL` as a CA bundle path.
 - **Development:** a contract table of the fields the code reads (`tests/contract.py`), opt-in live contract tests
   (`pytest -m live`, GET only), a fixture recorder with a deterministic sanitiser and leak check (`tools/`), golden
   files and a docs-drift test, a 100% line and branch coverage requirement (checked in CI), Dependabot for the GitHub Actions and
@@ -93,23 +93,30 @@ and `wep` Wi-Fi security values) the README says so.
 
 ### Changed
 
-- **Logging foundation (stderr only):** the tool's diagnostics now go through one logger (`unifi_sentinel`, standard library) with a redaction filter. Nothing changes by default: `Warning: ...` lines and `--verbose` `[verbose] ...` lines are byte-for-byte what they were. New settings `LOG_LEVEL` (`DEBUG`, `INFO`, `WARNING`, `ERROR`) and `LOG_FORMAT` (`text` or `json`, one record per line with `ts`, `level`, `logger`, `msg`, `event`, `request_id`, `user`, `site` and the event's fields); a run has a `request_id` that also reaches the threads of a parallel read. Secrets (the API key, notification URLs, tokens and the mail account) and the values of `Authorization`/`Cookie` headers never reach a record; INFO and above never carry client names, MACs or addresses. `notify.delivery` and `watch.pass`/`watch.unavailable` are new records. See [docs/logging.md](docs/logging.md).
+- **The project is now Homelab Probe, and the command is `hlp`** (it was "UniFi Sentinel" and `unifi-sentinel`). UniFi is the primary and, for now, only supported platform; the name leaves room for others. Nothing was released under the old name, so there is **no alias and the old names are not read**:
+  - the distribution is `homelab-probe`, the Python package `homelab_probe`, the launcher `hlp.py`, the installed command `hlp`;
+  - the settings file is `hlp.toml` (example: `hlp.example.toml`) and the variable that names the `.env` file is `HLP_ENV` (they were `unifi-sentinel.toml` and `UNIFI_SENTINEL_ENV`);
+  - the UniFi connection settings carry a `UNIFI_` prefix: `UNIFI_URL`, `UNIFI_API_KEY`, `UNIFI_SITE_ID`, `UNIFI_VERIFY_SSL`, `UNIFI_TIMEOUT` and `UNIFI_PARALLEL_REQUESTS` (they were `CONTROLLER_URL`, `API_KEY`, `SITE_ID`, `VERIFY_SSL`, `TIMEOUT` and `PARALLEL_REQUESTS`); `ALLOW_INSECURE_HTTP`, `NOTIFY_*` and `LOG_*` are shared and keep their names;
+  - **webhook payload:** `source` is now `"homelab-probe"` (was `"unifi-sentinel"`; the JSON `version` stays 1), and notification and email titles start with `hlp:`;
+  - log records: the `logger` field is `homelab_probe.*`;
+  - the repository is `jeffholst/homelab-probe`, and the JSON Schema `$id`s point there.
+- **Logging foundation (stderr only):** the tool's diagnostics now go through one logger (`homelab_probe`, standard library) with a redaction filter. Nothing changes by default: `Warning: ...` lines and `--verbose` `[verbose] ...` lines are byte-for-byte what they were. New settings `LOG_LEVEL` (`DEBUG`, `INFO`, `WARNING`, `ERROR`) and `LOG_FORMAT` (`text` or `json`, one record per line with `ts`, `level`, `logger`, `msg`, `event`, `request_id`, `user`, `site` and the event's fields); a run has a `request_id` that also reaches the threads of a parallel read. Secrets (the API key, notification URLs, tokens and the mail account) and the values of `Authorization`/`Cookie` headers never reach a record; INFO and above never carry client names, MACs or addresses. `notify.delivery` and `watch.pass`/`watch.unavailable` are new records. See [docs/logging.md](docs/logging.md).
 - **The tool talks to the Integration API first** (`/proxy/network/integration/v1`). The legacy endpoints are used
   only for data it lacks (per-port counters, client-to-port mapping, reservations, network and Wi-Fi settings,
   health), and the zone-based firewall comes from the v2 endpoints.
-- **Layout:** the script is now a thin launcher over the `unifi_sentinel` package (`unifi-sentinel.py`, or the
-  `unifi-sentinel` command after `pip install .`), commands are one registry, each command declares what it reads,
+- **Layout:** the script is now a thin launcher over the `homelab_probe` package (`hlp.py`, or the
+  `hlp` command after `pip install .`), commands are one registry, each command declares what it reads,
   and `diagnose` is a package with a module per topic. None of this changes the command line.
 - **Reads run side by side** (up to 6 requests at once) and a client lookup reads far less; analysis is linear in
   the number of clients. Output and the order of warnings are the same as when reading one by one (`--parallel 1`).
 - **Minimum Python is 3.10** (3.9 is no longer supported).
 - **Errors exit with code 3** (earlier untagged versions exited 1 for every error), so `1` and `2` only ever mean findings.
-- **`.env` is read from the current directory** (or `--env-file`, or `UNIFI_SENTINEL_ENV`), never from the package
+- **`.env` is read from the current directory** (or `--env-file`, or `HLP_ENV`), never from the package
   directory or a parent directory. A tool installed with `pip install .` now finds the `.env` the README describes.
 - **Snapshot file names are in UTC** (`snapshot-YYYYMMDD-HHMMSSZ.json`); older local-time names are still read and
   ordered correctly.
 - **`--show-ignored` lists each finding's code**, so it can be copied into an ignore rule.
-- The version is written in one place, `unifi_sentinel.__version__`.
+- The version is written in one place, `homelab_probe.__version__`.
 - **Documentation:** the README is now a short quickstart (what it is, install, configure, the commands with one example each, the exit codes) and the detail is in `docs/` (diagnose and audit, notifications, inventory, network views, configuration and troubleshooting, running on a schedule, examples, features, development). Historical README anchors remain at their original URLs, and output samples are generated from the checked-in fixture.
 
 ### Fixed

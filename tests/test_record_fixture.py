@@ -11,10 +11,10 @@ from contract import CONTRACT, RecordingSession
 from record_fixture import DEFAULT_OUTPUT, build_fixture, main, project, record, write_private
 from sanitize import LeakError
 
-from unifi_sentinel.client import UniFiClient
-from unifi_sentinel.diagnose import diagnose
-from unifi_sentinel.events import render_message
-from unifi_sentinel.snapshot import EventQuery, Needs, collect_snapshot
+from homelab_probe.client import UniFiClient
+from homelab_probe.diagnose import diagnose
+from homelab_probe.events import render_message
+from homelab_probe.snapshot import EventQuery, Needs, collect_snapshot
 
 EVERYTHING = Needs(offline=True, reservations=True, groups=True, health=True, speedtests=True, neighbors=True, firewall=True, wlans=True,
                    events=EventQuery(since_seconds=7 * 86400))
@@ -140,8 +140,8 @@ def test_a_leak_stops_the_recording_and_nothing_is_written(monkeypatch, tmp_path
 
     monkeypatch.setattr(record_fixture, "sanitise", leaky)
     monkeypatch.setattr(record_fixture.UniFiClient, "from_config", lambda config: fake_client())
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     output = tmp_path / "out.json"
     assert main(["--output", str(output)]) == 4
     assert not output.exists() and "nothing written" in capsys.readouterr().err
@@ -151,8 +151,8 @@ def test_main_writes_an_owner_only_file_and_prints_counts_only(monkeypatch, tmp_
     import record_fixture
 
     monkeypatch.setattr(record_fixture.UniFiClient, "from_config", lambda config: fake_client())
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     output = tmp_path / "sub" / "controller.json"
     assert main(["--output", str(output), "--event-days", "1"]) == 0
     printed = capsys.readouterr().out
@@ -164,7 +164,7 @@ def test_main_writes_an_owner_only_file_and_prints_counts_only(monkeypatch, tmp_
 
 def test_main_reports_a_missing_configuration(capsys):
     assert main([]) == 3
-    assert "CONTROLLER_URL" in capsys.readouterr().err
+    assert "UNIFI_URL" in capsys.readouterr().err
 
 
 def test_main_reports_a_controller_that_cannot_be_read(monkeypatch, capsys):
@@ -173,8 +173,8 @@ def test_main_reports_a_controller_that_cannot_be_read(monkeypatch, capsys):
     session = FakeSession()
     session.status = 500
     monkeypatch.setattr(record_fixture.UniFiClient, "from_config", lambda config: fake_client(session))
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     assert main([]) == 3
     assert "ERROR" in capsys.readouterr().err
 

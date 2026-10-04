@@ -1,4 +1,4 @@
-"""Diagnostics: the ``unifi_sentinel`` logger tree, its three output formats and the filter every record passes.
+"""Diagnostics: the ``homelab_probe`` logger tree, its three output formats and the filter every record passes.
 
 Command output is not logging (it goes through ``commands.say``); this module is for what the tool says *about*
 itself: a degraded read, a request to the controller, the outcome of a notification. Library code takes a logger
@@ -33,7 +33,7 @@ from urllib.parse import quote, quote_plus
 
 from .util import printable
 
-ROOT = "unifi_sentinel"
+ROOT = "homelab_probe"
 MAX_LINE = 2000                     # characters in one rendered record
 MIN_SECRET_LENGTH = 6               # a shorter registered secret would garble every line; real keys are longer
 REDACTED = "[redacted]"
@@ -61,11 +61,11 @@ _log = logging.getLogger(__name__)
 
 # -- context: who and what a record belongs to -------------------------------------------------------------
 
-_request_id: contextvars.ContextVar[str] = contextvars.ContextVar("unifi_sentinel_request_id", default="")
-_user: contextvars.ContextVar[str] = contextvars.ContextVar("unifi_sentinel_user", default="")
-_site: contextvars.ContextVar[str] = contextvars.ContextVar("unifi_sentinel_site", default="")
-_sink: contextvars.ContextVar[Optional[List[str]]] = contextvars.ContextVar("unifi_sentinel_sink", default=None)
-_quiet: contextvars.ContextVar[bool] = contextvars.ContextVar("unifi_sentinel_quiet", default=False)
+_request_id: contextvars.ContextVar[str] = contextvars.ContextVar("homelab_probe_request_id", default="")
+_user: contextvars.ContextVar[str] = contextvars.ContextVar("homelab_probe_user", default="")
+_site: contextvars.ContextVar[str] = contextvars.ContextVar("homelab_probe_site", default="")
+_sink: contextvars.ContextVar[Optional[List[str]]] = contextvars.ContextVar("homelab_probe_sink", default=None)
+_quiet: contextvars.ContextVar[bool] = contextvars.ContextVar("homelab_probe_quiet", default=False)
 
 
 def new_id() -> str:
@@ -258,7 +258,7 @@ def parse_level(text: Any) -> int:
 
 
 def configure(fmt: str = "cli", level: Any = "WARNING", stream: Optional[TextIO] = None) -> None:
-    """Set the format (``cli``, ``text`` or ``json``) and level of the ``unifi_sentinel`` logger tree, replacing
+    """Set the format (``cli``, ``text`` or ``json``) and level of the ``homelab_probe`` logger tree, replacing
     what an earlier call set. Safe to call again. ``stream`` is for tests; the default is stderr."""
     if fmt not in ("cli", *FORMAT_WORDS):
         raise ValueError(f"log format must be one of cli, {', '.join(FORMAT_WORDS)} (got {fmt!r})")

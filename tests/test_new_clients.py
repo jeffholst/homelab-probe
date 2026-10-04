@@ -2,10 +2,10 @@ import json
 
 import pytest
 
-from unifi_sentinel import cli
-from unifi_sentinel.client import UniFiAPIError
-from unifi_sentinel.new_clients import render, report, ungrouped_clients
-from unifi_sentinel.snapshot import Needs, Snapshot, collect_snapshot
+from homelab_probe import cli
+from homelab_probe.client import UniFiAPIError
+from homelab_probe.new_clients import render, report, ungrouped_clients
+from homelab_probe.snapshot import Needs, Snapshot, collect_snapshot
 
 
 def snapshot(users, clients=(), groups=None, devices=()):
@@ -142,8 +142,8 @@ def test_alluser_failure_degrades_with_a_warning_when_it_is_optional(fake_client
 
 
 def test_cli_new_clients(fake_client, monkeypatch, capsys):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, cfg: fake_client))
 
     assert cli.main(["new-clients"]) == 0

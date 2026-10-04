@@ -6,8 +6,8 @@ import json
 
 import pytest
 
-from unifi_sentinel import cli
-from unifi_sentinel.query import (
+from homelab_probe import cli
+from homelab_probe.query import (
     NETWORK_COLUMNS,
     WLAN_COLUMNS,
     filter_clients,
@@ -17,14 +17,14 @@ from unifi_sentinel.query import (
     security_label,
     wlan_rows,
 )
-from unifi_sentinel.snapshot import Needs, Snapshot, collect_snapshot
+from homelab_probe.snapshot import Needs, Snapshot, collect_snapshot
 
 SECRET = "pa55-never-print-this-passphrase"
 
 
 def run(fake_client, monkeypatch, capsys, *argv):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     code = cli.main(list(argv))
     captured = capsys.readouterr()
@@ -33,8 +33,8 @@ def run(fake_client, monkeypatch, capsys, *argv):
 
 def usage_error(monkeypatch, capsys, *argv):
     """(exit code, stderr) of a command line the parser refuses."""
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     with pytest.raises(SystemExit) as stopped:
         cli.main(list(argv))
     return stopped.value.code, capsys.readouterr().err

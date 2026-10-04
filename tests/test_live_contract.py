@@ -1,6 +1,6 @@
 """Does a real controller still return the fields the code reads? Opt in with ``uv run pytest -m live``.
 
-Skipped by default and in CI. It reads the controller named by ``CONTROLLER_URL``/``API_KEY`` (environment or
+Skipped by default and in CI. It reads the controller named by ``UNIFI_URL``/``UNIFI_API_KEY`` (environment or
 ``./.env``) once, the way ``diagnose`` does, with GET requests and the one approved read-only event log query
 (``tests/contract.py`` ``RecordingSession`` refuses anything else), then checks every endpoint against the
 contract. Failures name the endpoint and field, never a value: no address, name or key is printed.
@@ -9,9 +9,9 @@ contract. Failures name the endpoint and field, never a value: no address, name 
 import pytest
 from contract import CONTRACT, RecordingSession, problems
 
-from unifi_sentinel.client import UniFiClient
-from unifi_sentinel.config import ConfigError, load_config
-from unifi_sentinel.snapshot import EventQuery, Needs, collect_snapshot
+from homelab_probe.client import UniFiClient
+from homelab_probe.config import ConfigError, load_config
+from homelab_probe.snapshot import EventQuery, Needs, collect_snapshot
 
 pytestmark = pytest.mark.live
 

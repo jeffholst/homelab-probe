@@ -8,8 +8,8 @@ import pytest
 from contract import CONTRACT, covered, endpoint_of, present, problems, segments
 from field_tracking import TrackingSession
 
-from unifi_sentinel import cli
-from unifi_sentinel.client import UniFiClient
+from homelab_probe import cli
+from homelab_probe.client import UniFiClient
 
 # every command, so every field the program can read from the fixture is read
 COMMANDS = [["info"], ["export"], ["export", "--include-offline"], ["query", "devices"],
@@ -45,7 +45,7 @@ def fixture_records(name):
 
 @pytest.mark.parametrize("name", sorted(CONTRACT))
 def test_the_fixture_has_every_field_of_the_contract(name):
-    assert problems(name, fixture_records(name)) == [], f"extend unifi_sentinel/demo/controller.json for {name}"
+    assert problems(name, fixture_records(name)) == [], f"extend homelab_probe/demo/controller.json for {name}"
 
 
 def paths_read(tmp_path, monkeypatch):
@@ -59,8 +59,8 @@ def paths_read(tmp_path, monkeypatch):
         args = list(argv) + (["-o", str(tmp_path)] if argv[0] == "export" else [])
         with mock.patch.object(cli.UniFiClient, "from_config", classmethod(lambda cls, c, client=client: client)), \
                 contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-            monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-            monkeypatch.setenv("API_KEY", "key")
+            monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+            monkeypatch.setenv("UNIFI_API_KEY", "key")
             if args[0] == "diff":
                 cli.main(["snapshot", "--dir", str(tmp_path / "snaps")])
                 cli.main(["diff", "--dir", str(tmp_path / "snaps")])

@@ -7,10 +7,10 @@ from pathlib import Path
 import pytest
 from docs_support import all_docs_text
 
-from unifi_sentinel import cli
-from unifi_sentinel.client import UniFiAPIError
-from unifi_sentinel.firewall import FIREWALL_CODES, build_firewall, render_text, to_json
-from unifi_sentinel.snapshot import FirewallData, Needs, Snapshot, collect_snapshot, describe_snapshot
+from homelab_probe import cli
+from homelab_probe.client import UniFiAPIError
+from homelab_probe.firewall import FIREWALL_CODES, build_firewall, render_text, to_json
+from homelab_probe.snapshot import FirewallData, Needs, Snapshot, collect_snapshot, describe_snapshot
 
 NEEDS = Needs(firewall=True, reservations=True)
 
@@ -317,7 +317,7 @@ def test_without_the_client_history_no_reservation_is_claimed(fake_client):
 
 
 def test_every_code_used_is_listed_and_every_listed_code_is_used():
-    source = (Path(__file__).parent.parent / "unifi_sentinel" / "firewall.py").read_text()
+    source = (Path(__file__).parent.parent / "homelab_probe" / "firewall.py").read_text()
     used = set(re.findall(r'code="(firewall\.[a-z_]+)"', source))
     assert used == set(FIREWALL_CODES)
     readme = all_docs_text()
@@ -328,8 +328,8 @@ def test_every_code_used_is_listed_and_every_listed_code_is_used():
 # -- rendering and the command --------------------------------------------------------------------------
 
 def run(fake_client, monkeypatch, argv):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     return cli.main(argv)
 

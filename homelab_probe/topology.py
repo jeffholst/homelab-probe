@@ -1,6 +1,6 @@
 """Uplink topology: how the gateway, switches and access points are wired together.
 
-`unifi-sentinel topology` draws the tree from the gateway down, with the port each device
+`hlp topology` draws the tree from the gateway down, with the port each device
 plugs into, the negotiated link speed, client counts and anything `diagnose` flags.
 """
 

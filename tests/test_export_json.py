@@ -8,15 +8,15 @@ from pathlib import Path
 import pytest
 from docs_support import ROOT
 
-from unifi_sentinel import cli
-from unifi_sentinel.export import EXPORT_FORMATS, JSON_FILENAME, JSON_VERSION
+from homelab_probe import cli
+from homelab_probe.export import EXPORT_FORMATS, JSON_FILENAME, JSON_VERSION
 
 HOSTILE = "\x1b[31m\x07\n[CRITICAL] forged: all clear\u202e"
 
 
 def run(fake_client, monkeypatch, capsys, *argv):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     code = cli.main(list(argv))
     out = capsys.readouterr()
@@ -201,8 +201,8 @@ def test_the_formats_are_csv_and_json_and_csv_is_the_default():
 
 
 def test_an_unknown_format_is_a_usage_error(monkeypatch, capsys):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     with pytest.raises(SystemExit) as stopped:
         cli.main(["export", "--format", "xml"])
     assert stopped.value.code == 64 and "invalid choice" in capsys.readouterr().err

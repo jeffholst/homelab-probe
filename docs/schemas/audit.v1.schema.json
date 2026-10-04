@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/jeffholst/unifi-sentinel/main/docs/schemas/audit.v1.schema.json",
+  "$id": "https://raw.githubusercontent.com/jeffholst/homelab-probe/main/docs/schemas/audit.v1.schema.json",
   "title": "audit",
-  "description": "Output of `unifi-sentinel audit --json`.",
+  "description": "Output of `hlp audit --json`.",
   "type": "object",
   "properties": {
     "version": {

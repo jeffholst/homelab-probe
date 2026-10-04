@@ -4,11 +4,11 @@ import json
 
 import pytest
 
-from unifi_sentinel import cli
-from unifi_sentinel.client import UniFiAPIError
-from unifi_sentinel.diagnose import diagnose, needs_for
-from unifi_sentinel.diagnose.devices import _overheating_findings
-from unifi_sentinel.snapshot import Snapshot, collect_snapshot
+from homelab_probe import cli
+from homelab_probe.client import UniFiAPIError
+from homelab_probe.diagnose import diagnose, needs_for
+from homelab_probe.diagnose.devices import _overheating_findings
+from homelab_probe.snapshot import Snapshot, collect_snapshot
 
 GATEWAY, SWITCH, AP, GARAGE = 0, 1, 2, 3                    # the order of the fixture's devices
 
@@ -27,8 +27,8 @@ def hot(**extra):
 
 
 def run(fake_client, monkeypatch, capsys, *argv):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     code = cli.main(list(argv))
     out = capsys.readouterr()
@@ -204,7 +204,7 @@ def test_an_ignore_rule_by_code_or_by_name_silences_it(fake_client, monkeypatch,
     legacy(fake_client, GATEWAY)["overheating"] = True
     for rule in ('code = "device.overheating"', 'subject = "gateway"\nmessage = "overheating"',
                  'code = "device.overheating"\nsubject = "Gat*"'):
-        config = tmp_path / "unifi-sentinel.toml"
+        config = tmp_path / "hlp.toml"
         config.write_text(f'[[ignore]]\n{rule}\nreason = "in a hot cupboard on purpose"\n')
         code, findings = findings_json(fake_client, monkeypatch, capsys, "--config", str(config), "--show-ignored")
         assert overheating(findings) == [], rule

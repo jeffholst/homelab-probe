@@ -2,13 +2,13 @@ import re
 
 import pytest
 
-from unifi_sentinel import cli
-from unifi_sentinel.client import UniFiAPIError
-from unifi_sentinel.config import ConfigError
-from unifi_sentinel.diagnose import diagnose, exit_code
-from unifi_sentinel.events import describe_duration
-from unifi_sentinel.settings import DiagnoseSettings, load_settings
-from unifi_sentinel.snapshot import Snapshot
+from homelab_probe import cli
+from homelab_probe.client import UniFiAPIError
+from homelab_probe.config import ConfigError
+from homelab_probe.diagnose import diagnose, exit_code
+from homelab_probe.events import describe_duration
+from homelab_probe.settings import DiagnoseSettings, load_settings
+from homelab_probe.snapshot import Snapshot
 
 HOUR = 3600
 STAMP = 1_790_000_000_000      # ms
@@ -194,8 +194,8 @@ def test_event_flap_count_loads_defaults_and_validates(tmp_path):
 
 def _run(fake_client, monkeypatch, argv):
     fake_client.session.fx["legacy"]["device"][0]["overheating"] = False
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     return cli.main(argv)
 
@@ -382,8 +382,8 @@ def test_a_recurring_conflict_over_a_long_window_says_how_many_days():
 
 
 def test_the_ignore_list_still_matches_the_ip_and_the_finding_is_still_a_warning():
-    from unifi_sentinel.diagnose import apply_ignores
-    from unifi_sentinel.settings import IgnoreRule
+    from homelab_probe.diagnose import apply_ignores
+    from homelab_probe.settings import IgnoreRule
     findings = diagnose(conflict_snap([conflict(clients=[dev_a(), dev_b()])]))
     kept, ignored = apply_ignores(findings, (IgnoreRule(subject="192.0.2.24", message="IP conflict", reason="known"),))
     assert not [f for f in kept if "IP conflict" in f.message] and len(ignored) == 1

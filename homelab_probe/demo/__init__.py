@@ -1,6 +1,6 @@
 """Demo mode: every command against the synthetic controller, with nothing read from the machine or sent anywhere.
 
-``unifi-sentinel --demo <command>`` builds its configuration and its client here instead of from ``.env``: the address
+``hlp --demo <command>`` builds its configuration and its client here instead of from ``.env``: the address
 is on the ``.invalid`` top-level domain (which never resolves), the API key is a placeholder, and the session is a
 ``DemoSession`` that answers from the packaged fixture in memory. ``cli.main`` skips ``load_config`` entirely in this
 mode, so no ``.env``, environment variable, settings file or notification destination can leak into a demo, and it

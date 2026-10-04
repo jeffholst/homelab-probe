@@ -1,8 +1,8 @@
 import pytest
 
-from unifi_sentinel.diagnose import diagnose
-from unifi_sentinel.query import query_rows
-from unifi_sentinel.snapshot import Snapshot
+from homelab_probe.diagnose import diagnose
+from homelab_probe.query import query_rows
+from homelab_probe.snapshot import Snapshot
 
 
 def make_snapshot():
@@ -53,7 +53,7 @@ def test_diagnose_high_resource_use():
 
 
 def test_inventory_uses_integration_uplink_and_heartbeat():
-    from unifi_sentinel.export import build_inventory
+    from homelab_probe.export import build_inventory
     devices = [{"id": "gw", "macAddress": "aa:aa", "name": "GW", "model": "UCG Max"},
                {"id": "sw", "macAddress": "bb:bb", "name": "SW", "model": "USW Ultra",
                 "state": "ONLINE"}]
@@ -68,7 +68,7 @@ def test_inventory_uses_integration_uplink_and_heartbeat():
 
 
 def test_switch_uplink_port_names_upstream_device():
-    from unifi_sentinel.export import build_switch_ports
+    from homelab_probe.export import build_switch_ports
     legacy = [
         {"mac": "aa:aa", "type": "udm", "name": "GW", "model": "UCG Max"},
         {"mac": "bb:bb", "type": "usw", "name": "SW",
@@ -84,7 +84,7 @@ def test_ssl_error_message_is_actionable(monkeypatch):
     import pytest
     import requests
 
-    from unifi_sentinel.client import UniFiAPIError, UniFiClient
+    from homelab_probe.client import UniFiAPIError, UniFiClient
 
     client = UniFiClient("https://x", "key", verify_ssl=True)
 
@@ -92,7 +92,7 @@ def test_ssl_error_message_is_actionable(monkeypatch):
         raise requests.exceptions.SSLError("bad cert")
 
     monkeypatch.setattr(client.session, "get", boom)
-    with pytest.raises(UniFiAPIError, match="VERIFY_SSL=false"):
+    with pytest.raises(UniFiAPIError, match="UNIFI_VERIFY_SSL=false"):
         client.info()
 
 
@@ -132,7 +132,7 @@ def test_resource_use_thresholds():
 
 
 def test_format_findings_emoji_and_text():
-    from unifi_sentinel.diagnose import Finding, format_findings, stream_supports_emoji
+    from homelab_probe.diagnose import Finding, format_findings, stream_supports_emoji
 
     findings = [Finding("critical", "GW", "down"), Finding("warning", "A", "x"),
                 Finding("warning", "B", "y"), Finding("info", "C", "z")]
@@ -156,7 +156,7 @@ def test_format_findings_emoji_and_text():
 
 
 def test_exit_code_by_severity_and_threshold():
-    from unifi_sentinel.diagnose import Finding, exit_code
+    from homelab_probe.diagnose import Finding, exit_code
 
     crit, warn, info = Finding("critical", "a", "x"), Finding("warning", "b", "y"), Finding("info", "c", "z")
     assert exit_code([]) == 0
@@ -172,10 +172,10 @@ def test_exit_code_by_severity_and_threshold():
 
 
 def _run_cli(fake_client, monkeypatch, argv):
-    from unifi_sentinel import cli
+    from homelab_probe import cli
     fake_client.session.fx["legacy"]["device"][0]["overheating"] = False
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, cfg: fake_client))
     return cli.main(argv)
 
@@ -195,7 +195,7 @@ def test_cli_critical_exits_2(fake_client, monkeypatch):
 
 
 def test_cli_errors_and_usage_use_distinct_codes(fake_client, monkeypatch, capsys):
-    from unifi_sentinel import cli
+    from homelab_probe import cli
     fake_client.session.status = 500
     assert _run_cli(fake_client, monkeypatch, ["diagnose"]) == cli.EXIT_ERROR == 3
     assert _run_cli(fake_client, monkeypatch, ["info"]) == 3
@@ -208,7 +208,7 @@ def test_cli_errors_and_usage_use_distinct_codes(fake_client, monkeypatch, capsy
 
 
 def test_null_uplink_in_device_detail_does_not_crash():
-    from unifi_sentinel.export import build_inventory
+    from homelab_probe.export import build_inventory
     devices = [{"id": "sw", "macAddress": "bb:bb", "name": "SW", "model": "USW Ultra"}]
     rows = build_inventory(devices, [], [], [], device_details={"sw": {"uplink": None}})
     assert rows[0]["Switch"] == ""

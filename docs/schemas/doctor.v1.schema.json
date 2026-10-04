@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/jeffholst/unifi-sentinel/main/docs/schemas/doctor.v1.schema.json",
+  "$id": "https://raw.githubusercontent.com/jeffholst/homelab-probe/main/docs/schemas/doctor.v1.schema.json",
   "title": "doctor",
-  "description": "Output of `unifi-sentinel doctor --json`: the checks of the installation, the settings and the controller. Nothing in it is a secret or names the controller.",
+  "description": "Output of `hlp doctor --json`: the checks of the installation, the settings and the controller. Nothing in it is a secret or names the controller.",
   "type": "object",
   "properties": {
     "version": {

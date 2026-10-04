@@ -9,13 +9,13 @@ import pytest
 from docs_support import ROOT
 from jsonschema import Draft202012Validator
 
-from unifi_sentinel import cli, commands
-from unifi_sentinel import settings as settings_module
-from unifi_sentinel.audit import AUDIT_AREAS
-from unifi_sentinel.config import ConfigError
-from unifi_sentinel.diagnose import Finding, apply_ignores, findings_json, format_ignored
-from unifi_sentinel.diagnose import output as output_module
-from unifi_sentinel.settings import IgnoreRule, expired_rules, load_settings
+from homelab_probe import cli, commands
+from homelab_probe import settings as settings_module
+from homelab_probe.audit import AUDIT_AREAS
+from homelab_probe.config import ConfigError
+from homelab_probe.diagnose import Finding, apply_ignores, findings_json, format_ignored
+from homelab_probe.diagnose import output as output_module
+from homelab_probe.settings import IgnoreRule, expired_rules, load_settings
 
 DATE = datetime.date
 TEN = DATE(2026, 10, 10)
@@ -23,7 +23,7 @@ LONG_AGO, FAR_AHEAD = "2000-01-01", "2999-12-31"          # fixed dates, so a CL
 
 
 def write(tmp_path, text):
-    path = tmp_path / "unifi-sentinel.toml"
+    path = tmp_path / "hlp.toml"
     path.write_text(text, encoding="utf-8")
     return path
 
@@ -243,8 +243,8 @@ def test_the_schema_declares_until_and_the_output_matches_it(name):
 # -- the commands ----------------------------------------------------------------------------------------------
 
 def run(fake_client, monkeypatch, argv):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     return cli.main(argv)
 
@@ -320,7 +320,7 @@ def test_initial_warning_and_filtering_use_the_same_date(
     fake_datetime = types.SimpleNamespace(date=Day, datetime=datetime.datetime)
     monkeypatch.setattr(commands, "datetime", fake_datetime)
     monkeypatch.setattr(output_module, "datetime", fake_datetime)
-    monkeypatch.setattr("unifi_sentinel.settings.datetime", fake_datetime)
+    monkeypatch.setattr("homelab_probe.settings.datetime", fake_datetime)
     config = write(tmp_path, rule_text('"2026-12-31"', code=code, subject=subject))
     run(fake_client, monkeypatch, [command, "--json", "--config", str(config)])
     out = capsys.readouterr()
@@ -399,5 +399,5 @@ def test_a_bad_date_stops_the_command_before_it_contacts_the_controller(fake_cli
 # -- the documentation -------------------------------------------------------------------------------------------
 
 def test_the_example_file_shows_a_temporary_rule_that_loads():
-    settings = load_settings(ROOT / "unifi-sentinel.example.toml")
+    settings = load_settings(ROOT / "hlp.example.toml")
     assert any(rule.until is not None for rule in settings.ignore)

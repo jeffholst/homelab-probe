@@ -17,7 +17,7 @@ __pycache__/**
 *.egg-info/
 build/
 .coverage
-unifi-sentinel.toml
+hlp.toml
 # Saved inventories hold real MACs and IPs
 snapshots/
 

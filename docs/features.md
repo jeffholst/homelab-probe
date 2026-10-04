@@ -23,7 +23,7 @@
 - **Choosing checks**: `diagnose --only` and `--skip` run some areas (`devices`, `health`, `wan`, `clients`, `reservations`, `ports`, `wifi`, `events`) and read only the data those need; the output says what was not checked
 - **Running unattended**: tested setups for cron, a systemd timer, launchd and Docker, with the working directory, exit codes, first-run baseline and overlapping runs explained ([Running on a schedule](scheduling.md))
 - **Watching**: `diagnose --watch SECONDS` repeats the checks and prints only what is new, worse or fixed since the last pass, until Ctrl-C
-- **Several sites**: `--site NAME|REF|UUID`, before the command, reads another site for one run and beats `SITE_ID`
+- **Several sites**: `--site NAME|REF|UUID`, before the command, reads another site for one run and beats `UNIFI_SITE_ID`
 - **JSON Schemas**: a versioned JSON Schema (draft 2020-12) for every `--json` output, the snapshot file and the webhook payload, in `docs/schemas/`, so a script can validate what it reads
 - **Shell completion**: `completion bash|zsh|fish` prints a script generated from the program's own options, so new options complete as soon as they exist
 - **Speed and resilience**: independent reads run side by side (`--parallel`), a failed GET is retried twice, `--timeout` sets the per-request limit, and an optional read that fails warns instead of stopping the command

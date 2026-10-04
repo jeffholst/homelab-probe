@@ -41,7 +41,7 @@ Every `--json` output of the tool, the snapshot files and the webhook payload ha
 import json, subprocess
 from jsonschema import validate   # pip install jsonschema
 
-run = subprocess.run(["unifi-sentinel", "diagnose", "--json"], capture_output=True, text=True)   # exit 1 or 2 means findings
+run = subprocess.run(["hlp", "diagnose", "--json"], capture_output=True, text=True)   # exit 1 or 2 means findings
 validate(json.loads(run.stdout), json.load(open("docs/schemas/diagnose.v1.schema.json")))
 ```
 

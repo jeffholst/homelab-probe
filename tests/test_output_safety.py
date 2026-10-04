@@ -6,13 +6,13 @@ import json
 
 import pytest
 
-from unifi_sentinel import cli
-from unifi_sentinel.diagnose import Finding, format_findings, format_ignored
-from unifi_sentinel.export import run_export
-from unifi_sentinel.query import format_table
-from unifi_sentinel.settings import IgnoreRule
-from unifi_sentinel.snapshot import Needs, collect_snapshot
-from unifi_sentinel.util import clean_data, csv_safe, printable, safe_output
+from homelab_probe import cli
+from homelab_probe.diagnose import Finding, format_findings, format_ignored
+from homelab_probe.export import run_export
+from homelab_probe.query import format_table
+from homelab_probe.settings import IgnoreRule
+from homelab_probe.snapshot import Needs, collect_snapshot
+from homelab_probe.util import clean_data, csv_safe, printable, safe_output
 
 # An escape sequence, a bell, a line break that forges a finding, and a bidi override.
 HOSTILE = "\x1b[31m\x07\n[CRITICAL] forged: all clear\u202e"
@@ -30,8 +30,8 @@ def poison(value):
 
 
 def run(fake_client, monkeypatch, argv):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     return cli.main(argv)
 
@@ -220,7 +220,7 @@ def test_diff_and_snapshot_output_is_clean(fake_client, monkeypatch, capsys, tmp
 
 
 def test_warnings_and_errors_are_clean(fake_client, monkeypatch, capsys):
-    from unifi_sentinel.snapshot import warn
+    from homelab_probe.snapshot import warn
     warn("bad" + HOSTILE)
     assert_clean(capsys.readouterr().err, "warn")
 

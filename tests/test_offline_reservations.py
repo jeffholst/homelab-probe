@@ -5,14 +5,14 @@ import time
 
 import pytest
 
-from unifi_sentinel import cli, wan
-from unifi_sentinel.config import ConfigError
-from unifi_sentinel.diagnose import CRITICAL, INFO, WARNING, _offline_reservation_findings, apply_ignores, diagnose
-from unifi_sentinel.query import query_rows, render
-from unifi_sentinel.reservations import offline_reservation_rows, offline_reservations
-from unifi_sentinel.settings import DiagnoseSettings, IgnoreRule, load_settings
-from unifi_sentinel.snapshot import Needs, collect_snapshot
-from unifi_sentinel.util import describe_age
+from homelab_probe import cli, wan
+from homelab_probe.config import ConfigError
+from homelab_probe.diagnose import CRITICAL, INFO, WARNING, _offline_reservation_findings, apply_ignores, diagnose
+from homelab_probe.query import query_rows, render
+from homelab_probe.reservations import offline_reservation_rows, offline_reservations
+from homelab_probe.settings import DiagnoseSettings, IgnoreRule, load_settings
+from homelab_probe.snapshot import Needs, collect_snapshot
+from homelab_probe.util import describe_age
 
 DAY = 86400
 NOW = float(int(time.time()))      # the fixture's own last-seen times are relative to the real clock
@@ -214,8 +214,8 @@ def test_query_rows_and_render_add_the_column_only_for_offline(fake_client):
 
 def run(fake_client, monkeypatch, argv):
     fake_client.session.fx["legacy"]["device"][0]["overheating"] = False
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     return cli.main(argv)
 

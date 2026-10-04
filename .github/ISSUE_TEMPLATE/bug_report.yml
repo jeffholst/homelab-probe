@@ -9,7 +9,7 @@ body:
         MAC addresses, IP addresses, host names, device and client names, SSIDs, site IDs, your controller's address,
         and above all your API key or `.env` file. Replace each with a made-up value (`aa:bb:cc:dd:ee:ff`,
         `192.0.2.10`, `Office Switch`). A security problem does not belong here: see
-        [SECURITY.md](https://github.com/jeffholst/unifi-sentinel/blob/main/SECURITY.md).
+        [SECURITY.md](https://github.com/jeffholst/homelab-probe/blob/main/SECURITY.md).
   - type: textarea
     id: what-happened
     attributes:
@@ -21,23 +21,23 @@ body:
     id: command
     attributes:
       label: The command and options
-      description: Exactly what you ran, for example `unifi-sentinel diagnose --only ports` (not the contents of `.env`).
-      placeholder: unifi-sentinel diagnose --only ports
+      description: Exactly what you ran, for example `hlp diagnose --only ports` (not the contents of `.env`).
+      placeholder: hlp diagnose --only ports
     validations:
       required: true
   - type: input
     id: version
     attributes:
       label: Version
-      description: The output of `unifi-sentinel --version`.
-      placeholder: unifi-sentinel 0.2.0
+      description: The output of `hlp --version`.
+      placeholder: hlp 0.2.0
     validations:
       required: true
   - type: input
     id: controller
     attributes:
       label: UniFi Network version and hardware
-      description: The Network application version (`unifi-sentinel info` shows it) and the models involved (gateway, switch, access point). Only 10.6.106 has been tested, so this matters.
+      description: The Network application version (`hlp info` shows it) and the models involved (gateway, switch, access point). Only 10.6.106 has been tested, so this matters.
       placeholder: Network 10.6.106, a gateway, a 24-port switch and two access points
     validations:
       required: true
@@ -46,7 +46,7 @@ body:
     attributes:
       label: How you run it
       options:
-        - uv run unifi-sentinel.py (from a clone)
+        - uv run hlp.py (from a clone)
         - pip install (from a clone or a tag)
         - uv tool install
         - Other

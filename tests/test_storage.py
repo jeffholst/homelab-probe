@@ -5,13 +5,13 @@ import math
 
 import pytest
 
-from unifi_sentinel import cli
-from unifi_sentinel.client import UniFiAPIError
-from unifi_sentinel.config import ConfigError
-from unifi_sentinel.diagnose import diagnose, needs_for
-from unifi_sentinel.diagnose.devices import _storage_findings
-from unifi_sentinel.settings import DiagnoseSettings, load_settings
-from unifi_sentinel.snapshot import Snapshot, collect_snapshot
+from homelab_probe import cli
+from homelab_probe.client import UniFiAPIError
+from homelab_probe.config import ConfigError
+from homelab_probe.diagnose import diagnose, needs_for
+from homelab_probe.diagnose.devices import _storage_findings
+from homelab_probe.settings import DiagnoseSettings, load_settings
+from homelab_probe.snapshot import Snapshot, collect_snapshot
 
 GATEWAY = 0
 
@@ -31,8 +31,8 @@ def found(*entries, settings=None, **kwargs):
 
 
 def run(fake_client, monkeypatch, capsys, *argv):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     code = cli.main(list(argv))
     out = capsys.readouterr()
@@ -207,7 +207,7 @@ def test_a_critical_entry_and_the_nameless_entry(fake_client, monkeypatch, capsy
 
 
 def test_the_thresholds_can_be_set_in_the_settings_file(fake_client, monkeypatch, capsys, tmp_path):
-    config = tmp_path / "unifi-sentinel.toml"
+    config = tmp_path / "hlp.toml"
     config.write_text("[thresholds]\nstorage_warn_pct = 5\nstorage_critical_pct = 6\n")
     result = storage_findings(fake_client, monkeypatch, capsys, "--config", str(config))
     assert [(f["subject"], f["severity"]) for f in result] == [("Gateway Backup", "critical")]      # 6.6% used
@@ -241,7 +241,7 @@ def test_no_extra_request_is_made_for_it(fake_client, monkeypatch, capsys):
 def test_an_ignore_rule_can_silence_one_entry_and_not_the_other(fake_client, monkeypatch, capsys, tmp_path):
     fill(fake_client, 0, 3900000000)
     fill(fake_client, 1, 1990000000, 2000000000)
-    config = tmp_path / "unifi-sentinel.toml"
+    config = tmp_path / "hlp.toml"
     config.write_text('[[ignore]]\ncode = "device.storage"\nsubject = "Gateway Temporary"\nreason = "meant to fill up"\n')
     result = storage_findings(fake_client, monkeypatch, capsys, "--config", str(config))
     assert [f["subject"] for f in result] == ["Gateway Backup"]
@@ -282,12 +282,12 @@ def test_when_the_legacy_data_is_unreadable_there_is_one_notice_and_no_finding(f
 def test_the_defaults_and_the_example_file():
     assert (DiagnoseSettings().storage_warn_pct, DiagnoseSettings().storage_critical_pct) == (90, 98)
     from docs_support import ROOT
-    example = load_settings(ROOT / "unifi-sentinel.example.toml")
+    example = load_settings(ROOT / "hlp.example.toml")
     assert (example.storage_warn_pct, example.storage_critical_pct) == (90, 98)
 
 
 def write(tmp_path, text):
-    path = tmp_path / "unifi-sentinel.toml"
+    path = tmp_path / "hlp.toml"
     path.write_text(text)
     return path
 

@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/jeffholst/unifi-sentinel/main/docs/schemas/events-summary.v1.schema.json",
+  "$id": "https://raw.githubusercontent.com/jeffholst/homelab-probe/main/docs/schemas/events-summary.v1.schema.json",
   "title": "events summary",
-  "description": "Output of `unifi-sentinel events --summary --json`.",
+  "description": "Output of `hlp events --summary --json`.",
   "type": "object",
   "properties": {
     "version": {

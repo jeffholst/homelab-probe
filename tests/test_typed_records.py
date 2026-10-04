@@ -4,8 +4,8 @@ from typing import get_type_hints
 
 import pytest
 
-from unifi_sentinel.client_view import DeviceIndex
-from unifi_sentinel.history import (
+from homelab_probe.client_view import DeviceIndex
+from homelab_probe.history import (
     Change,
     ChangedRecord,
     ClientRecord,
@@ -21,9 +21,9 @@ from unifi_sentinel.history import (
     load_snapshot,
     save_snapshot,
 )
-from unifi_sentinel.snapshot import Needs, collect_snapshot
-from unifi_sentinel.topology import ClientCounts, Node, NodeFinding, Summary, Topology, WiredClient, build_topology
-from unifi_sentinel.wifi import Neighbor, Radio, radios, unique_neighbors
+from homelab_probe.snapshot import Needs, collect_snapshot
+from homelab_probe.topology import ClientCounts, Node, NodeFinding, Summary, Topology, WiredClient, build_topology
+from homelab_probe.wifi import Neighbor, Radio, radios, unique_neighbors
 
 
 def keys(typed):
@@ -170,7 +170,7 @@ def test_the_ci_type_check_blocks_and_mypy_is_strict_about_untyped_functions():
 
 @pytest.mark.parametrize("name", ["Radio", "Diff", "DiffPart", "Change", "ChangedRecord"])
 def test_the_records_are_typed_dicts(name):
-    import unifi_sentinel.history as history
-    import unifi_sentinel.wifi as wifi
+    import homelab_probe.history as history
+    import homelab_probe.wifi as wifi
     cls = getattr(history, name, None) or getattr(wifi, name)
     assert hasattr(cls, "__required_keys__") and cls.__required_keys__ == frozenset(get_type_hints(cls))

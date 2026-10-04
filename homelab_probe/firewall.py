@@ -1,4 +1,4 @@
-"""Firewall view: `unifi-sentinel firewall`.
+"""Firewall view: `hlp firewall`.
 
 Answers "what does my firewall allow, and what is reachable from the internet?" from data the controller
 keeps (all read with GET): the zone-based firewall's policies, zones and zone matrix (legacy v2 endpoints; the

@@ -5,10 +5,10 @@ import re
 import pytest
 import requests
 
-from unifi_sentinel import cli
-from unifi_sentinel.client import UniFiAPIError, UniFiClient
-from unifi_sentinel.config import Config
-from unifi_sentinel.snapshot import EventQuery, Needs, collect_event_snapshot, collect_snapshot, describe_snapshot
+from homelab_probe import cli
+from homelab_probe.client import UniFiAPIError, UniFiClient
+from homelab_probe.config import Config
+from homelab_probe.snapshot import EventQuery, Needs, collect_event_snapshot, collect_snapshot, describe_snapshot
 
 KEY = "sekret-key-0123456789"
 MS = r"\(\d+ ms\)"
@@ -154,8 +154,8 @@ def test_collecting_event_snapshot_reports_it_when_tracing(fake_client):
 # -- the command line ------------------------------------------------------------------------------
 
 def run(fake_client, monkeypatch, argv, config_env=None):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", KEY)
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", KEY)
     for name, value in (config_env or {}).items():
         monkeypatch.setenv(name, value)
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
@@ -184,7 +184,7 @@ def test_verbose_writes_to_stderr_and_leaves_stdout_alone(fake_client, monkeypat
 def test_the_first_line_names_the_settings_in_use_without_the_key(fake_client, monkeypatch, capsys):
     run(fake_client, monkeypatch, ["--verbose", "--timeout", "30", "info"])
     first = verbose_lines(capsys.readouterr().err)[0]
-    assert first.startswith("[verbose] unifi-sentinel ") and "environment variables only" in first
+    assert first.startswith("[verbose] hlp ") and "environment variables only" in first
     assert "controller https://controller.example, site default, timeout 30 s, TLS verification on" in first
     assert KEY not in first
 
@@ -193,14 +193,14 @@ def test_the_line_names_the_env_file_and_a_ca_bundle(fake_client, monkeypatch, c
     bundle = tmp_path / "lab-ca.pem"
     bundle.write_text("x")
     env = tmp_path / "lab.env"
-    env.write_text(f"CONTROLLER_URL=https://controller.example\nAPI_KEY={KEY}\nVERIFY_SSL={bundle}\nSITE_ID=lab\n")
+    env.write_text(f"UNIFI_URL=https://controller.example\nUNIFI_API_KEY={KEY}\nUNIFI_VERIFY_SSL={bundle}\nUNIFI_SITE_ID=lab\n")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     assert cli.main(["--verbose", "--env-file", str(env), "info"]) == 0
     first = verbose_lines(capsys.readouterr().err)[0]
     assert f"settings from {env}" in first and f"TLS verification CA bundle {bundle}" in first and "site lab" in first
-    env.write_text(f"CONTROLLER_URL=https://controller.example\nAPI_KEY={KEY}\nVERIFY_SSL=false\n")
-    monkeypatch.delenv("VERIFY_SSL")                       # load_dotenv never overrides what the first run set
-    monkeypatch.delenv("SITE_ID", raising=False)
+    env.write_text(f"UNIFI_URL=https://controller.example\nUNIFI_API_KEY={KEY}\nUNIFI_VERIFY_SSL=false\n")
+    monkeypatch.delenv("UNIFI_VERIFY_SSL")                       # load_dotenv never overrides what the first run set
+    monkeypatch.delenv("UNIFI_SITE_ID", raising=False)
     assert cli.main(["--debug", "--env-file", str(env), "info"]) == 0
     assert "TLS verification off" in verbose_lines(capsys.readouterr().err)[0]
 
@@ -221,10 +221,10 @@ def test_the_summary_is_printed_when_a_request_fails(fake_client, monkeypatch, c
 
 
 def test_a_config_error_prints_no_summary(fake_client, monkeypatch, capsys):
-    monkeypatch.setenv("TIMEOUT", "soon")
+    monkeypatch.setenv("UNIFI_TIMEOUT", "soon")
     assert run(fake_client, monkeypatch, ["--verbose", "info"]) == cli.EXIT_ERROR
     err = capsys.readouterr().err
-    assert "TIMEOUT must be" in err and verbose_lines(err) == []
+    assert "UNIFI_TIMEOUT must be" in err and verbose_lines(err) == []
 
 
 def test_the_option_goes_before_the_command(fake_client, monkeypatch):

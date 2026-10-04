@@ -14,10 +14,10 @@ from pathlib import Path
 import pytest
 from golden_support import normalise
 
-from unifi_sentinel import cli
-from unifi_sentinel.util import normalize_mac
+from homelab_probe import cli
+from homelab_probe.util import normalize_mac
 
-PACKAGE = Path(__file__).resolve().parent.parent / "unifi_sentinel"
+PACKAGE = Path(__file__).resolve().parent.parent / "homelab_probe"
 MAC = re.compile(r"(?i)\b[0-9a-f]{2}(?::[0-9a-f]{2}){5}\b")
 
 SPELLINGS = {
@@ -87,7 +87,7 @@ def test_no_comparison_uses_a_bare_upper_on_a_mac():
 
 
 def test_mac_upper_guard_catches_a_multiline_alias(tmp_path):
-    package = tmp_path / "unifi_sentinel"
+    package = tmp_path / "homelab_probe"
     package.mkdir()
     (package / "bad.py").write_text('value = row.get(\n    "mac"\n)\nvalue.upper()\n', encoding="utf-8")
     assert unapproved_upper_calls(package) == ["bad.py:4: value.upper()"]
@@ -103,8 +103,8 @@ COMMANDS = [
 
 
 def output(fake_client, monkeypatch, capsys, argv):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     code = cli.main(argv)
     out = normalise(capsys.readouterr().out)       # times come from when each fake session was made
@@ -127,7 +127,7 @@ def test_every_command_says_the_same_whatever_spelling_a_source_uses(fake_client
                                                                       how):
     from conftest import FakeSession
 
-    from unifi_sentinel.client import UniFiClient
+    from homelab_probe.client import UniFiClient
 
     baseline_client = UniFiClient("https://controller", "key")
     baseline_client.session = FakeSession()
