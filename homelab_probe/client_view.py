@@ -1,7 +1,6 @@
 """Single-client troubleshooting view: `hlp client <name|mac|ip>`."""
 
 import ipaddress
-import json
 import re
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -479,5 +478,6 @@ def render_candidates(query: str, matches: List[Dict[str, Any]]) -> str:
             "name) to pick one:\n\n" + format_table(candidate_rows(shown), CANDIDATE_COLUMNS) + more)
 
 
-def to_json(detail: Dict[str, Any]) -> str:
-    return json.dumps({"version": JSON_VERSION, **detail}, indent=2)
+def client_data(detail: Dict[str, Any]) -> Dict[str, Any]:
+    """What ``client --json`` prints: the detail with its ``version`` first."""
+    return {"version": JSON_VERSION, **detail}

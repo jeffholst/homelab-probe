@@ -10,11 +10,11 @@ from homelab_probe.client_view import (
     _related,
     build_client_detail,
     candidate_rows,
+    client_data,
     find_clients,
     known_clients,
     render_candidates,
     render_detail,
-    to_json,
 )
 from homelab_probe.diagnose import Finding
 from homelab_probe.settings import DiagnoseSettings, IgnoreRule
@@ -211,7 +211,7 @@ def test_text_rendering_has_the_issue_example_shape(snap):
 
 
 def test_json_shape_and_candidates(snap):
-    parsed = json.loads(to_json(detail_for(snap, "desktop")))
+    parsed = json.loads(json.dumps(client_data(detail_for(snap, "desktop"))))
     assert set(parsed) == {"version", "identity", "addressing", "attachment", "link", "findings", "events_available",
                            "events_window", "events_truncated", "events", "device_events", "events_omitted"}
     assert parsed["identity"]["mac"] == "BB:00:00:00:00:01"
@@ -351,7 +351,7 @@ def test_truncated_event_log_marks_omission_counts_incomplete():
 
     assert detail["events_truncated"] is True
     assert detail["events_omitted"]["client"] == 2
-    assert json.loads(to_json(detail))["events_truncated"] is True
+    assert client_data(detail)["events_truncated"] is True
     text = render_detail(detail, emoji=False)
     assert "... and at least 2 more" in text
     assert "omission counts are incomplete" in text

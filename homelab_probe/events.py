@@ -164,33 +164,43 @@ def summarize(events: List[Dict[str, Any]], top: int = 10) -> Dict[str, Any]:
     }
 
 
-def render_events(events: List[Dict[str, Any]], more: bool, as_json: bool = False,
-                  summary: bool = False, cap_truncated: bool = False) -> str:
+def events_data(events: List[Dict[str, Any]], more: bool, summary: bool = False) -> Any:
+    """What ``events --json`` prints: a bare array of events, or with ``summary`` the counts (an object with a
+    ``version``; ``truncated`` says the limit cut the list)."""
+    if not summary:
+        return [event_json(e) for e in events]
+    s = summarize(events)
+    return {"version": JSON_VERSION, "total": s["total"], "by_severity": dict(s["by_severity"]),
+            "by_event": dict(s["by_event"]), "noisiest": s["noisiest"], "truncated": more}
+
+
+def render_events_text(data: Any, summary: bool = False, more: bool = False, cap_truncated: bool = False) -> str:
+    """The table (or, with ``summary``, the counts) from ``events_data``. ``more`` says the limit cut the list and
+    ``cap_truncated`` that the controller read hit its cap: neither is in the list's JSON, so the caller passes them."""
     if summary:
-        s = summarize(events)
-        if as_json:
-            return json.dumps({
-                "version": JSON_VERSION, "total": s["total"], "by_severity": dict(s["by_severity"]),
-                "by_event": dict(s["by_event"]), "noisiest": s["noisiest"], "truncated": more}, indent=2)
-        if not events:
+        if not data["total"]:
             return "No events in this window."
-        out = [f"{s['total']} event(s)" + (
+        out = [f"{data['total']} event(s)" + (
                    " (more events omitted; the 20,000-event read cap was reached)"
-                   if cap_truncated else " (limit reached; use --limit 0 for all)" if more else ""), "",
-               "By severity: " + ", ".join(f"{printable(name) or '?'} {n}" for name, n in s["by_severity"]), "",
-               "By event:",
-               format_table([{"Event": ev or "?", "Count": n} for ev, n in s["by_event"]],
+                   if cap_truncated else " (limit reached; use --limit 0 for all)" if data["truncated"] else ""), "",
+               "By severity: " + ", ".join(f"{printable(name) or '?'} {n}" for name, n in data["by_severity"].items()),
+               "", "By event:",
+               format_table([{"Event": ev or "?", "Count": n} for ev, n in data["by_event"].items()],
                             ["Event", "Count"]),
                "", "Noisiest (event and client/device):",
-               format_table(s["noisiest"], ["Event", "Subject", "Count"])]
+               format_table(data["noisiest"], ["Event", "Subject", "Count"])]
         return "\n".join(out)
 
-    if as_json:
-        return json.dumps([event_json(e) for e in events], indent=2)
-    if not events:
+    if not data:
         return "No events match."
-    rows = [event_row(e) for e in events]
     note = ("\n(more events omitted; the 20,000-event read cap was reached)"
             if cap_truncated else
             "\n(showing the newest events only; use --limit 0 for all)" if more else "")
-    return format_table(rows, EVENT_COLUMNS) + f"\n\n{len(rows)} event(s)" + note
+    return format_table(data, EVENT_COLUMNS) + f"\n\n{len(data)} event(s)" + note
+
+
+def render_events(events: List[Dict[str, Any]], more: bool, as_json: bool = False,
+                  summary: bool = False, cap_truncated: bool = False) -> str:
+    """``events_data`` as JSON or as text, for a caller that has the events rather than a document."""
+    data = events_data(events, more, summary)
+    return json.dumps(data, indent=2) if as_json else render_events_text(data, summary, more, cap_truncated)

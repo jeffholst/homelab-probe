@@ -60,10 +60,18 @@ def ungrouped_clients(snap: Snapshot) -> List[Dict[str, Any]]:
     return [row for _, row in found]
 
 
-def render(rows: List[Dict[str, Any]], as_json: bool) -> str:
-    if as_json:
-        return json.dumps([{c: r.get(c, "") for c in NEW_CLIENT_COLUMNS} for r in rows], indent=2)
+def new_clients_data(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """What ``new-clients --json`` prints: a bare array with the columns of the table."""
+    return [{c: r.get(c, "") for c in NEW_CLIENT_COLUMNS} for r in rows]
+
+
+def render_table(rows: List[Dict[str, Any]]) -> str:
     return format_table(rows, NEW_CLIENT_COLUMNS) + f"\n\n{len(rows)} client(s) in no group"
+
+
+def render(rows: List[Dict[str, Any]], as_json: bool) -> str:
+    """``new_clients_data`` as JSON or the table, for a caller that has rows rather than a document."""
+    return json.dumps(new_clients_data(rows), indent=2) if as_json else render_table(rows)
 
 
 def report(snap: Snapshot, search: str = "") -> List[Dict[str, Any]]:

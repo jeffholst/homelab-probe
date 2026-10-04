@@ -21,14 +21,19 @@ from homelab_probe.doctor import CHECKS, OK, make
 from homelab_probe.documents import (
     Document,
     audit_document,
+    client_document,
     doctor_document,
+    events_document,
     firewall_document,
     info_document,
+    new_clients_document,
+    query_document,
     topology_document,
     wan_document,
     wifi_document,
 )
 from homelab_probe.settings import DiagnoseSettings, IgnoreRule
+from homelab_probe.snapshot import EventQuery
 
 PACKAGE = Path(__file__).resolve().parent.parent / "homelab_probe"
 NOW_MS = 1_800_000_000_000
@@ -262,6 +267,183 @@ def test_firewall_zone_ids_stay_out_of_json_and_are_available_to_text(fake_clien
     assert all("id" not in zone for zone in document.data["zones"])
     assert "z-int" not in document.zone_names and document.zone_names["z-ext"] == "External"
     json.dumps(document.data)
+
+
+# -- events, client, query and new-clients ---------------------------------------------------------------
+
+def query_doc(**kwargs):
+    return lambda c: query_document(c, "default", echo=False, **kwargs)
+
+
+DAY = EventQuery(24 * 3600)
+# name -> (argv, how to build the document, the document's name, whether --json is a bare array)
+BATCH_2 = {
+    "events": (["events", "--json", "--since", "6h"],
+               lambda c: events_document(c, "default", EventQuery(6 * 3600), echo=False), "events", True),
+    "events-filtered": (["events", "--json", "--client", "phone", "--limit", "2"],
+                        lambda c: events_document(c, "default", DAY, "phone", limit=2, echo=False), "events", True),
+    "events-summary": (["events", "--summary", "--json"],
+                       lambda c: events_document(c, "default", DAY, summary=True, echo=False), "events", False),
+    "client": (["client", "desktop", "--json"],
+               lambda c: client_document(c, "default", "desktop", echo=False), "client", False),
+    "client-no-events": (["client", "phone", "--json", "--no-events"],
+                         lambda c: client_document(c, "default", "phone", events=False, echo=False), "client", False),
+    "query-all": (["query", "--json"], query_doc(), "query", True),
+    "query-devices": (["query", "devices", "--json"], query_doc(kind="devices"), "query", True),
+    "query-clients": (["query", "clients", "--json", "--include-offline"],
+                      query_doc(kind="clients", include_offline=True), "query", True),
+    "query-clients-filtered": (["query", "clients", "--json", "--ssid", "iot", "--search", "a"],
+                               query_doc(kind="clients", ssid="iot", search="a"), "query", True),
+    "query-ports": (["query", "ports", "--json", "--down"], query_doc(kind="ports", down=True), "query", True),
+    "query-reservations": (["query", "reservations", "--json"], query_doc(kind="reservations"), "query", True),
+    "query-networks": (["query", "networks", "--json"], query_doc(kind="networks"), "query", True),
+    "query-wlans": (["query", "wlans", "--json"], query_doc(kind="wlans"), "query", True),
+    "new-clients": (["new-clients", "--json"], lambda c: new_clients_document(c, "default", echo=False),
+                    "new-clients", True),
+}
+
+
+@pytest.fixture
+def frozen(monkeypatch):
+    """The fixture's event times are relative to the clock; two reads must see the same one to be compared."""
+    monkeypatch.setattr("homelab_probe.demo.session.time", types.SimpleNamespace(time=lambda: NOW_MS / 1000))
+
+
+@pytest.mark.parametrize("name", BATCH_2)
+def test_each_document_of_the_second_batch_is_what_its_json_output_prints(fake_client, frozen, name):
+    argv, make, document_name, bare_array = BATCH_2[name]
+    code, out, err = run_command(fake_client, argv)
+    with utc():
+        document = make(fake_client)
+    assert code == 0 and document.name == document_name
+    assert err == "".join(f"Warning: {w}\n" for w in document.warnings)
+    assert document.data == json.loads(out) and document.to_json() == out.rstrip("\n")
+    assert isinstance(document.data, list) is bare_array
+    json.dumps(document.data)
+
+
+def test_the_text_of_the_second_batch_is_rendered_from_the_documents(fake_client, frozen):
+    from homelab_probe.client_view import render_detail
+    from homelab_probe.events import render_events_text
+    from homelab_probe.new_clients import render_table as render_new
+    from homelab_probe.query import render_csv, render_table
+
+    with utc():
+        since = EventQuery(24 * 3600)
+        listing = events_document(fake_client, "default", since, limit=3, echo=False)
+        summary = events_document(fake_client, "default", since, summary=True, echo=False)
+        cases = [
+            (["events", "--limit", "3"], render_events_text(listing.data, False, **{
+                "more": listing.meta["more"], "cap_truncated": listing.meta["cap_truncated"]})),
+            (["events", "--summary"], render_events_text(summary.data, True, cap_truncated=False)),
+            (["client", "desktop", "--no-emoji"],
+             render_detail(client_document(fake_client, "default", "desktop", echo=False).data, False)),
+            (["query", "ports"], render_table(query_document(fake_client, "default", "ports", echo=False).data, "ports")),
+            (["query", "clients", "--csv"],
+             render_csv(query_document(fake_client, "default", "clients", echo=False).data, "clients")),
+            (["new-clients"], render_new(new_clients_document(fake_client, "default", echo=False).data)),
+        ]
+        for argv, expected in cases:
+            _, out, _ = run_command(fake_client, argv)
+            assert out.rstrip("\n") == expected.rstrip("\n"), argv
+
+
+def test_a_client_that_is_not_one_match_gives_the_candidates_and_no_data(fake_client, frozen):
+    none = client_document(fake_client, "default", "zzz-nobody", echo=False)
+    assert none.data == {} and none.meta["matches"] == []
+    several = client_document(fake_client, "default", "bb0000", echo=False)
+    assert several.data == {} and len(several.meta["matches"]) > 1
+    code, out, err = run_command(fake_client, ["client", "bb0000", "--json"])
+    assert code == 4 and out == "" and "clients match" in err
+
+
+def test_the_client_document_reads_the_events_only_for_a_match_and_when_asked(fake_client):
+    client_document(fake_client, "default", "zzz-nobody", echo=False)
+    assert not fake_client.session.posts                               # nothing matched: no POST
+    client_document(fake_client, "default", "desktop", events=False, echo=False)
+    assert not fake_client.session.posts
+    client_document(fake_client, "default", "desktop", echo=False)
+    assert len(fake_client.session.posts) == 1
+
+
+def test_the_events_document_says_when_the_limit_or_the_cap_cut_the_list(fake_client):
+    cut = events_document(fake_client, "default", EventQuery(24 * 3600), limit=1, echo=False)
+    assert cut.meta == {"more": True, "cap_truncated": False} and len(cut.data) == 1
+    whole = events_document(fake_client, "default", EventQuery(24 * 3600), limit=0, echo=False)
+    assert whole.meta["more"] is False and len(whole.data) > 1
+    summary = events_document(fake_client, "default", EventQuery(24 * 3600), limit=1, summary=True, echo=False)
+    assert summary.data["total"] == len(whole.data) and summary.data["truncated"] is False   # a summary ignores --limit
+
+
+def test_the_events_document_says_when_the_read_cap_stopped_the_list(fake_client, monkeypatch, capsys):
+    from homelab_probe import snapshot as snapshot_module
+    from homelab_probe.events import render_events_text
+
+    monkeypatch.setattr(snapshot_module, "EVENT_PAGE_SIZE", 2)
+    monkeypatch.setattr(snapshot_module, "MAX_EVENTS", 4)
+    document = events_document(fake_client, "default", DAY, limit=0, echo=False)
+    assert len(document.data) == 4 and document.meta == {"more": True, "cap_truncated": True}
+    assert "the 20,000-event read cap was reached" in render_events_text(document.data, False, **document.meta)
+    code, out, _ = run_command(fake_client, ["events", "--limit", "0"])
+    assert code == 0 and "the 20,000-event read cap was reached" in out
+
+
+def test_a_query_that_could_not_read_what_it_lists_raises_instead_of_returning_nothing(fake_client):
+    real = fake_client.legacy_rest
+
+    def broken(site_ref, resource):
+        if resource in ("networkconf", "wlanconf"):
+            raise UniFiAPIError("HTTP 500")
+        return real(site_ref, resource)
+
+    fake_client.legacy_rest = broken
+    for kind, text in (("networks", "no networks were returned"), ("wlans", "Wi-Fi networks could not be read")):
+        with pytest.raises(UniFiAPIError, match=text):
+            query_document(fake_client, "default", kind, echo=False)
+    real_stat = fake_client.legacy_stat
+
+    def no_sta(site_ref, resource):
+        if resource == "sta":
+            raise UniFiAPIError("HTTP 500")
+        return real_stat(site_ref, resource)
+
+    fake_client.legacy_stat = no_sta
+    with pytest.raises(UniFiAPIError, match="need the connected-client details"):
+        query_document(fake_client, "default", "clients", ssid="x", echo=False)
+
+
+def test_the_query_document_reads_what_the_kind_needs(fake_client):
+    from homelab_probe.documents import query_needs
+
+    assert query_needs("networks") == query_needs("networks", True, "x") and not query_needs("networks").wlans
+    assert query_needs("wlans").wlans and not query_needs("wlans").clients
+    assert query_needs("clients", True).offline and query_needs("clients", network="").networks
+    assert query_needs("reservations").reservations and not query_needs("devices").reservations
+
+
+def test_the_offline_reservations_use_the_threshold_of_the_settings(fake_client):
+    default = query_document(fake_client, "default", "reservations", offline=True, settings=DiagnoseSettings(),
+                             echo=False)
+    long = query_document(fake_client, "default", "reservations", offline=True,
+                          settings=DiagnoseSettings(reserved_offline_warn_days=100_000), echo=False)
+    assert default.meta == {"kind": "reservations", "offline": True} and len(long.data) <= len(default.data)
+    none = query_document(fake_client, "default", "reservations", offline=True, echo=False)
+    assert len(none.data) == len(query_document(fake_client, "default", "reservations", echo=False).data)
+
+
+def test_a_degraded_read_of_the_query_is_in_the_document_and_not_printed_when_quiet(fake_client, capsys):
+    real_stat = fake_client.legacy_stat
+
+    def no_history(site_ref, resource):
+        if resource == "alluser":
+            raise UniFiAPIError("HTTP 500")
+        return real_stat(site_ref, resource)
+
+    fake_client.legacy_stat = no_history
+    document = query_document(fake_client, "default", "clients", include_offline=True, echo=False)
+    assert document.warnings and capsys.readouterr().err == ""
+    loud = query_document(fake_client, "default", "clients", include_offline=True)
+    assert capsys.readouterr().err == "".join(f"Warning: {w}\n" for w in loud.warnings) and loud.warnings
 
 
 # -- info and doctor --------------------------------------------------------------------------------
