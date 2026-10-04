@@ -288,7 +288,7 @@ EXPORT_FORMATS = ("csv", "json")
 
 
 def inventory_rows(snap: Snapshot) -> List[Dict[str, Any]]:
-    """The rows of ``unifi_clients.csv``: devices, connected clients, then (when collected) offline clients."""
+    """The rows of ``unifi_clients.csv``: connected clients, devices, then (when collected) offline clients."""
     rows = build_inventory(snap.devices, snap.clients, snap.legacy_devices, snap.legacy_clients,
                            snap.device_details, snap.device_stats)
     return rows + build_offline_clients(snap.clients, snap.devices, snap.all_users)

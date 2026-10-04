@@ -188,7 +188,7 @@ Clients that use a private Wi-Fi MAC address are flagged in `query clients`, `ne
 
 ### Output files
 
-`export` writes the inventory and one CSV per switch (or one JSON file with `--format json`); names are cleaned and formula-like cells neutralized. [Details](docs/inventory.md#output-files).
+`export` writes the inventory and one CSV per switch (or one JSON file with `--format json`); CSV names are cleaned and formula-like cells neutralized, while JSON values remain raw. [Details](docs/inventory.md#output-files).
 
 ### Exit codes
 
