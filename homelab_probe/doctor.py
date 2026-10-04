@@ -264,7 +264,8 @@ def _config_checks(config: Optional[Config], first: Check) -> List[Check]:
         checks.append(make("config.tls", OK, f"certificates are verified against {config.verify_ssl}"))
     else:
         checks.append(make("config.tls", OK, "certificates are verified against the system's trusted authorities",
-                           "a self-signed controller certificate needs UNIFI_VERIFY_SSL=<signing CA file>"))
+                           "for a private CA, set UNIFI_VERIFY_SSL to its CA file; use a self-signed leaf certificate "
+                           "as a trust anchor only if OpenSSL accepts it"))
     checks.append(make("config.limits", OK, f"timeout {config.timeout:g} s, "
                        f"{plural(config.parallel, 'request')} at once, site {config.site}"))
     return checks
@@ -300,11 +301,22 @@ def explain(error: UniFiAPIError, config: Config) -> Tuple[str, str]:
     """(message, fix) for a failed request, from its kind, never from its text (which has the address in it)."""
     kind = error.kind
     if kind == "tls":
+        if error.tls_reason == "hostname_mismatch":
+            return ("the controller's TLS certificate does not match the UNIFI_URL host name or address",
+                    "use a URL named in the certificate, or install a certificate with a matching subjectAltName")
+        if error.tls_reason == "invalid_ca":
+            return ("a certificate in the TLS verification chain is not usable as a CA certificate",
+                    "check the controller's certificate chain and trust configuration; for a private CA, "
+                    "set UNIFI_VERIFY_SSL to its CA file")
+        if error.tls_reason == "untrusted":
+            return ("TLS certificate verification failed with the configured CA bundle",
+                    "check the configured CA bundle and the controller's certificate chain")
         if isinstance(config.verify_ssl, str):
-            return ("the controller's certificate is not signed by anything in the CA bundle in UNIFI_VERIFY_SSL",
-                    "use the CA that signed it, or install a trusted certificate on the controller")
+            return ("the controller's TLS certificate was not accepted using the configured CA bundle",
+                    "check the configured CA bundle and the controller's certificate chain")
         return ("the controller's TLS certificate was not accepted",
-                "a self-signed certificate: point UNIFI_VERIFY_SSL at its signing CA file (PEM); "
+                "for a private CA, point UNIFI_VERIFY_SSL at its CA file (PEM); use a self-signed leaf certificate "
+                "as a trust anchor only if OpenSSL accepts it; "
                 "UNIFI_VERIFY_SSL=false is a last resort")
     if kind == "unauthorized":
         return ("the controller rejected the API key (401)",
