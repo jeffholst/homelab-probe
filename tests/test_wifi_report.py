@@ -5,6 +5,7 @@ import pytest
 from homelab_probe import cli
 from homelab_probe.client import UniFiAPIError
 from homelab_probe.client_view import DeviceIndex
+from homelab_probe.documents import wifi_document
 from homelab_probe.snapshot import Needs, Snapshot, collect_snapshot
 from homelab_probe.wifi import (
     DEFAULT_MIN_SIGNAL,
@@ -16,7 +17,6 @@ from homelab_probe.wifi import (
     radios,
     render_text,
     span_mhz,
-    to_json,
     unique_neighbors,
 )
 
@@ -284,12 +284,12 @@ def test_names_are_capped_per_channel_unless_all():
     assert "more (use --all)" not in full and f"Net{NAMES_PER_CHANNEL + 2:02d}" in full
 
 
-def test_missing_data_still_renders_and_json_is_complete(report):
+def test_missing_data_still_renders_and_json_is_complete(report, fake_client):
     empty = build_wifi(Snapshot(site={}, devices=[], clients=[]))
     assert empty["plan"] == [] and empty["observations"] == []
     text = render_text(empty)
     assert "no radio data" in text and "Neighboring networks: 0 seen by your APs" in text
-    parsed = json.loads(to_json(report))
+    parsed = json.loads(wifi_document(fake_client, "default", echo=False).to_json())
     assert set(parsed) == {"version", "ap_matched", "min_signal", "radios", "neighbors", "plan", "observations"}
     assert parsed["neighbors"]["available"] is True
     assert parsed["plan"][0]["channels"][0]["strong_networks"] is not None and "span" not in parsed["radios"][0]

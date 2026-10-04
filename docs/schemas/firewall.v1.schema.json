@@ -155,12 +155,20 @@
           },
           "Zone": {
             "type": "string"
+          },
+          "id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The zone's id (what the matrix cells are keyed by); null when the controller sent none."
           }
         },
         "required": [
           "Built in",
           "Networks",
-          "Zone"
+          "Zone",
+          "id"
         ]
       }
     },

@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import logs
-from .audit import AUDIT_AREAS, audit
 from .client import UniFiAPIError, UniFiClient
 from .client_view import build_client_detail, find_clients, render_candidates, render_detail, to_json
 from .completion import SHELLS
@@ -30,22 +29,30 @@ from .diagnose import (
     apply_ignores,
     diagnose,
     exit_code,
+    findings_from_document,
     findings_json,
     format_findings,
     format_ignored,
     needs_for,
     parse_areas,
+    render_findings,
     stream_supports_emoji,
 )
 from .doctor import Options as DoctorOptions
 from .doctor import exit_failed, run_checks
 from .doctor import render as render_doctor
-from .documents import doctor_document, info_document, wan_document
+from .documents import (
+    audit_document,
+    doctor_document,
+    firewall_document,
+    info_document,
+    topology_document,
+    wan_document,
+    wifi_document,
+)
 from .events import DEFAULT_LIMIT, DEFAULT_SINCE, SEVERITIES, fetch_events, make_filter, parse_duration, render_events
 from .export import EXPORT_FORMATS, JSON_FILENAME, run_export
-from .firewall import build_firewall
 from .firewall import render_text as render_firewall
-from .firewall import to_json as firewall_json
 from .history import (
     DEFAULT_DIR,
     SnapshotRecord,
@@ -75,18 +82,15 @@ from .notify import (
 from .query import query_rows, render, render_csv
 from .settings import DiagnoseSettings, expired_rules
 from .snapshot import EventQuery, Needs, collect_event_snapshot, collect_snapshot, extend_snapshot, warn
-from .topology import build_topology
 from .topology import render_text as render_topology
-from .topology import to_json as topology_json
 from .util import printable, safe_output
 from .wan import DEFAULT_DAYS
 from .wan import render_text as render_wan
 from .watch import MAX_SECONDS, MIN_SECONDS
 from .watch import changes as watch_changes
 from .watch import start as watch_start
-from .wifi import DEFAULT_MIN_SIGNAL, build_wifi, parse_band
+from .wifi import DEFAULT_MIN_SIGNAL, parse_band
 from .wifi import render_text as render_wifi
-from .wifi import to_json as wifi_json
 
 _log = logging.getLogger(__name__)
 
@@ -416,10 +420,9 @@ def _add_topology(parser: argparse.ArgumentParser) -> None:
 
 def _run_topology(ctx: Context) -> int:
     args = ctx.args
-    snap = collect_snapshot(ctx.client, ctx.config.site, Needs())
-    tree = build_topology(snap, ctx.settings, with_clients=args.clients)
+    document = topology_document(ctx.client, ctx.config.site, ctx.settings, args.clients)
     emoji = not args.no_emoji and stream_supports_emoji(sys.stdout)
-    say(topology_json(tree) if args.json else render_topology(tree, emoji, args.clients))
+    say(document.to_json() if args.json else render_topology(document.data, emoji, args.clients))
     return 0
 
 
@@ -527,9 +530,8 @@ def _add_wifi(parser: argparse.ArgumentParser) -> None:
 
 def _run_wifi(ctx: Context) -> int:
     args = ctx.args
-    snap = collect_snapshot(ctx.client, ctx.config.site, Needs(neighbors=True))
-    report = build_wifi(snap, args.min_signal, args.band or "", args.ap)
-    say(wifi_json(report) if args.json else render_wifi(report, args.all, args.ap))
+    document = wifi_document(ctx.client, ctx.config.site, args.min_signal, args.band or "", args.ap)
+    say(document.to_json() if args.json else render_wifi(document.data, args.all, args.ap))
     return 0
 
 
@@ -565,10 +567,9 @@ def _add_firewall(parser: argparse.ArgumentParser) -> None:
 
 def _run_firewall(ctx: Context) -> int:
     args = ctx.args
-    snap = collect_snapshot(ctx.client, ctx.config.site, Needs(firewall=True, reservations=True))
-    report = build_firewall(snap, args.all, args.search)
+    document = firewall_document(ctx.client, ctx.config.site, args.all, args.search)
     emoji = not args.no_emoji and stream_supports_emoji(sys.stdout)
-    say(firewall_json(report) if args.json else render_firewall(report, args.zones, emoji))
+    say(document.to_json() if args.json else render_firewall(document.data, args.zones, emoji))
     return 0
 
 
@@ -599,17 +600,13 @@ def _run_audit(ctx: Context) -> int:
     settings = ctx.settings or DiagnoseSettings()
     today = datetime.date.today()
     _warn_expired_rules(settings, today)
-    snap = collect_snapshot(ctx.client, ctx.config.site,
-                            Needs(offline=True, wlans=True, legacy_devices=False, device_extras=False))
-    findings, ignored = apply_ignores(audit(snap), settings.ignore, today)
+    document = audit_document(ctx.client, ctx.config.site, settings, args.show_ignored, today=today)
     if args.json:
-        say(findings_json(findings, ignored, args.show_ignored, AUDIT_AREAS))
+        say(document.to_json())
     else:
         emoji = not args.no_emoji and stream_supports_emoji(sys.stdout)
-        say(format_findings(findings, emoji, len(ignored)))
-        if args.show_ignored and ignored:
-            say("\n" + format_ignored(ignored))
-    return exit_code(findings, args.fail_on)
+        say(render_findings(document.data, emoji, args.show_ignored))
+    return exit_code(findings_from_document(document.data), args.fail_on)
 
 
 # -- doctor -----------------------------------------------------------------------------------------

@@ -4,9 +4,8 @@
 plugs into, the negotiated link speed, client counts and anything `diagnose` flags.
 """
 
-import json
 from collections import Counter
-from typing import Dict, List, Optional, Set, Tuple, TypedDict
+from typing import Any, Dict, List, Optional, Set, Tuple, TypedDict
 
 from .client_view import DeviceIndex
 from .diagnose import EMOJI, INFO, SEVERITY_ORDER, Finding, apply_ignores, diagnose, uplink_speeds
@@ -262,8 +261,9 @@ def _line(n: Node, emoji: bool, root: bool) -> str:
     return "   ".join(parts)
 
 
-def render_text(topology: Topology, emoji: bool = True, with_clients: bool = False) -> str:
-    topology = clean_data(topology)
+def render_text(document: Dict[str, Any], emoji: bool = True, with_clients: bool = False) -> str:
+    """Draw the tree from a topology document (the ``--json`` dict: the tree plus its ``version``)."""
+    topology: Topology = clean_data(document)
     style = _UNICODE if emoji else _ASCII
     lines: List[str] = []
 
@@ -320,7 +320,3 @@ def _flatten(topology: Topology) -> List[Node]:
 
     walk(topology["roots"])
     return out + topology["unattached"]
-
-
-def to_json(topology: Topology) -> str:
-    return json.dumps({"version": JSON_VERSION, **topology}, indent=2)

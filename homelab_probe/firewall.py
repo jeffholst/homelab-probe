@@ -13,7 +13,6 @@ Findings reuse the ``Finding`` of ``diagnose`` but have their own codes (``FIREW
 changes the exit code (0 unless the controller cannot be read).
 """
 
-import json
 from typing import Any, Dict, List, Optional, Set
 
 from .diagnose.addresses import ip_holders, normalize_ip
@@ -134,7 +133,8 @@ def forward_rows(fw: FirewallData) -> List[Dict[str, Any]]:
 
 def zone_rows(snap: Snapshot, fw: FirewallData) -> List[Dict[str, Any]]:
     networks = _network_names(snap)
-    return [{"Zone": str(z.get("name") or UNKNOWN_ZONE), "Built in": bool(z.get("zone_key")),
+    return [{"id": z["_id"] if isinstance(z.get("_id"), str) else None,
+             "Zone": str(z.get("name") or UNKNOWN_ZONE), "Built in": bool(z.get("zone_key")),
              "Networks": [networks.get(i, "a network") for i in z.get("network_ids") or []]}
             for z in fw.zones or []]
 
@@ -264,14 +264,14 @@ def build_firewall(snap: Snapshot, show_all: bool = False, search: str = "") -> 
             {k: v for k, v in r.items() if not k.startswith("_")} for r in search_rows(forwards, search)],
         "zones": zone_rows(snap, fw),
         "matrix": matrix_rows(fw),
-        "_zone_names": _zone_names(fw),
         "findings": [f.to_dict() for f in findings],
         "notes": notes,
     }
 
 
-def to_json(report: Dict[str, Any]) -> str:
-    return json.dumps({k: v for k, v in report.items() if k != "_zone_names"}, indent=2)
+def _zone_names_of(zones: List[Dict[str, Any]]) -> Dict[str, str]:
+    """Zone id to name, from the ``zones`` rows of the report."""
+    return {z["id"]: z["Zone"] for z in zones if z["id"] is not None}
 
 
 def _matrix_table(matrix: List[Dict[str, Any]], zone_names: Dict[str, str]) -> str:
@@ -313,7 +313,7 @@ def render_text(report: Dict[str, Any], zones: bool = False, emoji: bool = True)
                          + (", ".join(z["Networks"]) or "no networks"))
         lines += ["", "Zone matrix (what traffic from a zone may do in another: A allow all, B block all, "
                       "R return traffic only, C custom rules, - none)",
-                   _matrix_table(report["matrix"], report["_zone_names"])]
+                   _matrix_table(report["matrix"], _zone_names_of(report["zones"]))]
 
     findings = [Finding(f["severity"], f["subject"], f["message"], code=f["code"]) for f in report["findings"]]
     lines += ["", "Findings", format_findings(findings, emoji) if findings else "No issues found."]

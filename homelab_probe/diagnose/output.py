@@ -75,25 +75,36 @@ def format_findings(findings: List[Finding], emoji: bool = True, ignored: int = 
     return "\n".join(lines) + "\n\n" + ", ".join(parts) + note
 
 
+def format_ignored_rows(ignored: List[Dict[str, Any]]) -> str:
+    """The suppressed findings (``ignored_dict`` rows), with each rule's reason (and the date a temporary rule
+    ends)."""
+    lines = [f"  {printable(r['subject'])}: {printable(r['message'])}  "
+             f"({'code: ' + printable(r['code']) + '; ' if r['code'] else ''}"
+             f"ignored{' until ' + r['until'] if r.get('until') else ''}: {printable(r['reason'])})"
+             for r in ignored]
+    return f"Ignored ({len(ignored)}):\n" + "\n".join(lines)
+
+
 def format_ignored(ignored: List[Tuple[Finding, IgnoreRule]]) -> str:
     """The findings the ignore list suppressed, with each rule's reason (and the date a temporary rule ends)."""
-    lines = [f"  {printable(f.subject)}: {printable(f.message)}  "
-             f"({'code: ' + printable(f.code) + '; ' if f.code else ''}"
-             f"ignored{' until ' + r.until.isoformat() if r.until else ''}: {printable(r.reason)})"
-             for f, r in ignored]
-    return f"Ignored ({len(ignored)}):\n" + "\n".join(lines)
+    return format_ignored_rows([ignored_dict(f, r) for f, r in ignored])
 
 
 JSON_VERSION = 1
 
 
-def findings_json(findings: List[Finding], ignored: List[Tuple[Finding, IgnoreRule]],
-                  show_ignored: bool = False, areas: Optional[Sequence[str]] = None) -> str:
-    """``diagnose --json``: the findings with their stable codes, a severity summary and the
-    number the ignore list suppressed. The ``ignored`` list (each with its rule's reason, and its ``until`` date
-    if it has one) is only included with ``show_ignored``, as in the text output. Names are raw here, which is
-    safe: JSON escapes control characters itself. ``areas`` are the areas of checks that ran (all of them by
-    default), so a consumer can tell "nothing found" from "not looked at"."""
+def ignored_dict(finding: Finding, rule: IgnoreRule) -> Dict[str, Any]:
+    """A suppressed finding with its rule's reason (and the ``until`` date of a temporary rule)."""
+    return {**finding.to_dict(), "reason": rule.reason, **({"until": rule.until.isoformat()} if rule.until else {})}
+
+
+def findings_document(findings: List[Finding], ignored: List[Tuple[Finding, IgnoreRule]],
+                      show_ignored: bool = False, areas: Optional[Sequence[str]] = None) -> Dict[str, Any]:
+    """The findings with their stable codes, a severity summary and the number the ignore list suppressed: the
+    dict that ``diagnose --json`` and ``audit --json`` print. The ``ignored`` list (each with its rule's reason,
+    and its ``until`` date if it has one) is only included with ``show_ignored``, as in the text output. Names are
+    raw here, which is safe: JSON escapes control characters itself. ``areas`` are the areas of checks that ran
+    (all of them by default), so a consumer can tell "nothing found" from "not looked at"."""
     document: Dict[str, Any] = {
         "version": JSON_VERSION,
         "areas": list(AREA_NAMES if areas is None else areas),
@@ -102,10 +113,29 @@ def findings_json(findings: List[Finding], ignored: List[Tuple[Finding, IgnoreRu
         "findings": [f.to_dict() for f in findings],
     }
     if show_ignored:
-        document["ignored"] = [{**f.to_dict(), "reason": rule.reason,
-                                **({"until": rule.until.isoformat()} if rule.until else {})}
-                               for f, rule in ignored]
-    return json.dumps(document, indent=2)
+        document["ignored"] = [ignored_dict(f, rule) for f, rule in ignored]
+    return document
+
+
+def findings_json(findings: List[Finding], ignored: List[Tuple[Finding, IgnoreRule]],
+                  show_ignored: bool = False, areas: Optional[Sequence[str]] = None) -> str:
+    """``diagnose --json``: ``findings_document`` as text."""
+    return json.dumps(findings_document(findings, ignored, show_ignored, areas), indent=2)
+
+
+def findings_from_document(document: Dict[str, Any]) -> List[Finding]:
+    """The findings of a ``findings_document`` back as ``Finding`` objects (for the text renderer and the exit
+    code, which work on them)."""
+    return [Finding.from_dict(f) for f in document["findings"]]
+
+
+def render_findings(document: Dict[str, Any], emoji: bool = True, show_ignored: bool = False) -> str:
+    """The text of ``audit`` from its document: the findings, then (with ``show_ignored``) what the ignore list
+    suppressed."""
+    text = format_findings(findings_from_document(document), emoji, document["summary"]["ignored"])
+    if show_ignored and document.get("ignored"):
+        text += "\n\n" + format_ignored_rows(document["ignored"])
+    return text
 
 
 def stream_supports_emoji(stream: Any) -> bool:

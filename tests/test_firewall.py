@@ -9,7 +9,7 @@ from docs_support import all_docs_text
 
 from homelab_probe import cli
 from homelab_probe.client import UniFiAPIError
-from homelab_probe.firewall import FIREWALL_CODES, build_firewall, render_text, to_json
+from homelab_probe.firewall import FIREWALL_CODES, build_firewall, render_text
 from homelab_probe.snapshot import FirewallData, Needs, Snapshot, collect_snapshot, describe_snapshot
 
 NEEDS = Needs(firewall=True, reservations=True)
@@ -104,7 +104,7 @@ def test_the_port_forwards_are_listed_with_their_target_and_interface(fake_clien
 def test_zones_and_the_matrix(fake_client):
     report = build_firewall(snapshot(fake_client))
     zones = {z["Zone"]: z for z in report["zones"]}
-    assert zones["Internal"] == {"Zone": "Internal", "Built in": True, "Networks": ["Main"]}
+    assert zones["Internal"] == {"id": "z-int", "Zone": "Internal", "Built in": True, "Networks": ["Main"]}
     assert zones["IoT Zone"]["Built in"] is False and zones["IoT Zone"]["Networks"] == ["IoT"]
     cells = {r["From"]: r["cells"] for r in report["matrix"]}
     assert cells["Internal"]["z-ext"] == {"action": "A", "policies": 1}
@@ -356,7 +356,7 @@ def test_json_output_is_complete_and_raw(fake_client, monkeypatch, capsys):
     assert data["version"] == 1 and data["style"] == "zone-based" and len(data["findings"]) == 7
     assert set(data) == {"version", "style", "policies", "built_in_policies", "built_in_hidden", "port_forwards",
                          "zones", "matrix", "findings", "notes"}
-    assert to_json(data) == json.dumps(data, indent=2)
+    assert all(set(z) == {"id", "Zone", "Built in", "Networks"} for z in data["zones"])
 
 
 def test_the_command_reads_the_firewall_and_nothing_else_it_does_not_declare(fake_client, monkeypatch, capsys):
