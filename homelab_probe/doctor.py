@@ -24,7 +24,15 @@ import requests
 
 from . import __version__
 from .client import UniFiAPIError, UniFiClient
-from .config import Config, ConfigError, env_file_warning, find_env_file, load_config
+from .config import (
+    Config,
+    ConfigError,
+    EnvFileReport,
+    env_file_warning,
+    find_env_file,
+    inspect_env_file,
+    load_config,
+)
 from .notify import Event, destinations_from_config, render_text
 from .settings import DEFAULT_FILENAME, expired_rules, load_settings
 from .util import plural, printable
@@ -105,6 +113,7 @@ CHECKS: Dict[str, str] = {
     "install.version": "Versions",
     "config.env_file": ".env file",
     "config.env_permissions": ".env permissions",
+    "config.env_contents": "Settings in .env",
     "config.settings_file": "Settings file",
     "config.environment": "Required settings",
     "config.tls": "TLS verification",
@@ -186,6 +195,47 @@ def _install_checks() -> List[Check]:
                  f"hlp {__version__}, Python {version} on {sys.platform}, requests {requests.__version__}")]
 
 
+def _lines(numbers: List[int]) -> str:
+    """'line 4' or 'lines 4, 9'."""
+    return ("line " if len(numbers) == 1 else "lines ") + ", ".join(str(n) for n in numbers)
+
+
+def env_contents_check(report: EnvFileReport) -> Check:
+    """What is in the ``.env`` file: names and line numbers only, never a value."""
+    if report.clean:
+        return make("config.env_contents", OK,
+                    f"{plural(report.settings, 'setting')}, each listed once, all recognized")
+    problems: List[str] = []
+    fixes: List[str] = []
+    for name, found in report.duplicates.items():
+        problems.append(f"{name} is listed {plural(len(found), 'time')} ({_lines(found)}) and the last one "
+                        f"(line {found[-1]}) is used")
+    if report.duplicates:
+        fixes.append("keep one line for each setting")
+    for line, name, suggestion in report.unknown:
+        what = f"{name} (line {line}) is not a setting" if name else f"line {line} sets a name that is not a setting"
+        problems.append(what + (f", did you mean {suggestion}?" if suggestion else ""))
+    if report.unknown:
+        fixes.append("correct or remove the names that are not settings (they are ignored)")
+    for line in report.misplaced:
+        problems.append(f"HLP_ENV (line {line}) does nothing in a .env file, because it names the file; set it in "
+                        "the environment")
+    for line in report.bad_lines:
+        problems.append(f"line {line} cannot be read (check quotes and the = sign)")
+    if report.misplaced or report.bad_lines:
+        fixes.append("fix or remove those lines")
+    for name in report.empty:
+        problems.append(f"{name} is empty, which counts as not set")
+    if report.empty:
+        fixes.append("give an empty setting a value or delete its line")
+    for name in report.overridden:
+        problems.append(f"{name} is also set in the environment with another value, and the environment wins over "
+                        "the .env file")
+    if report.overridden:
+        fixes.append("unset the variable in the shell, or change it there instead of in the file")
+    return make("config.env_contents", WARN, "; ".join(problems), "; ".join(fixes))
+
+
 def _file_checks(options: Options) -> Tuple[List[Check], Optional[Path]]:
     """The .env file, its permissions and the settings file. Also returns the .env path (None: none, or unusable)."""
     checks: List[Check] = []
@@ -196,6 +246,7 @@ def _file_checks(options: Options) -> Tuple[List[Check], Optional[Path]]:
         checks.append(make("config.env_file", FAIL, str(e),
                            "give an existing file to --env-file or HLP_ENV, or unset it"))
         checks.append(make("config.env_permissions", SKIP, "skipped: there is no .env file to look at"))
+        checks.append(make("config.env_contents", SKIP, "skipped: there is no .env file to look at"))
     else:
         if path is not None:
             checks.append(make("config.env_file", OK, f"found {path}"))
@@ -206,6 +257,7 @@ def _file_checks(options: Options) -> Tuple[List[Check], Optional[Path]]:
                 checks.append(make("config.env_permissions", INFO, "not checked on Windows"))
             else:
                 checks.append(make("config.env_permissions", OK, "only you can read it (it holds the API key)"))
+            checks.append(env_contents_check(inspect_env_file(path)))
         else:
             from_environment = bool(os.environ.get("UNIFI_URL") and os.environ.get("UNIFI_API_KEY"))
             checks.append(make(
@@ -214,6 +266,7 @@ def _file_checks(options: Options) -> Tuple[List[Check], Optional[Path]]:
                 else "no .env file in the current directory and no --env-file or HLP_ENV",
                 "" if from_environment else "copy example.env to .env here, or run from the directory that has it"))
             checks.append(make("config.env_permissions", SKIP, "skipped: there is no .env file to look at"))
+            checks.append(make("config.env_contents", SKIP, "skipped: there is no .env file to look at"))
     checks.append(_settings_check(options))
     return checks, path
 

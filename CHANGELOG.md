@@ -90,6 +90,7 @@ and `wep` Wi-Fi security values) the README says so.
   `uv.lock`, and CI on Python 3.10 to 3.13 with `ruff` and `mypy`. `SECURITY.md` (how to report a vulnerability
   privately, what is in scope), `CONTRIBUTING.md` and GitHub issue forms for a bug report and a feature request, which
   ask the reporter to redact addresses, names and keys; `tests/test_community_files.py` keeps them honest.
+- **`doctor` checks what is inside the `.env` file** (new check id `config.env_contents`): a setting listed on several lines (the last one is used), a misspelled name (with a suggestion), a line that cannot be read, an empty setting, and a variable already set in the environment with another value (the environment wins). It reports names and line numbers only, never a value, and is a warning, so the exit code does not change.
 
 ### Changed
 
