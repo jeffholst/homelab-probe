@@ -165,7 +165,7 @@ class UniFiClient:
                     resp = send()
             except requests.exceptions.SSLError as e:
                 self._note(label, started, "TLS certificate verification failed")
-                raise self._tls_error() from e
+                raise self._tls_error(e) from e
             except requests.exceptions.Timeout as e:
                 self._note(label, started, "timed out")
                 failure = UniFiAPIError(
@@ -260,8 +260,23 @@ class UniFiClient:
         key = self.session.headers.get("X-API-KEY")
         return text.replace(key, "***") if isinstance(key, str) and key else text
 
-    def _tls_error(self) -> UniFiAPIError:
+    def _tls_error(self, error: requests.exceptions.SSLError) -> UniFiAPIError:
+        detail = self._redact(str(error))
         if isinstance(self.verify_ssl, str):
+            if "invalid CA certificate" in detail:
+                return UniFiAPIError(
+                    f"TLS certificate verification failed for {self.base_url}: the certificate in "
+                    f"{self.verify_ssl} (UNIFI_VERIFY_SSL) is not usable as a CA bundle. Use the CA that signed "
+                    f"the controller's certificate, install a certificate with proper CA/signing metadata, or set "
+                    f"UNIFI_VERIFY_SSL=false if you accept an unverified lab connection.", kind="tls"
+                )
+            if "IP address mismatch" in detail or "Hostname mismatch" in detail:
+                return UniFiAPIError(
+                    f"TLS certificate verification failed for {self.base_url}: the controller certificate is trusted "
+                    f"by {self.verify_ssl} (UNIFI_VERIFY_SSL), but it is not valid for this UNIFI_URL host name or "
+                    f"address. Use a URL named in the certificate, or install a certificate whose subjectAltName "
+                    f"includes this host.", kind="tls"
+                )
             return UniFiAPIError(
                 f"TLS certificate verification failed for {self.base_url}: the certificate is not signed "
                 f"by anything in the CA bundle {self.verify_ssl} (UNIFI_VERIFY_SSL). Use the CA that signed the "

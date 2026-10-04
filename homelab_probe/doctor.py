@@ -259,12 +259,12 @@ def _config_checks(config: Optional[Config], first: Check) -> List[Check]:
     elif config.verify_ssl is False:
         checks.append(make("config.tls", WARN,
                            "certificate checking is off: the key is sent without checking who answers",
-                           "trust the controller's certificate with UNIFI_VERIFY_SSL=/path/to/its-certificate.pem"))
+                           "trust the controller's signing CA with UNIFI_VERIFY_SSL=/path/to/ca.pem"))
     elif isinstance(config.verify_ssl, str):
         checks.append(make("config.tls", OK, f"certificates are verified against {config.verify_ssl}"))
     else:
         checks.append(make("config.tls", OK, "certificates are verified against the system's trusted authorities",
-                           "a self-signed controller certificate needs UNIFI_VERIFY_SSL=<its certificate file>"))
+                           "a self-signed controller certificate needs UNIFI_VERIFY_SSL=<signing CA file>"))
     checks.append(make("config.limits", OK, f"timeout {config.timeout:g} s, "
                        f"{plural(config.parallel, 'request')} at once, site {config.site}"))
     return checks
@@ -302,9 +302,9 @@ def explain(error: UniFiAPIError, config: Config) -> Tuple[str, str]:
     if kind == "tls":
         if isinstance(config.verify_ssl, str):
             return ("the controller's certificate is not signed by anything in the CA bundle in UNIFI_VERIFY_SSL",
-                    "use the CA that signed it, or the controller's own certificate file")
+                    "use the CA that signed it, or install a trusted certificate on the controller")
         return ("the controller's TLS certificate was not accepted",
-                "a self-signed certificate: point UNIFI_VERIFY_SSL at its certificate file (PEM); "
+                "a self-signed certificate: point UNIFI_VERIFY_SSL at its signing CA file (PEM); "
                 "UNIFI_VERIFY_SSL=false is a last resort")
     if kind == "unauthorized":
         return ("the controller rejected the API key (401)",

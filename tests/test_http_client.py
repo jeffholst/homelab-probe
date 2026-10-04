@@ -257,6 +257,29 @@ def test_the_tls_message_points_at_a_ca_bundle_or_names_the_one_in_use(tmp_path)
     assert bundle in str(caught.value) and "not signed by anything in the CA bundle" in str(caught.value)
 
 
+def test_the_tls_message_explains_an_invalid_ca_bundle_certificate(tmp_path):
+    bundle = str(tmp_path / "unifi.pem")
+    client, _ = make(requests.exceptions.SSLError("certificate verify failed: invalid CA certificate"),
+                     verify_ssl=bundle)
+    with pytest.raises(UniFiAPIError) as caught:
+        client.info()
+    assert bundle in str(caught.value)
+    assert "not usable as a CA bundle" in str(caught.value)
+    assert "UNIFI_VERIFY_SSL=false" in str(caught.value)
+
+
+def test_the_tls_message_explains_a_trusted_certificate_for_the_wrong_host(tmp_path):
+    bundle = str(tmp_path / "unifi.pem")
+    client, _ = make(requests.exceptions.SSLError(
+        "certificate verify failed: IP address mismatch, certificate is not valid for '192.168.2.1'"),
+        verify_ssl=bundle)
+    with pytest.raises(UniFiAPIError) as caught:
+        client.info()
+    assert bundle in str(caught.value)
+    assert "not valid for this UNIFI_URL host name or address" in str(caught.value)
+    assert "subjectAltName" in str(caught.value)
+
+
 def test_an_unreadable_bundle_inside_the_library_is_an_api_error_not_a_traceback():
     client, _ = make(OSError("Could not find a suitable TLS CA certificate bundle, invalid path: /nope.pem"))
     with pytest.raises(UniFiAPIError, match="cannot make the request"):
