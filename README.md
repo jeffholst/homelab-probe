@@ -130,7 +130,7 @@ uv run unifi-sentinel.py diagnose --only ports,wifi           # just those check
 uv run unifi-sentinel.py diagnose --watch 60                  # every minute, print only what changed (Ctrl-C to stop)
 ```
 
-Run these from the project root (uv uses `pyproject.toml`); after `pip install .` use `unifi-sentinel <command>` instead. Run `--help` on the tool or any command for options, and `--version` for the version. More examples, with sample output, are in [docs/examples.md](docs/examples.md). `--demo` ([details](docs/configuration.md#trying-it-without-a-controller---demo)) works with any of them.
+Run these from the project root (uv uses `pyproject.toml`); after `pip install .` use `unifi-sentinel <command>` instead. Run `--help` on the tool or any command for options, and `--version` for the version. More examples, with sample output, are in [docs/examples.md](docs/examples.md). For supported commands, `--demo` ([details](docs/configuration.md#trying-it-without-a-controller---demo)) serves synthetic data; it does not support `doctor`, `snapshot` or `diff`, and refuses notification options.
 
 ### Diagnose
 
