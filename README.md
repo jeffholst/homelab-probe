@@ -107,11 +107,11 @@ Either installs the `unifi-sentinel` command (its `--version` option shows which
 ## Usage
 
 ```bash
+uv run unifi-sentinel.py --demo diagnose                      # no controller yet? synthetic data, nothing read or sent
 uv run unifi-sentinel.py info                                 # the controller's version and its sites
 uv run unifi-sentinel.py --site Lab diagnose --no-events      # another site for this run (beats SITE_ID)
 uv run unifi-sentinel.py export -o ./out --include-offline    # CSV files (--output-dir; --format json for one JSON file); also offline clients
 uv run unifi-sentinel.py query clients -s printer --json      # filter (long form: --search), as JSON; --csv for a spreadsheet
-uv run unifi-sentinel.py query clients --include-offline      # also previously seen clients
 uv run unifi-sentinel.py query wlans                          # Wi-Fi networks (also: query networks; query clients --ssid guest)
 uv run unifi-sentinel.py snapshot                             # save the inventory to ./snapshots/
 uv run unifi-sentinel.py diff                                 # what changed since the newest snapshot?
@@ -130,7 +130,7 @@ uv run unifi-sentinel.py diagnose --only ports,wifi           # just those check
 uv run unifi-sentinel.py diagnose --watch 60                  # every minute, print only what changed (Ctrl-C to stop)
 ```
 
-Run these from the project root (uv uses `pyproject.toml`); after `pip install .` use `unifi-sentinel <command>` instead. Run `--help` on the tool or any command for options, and `--version` for the version. More examples, with sample output, are in [docs/examples.md](docs/examples.md). No controller yet? `--demo` runs any of them on synthetic data ([details](docs/configuration.md#trying-it-without-a-controller---demo)).
+Run these from the project root (uv uses `pyproject.toml`); after `pip install .` use `unifi-sentinel <command>` instead. Run `--help` on the tool or any command for options, and `--version` for the version. More examples, with sample output, are in [docs/examples.md](docs/examples.md). For supported commands, `--demo` ([details](docs/configuration.md#trying-it-without-a-controller---demo)) serves synthetic data; it does not support `doctor`, `snapshot` or `diff`, and refuses notification options.
 
 ### Diagnose
 

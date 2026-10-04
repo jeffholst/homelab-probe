@@ -1,11 +1,13 @@
 # Examples
 
-Every command with its options, and sample output generated from the checked-in synthetic test fixture (not a real network).
+Every command with its options, and sample output generated from the checked-in synthetic test fixture (not a real network). The same data is what `--demo` serves for supported commands, so you can run those examples without a controller by putting `--demo` before the command (see [Trying it without a controller](configuration.md#trying-it-without-a-controller---demo)). `doctor`, `snapshot` and `diff` are not supported in demo mode, and notification options are refused.
 
 ## More examples
 
 
 ```bash
+uv run unifi-sentinel.py --demo diagnose             # no controller: the synthetic network, nothing read or sent
+uv run unifi-sentinel.py --demo topology --clients   # supported reports use the same synthetic data
 uv run unifi-sentinel.py info
 uv run unifi-sentinel.py export
 uv run unifi-sentinel.py export -o ./out   # write CSVs to a directory (long form: --output-dir)
