@@ -16,6 +16,7 @@ controller URL must be ``https://`` unless ``ALLOW_INSECURE_HTTP`` opts in, beca
 travels in a header of every request.
 """
 
+import difflib
 import ipaddress
 import math
 import os
@@ -26,10 +27,11 @@ import sys
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
+from dotenv.parser import parse_stream
 
 from .logs import FORMAT_WORDS, LEVEL_WORDS
 
@@ -45,6 +47,18 @@ TRUE_WORDS = ("true", "yes", "1", "on")
 FALSE_WORDS = ("false", "no", "0", "off")
 _UNSAFE_SITE_CHARACTERS = "/\\?#"
 SECRET_FILE_GROUP_OTHER_BITS = 0o077   # any of these set means someone besides the owner can read
+
+# Every variable the code reads (``example.env`` documents them; ``tests/test_env_contents.py`` pins the list). Not
+# ``HLP_ENV``: it names the file, so it is read before the file and does nothing inside it.
+KNOWN_VARIABLES = (
+    "UNIFI_URL", "UNIFI_API_KEY", "UNIFI_SITE_ID", "UNIFI_VERIFY_SSL", "UNIFI_TIMEOUT", "UNIFI_PARALLEL_REQUESTS",
+    "ALLOW_INSECURE_HTTP", "LOG_LEVEL", "LOG_FORMAT",
+    "NOTIFY_NTFY_URL", "NOTIFY_NTFY_TOKEN", "NOTIFY_WEBHOOK_URL", "NOTIFY_WEBHOOK_TOKEN",
+    "NOTIFY_SMTP_HOST", "NOTIFY_SMTP_PORT", "NOTIFY_SMTP_SECURITY", "NOTIFY_SMTP_USER", "NOTIFY_SMTP_PASSWORD",
+    "NOTIFY_EMAIL_FROM", "NOTIFY_EMAIL_TO",
+)
+MAX_NAME_LENGTH = 64      # a longer or odder key is never repeated in a message: it may be a pasted secret
+_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 
 class ConfigError(Exception):
@@ -373,6 +387,75 @@ def find_env_file(explicit: Optional[Path] = None) -> Optional[Path]:
         return named
     default = Path.cwd() / DEFAULT_ENV_FILE
     return default if default.is_file() else None
+
+
+@dataclass(frozen=True)
+class EnvFileReport:
+    """What is in a ``.env`` file, for ``doctor``: names and line numbers only, never a value (values are secrets).
+    ``unknown`` rows are ``(line, name, suggestion)``; ``name`` is blank when the key is not a plain name (it could
+    be a pasted secret), ``suggestion`` is the closest known variable or blank."""
+
+    settings: int = 0                                                  # distinct known variables in the file
+    duplicates: Dict[str, List[int]] = field(default_factory=dict)     # a known variable on several lines
+    unknown: List[Tuple[int, str, str]] = field(default_factory=list)
+    misplaced: List[int] = field(default_factory=list)                 # lines setting HLP_ENV, which does nothing here
+    bad_lines: List[int] = field(default_factory=list)                 # lines the parser cannot read
+    empty: List[str] = field(default_factory=list)                     # known variables whose value is blank
+    overridden: List[str] = field(default_factory=list)                # the environment sets these differently
+
+    @property
+    def clean(self) -> bool:
+        return not (self.duplicates or self.unknown or self.misplaced or self.bad_lines or self.empty
+                    or self.overridden)
+
+
+def _suggestion(name: str) -> str:
+    lowered = {known.lower(): known for known in KNOWN_VARIABLES}       # a lower-case spelling is a typo too
+    close = difflib.get_close_matches(name.lower(), list(lowered), n=1, cutoff=0.8)
+    return lowered[close[0]] if close else ""
+
+
+def inspect_env_file(path: Path) -> EnvFileReport:
+    """Read ``path`` the way ``load_config`` will and report what would confuse a person: a variable on several lines
+    (the last one is used), a name that is not a setting, a line that cannot be read, a blank value, and a variable
+    the environment already sets differently (the environment wins over the file; a value that refers to another
+    variable with ``$`` is not compared). Call it **before**
+    ``load_config``, which copies the file into the environment. An unreadable file gives an empty report:
+    ``load_config`` reports that."""
+    try:
+        with path.open(encoding="utf-8") as stream:
+            bindings = list(parse_stream(stream))
+    except (OSError, UnicodeError):
+        return EnvFileReport()
+    lines: Dict[str, List[int]] = {}
+    last: Dict[str, Optional[str]] = {}
+    unknown: List[Tuple[int, str, str]] = []
+    misplaced: List[int] = []
+    bad_lines: List[int] = []
+    unknown_seen = set()
+    for binding in bindings:
+        line = binding.original.line
+        if binding.error:
+            bad_lines.append(line)
+        elif binding.key is None:
+            continue
+        elif binding.key in KNOWN_VARIABLES:
+            lines.setdefault(binding.key, []).append(line)
+            last[binding.key] = binding.value
+        elif binding.key == ENV_FILE_VAR:
+            misplaced.append(line)
+        elif binding.key not in unknown_seen:
+            unknown_seen.add(binding.key)
+            shown = binding.key if len(binding.key) <= MAX_NAME_LENGTH and _NAME.fullmatch(binding.key) else ""
+            unknown.append((line, shown, _suggestion(shown) if shown else ""))
+    return EnvFileReport(
+        settings=len(lines),
+        duplicates={name: found for name, found in lines.items() if len(found) > 1},
+        unknown=unknown, misplaced=misplaced, bad_lines=bad_lines,
+        empty=[name for name, value in last.items() if not (value or "").strip()],
+        overridden=[name for name, value in last.items() if value is not None and "$" not in value
+                    and name in os.environ and os.environ[name] != value],
+    )
 
 
 def load_config(env_file: Optional[Path] = None, site_override: Optional[str] = None) -> Config:
