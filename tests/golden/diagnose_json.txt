@@ -10,12 +10,19 @@
     "wifi"
   ],
   "summary": {
-    "critical": 0,
+    "critical": 1,
     "warning": 10,
     "info": 2,
     "ignored": 0
   },
   "findings": [
+    {
+      "severity": "critical",
+      "code": "device.overheating",
+      "subject": "Gateway",
+      "message": "reports that it is overheating",
+      "mac": "AA:00:00:00:00:01"
+    },
     {
       "severity": "warning",
       "code": "device.offline",

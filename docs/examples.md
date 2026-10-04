@@ -75,6 +75,7 @@ Client,old-tablet,BB:00:00:00:00:04,10.0.0.51,,Wireless,,,2025-12-06 05:46:40,Of
 Sample from synthetic data with `diagnose --no-events` (text labels are used when output is piped; a UTF-8 terminal shows emojis):
 
 ```text
+[CRITICAL] Gateway: reports that it is overheating
 [WARNING ] Garage AP: device is offline
 [WARNING ] Office Switch: CPU utilization 95%
 [WARNING ] Office Switch: PoE budget 41.6 W of 52 W used (80%)
@@ -88,7 +89,7 @@ Sample from synthetic data with `diagnose --no-events` (text labels are used whe
 [INFO    ] Office Switch port 2: negotiated at 100 Mbps
 [INFO    ] wlan: wlan subsystem reports warning: 1 device(s) disconnected (see the device findings)
 
-10 warnings, 2 info
+1 critical, 10 warnings, 2 info
 ```
 
 ### new-clients

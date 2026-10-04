@@ -206,7 +206,7 @@
         "type": "udm",
         "name": "Gateway",
         "model": "UCG Max",
-        "overheating": false,
+        "overheating": true,
         "wan1": {
           "name": "eth4",
           "up": true,

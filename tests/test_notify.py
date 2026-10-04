@@ -431,6 +431,7 @@ def make_env(monkeypatch, ntfy=NTFY, webhook="", token=""):
 
 
 def run(fake_client, monkeypatch, argv):
+    fake_client.session.fx["legacy"]["device"][0]["overheating"] = False
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     return cli.main(argv)
 

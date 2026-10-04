@@ -323,6 +323,7 @@ def test_bad_timeouts_are_rejected(text):
 # -- --timeout on the command line ---------------------------------------------------------------------
 
 def run(fake_client, monkeypatch, argv, seen=None):
+    fake_client.session.fx["legacy"]["device"][0]["overheating"] = False
     monkeypatch.setenv("CONTROLLER_URL", URL)
     monkeypatch.setenv("API_KEY", KEY)
 

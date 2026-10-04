@@ -1,3 +1,4 @@
+[CRITICAL] Gateway: reports that it is overheating
 [WARNING ] 10.0.0.50: IP conflict reported 1 time in the last 24h between Guest Laptop and old-printer on Main (most recent <time>); old-printer holds the reservation for 10.0.0.50
 [WARNING ] Garage AP: device is offline
 [WARNING ] Office Switch: CPU utilization 95%
@@ -12,4 +13,4 @@
 [INFO  ] Office Switch port 2: negotiated at 100 Mbps
 [INFO  ] wlan: wlan subsystem reports warning: 1 device(s) disconnected (see the device findings)
 
-11 warnings, 2 info
+1 critical, 11 warnings, 2 info

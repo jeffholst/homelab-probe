@@ -39,6 +39,7 @@ class Snapshot:
     clients: List[Dict[str, Any]]
     # Legacy data supplies switch/port mapping and counters; empty if unavailable.
     legacy_devices: List[Dict[str, Any]] = field(default_factory=list)
+    legacy_devices_available: bool = True
     legacy_clients: List[Dict[str, Any]] = field(default_factory=list)
     legacy_clients_available: bool = True
     all_users: List[Dict[str, Any]] = field(default_factory=list)
@@ -88,6 +89,16 @@ def _legacy_clients_or_empty(
         return client.legacy_stat(site_ref, "sta"), True
     except UniFiAPIError as e:
         notes.append(f"legacy stat/sta unavailable; port mapping will be incomplete: {e}")
+        return [], False
+
+
+def _legacy_devices_or_empty(
+    client: UniFiClient, site_ref: str, notes: List[str]
+) -> tuple[List[Dict[str, Any]], bool]:
+    try:
+        return client.legacy_stat(site_ref, "device"), True
+    except UniFiAPIError as e:
+        notes.append(f"legacy stat/device unavailable; port and overheating checks were skipped: {e}")
         return [], False
 
 
@@ -427,7 +438,7 @@ def collect_snapshot(
             if needs.clients is not False:
                 reads.submit("clients", lambda notes: client.clients(site_id))
             if needs.legacy_devices is not False:
-                reads.submit("legacy_devices", lambda notes: _legacy_or_empty(client, site_ref, "device", notes))
+                reads.submit("legacy_devices", lambda notes: _legacy_devices_or_empty(client, site_ref, notes))
             if needs.legacy_clients is not False:
                 reads.submit("legacy_clients", lambda notes: _legacy_clients_or_empty(client, site_ref, notes))
             _submit_extras(reads, needs, client, site_ref, now_ms, users=True)
@@ -438,7 +449,7 @@ def collect_snapshot(
             if needs.clients is not False:
                 snap.clients = reads.result("clients")
             if needs.legacy_devices is not False:
-                snap.legacy_devices = reads.result("legacy_devices")
+                snap.legacy_devices, snap.legacy_devices_available = reads.result("legacy_devices")
             if needs.legacy_clients is not False:
                 snap.legacy_clients, snap.legacy_clients_available = reads.result("legacy_clients")
             _apply_extras(snap, reads, needs, users=True)
@@ -462,12 +473,12 @@ def extend_snapshot(client: UniFiClient, snap: Snapshot, needs: Needs, now_ms: O
         reads = _Reads(pool)
         try:
             if needs.legacy_devices is True:
-                reads.submit("legacy_devices", lambda notes: _legacy_or_empty(client, site_ref, "device", notes))
+                reads.submit("legacy_devices", lambda notes: _legacy_devices_or_empty(client, site_ref, notes))
             if needs.device_extras is True:
                 _submit_device_extras(reads, snap, client, needs.device_stats is not False)
             _submit_extras(reads, needs, client, site_ref, now_ms, users=False)
             if needs.legacy_devices is True:
-                snap.legacy_devices = reads.result("legacy_devices")
+                snap.legacy_devices, snap.legacy_devices_available = reads.result("legacy_devices")
             if needs.device_extras is True:
                 _apply_device_extras(snap, reads, needs.device_stats is not False)
             _apply_extras(snap, reads, needs, users=False)

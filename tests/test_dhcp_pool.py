@@ -175,6 +175,7 @@ def test_diagnose_includes_the_check(fake_client):
 # -- the command line -------------------------------------------------------------------------------
 
 def test_diagnose_json_end_to_end(fake_client, monkeypatch, capsys):
+    fake_client.session.fx["legacy"]["device"][0]["overheating"] = False
     snapshot(fake_client, reservations=[("cc:00:00:00:00:01", "media-box", "10.0.0.150")])
     monkeypatch.setenv("CONTROLLER_URL", "https://controller")
     monkeypatch.setenv("API_KEY", "key")

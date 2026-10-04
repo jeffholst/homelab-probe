@@ -5,6 +5,7 @@ import json
 import pytest
 
 from unifi_sentinel import cli
+from unifi_sentinel.client import UniFiAPIError
 from unifi_sentinel.diagnose import diagnose, needs_for
 from unifi_sentinel.diagnose.devices import _overheating_findings
 from unifi_sentinel.snapshot import Snapshot, collect_snapshot
@@ -110,9 +111,11 @@ def test_a_malformed_legacy_record_is_skipped_without_a_crash():
 
 # -- in the command --------------------------------------------------------------------------------------------
 
-def test_the_fixture_has_no_overheating_device(fake_client, monkeypatch, capsys):
-    assert overheating(findings_json(fake_client, monkeypatch, capsys)[1]) == []
-    assert legacy(fake_client, GATEWAY)["overheating"] is False        # the flag as the controller sends it
+def test_the_fixture_has_an_overheating_device(fake_client, monkeypatch, capsys):
+    assert legacy(fake_client, GATEWAY)["overheating"] is True
+    code, findings = findings_json(fake_client, monkeypatch, capsys)
+    (finding,) = overheating(findings)
+    assert code == 2 and finding["subject"] == "Gateway"
 
 
 def test_an_overheating_gateway_is_critical_and_exits_two_in_every_output(fake_client, monkeypatch, capsys):
@@ -136,6 +139,7 @@ def test_the_critical_finding_is_listed_before_warnings(fake_client, monkeypatch
 
 
 def test_an_offline_device_with_a_stale_flag_is_only_reported_as_offline(fake_client, monkeypatch, capsys):
+    legacy(fake_client, GATEWAY)["overheating"] = False
     legacy(fake_client, GARAGE)["overheating"] = True                  # the offline access point
     _, findings = findings_json(fake_client, monkeypatch, capsys)
     assert overheating(findings) == [] and any(f["code"] == "device.offline" for f in findings)
@@ -170,10 +174,22 @@ def test_no_extra_request_is_made_for_it(fake_client, monkeypatch, capsys):
     assert sorted(fake_client.session.calls) == plain
 
 
+def test_a_successful_empty_legacy_device_read_does_not_report_unavailable(fake_client, monkeypatch, capsys):
+    fake_client.session.fx["legacy"]["device"] = []
+    _, findings = findings_json(fake_client, monkeypatch, capsys)
+    assert not any(f["code"] == "controller.legacy_unavailable" for f in findings)
+
+
 def test_when_the_legacy_data_is_unreadable_the_one_notice_says_both_checks_were_skipped(fake_client, monkeypatch,
                                                                                         capsys):
-    legacy(fake_client, GATEWAY)["overheating"] = True
-    fake_client.session.fx["legacy"]["device"] = []
+    legacy_stat = fake_client.legacy_stat
+
+    def fail_device_read(site_ref, resource):
+        if resource == "device":
+            raise UniFiAPIError("HTTP 500 forced")
+        return legacy_stat(site_ref, resource)
+
+    monkeypatch.setattr(fake_client, "legacy_stat", fail_device_read)
     _, findings = findings_json(fake_client, monkeypatch, capsys)
     (notice,) = [f for f in findings if f["code"] == "controller.legacy_unavailable"]
     assert notice["message"] == "legacy device data unavailable; port and overheating checks were skipped"
@@ -211,6 +227,7 @@ def test_the_topology_flags_the_device(fake_client, monkeypatch, capsys):
     _, out, _ = run(fake_client, monkeypatch, capsys, "topology", "--json")
     assert "device.overheating" in out
     legacy(fake_client, SWITCH)["overheating"] = False
+    legacy(fake_client, GATEWAY)["overheating"] = False
     _, out, _ = run(fake_client, monkeypatch, capsys, "topology", "--json")
     assert "device.overheating" not in out
 

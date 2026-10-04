@@ -151,6 +151,7 @@ def test_json_respects_no_events(fake_client, monkeypatch, capsys):
 # -- exit codes ----------------------------------------------------------------------
 
 def test_exit_codes_are_the_same_with_and_without_json(fake_client, monkeypatch, capsys):
+    fake_client.session.fx["legacy"]["device"][0]["overheating"] = False
     for extra in ([], ["--fail-on", "critical"], ["--fail-on", "info"], ["--no-events"]):
         text_code = run(fake_client, monkeypatch, ["diagnose", *extra])
         capsys.readouterr()

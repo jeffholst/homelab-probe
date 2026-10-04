@@ -68,8 +68,9 @@ def test_cli_end_to_end(fake_client, monkeypatch, capsys, tmp_path):
 
     assert cli.main(["info"]) == 0
     assert "Site: Default" in capsys.readouterr().out
-    assert cli.main(["diagnose"]) == 1  # the fixture has warnings
-    assert "Garage AP" in capsys.readouterr().out
+    assert cli.main(["diagnose"]) == 2  # the fixture has a critical overheating finding
+    output = capsys.readouterr().out
+    assert "Gateway: reports that it is overheating" in output and "Garage AP" in output
     assert cli.main(["export", "-o", str(tmp_path)]) == 0
     assert (tmp_path / "unifi_clients.csv").exists()
 
@@ -206,6 +207,7 @@ def test_export_csv_columns_unchanged(fake_client, tmp_path):
 
 
 def test_diagnose_flags_fixture_reservation_outside_subnet(fake_client, monkeypatch, capsys):
+    fake_client.session.fx["legacy"]["device"][0]["overheating"] = False
     snap = collect_snapshot(fake_client, "default", Needs(reservations=True))
     msgs = {(f.subject, f.message) for f in diagnose(snap)}
     # old-printer is reserved 10.0.0.50 but overridden onto IoT (10.0.20.0/24)

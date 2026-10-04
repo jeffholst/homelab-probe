@@ -14,10 +14,11 @@ Recent events (last 24h, newest first):
   none about this client in the last 24h
 
 Related findings:
+[CRITICAL] Gateway: reports that it is overheating
 [WARNING ] 10.0.0.50: IP conflict reported 1 time in the last 24h between Guest Laptop and old-printer on Main (most recent <time>); old-printer holds the reservation for 10.0.0.50
 [WARNING ] Office Switch: CPU utilization 95%
 [WARNING ] Office Switch: PoE budget 41.6 W of 52 W used (80%)
 [WARNING ] Office Switch: uplink to Gateway negotiated at 100 Mbps but both ends support 1000 Mbps
 [WARNING ] old-printer: reserved IP 10.0.0.50 is outside network IoT (10.0.20.1/24)
 
-5 warnings
+1 critical, 5 warnings
