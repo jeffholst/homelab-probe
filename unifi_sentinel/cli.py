@@ -78,8 +78,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Log each request to stderr (method, path, status, milliseconds, retries) and what "
                              "was read, never the API key (before the command)")
     parser.add_argument("--demo", action="store_true",
-                        help="Run the command on synthetic data: no .env or settings file is read and no controller "
-                             "is contacted (before the command; not with doctor, snapshot, diff or --notify)")
+                        help="Run the command on synthetic data: no .env or implicit settings file is read and no "
+                             "controller is contacted (before the command; not with doctor, snapshot, diff or --notify)")
     parser.add_argument("--timeout", type=_timeout, metavar="SECONDS",
                         help="Seconds to wait for each request to the controller (before the command; "
                              "default: TIMEOUT from .env, else 15)")
