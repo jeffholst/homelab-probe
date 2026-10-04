@@ -63,6 +63,7 @@ COMMAND_DOC_SECTIONS = {
     "new-clients": ("New clients", "Randomized MAC addresses"),
     "diagnose": ("Diagnose", "Notifications"),
     "completion": ("Shell completion",),
+    "doctor": ("Checking your setup: `doctor`",),
     "info": (),
 }
 

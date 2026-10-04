@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/jeffholst/unifi-sentinel/main/docs/schemas/doctor.v1.schema.json",
+  "title": "doctor",
+  "description": "Output of `unifi-sentinel doctor --json`: the checks of the installation, the settings and the controller. Nothing in it is a secret or names the controller.",
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "tool": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string"
+        },
+        "python": {
+          "type": "string"
+        },
+        "platform": {
+          "type": "string",
+          "description": "sys.platform: linux, darwin, win32..."
+        }
+      },
+      "required": [
+        "platform",
+        "python",
+        "version"
+      ]
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z]+\\.[a-z_0-9]+$",
+            "description": "A stable check id, such as config.env_file or endpoint.stat_alluser."
+          },
+          "section": {
+            "enum": [
+              "install",
+              "config",
+              "notify",
+              "controller",
+              "endpoint"
+            ]
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "warn",
+              "fail",
+              "skip",
+              "info"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "fix": {
+            "type": "string",
+            "description": "What to do about it, or ''."
+          }
+        },
+        "required": [
+          "fix",
+          "id",
+          "message",
+          "section",
+          "status",
+          "title"
+        ]
+      }
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "number"
+        },
+        "warn": {
+          "type": "number"
+        },
+        "fail": {
+          "type": "number"
+        },
+        "skip": {
+          "type": "number"
+        },
+        "info": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "fail",
+        "info",
+        "ok",
+        "skip",
+        "warn"
+      ]
+    }
+  },
+  "required": [
+    "checks",
+    "summary",
+    "tool",
+    "version"
+  ]
+}

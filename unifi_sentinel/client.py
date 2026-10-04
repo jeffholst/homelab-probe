@@ -52,7 +52,14 @@ def _segment(value: str) -> str:
 
 
 class UniFiAPIError(Exception):
-    """Raised for connection failures and non-2xx responses."""
+    """Raised for connection failures and non-2xx responses. ``kind`` says which (``tls``, ``unauthorized``,
+    ``forbidden``, ``timeout``, ``connection``, ``request``, ``http``, ``bad_body`` or ``site``) and ``status`` is the
+    HTTP status when there was one, so a caller can explain a failure without matching the wording of the message."""
+
+    def __init__(self, message: str = "", *, kind: str = "", status: Optional[int] = None) -> None:
+        super().__init__(message)
+        self.kind = kind
+        self.status = status
 
 
 class UniFiClient:
@@ -158,20 +165,20 @@ class UniFiClient:
                 self._note(label, started, "timed out")
                 failure = UniFiAPIError(
                     f"timed out after {self.timeout:g} s{self._tries(attempt)}: {url}; "
-                    "a slow gateway may need a longer --timeout")
+                    "a slow gateway may need a longer --timeout", kind="timeout")
                 cause: BaseException = e
             except requests.exceptions.ConnectionError as e:
                 self._note(label, started, "connection error")
                 failure = UniFiAPIError(
-                    f"Connection error for {url}{self._tries(attempt)}: {self._redact(str(e))}")
+                    f"Connection error for {url}{self._tries(attempt)}: {self._redact(str(e))}", kind="connection")
                 cause = e
             except requests.exceptions.RequestException as e:
                 self._note(label, started, "request error")
                 raise UniFiAPIError(
-                    f"Request error for {url}: {self._redact(str(e))}") from e
+                    f"Request error for {url}: {self._redact(str(e))}", kind="request") from e
             except OSError as e:               # e.g. requests cannot read the CA bundle file
                 self._note(label, started, "could not send")
-                raise UniFiAPIError(f"cannot make the request to {url}: {self._redact(str(e))}") from e
+                raise UniFiAPIError(f"cannot make the request to {url}: {self._redact(str(e))}", kind="request") from e
             else:
                 self._note(label, started, str(resp.status_code))
                 if resp.status_code in RETRY_STATUSES and attempt < attempts:
@@ -237,29 +244,30 @@ class UniFiClient:
             return UniFiAPIError(
                 f"TLS certificate verification failed for {self.base_url}: the certificate is not signed "
                 f"by anything in the CA bundle {self.verify_ssl} (VERIFY_SSL). Use the CA that signed the "
-                f"controller's certificate, or its own certificate file."
+                f"controller's certificate, or its own certificate file.", kind="tls"
             )
         return UniFiAPIError(
             f"TLS certificate verification failed for {self.base_url}. Install a "
             f"trusted certificate on the controller, point VERIFY_SSL at a CA bundle that "
-            f"trusts it, or set VERIFY_SSL=false in .env if you accept an unverified connection."
+            f"trusts it, or set VERIFY_SSL=false in .env if you accept an unverified connection.", kind="tls"
         )
 
     def _decode_response(self, resp: requests.Response, url: str, attempt: int = 1) -> Any:
         if resp.status_code == 401:
-            raise UniFiAPIError(f"401 Unauthorized for {url}: invalid API key.")
+            raise UniFiAPIError(f"401 Unauthorized for {url}: invalid API key.", kind="unauthorized", status=401)
         if resp.status_code == 403:
             raise UniFiAPIError(
                 f"403 Forbidden for {url}: the API key is valid but is not allowed to make this request. "
                 "Check the key's access in Settings > Control Plane > Integrations (some legacy endpoints "
-                "may also reject API keys on some controller versions).")
+                "may also reject API keys on some controller versions).", kind="forbidden", status=403)
         if not resp.ok:
             raise UniFiAPIError(
-                f"HTTP {resp.status_code} for {url}{self._tries(attempt)}: {self._redact(resp.text)[:500]}")
+                f"HTTP {resp.status_code} for {url}{self._tries(attempt)}: {self._redact(resp.text)[:500]}",
+                kind="http", status=resp.status_code)
         try:
             return resp.json()
         except ValueError as e:
-            raise UniFiAPIError(f"Non-JSON response from {url}") from e
+            raise UniFiAPIError(f"Non-JSON response from {url}", kind="bad_body") from e
 
     def _paginate(self, path: str) -> Iterator[Dict[str, Any]]:
         """Yield every item from an offset/limit paginated Integration API list."""
@@ -288,7 +296,7 @@ class UniFiClient:
             if site in (s.get("id"), s.get("internalReference"), s.get("name")):
                 return s
         known = [s.get("internalReference") or s.get("name") for s in sites]
-        raise UniFiAPIError(f"Site '{site}' not found. Available: {known}")
+        raise UniFiAPIError(f"Site '{site}' not found. Available: {known}", kind="site")
 
     def devices(self, site_id: str) -> List[Dict[str, Any]]:
         return list(self._paginate(f"{INTEGRATION_PREFIX}/sites/{site_id}/devices"))
@@ -335,5 +343,5 @@ class UniFiClient:
         """
         body = self._post_system_log(site_ref, query)
         if not isinstance(body, dict) or not isinstance(body.get("data"), list):
-            raise UniFiAPIError("Unexpected response from the event log (no 'data' list)")
+            raise UniFiAPIError("Unexpected response from the event log (no 'data' list)", kind="bad_body")
         return body

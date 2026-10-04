@@ -7,6 +7,7 @@ handler declares what it reads with a ``Needs``), analysis and rendering in the 
 
 import argparse
 import datetime
+import json
 import sys
 import time
 from collections.abc import Callable
@@ -35,6 +36,10 @@ from .diagnose import (
     parse_areas,
     stream_supports_emoji,
 )
+from .doctor import Options as DoctorOptions
+from .doctor import exit_failed, run_checks
+from .doctor import render as render_doctor
+from .doctor import to_dict as doctor_dict
 from .events import DEFAULT_LIMIT, DEFAULT_SINCE, SEVERITIES, fetch_events, make_filter, parse_duration, render_events
 from .export import EXPORT_FORMATS, JSON_FILENAME, run_export
 from .firewall import build_firewall
@@ -605,6 +610,27 @@ def _run_audit(ctx: Context) -> int:
     return exit_code(findings, args.fail_on)
 
 
+# -- doctor -----------------------------------------------------------------------------------------
+
+def _add_doctor(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--offline", action="store_true",
+                        help="Only check the installation and the settings files; do not contact the controller")
+    parser.add_argument("--no-events", action="store_true",
+                        help="Skip the event-log check (the one read-only POST)")
+    parser.add_argument("--config", type=Path, metavar="FILE",
+                        help="TOML settings file to check (default: ./unifi-sentinel.toml if present)")
+    parser.add_argument("--json", action="store_true", help="Print the checks as JSON")
+
+
+def _run_doctor(args: argparse.Namespace) -> int:
+    """Runs without the usual configuration step: a broken setup is what it is there to report, not to stop at."""
+    checks = run_checks(DoctorOptions(env_file=args.env_file, site=args.site, timeout=args.timeout,
+                                      parallel=args.parallel, config=args.config, offline=args.offline,
+                                      events=not args.no_events))
+    say(json.dumps(doctor_dict(checks), indent=2) if args.json else render_doctor(checks))
+    return EXIT_ERROR if exit_failed(checks) else 0
+
+
 # -- completion -------------------------------------------------------------------------------------
 
 def _add_completion(parser: argparse.ArgumentParser) -> None:
@@ -866,6 +892,8 @@ COMMANDS: List[Command] = [
             _add_firewall, _run_firewall),
     Command("audit", "Configuration audit: settings that are probably not what you want", _add_audit, _run_audit,
             wants_settings=_always),
+    Command("doctor", "Check the installation and the settings, and that the controller answers", _add_doctor, _not_run,
+            run_local=_run_doctor),
     Command("completion", "Print a shell completion script (bash, zsh or fish)", _add_completion, _not_run,
             run_local=_run_completion),
     Command("diagnose", "Run read-only health checks (offline devices, port errors, ...)", _add_diagnose,
