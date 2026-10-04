@@ -11,8 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from unifi_sentinel import __version__
-from unifi_sentinel.wifi import CHANNEL_14_CENTRE_MHZ, overlaps, span_mhz
+from homelab_probe import __version__
+from homelab_probe.wifi import CHANNEL_14_CENTRE_MHZ, overlaps, span_mhz
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -32,11 +32,11 @@ def test_the_version_is_written_once_and_pyproject_reads_it():
     config = pyproject()
     assert "version" not in config["project"], "the version must not be repeated in pyproject.toml"
     assert "version" in config["project"]["dynamic"]
-    assert config["tool"]["setuptools"]["dynamic"]["version"] == {"attr": "unifi_sentinel.__version__"}
+    assert config["tool"]["setuptools"]["dynamic"]["version"] == {"attr": "homelab_probe.__version__"}
 
 
 def test_the_version_is_a_plain_literal_setuptools_can_read_without_importing_the_package():
-    tree = ast.parse((ROOT / "unifi_sentinel" / "__init__.py").read_text(encoding="utf-8"))
+    tree = ast.parse((ROOT / "homelab_probe" / "__init__.py").read_text(encoding="utf-8"))
     assigned = [n for n in tree.body if isinstance(n, ast.Assign) and any(
         isinstance(t, ast.Name) and t.id == "__version__" for t in n.targets)]
     assert len(assigned) == 1 and isinstance(assigned[0].value, ast.Constant)
@@ -45,14 +45,14 @@ def test_the_version_is_a_plain_literal_setuptools_can_read_without_importing_th
 
 def test_no_other_source_file_repeats_the_version_string():
     version = re.escape(__version__)
-    for path in (ROOT / "unifi_sentinel").rglob("*.py"):
-        if path.name == "__init__.py" and path.parent.name == "unifi_sentinel":
+    for path in (ROOT / "homelab_probe").rglob("*.py"):
+        if path.name == "__init__.py" and path.parent.name == "homelab_probe":
             continue
         assert not re.search(rf'["\']{version}["\']', path.read_text(encoding="utf-8")), path
 
 
 def test_the_command_line_reports_the_package_version(capsys):
-    from unifi_sentinel import cli
+    from homelab_probe import cli
     with pytest.raises(SystemExit) as caught:
         cli.main(["--version"])
     assert caught.value.code == 0 and capsys.readouterr().out.strip() == __version__
@@ -67,17 +67,17 @@ def test_a_built_wheel_carries_the_same_version(tmp_path):
     for name in ("pyproject.toml", "README.md", "LICENSE"):
         if (ROOT / name).exists():
             shutil.copy(ROOT / name, source / name)
-    shutil.copytree(ROOT / "unifi_sentinel", source / "unifi_sentinel", ignore=shutil.ignore_patterns("__pycache__"))
+    shutil.copytree(ROOT / "homelab_probe", source / "homelab_probe", ignore=shutil.ignore_patterns("__pycache__"))
     result = subprocess.run(["uv", "build", "--wheel", "--out-dir", str(tmp_path / "dist"), str(source)],
                             capture_output=True, text=True, timeout=300)
     assert result.returncode == 0, result.stderr
     (wheel,) = (tmp_path / "dist").glob("*.whl")
-    assert wheel.name.startswith(f"unifi_sentinel-{__version__}-")
-    metadata = zipfile.ZipFile(wheel).read(f"unifi_sentinel-{__version__}.dist-info/METADATA").decode("utf-8")
+    assert wheel.name.startswith(f"homelab_probe-{__version__}-")
+    metadata = zipfile.ZipFile(wheel).read(f"homelab_probe-{__version__}.dist-info/METADATA").decode("utf-8")
     assert f"Version: {__version__}" in metadata
-    assert "Name: unifi-sentinel" in metadata
+    assert "Name: homelab-probe" in metadata
     names = zipfile.ZipFile(wheel).namelist()
-    assert "unifi_sentinel/demo/controller.json" in names and "unifi_sentinel/demo/session.py" in names   # --demo
+    assert "homelab_probe/demo/controller.json" in names and "homelab_probe/demo/session.py" in names   # --demo
 
 
 # -- wifi: channel 14 and U-NII-4 ---------------------------------------------------------------------------------

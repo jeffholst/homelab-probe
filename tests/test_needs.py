@@ -4,9 +4,9 @@ import dataclasses
 
 import pytest
 
-from unifi_sentinel import cli
-from unifi_sentinel.client import UniFiAPIError
-from unifi_sentinel.snapshot import EventQuery, Needs, collect_event_snapshot, collect_snapshot
+from homelab_probe import cli
+from homelab_probe.client import UniFiAPIError
+from homelab_probe.snapshot import EventQuery, Needs, collect_event_snapshot, collect_snapshot
 
 ALWAYS = {"/proxy/network/integration/v1/sites", "/proxy/network/api/s/default/stat/device",
           "/proxy/network/api/s/default/stat/sta"}
@@ -124,8 +124,8 @@ def test_a_required_client_history_fails_and_an_optional_one_degrades(fake_clien
 # -- what each command reads ---------------------------------------------------------------------------------
 
 def run(fake_client, monkeypatch, argv):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     return cli.main(argv)
 

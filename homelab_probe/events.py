@@ -1,4 +1,4 @@
-"""Event history from the controller's system log: `unifi-sentinel events`.
+"""Event history from the controller's system log: `hlp events`.
 
 The log is collected into a ``Snapshot``; this module only filters and renders it.
 """

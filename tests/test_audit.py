@@ -7,10 +7,10 @@ from pathlib import Path
 import pytest
 from docs_support import all_docs_text
 
-from unifi_sentinel import cli
-from unifi_sentinel.audit import AUDIT_AREAS, AUDIT_CODES, MAX_LISTED, audit
-from unifi_sentinel.client import UniFiAPIError
-from unifi_sentinel.snapshot import Needs, collect_snapshot, describe_snapshot
+from homelab_probe import cli
+from homelab_probe.audit import AUDIT_AREAS, AUDIT_CODES, MAX_LISTED, audit
+from homelab_probe.client import UniFiAPIError
+from homelab_probe.snapshot import Needs, collect_snapshot, describe_snapshot
 
 NEEDS = Needs(offline=True, wlans=True, legacy_devices=False, device_extras=False)
 ROOT = Path(__file__).resolve().parent.parent
@@ -196,15 +196,15 @@ def test_findings_are_sorted_warnings_first_then_by_subject(fake_client):
 
 
 def test_every_code_is_listed_documented_and_used():
-    source = (ROOT / "unifi_sentinel" / "audit.py").read_text()
+    source = (ROOT / "homelab_probe" / "audit.py").read_text()
     assert set(re.findall(r'code="(audit\.[a-z_0-9]+)"', source)) == set(AUDIT_CODES)
     readme = all_docs_text()
     assert all(f"`{code}`" in readme for code in AUDIT_CODES)
 
 
 def run(fake_client, monkeypatch, argv):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     return cli.main(argv)
 
@@ -238,7 +238,7 @@ def test_json_has_the_same_shape_as_diagnose_with_audit_areas(fake_client, monke
 
 
 def test_the_ignore_list_applies_and_show_ignored_lists_what_it_hid(fake_client, monkeypatch, capsys, tmp_path):
-    config = tmp_path / "unifi-sentinel.toml"
+    config = tmp_path / "hlp.toml"
     config.write_text('[[ignore]]\nsubject = "Lobby"\nmessage = "open network"\nreason = "lobby is open on purpose"\n')
     assert run(fake_client, monkeypatch, ["audit", "--no-emoji", "--config", str(config), "--show-ignored"]) == 1
     out = capsys.readouterr().out

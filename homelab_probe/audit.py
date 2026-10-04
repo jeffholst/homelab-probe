@@ -1,4 +1,4 @@
-"""Configuration audit: `unifi-sentinel audit`.
+"""Configuration audit: `hlp audit`.
 
 `diagnose` says what is wrong now; this says what is configured in a way you probably did not intend. It reads
 settings, not health: the Wi-Fi networks (legacy ``rest/wlanconf``), the device list and the client history. All

@@ -267,7 +267,7 @@ def _add_query(parser: argparse.ArgumentParser) -> None:
                              "them (reserved_offline_warn_days), or never seen")
     parser.add_argument("--config", type=Path, metavar="FILE",
                         help="reservations --offline only: TOML file with the threshold "
-                             "(default: ./unifi-sentinel.toml if present)")
+                             "(default: ./hlp.toml if present)")
 
 
 def _check_query(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
@@ -371,7 +371,7 @@ def _add_client(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--json", action="store_true", help="Output JSON instead of text")
     parser.add_argument("--config", type=Path, metavar="FILE",
                         help="TOML file with diagnose thresholds and ignore list "
-                             "(default: ./unifi-sentinel.toml if present)")
+                             "(default: ./hlp.toml if present)")
     parser.add_argument("--no-events", action="store_true",
                         help="Skip the recent-events section, which otherwise sends the one approved "
                              "read-only event-log query")
@@ -408,7 +408,7 @@ def _add_topology(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--json", action="store_true", help="Output nested JSON instead of a tree")
     parser.add_argument("--config", type=Path, metavar="FILE",
                         help="TOML file with diagnose thresholds and ignore list "
-                             "(default: ./unifi-sentinel.toml if present)")
+                             "(default: ./hlp.toml if present)")
     parser.add_argument("--no-emoji", action="store_true",
                         help="Use ASCII drawing and text severity labels (automatic when output is "
                              "not a UTF-8 terminal)")
@@ -540,7 +540,7 @@ def _add_wan(parser: argparse.ArgumentParser) -> None:
                         help=f"How many days of speedtests to summarize (default: {DEFAULT_DAYS})")
     parser.add_argument("--json", action="store_true", help="Output JSON instead of text")
     parser.add_argument("--config", type=Path, metavar="FILE",
-                        help="TOML file with the thresholds (default: ./unifi-sentinel.toml if present)")
+                        help="TOML file with the thresholds (default: ./hlp.toml if present)")
 
 
 def _run_wan(ctx: Context) -> int:
@@ -578,7 +578,7 @@ def _add_audit(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--fail-on", choices=[INFO, WARNING], default=WARNING,
                         help="Lowest severity that gives a non-zero exit code (default: warning)")
     parser.add_argument("--config", type=Path, metavar="FILE",
-                        help="TOML file with an ignore list (default: ./unifi-sentinel.toml if present)")
+                        help="TOML file with an ignore list (default: ./hlp.toml if present)")
     parser.add_argument("--show-ignored", action="store_true",
                         help="Also list the findings suppressed by the ignore list")
     parser.add_argument("--no-emoji", action="store_true",
@@ -620,7 +620,7 @@ def _add_doctor(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--no-events", action="store_true",
                         help="Skip the event-log check (the one read-only POST)")
     parser.add_argument("--config", type=Path, metavar="FILE",
-                        help="TOML settings file to check (default: ./unifi-sentinel.toml if present)")
+                        help="TOML settings file to check (default: ./hlp.toml if present)")
     parser.add_argument("--json", action="store_true", help="Print the checks as JSON")
 
 
@@ -654,7 +654,7 @@ def _add_diagnose(parser: argparse.ArgumentParser) -> None:
                              "critical always exits 2")
     parser.add_argument("--config", type=Path, metavar="FILE",
                         help="TOML file with thresholds and an ignore list "
-                             "(default: ./unifi-sentinel.toml if present)")
+                             "(default: ./hlp.toml if present)")
     parser.add_argument("--only", action="append", default=[], metavar="AREA[,AREA...]",
                         help=f"Run only the checks of these areas ({', '.join(AREA_NAMES)}); repeatable. "
                              "Only the data they need is read")
@@ -738,7 +738,7 @@ def _check_diagnose(parser: argparse.ArgumentParser, args: argparse.Namespace) -
 def _prepare_diagnose(args: argparse.Namespace, config: Config) -> None:
     if args.notify and not args.notify_dry_run and not args.notify_baseline and not destinations_from_config(config):
         raise ConfigError("--notify needs a destination: set NOTIFY_NTFY_URL, NOTIFY_WEBHOOK_URL and/or "
-                          "NOTIFY_SMTP_HOST in .env (see https://github.com/jeffholst/unifi-sentinel/blob/main/"
+                          "NOTIFY_SMTP_HOST in .env (see https://github.com/jeffholst/homelab-probe/blob/main/"
                           "docs/notifications.md); nothing was sent")
 
 

@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/jeffholst/unifi-sentinel/main/docs/schemas/query-clients.v1.schema.json",
+  "$id": "https://raw.githubusercontent.com/jeffholst/homelab-probe/main/docs/schemas/query-clients.v1.schema.json",
   "title": "query clients",
-  "description": "Output of `unifi-sentinel query clients --json` (with `--include-offline` also previously seen clients).",
+  "description": "Output of `hlp query clients --json` (with `--include-offline` also previously seen clients).",
   "type": "array",
   "items": {
     "type": "object",

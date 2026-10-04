@@ -6,12 +6,12 @@ import time
 import pytest
 from scale_support import big_site
 
-from unifi_sentinel.client_view import AddressingIndex, addressing, known_clients
-from unifi_sentinel.diagnose import diagnose
-from unifi_sentinel.export import LocationIndex, client_location
-from unifi_sentinel.history import capture
-from unifi_sentinel.new_clients import report
-from unifi_sentinel.topology import build_topology
+from homelab_probe.client_view import AddressingIndex, addressing, known_clients
+from homelab_probe.diagnose import diagnose
+from homelab_probe.export import LocationIndex, client_location
+from homelab_probe.history import capture
+from homelab_probe.new_clients import report
+from homelab_probe.topology import build_topology
 
 
 def best_of(fn, repeats=3):

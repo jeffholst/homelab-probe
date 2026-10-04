@@ -1,12 +1,12 @@
-"""The fake controller is the demo controller: ``unifi_sentinel/demo`` (synthetic, sanitized, no real network data)."""
+"""The fake controller is the demo controller: ``homelab_probe/demo`` (synthetic, sanitized, no real network data)."""
 
 import os
 
 import pytest
 
-from unifi_sentinel import logs
-from unifi_sentinel.client import UniFiClient
-from unifi_sentinel.demo.session import (  # noqa: F401  (the tests import these names from here)
+from homelab_probe import logs
+from homelab_probe.client import UniFiClient
+from homelab_probe.demo.session import (  # noqa: F401  (the tests import these names from here)
     FIXTURE,
     INTEGRATION,
     LEGACY,
@@ -15,12 +15,12 @@ from unifi_sentinel.demo.session import (  # noqa: F401  (the tests import these
     SYSTEM_LOG,
     FakeResponse,
 )
-from unifi_sentinel.demo.session import (
+from homelab_probe.demo.session import (
     DemoSession as FakeSession,
 )
 
-CONFIG_VARIABLES = ("CONTROLLER_URL", "API_KEY", "SITE_ID", "VERIFY_SSL", "ALLOW_INSECURE_HTTP", "TIMEOUT",
-                    "PARALLEL_REQUESTS", "UNIFI_SENTINEL_ENV", "NOTIFY_NTFY_URL", "NOTIFY_NTFY_TOKEN", "NOTIFY_WEBHOOK_URL",
+CONFIG_VARIABLES = ("UNIFI_URL", "UNIFI_API_KEY", "UNIFI_SITE_ID", "UNIFI_VERIFY_SSL", "ALLOW_INSECURE_HTTP", "UNIFI_TIMEOUT",
+                    "UNIFI_PARALLEL_REQUESTS", "HLP_ENV", "NOTIFY_NTFY_URL", "NOTIFY_NTFY_TOKEN", "NOTIFY_WEBHOOK_URL",
                     "NOTIFY_WEBHOOK_TOKEN", "NOTIFY_SMTP_HOST", "NOTIFY_SMTP_PORT", "NOTIFY_SMTP_SECURITY",
                     "NOTIFY_SMTP_USER", "NOTIFY_SMTP_PASSWORD", "NOTIFY_EMAIL_FROM", "NOTIFY_EMAIL_TO", "LOG_LEVEL",
                     "LOG_FORMAT")
@@ -30,7 +30,7 @@ CONFIG_VARIABLES = ("CONTROLLER_URL", "API_KEY", "SITE_ID", "VERIFY_SSL", "ALLOW
 def _isolated_environment(request, tmp_path, monkeypatch):
     """No test may depend on the developer's real .env, settings file or environment.
 
-    Each test starts in an empty working directory (``.env`` and ``unifi-sentinel.toml``
+    Each test starts in an empty working directory (``.env`` and ``hlp.toml``
     are looked up in the current directory) with the configuration variables unset. A test
     that needs a file creates it there, or changes directory itself.
     """
@@ -43,7 +43,7 @@ def _isolated_environment(request, tmp_path, monkeypatch):
     monkeypatch.chdir(workdir)
     for name in CONFIG_VARIABLES:
         monkeypatch.delenv(name, raising=False)
-    monkeypatch.setattr("unifi_sentinel.client.RETRY_BACKOFF_S", 0)    # retries must not make the suite wait
+    monkeypatch.setattr("homelab_probe.client.RETRY_BACKOFF_S", 0)    # retries must not make the suite wait
     logs.reset()                   # the logger, its secrets and its context are process-wide
     yield
     logs.reset()

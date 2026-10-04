@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from unifi_sentinel import cli
-from unifi_sentinel.client import UniFiAPIError
-from unifi_sentinel.diagnose import EXIT_CRITICAL, EXIT_OK, EXIT_WARNING
+from homelab_probe import cli
+from homelab_probe.client import UniFiAPIError
+from homelab_probe.diagnose import EXIT_CRITICAL, EXIT_OK, EXIT_WARNING
 
 README = Path(__file__).resolve().parent.parent / "README.md"
 DOCUMENTED = {0, 1, 2, 3, 4, 64}
@@ -24,8 +24,8 @@ def documented_codes():
 
 def run(fake_client, monkeypatch, argv):
     fake_client.session.fx["legacy"]["device"][0]["overheating"] = False
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     return cli.main(argv)
 
@@ -66,8 +66,8 @@ def test_2_a_critical_finding(fake_client, monkeypatch):
 
 
 def test_3_a_bad_configuration(fake_client, monkeypatch, tmp_path):
-    monkeypatch.delenv("CONTROLLER_URL", raising=False)
-    monkeypatch.delenv("API_KEY", raising=False)
+    monkeypatch.delenv("UNIFI_URL", raising=False)
+    monkeypatch.delenv("UNIFI_API_KEY", raising=False)
     assert cli.main(["info"]) == 3
     assert cli.main(["--env-file", str(tmp_path / "missing.env"), "info"]) == 3
 
@@ -121,6 +121,6 @@ def test_findings_and_errors_never_share_a_code():
 
 def test_the_same_codes_come_out_of_a_real_process(tmp_path):
     for args, code in ((["--version"], 0), (["nonsense"], 64), (["info"], 3)):
-        result = subprocess.run([sys.executable, "-m", "unifi_sentinel.cli", *args], cwd=tmp_path,
+        result = subprocess.run([sys.executable, "-m", "homelab_probe.cli", *args], cwd=tmp_path,
                                 capture_output=True, text=True, timeout=60)
         assert result.returncode == code, args

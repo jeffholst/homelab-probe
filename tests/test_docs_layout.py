@@ -10,14 +10,14 @@ import re
 import pytest
 from docs_support import DOCS, README, ROOT, anchors, doc_paths, duplicate_headings, headings, local_links
 
-from unifi_sentinel.commands import COMMANDS
+from homelab_probe.commands import COMMANDS
 
 README_LINES = 250          # "well under 250" was the target of the issue; this is the ceiling
 
 # Every anchor the README had before the split (GitHub's slugs). Issues, pull requests and bookmarks may use them, so
 # each one must still exist at its original README URL.
 OLD_ANCHORS = (
-    "unifi-sentinel",
+    "homelab-probe",
     "credits",
     "commands",
     "features",
@@ -100,7 +100,7 @@ def test_every_command_row_links_to_a_page_that_exists():
 def test_every_command_has_an_example_in_the_readme_itself():
     readme = read(README)
     for command in COMMANDS:
-        assert re.search(rf"unifi-sentinel\.py (?:--[\w-]+(?: \S+)? )*{re.escape(command.name)}\b", readme), command.name
+        assert re.search(rf"hlp\.py (?:--[\w-]+(?: \S+)? )*{re.escape(command.name)}\b", readme), command.name
 
 
 # -- links and anchors -------------------------------------------------------------------------------------------------

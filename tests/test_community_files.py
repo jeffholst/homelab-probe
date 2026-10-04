@@ -18,7 +18,7 @@ CONTRIBUTING = ROOT / "CONTRIBUTING.md"
 TEMPLATES = ROOT / ".github" / "ISSUE_TEMPLATE"
 FORMS = sorted(TEMPLATES.glob("*.yml"))
 COMMUNITY = [SECURITY, CONTRIBUTING, ROOT / ".github" / "pull_request_template.md"]
-REPOSITORY = "https://github.com/jeffholst/unifi-sentinel"
+REPOSITORY = "https://github.com/jeffholst/homelab-probe"
 UPSTREAM = "https://github.com/ericfitz/unifi-clients-export"
 ADVISORIES = f"{REPOSITORY}/security/advisories/new"
 REPOSITORY_LABELS = {"bug", "enhancement", "documentation"}          # the labels the repository has
@@ -111,7 +111,7 @@ def test_security_tells_the_reporter_to_redact_and_never_send_the_key():
 
 def test_security_scope_names_the_guarantees_the_project_makes():
     text = read(SECURITY)
-    for needle in ("read-only", "GET", "event-log", "control", "CSV", "redirect", "TLS", "VERIFY_SSL=false",
+    for needle in ("read-only", "GET", "event-log", "control", "CSV", "redirect", "TLS", "UNIFI_VERIFY_SSL=false",
                    "ALLOW_INSECURE_HTTP=true"):
         assert needle in text, needle
 
@@ -226,7 +226,7 @@ def test_the_chooser_config_links_the_private_advisory_form_and_the_troubleshoot
     assert links["Report a security vulnerability"]["url"] == ADVISORIES
     assert "SECURITY.md" in links["Report a security vulnerability"]["about"]
     troubleshooting = urlparse(links["Troubleshooting"]["url"])
-    assert troubleshooting.path == "/jeffholst/unifi-sentinel/blob/main/docs/configuration.md"
+    assert troubleshooting.path == "/jeffholst/homelab-probe/blob/main/docs/configuration.md"
     assert troubleshooting.fragment in anchors(read(ROOT / "docs" / "configuration.md"))
     assert all(link["name"] and link["about"] for link in links.values())
     assert set(config) == {"blank_issues_enabled", "contact_links"}
@@ -255,10 +255,10 @@ def test_the_numbers_and_rules_it_states_match_the_project():
 
 def test_the_rules_it_repeats_are_the_rules_of_claude_md():
     claude, contributing = read(ROOT / "CLAUDE.md"), read(CONTRIBUTING)
-    for rule in ("normalize_mac", "never rename or reuse", "unifi_sentinel/demo/controller.json"):
+    for rule in ("normalize_mac", "never rename or reuse", "homelab_probe/demo/controller.json"):
         assert rule in claude, f"CLAUDE.md no longer says {rule!r}"
     assert "normalize_mac" in contributing and "never renamed or reused" in contributing
-    assert "unifi_sentinel/demo/controller.json" in contributing
+    assert "homelab_probe/demo/controller.json" in contributing
 
 
 # -- no real data in anything that tells people to remove it -----------------------------------------------------------

@@ -7,10 +7,10 @@ from pathlib import Path
 import pytest
 from conftest import CONFIG_VARIABLES
 
-from unifi_sentinel import cli
-from unifi_sentinel.commands import COMMANDS_BY_NAME
+from homelab_probe import cli
+from homelab_probe.commands import COMMANDS_BY_NAME
 
-PACKAGE = Path(__file__).resolve().parent.parent / "unifi_sentinel"
+PACKAGE = Path(__file__).resolve().parent.parent / "homelab_probe"
 
 
 def variables_read():
@@ -22,7 +22,7 @@ def variables_read():
         found |= set(re.findall(r'^[A-Z_]*ENV[A-Z_]*VAR\w*\s*=\s*"([A-Z][A-Z0-9_]+)"', text, re.M))
     # config.py also reads groups of settings through a helper (``env.get(name)``), so its quoted setting names count
     config = (PACKAGE / "config.py").read_text(encoding="utf-8")
-    found |= set(re.findall(r'"((?:NOTIFY|CONTROLLER|API|SITE|VERIFY|ALLOW|TIMEOUT|PARALLEL|UNIFI)_[A-Z0-9_]+)"', config))
+    found |= set(re.findall(r'"((?:NOTIFY|ALLOW|UNIFI|HLP|LOG)_[A-Z0-9_]+)"', config))
     return found
 
 
@@ -31,7 +31,7 @@ def test_every_variable_the_package_reads_is_cleared_for_each_test():
     tests (found in review twice). Add it there."""
     missing = variables_read() - set(CONFIG_VARIABLES)
     assert not missing, f"add {sorted(missing)} to CONFIG_VARIABLES in tests/conftest.py"
-    assert variables_read() >= {"CONTROLLER_URL", "API_KEY", "UNIFI_SENTINEL_ENV", "PARALLEL_REQUESTS"}   # the scan works
+    assert variables_read() >= {"UNIFI_URL", "UNIFI_API_KEY", "HLP_ENV", "UNIFI_PARALLEL_REQUESTS"}   # the scan works
 
 
 def test_no_variable_is_cleared_that_nothing_reads():
@@ -39,8 +39,8 @@ def test_no_variable_is_cleared_that_nothing_reads():
 
 
 def run(fake_client, monkeypatch, argv):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     return cli.main(argv)
 

@@ -1,0 +1,47 @@
+[[ignore]]
+code = "reservation.offline"
+subject = "Beszel"
+until = 2026-11-03
+reason = "temporary: host shut down since it's not being used right now"
+
+[[ignore]]
+code = "reservation.offline"
+subject = "Bumblebee"
+until = 2026-11-03
+reason = "temporary: host offline, not being used right now"
+
+[[ignore]]
+code = "reservation.offline"
+subject = "Enterprise"
+until = 2026-11-03
+reason = "temporary: host offline, not being used right now"
+
+[[ignore]]
+code = "reservation.offline"
+subject = "Holodeck"
+until = 2026-11-03
+reason = "temporary: host offline, not being used right now"
+
+[[ignore]]
+code = "reservation.offline"
+subject = "Homepage"
+until = 2026-11-03
+reason = "temporary: host offline, not being used right now"
+
+[[ignore]]
+code = "reservation.offline"
+subject = "OpenClaw"
+until = 2026-11-03
+reason = "temporary: host offline, not being used right now"
+
+[[ignore]]
+code = "reservation.offline"
+subject = "Orbi Router"
+until = 2026-11-03
+reason = "temporary: device offline, not being used right now"
+
+[[ignore]]
+code = "reservation.offline"
+subject = "Serenity (wired)"
+until = 2026-11-03
+reason = "temporary: host offline, not being used right now"

@@ -2,12 +2,12 @@ import re
 
 import pytest
 
-from unifi_sentinel import cli
-from unifi_sentinel.client import UniFiAPIError
-from unifi_sentinel.config import ConfigError
-from unifi_sentinel.diagnose import diagnose, exit_code
-from unifi_sentinel.settings import DiagnoseSettings, load_settings
-from unifi_sentinel.snapshot import Needs, Snapshot, collect_snapshot
+from homelab_probe import cli
+from homelab_probe.client import UniFiAPIError
+from homelab_probe.config import ConfigError
+from homelab_probe.diagnose import diagnose, exit_code
+from homelab_probe.settings import DiagnoseSettings, load_settings
+from homelab_probe.snapshot import Needs, Snapshot, collect_snapshot
 
 
 def snap(*health):
@@ -130,8 +130,8 @@ def test_health_endpoint_failure_degrades_with_a_warning(fake_client, monkeypatc
 def test_cli_diagnose_shows_the_explained_wlan_status_and_keeps_the_exit_code(
         fake_client, monkeypatch, capsys):
     fake_client.session.fx["legacy"]["device"][0]["overheating"] = False
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     code = cli.main(["diagnose", "--no-emoji"])
     out = capsys.readouterr().out

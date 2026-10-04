@@ -4,13 +4,13 @@ import json
 
 import pytest
 
-from unifi_sentinel import cli
-from unifi_sentinel.client_view import build_client_detail, find_clients, render_detail
-from unifi_sentinel.diagnose import INFO, WARNING, _private_mac_findings, apply_ignores, diagnose
-from unifi_sentinel.new_clients import report
-from unifi_sentinel.query import query_rows, render
-from unifi_sentinel.snapshot import Needs, collect_snapshot
-from unifi_sentinel.util import is_randomized_mac
+from homelab_probe import cli
+from homelab_probe.client_view import build_client_detail, find_clients, render_detail
+from homelab_probe.diagnose import INFO, WARNING, _private_mac_findings, apply_ignores, diagnose
+from homelab_probe.new_clients import report
+from homelab_probe.query import query_rows, render
+from homelab_probe.snapshot import Needs, collect_snapshot
+from homelab_probe.util import is_randomized_mac
 
 PRIVATE = "02:00:00:00:00:21"      # locally administered unicast (second digit 2)
 
@@ -83,7 +83,7 @@ def test_query_clients_flags_offline_private_macs_too(fake_client):
 
 
 def test_devices_and_the_csv_export_do_not_change(fake_client):
-    from unifi_sentinel.export import INVENTORY_COLUMNS
+    from homelab_probe.export import INVENTORY_COLUMNS
     snap = collect_snapshot(fake_client, "default")
     assert "Private MAC" not in INVENTORY_COLUMNS
     assert all("Private MAC" not in r for r in query_rows(snap, "devices"))
@@ -160,7 +160,7 @@ def test_the_findings_are_info_only(fake_client):
 
 
 def test_the_ignore_list_can_silence_them(fake_client):
-    from unifi_sentinel.settings import IgnoreRule
+    from homelab_probe.settings import IgnoreRule
     add_client(fake_client, reserved="10.0.0.80")
     findings = _private_mac_findings(snapshot(fake_client))
     kept, ignored = apply_ignores(findings, (IgnoreRule(subject="clients", message="randomized", reason="phones"),
@@ -169,8 +169,8 @@ def test_the_ignore_list_can_silence_them(fake_client):
 
 
 def run(fake_client, monkeypatch, argv):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     return cli.main(argv)
 

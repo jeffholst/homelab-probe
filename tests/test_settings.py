@@ -3,11 +3,11 @@ from pathlib import Path
 
 import pytest
 
-from unifi_sentinel import cli
-from unifi_sentinel.config import ConfigError
-from unifi_sentinel.diagnose import Finding, apply_ignores, diagnose, exit_code, format_findings, format_ignored
-from unifi_sentinel.settings import DEFAULT_FILENAME, DiagnoseSettings, IgnoreRule, load_settings
-from unifi_sentinel.snapshot import Snapshot
+from homelab_probe import cli
+from homelab_probe.config import ConfigError
+from homelab_probe.diagnose import Finding, apply_ignores, diagnose, exit_code, format_findings, format_ignored
+from homelab_probe.settings import DEFAULT_FILENAME, DiagnoseSettings, IgnoreRule, load_settings
+from homelab_probe.snapshot import Snapshot
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -40,7 +40,7 @@ def test_partial_config_keeps_other_defaults(tmp_path):
 
 
 def test_the_shipped_example_config_loads():
-    s = load_settings(ROOT / "unifi-sentinel.example.toml")
+    s = load_settings(ROOT / "hlp.example.toml")
     assert (s.resource_warn_pct, s.resource_critical_pct, s.slow_link_mbps) == (90, 98, 100)
     assert [r.subject for r in s.ignore] == ["Garage AP", "* port 2", "Guest laptop"]
     assert all(r.reason for r in s.ignore)
@@ -180,8 +180,8 @@ def test_slow_link_threshold_is_configurable():
 
 def _run(fake_client, monkeypatch, argv):
     fake_client.session.fx["legacy"]["device"][0]["overheating"] = False
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     return cli.main(argv)
 

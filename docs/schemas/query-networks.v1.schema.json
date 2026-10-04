@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/jeffholst/unifi-sentinel/main/docs/schemas/query-networks.v1.schema.json",
+  "$id": "https://raw.githubusercontent.com/jeffholst/homelab-probe/main/docs/schemas/query-networks.v1.schema.json",
   "title": "query networks",
-  "description": "Output of `unifi-sentinel query networks --json`: one object per network, in the controller's order.",
+  "description": "Output of `hlp query networks --json`: one object per network, in the controller's order.",
   "type": "array",
   "items": {
     "type": "object",

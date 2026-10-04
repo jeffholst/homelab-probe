@@ -1,7 +1,7 @@
 """The documentation is the specification, so it is tested against the program. The README is the quickstart and
 the detail is in docs/ (see tests/test_docs_layout.py); everything below looks at the README and every page there.
 
-* every `unifi-sentinel ...` example in them parses with the real argument parser;
+* every `hlp ...` example in them parses with the real argument parser;
 * every command has a row in the README's Commands table, and every long option is mentioned somewhere;
 * the sample output blocks equal what the commands print against the synthetic fixture, wherever they now live
   (compared through golden_support.normalise, so times and padding do not matter).
@@ -24,9 +24,9 @@ import record_fixture
 from docs_support import README, all_docs_text, doc_paths
 from golden_support import CASES, GOLDEN, normalise, run_command
 
-from unifi_sentinel import cli
+from homelab_probe import cli
 
-LAUNCHERS = re.compile(r"(?:uv run unifi-sentinel\.py|unifi-sentinel)\s+(.*)$")
+LAUNCHERS = re.compile(r"(?:uv run hlp\.py|hlp)\s+(.*)$")
 STOP = {"||", "|", ">", ">>", "&&", ";", "2>&1"}
 
 # README sample block -> golden case. A block that starts with a `uv run ...` line keeps that line.
@@ -100,7 +100,7 @@ def command_lines(text):
 
 def example_argv(line):
     line = re.sub(r"^\s*(?:\$ |\*/\d+ \* \* \* \* cd \S+ && )", "", line.strip())
-    if not (line.startswith("uv run unifi-sentinel.py") or line.startswith("unifi-sentinel ")):
+    if not (line.startswith("uv run hlp.py") or line.startswith("hlp ")):
         return None
     match = LAUNCHERS.match(line)
     if not match:
@@ -111,7 +111,7 @@ def example_argv(line):
             tokens = tokens[:i]
             break
     if any(token.startswith("<") and token.endswith(">") for token in tokens):
-        return None                                     # a placeholder such as `unifi-sentinel <command>`, not an example
+        return None                                     # a placeholder such as `hlp <command>`, not an example
     return tokens
 
 
@@ -141,17 +141,17 @@ def test_every_example_parses_with_the_real_parser(argv):
     try:
         cli.build_parser().parse_args(argv)
     except SystemExit as e:
-        pytest.fail(f"a documentation example does not parse (exit {e.code}): unifi-sentinel {' '.join(argv)}")
+        pytest.fail(f"a documentation example does not parse (exit {e.code}): hlp {' '.join(argv)}")
 
 
 def test_the_example_extractor_handles_the_shapes_the_readme_uses():
-    assert example_argv("uv run unifi-sentinel.py diagnose --json   # as JSON") == ["diagnose", "--json"]
-    assert example_argv("$ unifi-sentinel --verbose wan --json > wan.json") == ["--verbose", "wan", "--json"]
-    assert example_argv("*/15 * * * * cd /path/to/x && uv run unifi-sentinel.py diagnose --fail-on critical || notify-me"
+    assert example_argv("uv run hlp.py diagnose --json   # as JSON") == ["diagnose", "--json"]
+    assert example_argv("$ hlp --verbose wan --json > wan.json") == ["--verbose", "wan", "--json"]
+    assert example_argv("*/15 * * * * cd /path/to/x && uv run hlp.py diagnose --fail-on critical || notify-me"
                         ) == ["diagnose", "--fail-on", "critical"]
-    assert example_argv("unifi-sentinel --env-file lab.env diagnose") == ["--env-file", "lab.env", "diagnose"]
-    assert example_argv("unifi-sentinel <command>") is None
-    assert example_argv("unifi-sentinel.toml settings are read") is None
+    assert example_argv("hlp --env-file lab.env diagnose") == ["--env-file", "lab.env", "diagnose"]
+    assert example_argv("hlp <command>") is None
+    assert example_argv("hlp.toml settings are read") is None
     assert example_argv("some other command") is None
 
 
@@ -294,7 +294,7 @@ def test_the_documented_sample_matches_the_real_output(fake_client, heading, cas
         return
     expected = normalise(actual)
     assert normalise(without_command_line(body)) == expected, (
-        f"the sample under '{heading}' in {path.name} no longer matches `unifi-sentinel {' '.join(CASES[case])}`. "
+        f"the sample under '{heading}' in {path.name} no longer matches `hlp {' '.join(CASES[case])}`. "
         "Regenerate it with UPDATE_README_SAMPLES=1 uv run pytest tests/test_docs_drift.py and review the diff.")
 
 

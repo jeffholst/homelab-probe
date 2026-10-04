@@ -4,7 +4,7 @@
     python tools/release_notes.py v0.2.0 > notes.md
 
 Used by ``.github/workflows/release.yml``. It stops (exit 1, with the reason on stderr) unless the tag is
-``v`` plus ``unifi_sentinel.__version__`` and ``CHANGELOG.md`` has a dated entry for that version, then prints that
+``v`` plus ``homelab_probe.__version__`` and ``CHANGELOG.md`` has a dated entry for that version, then prints that
 entry (without its heading) as the release notes. A release is public and hard to undo, so nothing else is allowed
 through: not a tag that disagrees with the package, not a missing entry, not one still marked Unreleased.
 """
@@ -26,9 +26,9 @@ class ReleaseError(Exception):
 
 def package_version(root: Optional[Path] = None) -> str:
     root = root or ROOT                    # looked up when called, so a caller (or a test) can point it elsewhere
-    match = re.search(r'^__version__ = "([^"]+)"', (root / "unifi_sentinel" / "__init__.py").read_text(), re.M)
+    match = re.search(r'^__version__ = "([^"]+)"', (root / "homelab_probe" / "__init__.py").read_text(), re.M)
     if not match:
-        raise ReleaseError("unifi_sentinel/__init__.py has no __version__")
+        raise ReleaseError("homelab_probe/__init__.py has no __version__")
     return match.group(1)
 
 

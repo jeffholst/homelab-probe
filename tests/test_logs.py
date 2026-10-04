@@ -15,23 +15,23 @@ from test_notify import NTFY, TOKEN, FakePost, events_for, finding
 from test_watch import Script
 from test_watch import run as run_watch
 
-from unifi_sentinel import cli, logs
-from unifi_sentinel.client import UniFiAPIError, UniFiClient
-from unifi_sentinel.config import Config, ConfigError, SmtpSettings, load_config, parse_log_format, parse_log_level
-from unifi_sentinel.diagnose import WARNING
-from unifi_sentinel.notify import Destination, send
-from unifi_sentinel.snapshot import EventQuery, Needs, collect_snapshot
+from homelab_probe import cli, logs
+from homelab_probe.client import UniFiAPIError, UniFiClient
+from homelab_probe.config import Config, ConfigError, SmtpSettings, load_config, parse_log_format, parse_log_level
+from homelab_probe.diagnose import WARNING
+from homelab_probe.notify import Destination, send
+from homelab_probe.snapshot import EventQuery, Needs, collect_snapshot
 
 ROOT = Path(__file__).resolve().parent.parent
-PACKAGE = ROOT / "unifi_sentinel"
-log = logging.getLogger("unifi_sentinel.test")
+PACKAGE = ROOT / "homelab_probe"
+log = logging.getLogger("homelab_probe.test")
 
-API_KEY = "ak-9f8e7d6c5b4a3210"
+UNIFI_API_KEY = "ak-9f8e7d6c5b4a3210"
 PASSWORD = "pw-Hunter2-Secret!"
 SESSION = "sess-0123456789abcdef"
 SETUP = "setup-7777aaaa8888"
 URL = "https://ntfy.example/topic-3f9c1a2b"
-REGISTERED = (API_KEY, PASSWORD, SESSION, SETUP, URL, TOKEN)
+REGISTERED = (UNIFI_API_KEY, PASSWORD, SESSION, SETUP, URL, TOKEN)
 
 
 def capture(fmt, level="DEBUG"):
@@ -94,7 +94,7 @@ def test_the_text_format_has_time_level_logger_event_message_and_fields():
         logs.log_event(log, logging.INFO, "notify.delivery", "sent", destination="ntfy", delivered=True,
                        reason="HTTP 200", note="two words")
     assert re.fullmatch(
-        r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z INFO    unifi_sentinel\.test notify\.delivery sent "
+        r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z INFO    homelab_probe\.test notify\.delivery sent "
         r'request_id=abc123 site=default destination=ntfy delivered=true reason="HTTP 200" note="two words"\n',
         stream.getvalue())
 
@@ -102,7 +102,7 @@ def test_the_text_format_has_time_level_logger_event_message_and_fields():
 def test_a_text_record_without_an_event_or_fields_is_still_a_line():
     stream = capture("text", "INFO")
     log.info("plain")
-    assert re.fullmatch(r"\S+ INFO    unifi_sentinel\.test - plain\n", stream.getvalue())
+    assert re.fullmatch(r"\S+ INFO    homelab_probe\.test - plain\n", stream.getvalue())
     stream = capture("text", "INFO")
     logs.log_event(log, logging.INFO, "watch.pass", "x", empty="", nothing=None)
     assert stream.getvalue().rstrip().endswith('x empty="" nothing=""')
@@ -178,7 +178,7 @@ def test_a_call_whose_arguments_do_not_fit_its_format_still_logs():
     stream = capture("json")
     handler = next(h for h in logging.getLogger(logs.ROOT).handlers if isinstance(h, logs._Handler))
     # handed to our handler directly: pytest's own capture handlers (also attached to this logger) would raise
-    handler.handle(logging.LogRecord("unifi_sentinel.test", logging.WARNING, __file__, 1, "%d items", ("many",),
+    handler.handle(logging.LogRecord("homelab_probe.test", logging.WARNING, __file__, 1, "%d items", ("many",),
                                      None))
     (record,) = records(stream)
     assert record["msg"] == "%d items"
@@ -201,7 +201,7 @@ def test_poisoned_values_never_appear_through_any_channel(fmt):
     logs.register_secrets(*REGISTERED)
     stream = capture(fmt, "DEBUG")
     try:
-        raise RuntimeError(f"the server echoed {API_KEY} and password={PASSWORD}")
+        raise RuntimeError(f"the server echoed {UNIFI_API_KEY} and password={PASSWORD}")
     except RuntimeError:
         log.exception("failed with %s", SESSION)
     for secret in REGISTERED:
@@ -209,7 +209,7 @@ def test_poisoned_values_never_appear_through_any_channel(fmt):
         log.warning(f"fstring {secret}")
         logs.log_event(log, logging.INFO, "warning", "m", value=secret, nested={"deep": [secret]})
     logs.warn(f"degraded: {URL} and {SETUP}")
-    logs.verbose(f"settings {API_KEY}")
+    logs.verbose(f"settings {UNIFI_API_KEY}")
     for name in ("password", "token", "api_key", "session_id", "setup_token", "authorization", "cookie",
                  "set-cookie", "x.csrf", "credentials", "SESSION"):
         logs.log_event(log, logging.INFO, "warning", "m", **{name: "unregistered-value-xyz"})
@@ -239,10 +239,10 @@ def test_encoded_spellings_of_a_secret_are_hidden_too():
 
 
 def test_a_secret_hidden_by_invisible_characters_is_still_hidden():
-    logs.register_secrets(API_KEY)
+    logs.register_secrets(UNIFI_API_KEY)
     stream = capture("json")
-    log.warning("key %s", API_KEY[:5] + "\u200b" + API_KEY[5:])
-    assert API_KEY not in stream.getvalue() and "\u200b" not in stream.getvalue()
+    log.warning("key %s", UNIFI_API_KEY[:5] + "\u200b" + UNIFI_API_KEY[5:])
+    assert UNIFI_API_KEY not in stream.getvalue() and "\u200b" not in stream.getvalue()
 
 
 def test_short_and_non_text_secrets_are_not_registered():
@@ -254,8 +254,8 @@ def test_short_and_non_text_secrets_are_not_registered():
 
 
 def test_scrub_is_idempotent_and_leaves_ordinary_text_alone():
-    logs.register_secrets(API_KEY)
-    samples = [f"a {API_KEY} b", "password=abc token: 'x y'", "Authorization: Bearer abcdefgh", "plain text",
+    logs.register_secrets(UNIFI_API_KEY)
+    samples = [f"a {UNIFI_API_KEY} b", "password=abc token: 'x y'", "Authorization: Bearer abcdefgh", "plain text",
                "Set-Cookie: a=b", '{"secret": "s"}', "https://u:p@h/", "monkey=3 keys=a,b tokens=2"]
     for sample in samples:
         assert logs.scrub(logs.scrub(sample)) == logs.scrub(sample)
@@ -326,8 +326,8 @@ def test_bind_restores_the_previous_values_and_leaves_none_alone():
 
 
 def test_a_run_gets_its_own_request_id_and_site(fake_client, monkeypatch, capsys):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", API_KEY)
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", UNIFI_API_KEY)
     monkeypatch.setenv("LOG_FORMAT", "json")
     monkeypatch.setenv("LOG_LEVEL", "debug")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
@@ -341,7 +341,7 @@ def test_a_run_gets_its_own_request_id_and_site(fake_client, monkeypatch, capsys
     assert {r["request_id"] for r in run_records} == {run_id}
     assert {r["site"] for r in run_records} == {"default"}
     assert {"run.settings", "run.summary"} <= {r["event"] for r in run_records}
-    assert logs.scrub(f"x {API_KEY} y") == "x [redacted] y"       # the run registered its key
+    assert logs.scrub(f"x {UNIFI_API_KEY} y") == "x [redacted] y"       # the run registered its key
 
 
 # -- the warnings sink ---------------------------------------------------------------------------------------
@@ -375,7 +375,7 @@ def test_a_snapshot_collection_returns_its_warnings_as_data(fake_client, capsys)
 # -- personal data -------------------------------------------------------------------------------------------
 
 def fixture_identifiers():
-    data = json.loads((ROOT / "unifi_sentinel" / "demo" / "controller.json").read_text())
+    data = json.loads((ROOT / "homelab_probe" / "demo" / "controller.json").read_text())
     found = set()
 
     def walk(node, key=""):
@@ -400,8 +400,8 @@ COMMANDS = [["diagnose"], ["client", "desktop"], ["new-clients"], ["query", "cli
 
 
 def run_logged(fake_client, monkeypatch, capsys, level, argv):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", API_KEY)
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", UNIFI_API_KEY)
     monkeypatch.setenv("LOG_FORMAT", "json")
     monkeypatch.setenv("LOG_LEVEL", level)
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
@@ -418,7 +418,7 @@ def test_info_and_above_never_carry_client_names_macs_or_addresses_and_debug_has
         text = "\n".join(info)
         assert all(json.loads(line)["level"] in ("INFO", "WARNING", "ERROR") for line in info)
         for value in identifiers:
-            assert value.lower() not in text.lower(), (argv, value)
+            assert not re.search(rf"(?<!\w){re.escape(value)}(?!\w)", text, re.I), (argv, value)   # whole words: the logger is homelab_probe.*
         assert "controller.example" not in text
     debug = "\n".join(run_logged(fake_client, monkeypatch, capsys, "DEBUG", ["info"]))
     assert "controller.example" in debug and '"event": "run.settings"' in debug
@@ -500,8 +500,8 @@ def test_log_settings_are_validated_in_any_case():
 
 
 def test_load_config_reads_the_log_settings(monkeypatch):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", API_KEY)
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", UNIFI_API_KEY)
     config = load_config()
     assert (config.log_level, config.log_format) == ("", "")
     monkeypatch.setenv("LOG_LEVEL", "info")
@@ -514,8 +514,8 @@ def test_load_config_reads_the_log_settings(monkeypatch):
 
 
 def test_a_bad_log_level_is_a_config_error_with_exit_code_3(monkeypatch, capsys):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", API_KEY)
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", UNIFI_API_KEY)
     monkeypatch.setenv("LOG_LEVEL", "loud")
     assert cli.main(["info"]) == cli.EXIT_ERROR
     assert "ERROR: LOG_LEVEL must be one of" in capsys.readouterr().err
@@ -524,12 +524,12 @@ def test_a_bad_log_level_is_a_config_error_with_exit_code_3(monkeypatch, capsys)
 def test_the_configuration_lists_every_secret_it_holds():
     smtp = SmtpSettings("smtp.example", 587, "starttls", "from@example.org", ("to@example.org",), "mailuser",
                         "mailpassword")
-    config = Config("https://controller.example", API_KEY, notify_ntfy_url=NTFY, notify_ntfy_token="ntfytoken",
+    config = Config("https://controller.example", UNIFI_API_KEY, notify_ntfy_url=NTFY, notify_ntfy_token="ntfytoken",
                     notify_webhook_url="https://hook.example/x", notify_webhook_token="hooktoken", notify_smtp=smtp)
     assert set(config.secret_values()) == {
-        API_KEY, NTFY, "ntfytoken", "https://hook.example/x", "hooktoken", "smtp.example", "mailuser",
+        UNIFI_API_KEY, NTFY, "ntfytoken", "https://hook.example/x", "hooktoken", "smtp.example", "mailuser",
         "mailpassword", "from@example.org", "to@example.org"}
-    assert Config("https://controller.example", API_KEY).secret_values() == (API_KEY,)
+    assert Config("https://controller.example", UNIFI_API_KEY).secret_values() == (UNIFI_API_KEY,)
 
 
 # -- the event list --------------------------------------------------------------------------------------------

@@ -1,10 +1,10 @@
 # Contributing
 
-Thanks for helping. Issues and pull requests are welcome; work is tracked in [GitHub issues](https://github.com/jeffholst/unifi-sentinel/issues). For a security problem, do not open an issue: follow [SECURITY.md](SECURITY.md).
+Thanks for helping. Issues and pull requests are welcome; work is tracked in [GitHub issues](https://github.com/jeffholst/homelab-probe/issues). For a security problem, do not open an issue: follow [SECURITY.md](SECURITY.md).
 
 ## Before you start
 
-- Look for an existing issue, or open one (a [bug report or feature request](https://github.com/jeffholst/unifi-sentinel/issues/new/choose)) and say you want to work on it. One issue per pull request.
+- Look for an existing issue, or open one (a [bug report or feature request](https://github.com/jeffholst/homelab-probe/issues/new/choose)) and say you want to work on it. One issue per pull request.
 - A change that needs an endpoint nobody has probed yet starts with a read-only look at what that endpoint returns on a real controller. Say so in the issue instead of guessing field names; almost every endpoint this tool uses is undocumented.
 - The tool is **read-only**. Every request is a GET, with one exception: the event log can only be queried with a POST (see [the one POST](docs/network.md#the-one-post-and-why-it-is-safe)). A change that writes to the controller, or sends data anywhere except a notification destination the user configured, will not be accepted.
 
@@ -13,8 +13,8 @@ Thanks for helping. Issues and pull requests are welcome; work is tracked in [Gi
 You need Python 3.10 or newer and [uv](https://docs.astral.sh/uv/). Nothing is installed by hand; `uv run` resolves the dependencies from `pyproject.toml` and `uv.lock`.
 
 ```bash
-git clone https://github.com/jeffholst/unifi-sentinel
-cd unifi-sentinel
+git clone https://github.com/jeffholst/homelab-probe
+cd homelab-probe
 uv run pytest               # the tests never contact a controller
 uv run ruff check .         # add --fix for import order and unused imports
 uv run mypy                 # clean, and blocking in CI
@@ -25,7 +25,7 @@ CI runs all of these on every pull request, with the tests on Python 3.10 to 3.1
 
 ## What a good pull request has
 
-- **Tests.** The default suite uses the synthetic fixture (`unifi_sentinel/demo/controller.json`) served by a fake controller and never contacts a real one. The opt-in `uv run pytest -m live` contract tests read a configured real controller, so run them only with the controller owner's approval. Extend the fixture instead of pasting real data.
+- **Tests.** The default suite uses the synthetic fixture (`homelab_probe/demo/controller.json`) served by a fake controller and never contacts a real one. The opt-in `uv run pytest -m live` contract tests read a configured real controller, so run them only with the controller owner's approval. Extend the fixture instead of pasting real data.
 - **No real data anywhere.** Not in code, tests, docs, commit messages or the pull request text: no real MAC or IP addresses, host names, SSIDs, site IDs, names of your devices or API keys. Example output in the docs comes from the synthetic fixture.
 - **Documentation in the same pull request.** The README is a short quickstart (it must stay under 250 lines) and the detail is in [docs/](docs/): a Commands row, a usage example and a section for anything non-obvious. A user-visible change gets a line in the [changelog](CHANGELOG.md). When you change output on purpose, regenerate the golden files and the documented samples (`UPDATE_GOLDEN=1 uv run pytest tests/test_golden.py`, then `UPDATE_README_SAMPLES=1 uv run pytest tests/test_docs_drift.py`) and read both diffs.
 - **The conventions of the code.** Names that come from the network are untrusted and go through the output-safety helpers; finding codes are never renamed or reused; MACs are compared through `normalize_mac`; secrets never reach a message or a log. They are listed in [CLAUDE.md](CLAUDE.md), which is also the briefing for AI assistants working on this repository, and the layout of the code is in [docs/development.md](docs/development.md#development).
@@ -37,4 +37,4 @@ Work happens on a branch, never on `main`, and the pull request says `Fixes #N`.
 
 ## License
 
-By contributing you agree that your contribution is licensed under the [Apache License 2.0](LICENSE), like the rest of the project. UniFi Sentinel is a fork of [ericfitz/unifi-clients-export](https://github.com/ericfitz/unifi-clients-export), and that credit stays in the README.
+By contributing you agree that your contribution is licensed under the [Apache License 2.0](LICENSE), like the rest of the project. Homelab Probe is a fork of [ericfitz/unifi-clients-export](https://github.com/ericfitz/unifi-clients-export), and that credit stays in the README.

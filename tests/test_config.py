@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from unifi_sentinel import cli
-from unifi_sentinel.client import UniFiClient
-from unifi_sentinel.config import (
+from homelab_probe import cli
+from homelab_probe.client import UniFiClient
+from homelab_probe.config import (
     ENV_FILE_VAR,
     MAX_SITE_LENGTH,
     ConfigError,
@@ -16,9 +16,9 @@ from unifi_sentinel.config import (
     parse_bool,
     validate_site,
 )
-from unifi_sentinel.settings import DEFAULT_FILENAME, DiagnoseSettings, load_settings
+from homelab_probe.settings import DEFAULT_FILENAME, DiagnoseSettings, load_settings
 
-GOOD = "CONTROLLER_URL=https://controller.example\nAPI_KEY=file-key\n"
+GOOD = "UNIFI_URL=https://controller.example\nUNIFI_API_KEY=file-key\n"
 
 
 def write(path: Path, text: str = GOOD) -> Path:
@@ -32,7 +32,7 @@ def write(path: Path, text: str = GOOD) -> Path:
 def test_every_test_starts_in_an_empty_directory_with_no_configuration():
     assert list(Path.cwd().iterdir()) == []
     assert Path.cwd().name == "cwd"
-    for name in ("CONTROLLER_URL", "API_KEY", "SITE_ID", "VERIFY_SSL", ENV_FILE_VAR):
+    for name in ("UNIFI_URL", "UNIFI_API_KEY", "UNIFI_SITE_ID", "UNIFI_VERIFY_SSL", ENV_FILE_VAR):
         assert name not in os.environ
     assert load_settings() == DiagnoseSettings()                       # no settings file in the working directory
     assert find_env_file() is None
@@ -41,7 +41,7 @@ def test_every_test_starts_in_an_empty_directory_with_no_configuration():
 def test_files_in_the_developers_directory_do_not_reach_the_tests(monkeypatch, tmp_path):
     """The failure the fixture prevents: a real .env and settings file next to the code."""
     real = tmp_path / "developer-checkout"
-    write(real / ".env", GOOD + "SITE_ID=real-site\nVERIFY_SSL=false\n")
+    write(real / ".env", GOOD + "UNIFI_SITE_ID=real-site\nUNIFI_VERIFY_SSL=false\n")
     write(real / DEFAULT_FILENAME, "[thresholds]\nresource_warn_pct = 1\n")
     # the fixture's working directory is a different, empty one
     assert find_env_file() is None and load_settings().resource_warn_pct == 90
@@ -52,7 +52,7 @@ def test_files_in_the_developers_directory_do_not_reach_the_tests(monkeypatch, t
 # -- where the .env file is looked for ------------------------------------------
 
 def test_the_env_file_in_the_working_directory_is_read(monkeypatch, tmp_path):
-    write(Path.cwd() / ".env", GOOD + "SITE_ID=lab\nVERIFY_SSL=no\n")
+    write(Path.cwd() / ".env", GOOD + "UNIFI_SITE_ID=lab\nUNIFI_VERIFY_SSL=no\n")
     cfg = load_config()
     assert (cfg.controller_url, cfg.api_key, cfg.site, cfg.verify_ssl) == (
         "https://controller.example", "file-key", "lab", False)
@@ -60,7 +60,7 @@ def test_the_env_file_in_the_working_directory_is_read(monkeypatch, tmp_path):
 
 def test_an_installed_copy_finds_the_env_file_in_the_directory_it_is_run_from():
     """The bug: the search started at the package's own directory, so only a checkout worked."""
-    import unifi_sentinel.config as config_module
+    import homelab_probe.config as config_module
     package_dir = Path(config_module.__file__).resolve().parent
     assert Path.cwd().resolve() != package_dir and package_dir not in Path.cwd().resolve().parents
     write(Path.cwd() / ".env")
@@ -74,27 +74,27 @@ def test_parent_directories_are_not_searched(monkeypatch, tmp_path):
     child.mkdir(parents=True)
     monkeypatch.chdir(child)
     assert find_env_file() is None
-    with pytest.raises(ConfigError, match="CONTROLLER_URL is not set"):
+    with pytest.raises(ConfigError, match="UNIFI_URL is not set"):
         load_config()
 
 
 def test_explicit_file_beats_the_environment_variable_beats_the_working_directory(monkeypatch, tmp_path):
-    write(Path.cwd() / ".env", "CONTROLLER_URL=https://cwd.example\nAPI_KEY=cwd-key\n")
-    via_var = write(tmp_path / "via-var.env", "CONTROLLER_URL=https://var.example\nAPI_KEY=var-key\n")
-    explicit = write(tmp_path / "explicit.env", "CONTROLLER_URL=https://explicit.example\nAPI_KEY=explicit-key\n")
+    write(Path.cwd() / ".env", "UNIFI_URL=https://cwd.example\nUNIFI_API_KEY=cwd-key\n")
+    via_var = write(tmp_path / "via-var.env", "UNIFI_URL=https://var.example\nUNIFI_API_KEY=var-key\n")
+    explicit = write(tmp_path / "explicit.env", "UNIFI_URL=https://explicit.example\nUNIFI_API_KEY=explicit-key\n")
     assert load_config().api_key == "cwd-key"
-    monkeypatch.delenv("CONTROLLER_URL"), monkeypatch.delenv("API_KEY")
+    monkeypatch.delenv("UNIFI_URL"), monkeypatch.delenv("UNIFI_API_KEY")
     monkeypatch.setenv(ENV_FILE_VAR, str(via_var))
     assert load_config().api_key == "var-key"
-    for name in ("CONTROLLER_URL", "API_KEY"):                          # load_dotenv exported the previous values
+    for name in ("UNIFI_URL", "UNIFI_API_KEY"):                          # load_dotenv exported the previous values
         monkeypatch.delenv(name, raising=False)
     assert load_config(explicit).api_key == "explicit-key"
 
 
 def test_real_environment_variables_win_over_the_file(monkeypatch):
-    write(Path.cwd() / ".env", GOOD + "SITE_ID=from-file\n")
-    monkeypatch.setenv("API_KEY", "from-environment")
-    monkeypatch.setenv("SITE_ID", "from-env")
+    write(Path.cwd() / ".env", GOOD + "UNIFI_SITE_ID=from-file\n")
+    monkeypatch.setenv("UNIFI_API_KEY", "from-environment")
+    monkeypatch.setenv("UNIFI_SITE_ID", "from-env")
     cfg = load_config()
     assert (cfg.api_key, cfg.site, cfg.controller_url) == ("from-environment", "from-env", "https://controller.example")
 
@@ -103,7 +103,7 @@ def test_a_named_env_file_must_exist(monkeypatch, tmp_path):
     with pytest.raises(ConfigError, match=r"env file not found: .*nope\.env \(from --env-file\)"):
         load_config(tmp_path / "nope.env")
     monkeypatch.setenv(ENV_FILE_VAR, str(tmp_path / "gone.env"))
-    with pytest.raises(ConfigError, match=r"gone\.env \(from UNIFI_SENTINEL_ENV\)"):
+    with pytest.raises(ConfigError, match=r"gone\.env \(from HLP_ENV\)"):
         load_config()
     monkeypatch.setenv(ENV_FILE_VAR, "   ")                                # blank counts as unset
     assert find_env_file() is None
@@ -126,58 +126,58 @@ def test_an_unreadable_env_file_is_a_clear_error(tmp_path):
 def test_missing_and_placeholder_settings_say_where_to_put_them():
     with pytest.raises(ConfigError, match=r"--env-file"):
         load_config()
-    write(Path.cwd() / ".env", "CONTROLLER_URL=https://c.example\n")
-    with pytest.raises(ConfigError, match="API_KEY is not set"):
+    write(Path.cwd() / ".env", "UNIFI_URL=https://c.example\n")
+    with pytest.raises(ConfigError, match="UNIFI_API_KEY is not set"):
         load_config()
-    write(Path.cwd() / ".env", "CONTROLLER_URL=https://c.example\nAPI_KEY=your-api-key-here\n")
+    write(Path.cwd() / ".env", "UNIFI_URL=https://c.example\nUNIFI_API_KEY=your-api-key-here\n")
     with pytest.raises(ConfigError, match="placeholder"):
         load_config()
 
 
 def test_the_controller_url_has_its_trailing_slash_removed(monkeypatch):
-    monkeypatch.setenv("CONTROLLER_URL", "https://c.example///")
-    monkeypatch.setenv("API_KEY", "k")
+    monkeypatch.setenv("UNIFI_URL", "https://c.example///")
+    monkeypatch.setenv("UNIFI_API_KEY", "k")
     assert load_config().controller_url == "https://c.example"
 
 
-# -- VERIFY_SSL ------------------------------------------------------------------
+# -- UNIFI_VERIFY_SSL ------------------------------------------------------------------
 
 @pytest.mark.parametrize("text", ["true", "TRUE", "True", "yes", "Yes", "1", "on", "ON", "  true  ", "\ttrue\n"])
 def test_verify_ssl_true_spellings(text):
-    assert parse_bool("VERIFY_SSL", text) is True
+    assert parse_bool("UNIFI_VERIFY_SSL", text) is True
 
 
 @pytest.mark.parametrize("text", ["false", "FALSE", "False", "no", "No", "0", "off", "Off", "  false  ", "\tno\n"])
 def test_verify_ssl_false_spellings(text):
-    assert parse_bool("VERIFY_SSL", text) is False
+    assert parse_bool("UNIFI_VERIFY_SSL", text) is False
 
 
 @pytest.mark.parametrize("text", [None, "", "   ", "\n"])
 def test_unset_or_blank_uses_the_default(text):
-    assert parse_bool("VERIFY_SSL", text) is True and parse_bool("X", text, default=False) is False
+    assert parse_bool("UNIFI_VERIFY_SSL", text) is True and parse_bool("X", text, default=False) is False
 
 
 @pytest.mark.parametrize("text", ["off-ish", "n", "y", "disabled", "enable", "2", "-1", "none", "null", "truee", "falsee"])
 def test_unknown_verify_ssl_values_are_rejected_with_the_accepted_words(text):
     with pytest.raises(ConfigError) as exc:
-        parse_bool("VERIFY_SSL", text)
+        parse_bool("UNIFI_VERIFY_SSL", text)
     message = str(exc.value)
-    assert "VERIFY_SSL" in message and repr(text) in message
+    assert "UNIFI_VERIFY_SSL" in message and repr(text) in message
     assert all(word in message for word in ("true", "yes", "1", "on", "false", "no", "0", "off"))
 
 
 def test_load_config_rejects_a_bad_verify_ssl_and_honours_a_good_one(monkeypatch):
-    monkeypatch.setenv("CONTROLLER_URL", "https://c.example")
-    monkeypatch.setenv("API_KEY", "k")
+    monkeypatch.setenv("UNIFI_URL", "https://c.example")
+    monkeypatch.setenv("UNIFI_API_KEY", "k")
     assert load_config().verify_ssl is True
-    monkeypatch.setenv("VERIFY_SSL", "  Off ")
+    monkeypatch.setenv("UNIFI_VERIFY_SSL", "  Off ")
     assert load_config().verify_ssl is False
-    monkeypatch.setenv("VERIFY_SSL", "maybe")
-    with pytest.raises(ConfigError, match="VERIFY_SSL must be one of"):
+    monkeypatch.setenv("UNIFI_VERIFY_SSL", "maybe")
+    with pytest.raises(ConfigError, match="UNIFI_VERIFY_SSL must be one of"):
         load_config()
 
 
-# -- SITE_ID ---------------------------------------------------------------------
+# -- UNIFI_SITE_ID ---------------------------------------------------------------------
 
 @pytest.mark.parametrize("text, expected", [
     (None, "default"), ("", "default"), ("   ", "default"), (" lab ", "lab"), ("default", "default"),
@@ -191,15 +191,15 @@ def test_valid_site_ids(text, expected):
 @pytest.mark.parametrize("text", ["a/b", "../x", "a\\b", "a?b=1", "a#frag", "a\nb", "a\x00b", "a\tb", "a\x1bb", "a\x7fb",
                                   "x" * (MAX_SITE_LENGTH + 1)])
 def test_unsafe_or_overlong_site_ids_are_rejected(text):
-    with pytest.raises(ConfigError, match="SITE_ID"):
+    with pytest.raises(ConfigError, match="UNIFI_SITE_ID"):
         validate_site(text)
 
 
 def test_load_config_validates_site_id(monkeypatch):
-    monkeypatch.setenv("CONTROLLER_URL", "https://c.example")
-    monkeypatch.setenv("API_KEY", "k")
-    monkeypatch.setenv("SITE_ID", "../../admin")
-    with pytest.raises(ConfigError, match="SITE_ID .* cannot be part of a site name"):
+    monkeypatch.setenv("UNIFI_URL", "https://c.example")
+    monkeypatch.setenv("UNIFI_API_KEY", "k")
+    monkeypatch.setenv("UNIFI_SITE_ID", "../../admin")
+    with pytest.raises(ConfigError, match="UNIFI_SITE_ID .* cannot be part of a site name"):
         load_config()
 
 
@@ -247,7 +247,7 @@ def test_cli_env_file_option_supplies_the_settings(monkeypatch, tmp_path, fake_c
     captured = []
     monkeypatch.setattr(cli.UniFiClient, "from_config",
                         classmethod(lambda cls, cfg: (captured.append(cfg), fake_client)[1]))
-    envfile = write(tmp_path / "lab.env", GOOD + "SITE_ID=default\nVERIFY_SSL=off\n")
+    envfile = write(tmp_path / "lab.env", GOOD + "UNIFI_SITE_ID=default\nUNIFI_VERIFY_SSL=off\n")
     assert cli.main(["--env-file", str(envfile), "info"]) == 0
     assert (captured[0].controller_url, captured[0].api_key, captured[0].verify_ssl) == (
         "https://controller.example", "file-key", False)
@@ -257,12 +257,12 @@ def test_cli_env_file_option_supplies_the_settings(monkeypatch, tmp_path, fake_c
 def test_cli_env_file_errors_exit_with_the_config_code(monkeypatch, tmp_path, capsys):
     assert cli.main(["--env-file", str(tmp_path / "missing.env"), "info"]) == cli.EXIT_ERROR
     assert "env file not found" in capsys.readouterr().err
-    bad = write(tmp_path / "bad.env", GOOD + "VERIFY_SSL=sometimes\n")
+    bad = write(tmp_path / "bad.env", GOOD + "UNIFI_VERIFY_SSL=sometimes\n")
     assert cli.main(["--env-file", str(bad), "info"]) == cli.EXIT_ERROR
-    assert "VERIFY_SSL must be one of" in capsys.readouterr().err
-    unsafe = write(tmp_path / "site.env", GOOD + "SITE_ID=a/b\n")
+    assert "UNIFI_VERIFY_SSL must be one of" in capsys.readouterr().err
+    unsafe = write(tmp_path / "site.env", GOOD + "UNIFI_SITE_ID=a/b\n")
     assert cli.main(["--env-file", str(unsafe), "info"]) == cli.EXIT_ERROR
-    assert "SITE_ID" in capsys.readouterr().err
+    assert "UNIFI_SITE_ID" in capsys.readouterr().err
 
 
 def test_cli_env_file_is_a_global_option_given_before_the_command(tmp_path):
@@ -278,7 +278,7 @@ def test_example_env_verifies_certificates_and_every_value_is_valid():
     """A fresh copy of the example must not switch certificate checking off, and must parse."""
     from dotenv import dotenv_values
     values = dotenv_values(Path(__file__).resolve().parent.parent / "example.env")
-    assert parse_bool("VERIFY_SSL", values["VERIFY_SSL"]) is True
-    assert validate_site(values["SITE_ID"]) == "default"
-    assert values["CONTROLLER_URL"].startswith("https://")
+    assert parse_bool("UNIFI_VERIFY_SSL", values["UNIFI_VERIFY_SSL"]) is True
+    assert validate_site(values["UNIFI_SITE_ID"]) == "default"
+    assert values["UNIFI_URL"].startswith("https://")
     assert "ALLOW_INSECURE_HTTP" not in values                      # the lab opt-in stays commented out

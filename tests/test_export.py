@@ -1,4 +1,4 @@
-from unifi_sentinel.export import build_offline_clients
+from homelab_probe.export import build_offline_clients
 
 
 def test_offline_clients_exclude_connected_and_devices():
@@ -31,7 +31,7 @@ def test_offline_wired_client_gets_last_uplink():
 
 
 def test_switch_ports_match_when_mac_table_count_missing():
-    from unifi_sentinel.export import build_switch_ports
+    from homelab_probe.export import build_switch_ports
     switches = [{"mac": "aa:aa", "type": "usw", "name": "SW",
                  "port_table": [{"port_idx": 2, "up": True}]}]
     clients = [{"mac": "cc:cc", "name": "pc", "sw_mac": "aa:aa", "sw_port": 2}]
@@ -40,7 +40,7 @@ def test_switch_ports_match_when_mac_table_count_missing():
 
 
 def test_device_type_label_precedence():
-    from unifi_sentinel.export import device_type_label
+    from homelab_probe.export import device_type_label
     # legacy code wins
     assert device_type_label({"model": "UCG Max"}, "udm") == "Dream Machine"
     # model prefix beats the ambiguous "switching" feature (UCG Max)

@@ -1,6 +1,6 @@
 """Synthetic large sites for the scale tests: every address and name is generated, none is real."""
 
-from unifi_sentinel.snapshot import Snapshot
+from homelab_probe.snapshot import Snapshot
 
 
 def mac(prefix, i):

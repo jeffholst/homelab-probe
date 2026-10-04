@@ -1,10 +1,10 @@
 import csv
 
-from unifi_sentinel import cli
-from unifi_sentinel.diagnose import diagnose
-from unifi_sentinel.export import run_export
-from unifi_sentinel.query import query_rows
-from unifi_sentinel.snapshot import Needs, collect_snapshot
+from homelab_probe import cli
+from homelab_probe.diagnose import diagnose
+from homelab_probe.export import run_export
+from homelab_probe.query import query_rows
+from homelab_probe.snapshot import Needs, collect_snapshot
 
 
 def read(path):
@@ -62,8 +62,8 @@ def test_diagnose_reports_fixture_problems(fake_client):
 
 
 def test_cli_end_to_end(fake_client, monkeypatch, capsys, tmp_path):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, cfg: fake_client))
 
     assert cli.main(["info"]) == 0
@@ -78,12 +78,12 @@ def test_cli_end_to_end(fake_client, monkeypatch, capsys, tmp_path):
 def test_cli_reports_missing_config(capsys):
     # no patching needed: the autouse fixture runs every test in an empty directory
     assert cli.main(["info"]) == cli.EXIT_ERROR
-    assert "CONTROLLER_URL" in capsys.readouterr().err
+    assert "UNIFI_URL" in capsys.readouterr().err
 
 
 def test_reservations_include_offline_and_skip_stale(fake_client):
-    from unifi_sentinel.query import render
-    from unifi_sentinel.reservations import build_reservations
+    from homelab_probe.query import render
+    from homelab_probe.reservations import build_reservations
 
     snap = collect_snapshot(fake_client, "default", Needs(reservations=True))
     rows = build_reservations(snap)
@@ -103,8 +103,8 @@ def test_reservations_include_offline_and_skip_stale(fake_client):
 
 
 def test_query_reservations_via_cli(fake_client, monkeypatch, capsys):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, cfg: fake_client))
     assert cli.main(["query", "reservations"]) == 0
     out = capsys.readouterr().out
@@ -112,7 +112,7 @@ def test_query_reservations_via_cli(fake_client, monkeypatch, capsys):
 
 
 def test_query_ports_rows_and_filters(fake_client):
-    from unifi_sentinel.query import render
+    from homelab_probe.query import render
 
     snap = collect_snapshot(fake_client, "default")
     ports = query_rows(snap, "ports")
@@ -151,8 +151,8 @@ def test_duplicate_switch_names_keep_all_ports_and_csvs(fake_client, tmp_path):
 
 
 def test_query_ports_cli_and_flag_validation(fake_client, monkeypatch, capsys):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, cfg: fake_client))
 
     assert cli.main(["query", "ports", "--errors", "--switch", "office"]) == 0
@@ -173,7 +173,7 @@ def test_query_ports_cli_and_flag_validation(fake_client, monkeypatch, capsys):
 
 
 def test_query_devices_shows_firmware_update_and_uptime(fake_client):
-    from unifi_sentinel.query import format_uptime, render
+    from homelab_probe.query import format_uptime, render
 
     snap = collect_snapshot(fake_client, "default")
     rows = {r["Name"]: r for r in query_rows(snap, "devices")}
@@ -215,8 +215,8 @@ def test_diagnose_flags_fixture_reservation_outside_subnet(fake_client, monkeypa
     # the connected desktop matches its reservation: no mismatch finding
     assert not any(s == "desktop" for s, _ in msgs)
 
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     assert cli.main(["diagnose", "--no-emoji"]) == 1
     assert "old-printer: reserved IP 10.0.0.50 is outside network IoT" in capsys.readouterr().out

@@ -90,7 +90,7 @@ Clients without signal or satisfaction data (the controller omits it for some) a
 
 ### Configuration: thresholds and ignore list
 
-Thresholds and an ignore list live in an optional TOML file, read from `./unifi-sentinel.toml` or given with `diagnose --config FILE` (copy [unifi-sentinel.example.toml](../unifi-sentinel.example.toml); the real file is git-ignored because it may name your devices).
+Thresholds and an ignore list live in an optional TOML file, read from `./hlp.toml` or given with `diagnose --config FILE` (copy [hlp.example.toml](../hlp.example.toml); the real file is git-ignored because it may name your devices).
 
 ```toml
 [thresholds]                 # all optional; these are the defaults
@@ -142,7 +142,7 @@ Ignored findings are left out of the output, counted in the summary (`3 warnings
 
 **Temporary ignores: `until`.** `until = 2026-12-31` (a TOML date, or the string `"2026-12-31"`) is the last day the rule applies, by the local date and inclusive. From the next day the rule is **expired**: it no longer matches, so its findings are back in the output, in the exit code and in `--notify` (where they count as new), and `diagnose` and `audit` print one warning per expired rule on stderr, for example `Warning: the ignore rule for code "reservation.offline", subject "Test server" expired on 2026-12-31 and no longer applies; delete it or give it a later until date (temporary: shut down while I travel)`. The warning never changes stdout or an exit code (so `--json` stays valid JSON), and with `--watch` it is printed once at the start; a rule that runs out while the watch is running simply stops applying and its findings show up as new. `client` and `topology` apply the date too but print no warning. `--show-ignored` prints `ignored until 2026-12-31: reason` and `--json` adds `until` to those entries (only for rules that have one). Only a date in the form `2026-12-31` is accepted: a date with a time, another spelling (`2026-1-1`, `20261231`), an impossible date or any other value is a configuration error that names the rule, and `until` alone is not a rule (it needs a `code`, `subject` or `message`, and a `reason`).
 
-A missing, unreadable or invalid file (unknown keys, bad values, rules without a reason, an unknown code, a bad `until`) stops `diagnose` with exit code 3 before it contacts the controller. `client`, `topology`, `wan` and `audit` read the same file (`--config FILE`, or `./unifi-sentinel.toml`) for the thresholds and ignore rules they use; the other commands do not. On Python 3.10 the `tomli` package (installed automatically) reads it; 3.11 and later use the standard library.
+A missing, unreadable or invalid file (unknown keys, bad values, rules without a reason, an unknown code, a bad `until`) stops `diagnose` with exit code 3 before it contacts the controller. `client`, `topology`, `wan` and `audit` read the same file (`--config FILE`, or `./hlp.toml`) for the thresholds and ignore rules they use; the other commands do not. On Python 3.10 the `tomli` package (installed automatically) reads it; 3.11 and later use the standard library.
 
 ### JSON output and finding codes
 

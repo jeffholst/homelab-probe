@@ -8,18 +8,18 @@ from pathlib import Path
 import pytest
 from docs_support import all_docs_text
 
-from unifi_sentinel import cli
-from unifi_sentinel import diagnose as diagnose_module
-from unifi_sentinel.diagnose import CODES, Finding, apply_ignores, findings_json
-from unifi_sentinel.settings import IgnoreRule
+from homelab_probe import cli
+from homelab_probe import diagnose as diagnose_module
+from homelab_probe.diagnose import CODES, Finding, apply_ignores, findings_json
+from homelab_probe.settings import IgnoreRule
 
 DIAGNOSE_PACKAGE = Path(diagnose_module.__file__).parent
 FINDING_KEYS = {"severity", "code", "subject", "message", "mac"}
 
 
 def run(fake_client, monkeypatch, argv):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     return cli.main(argv)
 
@@ -184,7 +184,7 @@ IGNORES = ('[[ignore]]\nsubject = "Garage AP"\nmessage = "offline"\nreason = "sp
 
 
 def test_ignored_findings_are_counted_and_listed_only_with_show_ignored(fake_client, monkeypatch, capsys):
-    Path("unifi-sentinel.toml").write_text(IGNORES)
+    Path("hlp.toml").write_text(IGNORES)
     _, doc, _ = run_json(fake_client, monkeypatch, capsys)
     assert doc["summary"]["ignored"] == 1 and "ignored" not in doc
     assert not any(f["subject"] == "Garage AP" for f in doc["findings"])
@@ -197,7 +197,7 @@ def test_ignored_findings_are_counted_and_listed_only_with_show_ignored(fake_cli
 
 
 def test_ignored_findings_do_not_affect_the_exit_code(fake_client, monkeypatch, capsys):
-    Path("unifi-sentinel.toml").write_text('[[ignore]]\nsubject = "*"\nreason = "everything"\n')
+    Path("hlp.toml").write_text('[[ignore]]\nsubject = "*"\nreason = "everything"\n')
     code, doc, _ = run_json(fake_client, monkeypatch, capsys)
     assert code == 0 and doc["findings"] == [] and doc["summary"]["ignored"] > 0
 

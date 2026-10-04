@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/jeffholst/unifi-sentinel/main/docs/schemas/diagnose.v1.schema.json",
+  "$id": "https://raw.githubusercontent.com/jeffholst/homelab-probe/main/docs/schemas/diagnose.v1.schema.json",
   "title": "diagnose",
-  "description": "Output of `unifi-sentinel diagnose --json`.",
+  "description": "Output of `hlp diagnose --json`.",
   "type": "object",
   "properties": {
     "version": {

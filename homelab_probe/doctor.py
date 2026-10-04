@@ -119,9 +119,9 @@ CHECKS: Dict[str, str] = {
     "endpoint.events": EVENTS_TITLE,
 }
 
-_SECRET_VARIABLES = ("API_KEY", "NOTIFY_NTFY_URL", "NOTIFY_NTFY_TOKEN", "NOTIFY_WEBHOOK_URL", "NOTIFY_WEBHOOK_TOKEN",
-                     "NOTIFY_SMTP_HOST", "NOTIFY_SMTP_USER", "NOTIFY_SMTP_PASSWORD", "NOTIFY_EMAIL_FROM",
-                     "NOTIFY_EMAIL_TO")
+_SECRET_VARIABLES = ("UNIFI_API_KEY", "NOTIFY_NTFY_URL", "NOTIFY_NTFY_TOKEN", "NOTIFY_WEBHOOK_URL",
+                     "NOTIFY_WEBHOOK_TOKEN", "NOTIFY_SMTP_HOST", "NOTIFY_SMTP_USER", "NOTIFY_SMTP_PASSWORD",
+                     "NOTIFY_EMAIL_FROM", "NOTIFY_EMAIL_TO")
 
 
 def scrub(text: str) -> str:
@@ -132,7 +132,7 @@ def scrub(text: str) -> str:
         value = os.environ.get(name, "").strip()
         if len(value) >= 4:
             text = text.replace(value, "***")
-    url = os.environ.get("CONTROLLER_URL", "").strip()
+    url = os.environ.get("UNIFI_URL", "").strip()
     if len(url) >= 4:
         parts = urlsplit(url)
         for hidden in (url, url.rstrip("/"), parts.netloc, parts.hostname or ""):
@@ -183,7 +183,7 @@ class Options:
 def _install_checks() -> List[Check]:
     version = ".".join(str(n) for n in sys.version_info[:3])
     return [make("install.version", INFO,
-                 f"unifi-sentinel {__version__}, Python {version} on {sys.platform}, requests {requests.__version__}")]
+                 f"hlp {__version__}, Python {version} on {sys.platform}, requests {requests.__version__}")]
 
 
 def _file_checks(options: Options) -> Tuple[List[Check], Optional[Path]]:
@@ -194,7 +194,7 @@ def _file_checks(options: Options) -> Tuple[List[Check], Optional[Path]]:
         path = find_env_file(options.env_file)
     except ConfigError as e:
         checks.append(make("config.env_file", FAIL, str(e),
-                           "give an existing file to --env-file or UNIFI_SENTINEL_ENV, or unset it"))
+                           "give an existing file to --env-file or HLP_ENV, or unset it"))
         checks.append(make("config.env_permissions", SKIP, "skipped: there is no .env file to look at"))
     else:
         if path is not None:
@@ -207,11 +207,11 @@ def _file_checks(options: Options) -> Tuple[List[Check], Optional[Path]]:
             else:
                 checks.append(make("config.env_permissions", OK, "only you can read it (it holds the API key)"))
         else:
-            from_environment = bool(os.environ.get("CONTROLLER_URL") and os.environ.get("API_KEY"))
+            from_environment = bool(os.environ.get("UNIFI_URL") and os.environ.get("UNIFI_API_KEY"))
             checks.append(make(
                 "config.env_file", INFO if from_environment else WARN,
                 "no .env file in the current directory; the settings come from the environment" if from_environment
-                else "no .env file in the current directory and no --env-file or UNIFI_SENTINEL_ENV",
+                else "no .env file in the current directory and no --env-file or HLP_ENV",
                 "" if from_environment else "copy example.env to .env here, or run from the directory that has it"))
             checks.append(make("config.env_permissions", SKIP, "skipped: there is no .env file to look at"))
     checks.append(_settings_check(options))
@@ -243,7 +243,7 @@ def _load(options: Options) -> Tuple[Optional[Config], Check]:
         config = replace(config, timeout=options.timeout)
     if options.parallel is not None:
         config = replace(config, parallel=options.parallel)
-    return config, make("config.environment", OK, "CONTROLLER_URL and API_KEY are set and valid")
+    return config, make("config.environment", OK, "UNIFI_URL and UNIFI_API_KEY are set and valid")
 
 
 def _config_checks(config: Optional[Config], first: Check) -> List[Check]:
@@ -259,12 +259,12 @@ def _config_checks(config: Optional[Config], first: Check) -> List[Check]:
     elif config.verify_ssl is False:
         checks.append(make("config.tls", WARN,
                            "certificate checking is off: the key is sent without checking who answers",
-                           "trust the controller's certificate with VERIFY_SSL=/path/to/its-certificate.pem"))
+                           "trust the controller's certificate with UNIFI_VERIFY_SSL=/path/to/its-certificate.pem"))
     elif isinstance(config.verify_ssl, str):
         checks.append(make("config.tls", OK, f"certificates are verified against {config.verify_ssl}"))
     else:
         checks.append(make("config.tls", OK, "certificates are verified against the system's trusted authorities",
-                           "a self-signed controller certificate needs VERIFY_SSL=<its certificate file>"))
+                           "a self-signed controller certificate needs UNIFI_VERIFY_SSL=<its certificate file>"))
     checks.append(make("config.limits", OK, f"timeout {config.timeout:g} s, "
                        f"{plural(config.parallel, 'request')} at once, site {config.site}"))
     return checks
@@ -301,24 +301,24 @@ def explain(error: UniFiAPIError, config: Config) -> Tuple[str, str]:
     kind = error.kind
     if kind == "tls":
         if isinstance(config.verify_ssl, str):
-            return ("the controller's certificate is not signed by anything in the CA bundle in VERIFY_SSL",
+            return ("the controller's certificate is not signed by anything in the CA bundle in UNIFI_VERIFY_SSL",
                     "use the CA that signed it, or the controller's own certificate file")
         return ("the controller's TLS certificate was not accepted",
-                "a self-signed certificate: point VERIFY_SSL at its certificate file (PEM); "
-                "VERIFY_SSL=false is a last resort")
+                "a self-signed certificate: point UNIFI_VERIFY_SSL at its certificate file (PEM); "
+                "UNIFI_VERIFY_SSL=false is a last resort")
     if kind == "unauthorized":
         return ("the controller rejected the API key (401)",
-                "create a key under Settings > Control Plane > Integrations and put it in API_KEY")
+                "create a key under Settings > Control Plane > Integrations and put it in UNIFI_API_KEY")
     if kind == "forbidden":
         return ("403: the key is valid but not allowed to make this request",
                 "check the key's access in Settings > Control Plane > Integrations")
     if kind == "timeout":
-        return (f"no answer within {config.timeout:g} s", "raise TIMEOUT or pass --timeout 60 for a slow gateway")
+        return (f"no answer within {config.timeout:g} s", "raise UNIFI_TIMEOUT or pass --timeout 60 for a slow gateway")
     if kind == "connection":
-        return ("could not connect", "check the host and port in CONTROLLER_URL and that this machine can reach it")
+        return ("could not connect", "check the host and port in UNIFI_URL and that this machine can reach it")
     if kind == "bad_body":
         return ("answered with something that is not JSON",
-                "CONTROLLER_URL may point at a login page or a proxy instead of the controller")
+                "UNIFI_URL may point at a login page or a proxy instead of the controller")
     if kind == "http":
         return (f"HTTP {error.status}", "")
     return ("the request could not be made", "")
@@ -386,7 +386,7 @@ def _controller_checks(config: Config, options: Options, factory: Callable[[Conf
         else:
             checks.append(make("controller.site", FAIL, f"site '{config.site}' was not found; the controller has "
                                f"{plural(len(client.sites()), 'site')}",
-                               "run `unifi-sentinel info` to list them and set SITE_ID or --site"))
+                               "run `hlp info` to list them and set UNIFI_SITE_ID or --site"))
         return checks + _skip_rest("skipped: the site was not found")
     checks.append(make("controller.site", OK, f"found ({plural(len(client.sites()), 'site')} on the controller)"))
     now_ms = int(now * 1000)
@@ -446,7 +446,7 @@ def exit_failed(checks: List[Check]) -> bool:
 
 def render(checks: List[Check]) -> str:
     """The checks by section, one line each, then what to do about the ones that need it."""
-    lines = ["UniFi Sentinel doctor"]
+    lines = ["Homelab Probe doctor"]
     section = ""
     for check in checks:
         if check.section != section:

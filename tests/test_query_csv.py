@@ -7,9 +7,9 @@ import time
 
 import pytest
 
-from unifi_sentinel import cli
-from unifi_sentinel.query import PORT_COLUMNS, csv_cell, data_columns, port_rows, render_csv
-from unifi_sentinel.snapshot import Needs, collect_snapshot
+from homelab_probe import cli
+from homelab_probe.query import PORT_COLUMNS, csv_cell, data_columns, port_rows, render_csv
+from homelab_probe.snapshot import Needs, collect_snapshot
 
 KINDS = [
     ["all"], ["devices"], ["clients"], ["clients", "--include-offline"], ["reservations"],
@@ -19,8 +19,8 @@ KINDS = [
 
 
 def run(fake_client, monkeypatch, capsys, argv):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     code = cli.main(["query", *argv])
     return code, capsys.readouterr().out

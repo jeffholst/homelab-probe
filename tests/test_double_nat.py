@@ -4,11 +4,11 @@ import json
 
 import pytest
 
-from unifi_sentinel import cli
-from unifi_sentinel.diagnose import WARNING, apply_ignores, diagnose
-from unifi_sentinel.settings import IgnoreRule
-from unifi_sentinel.snapshot import Needs, collect_snapshot
-from unifi_sentinel.wan import build_wan, classify_wan_address, nat_status, render_text, to_json
+from homelab_probe import cli
+from homelab_probe.diagnose import WARNING, apply_ignores, diagnose
+from homelab_probe.settings import IgnoreRule
+from homelab_probe.snapshot import Needs, collect_snapshot
+from homelab_probe.wan import build_wan, classify_wan_address, nat_status, render_text, to_json
 
 # -- the classifier --------------------------------------------------------------------------
 
@@ -149,8 +149,8 @@ def test_the_message_text_matches_the_issue_example_for_cgnat(fake_client):
 
 def run(fake_client, monkeypatch, argv):
     fake_client.session.fx["legacy"]["device"][0]["overheating"] = False
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     return cli.main(argv)
 

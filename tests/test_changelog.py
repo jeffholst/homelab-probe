@@ -15,11 +15,11 @@ import yaml
 from jsonschema import Draft7Validator
 from release_notes import ReleaseError, changelog_section, main, package_version, release_notes
 
-import unifi_sentinel
-from unifi_sentinel.audit import AUDIT_CODES
-from unifi_sentinel.commands import COMMANDS
-from unifi_sentinel.diagnose import CODES
-from unifi_sentinel.firewall import FIREWALL_CODES
+import homelab_probe
+from homelab_probe.audit import AUDIT_CODES
+from homelab_probe.commands import COMMANDS
+from homelab_probe.diagnose import CODES
+from homelab_probe.firewall import FIREWALL_CODES
 
 ROOT = Path(__file__).resolve().parent.parent
 CHANGELOG = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
@@ -57,7 +57,7 @@ def version_key(text):
 # -- the changelog -------------------------------------------------------------------------------------------
 
 def test_there_is_an_entry_for_the_current_version():
-    date, body = changelog_section(CHANGELOG, unifi_sentinel.__version__)
+    date, body = changelog_section(CHANGELOG, homelab_probe.__version__)
     assert date and (date == "Unreleased" or re.fullmatch(r"\d{4}-\d{2}-\d{2}", date)) and body.strip()
 
 
@@ -65,7 +65,7 @@ def test_the_entries_are_in_descending_version_order_and_the_top_one_is_the_curr
     versions = re.findall(r"^## \[(\d+\.\d+\.\d+)\]", CHANGELOG, re.M)
     assert versions and versions == sorted(versions, key=version_key, reverse=True)
     top = re.findall(r"^## \[([^\]]+)\]", CHANGELOG, re.M)[0]
-    assert top in (unifi_sentinel.__version__, "Unreleased")
+    assert top in (homelab_probe.__version__, "Unreleased")
 
 
 def test_only_the_standard_groups_are_used():
@@ -96,15 +96,15 @@ def test_every_finding_code_named_in_the_changelog_exists():
 
 def test_the_readme_links_to_the_changelog_and_says_how_to_install_a_tagged_version():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "(CHANGELOG.md)" in readme and "uv tool install git+https://github.com/jeffholst/unifi-sentinel@v" in readme
-    assert "pip install git+https://github.com/jeffholst/unifi-sentinel@v" in readme
+    assert "(CHANGELOG.md)" in readme and "uv tool install git+https://github.com/jeffholst/homelab-probe@v" in readme
+    assert "pip install git+https://github.com/jeffholst/homelab-probe@v" in readme
 
 
 # -- the release notes tool -----------------------------------------------------------------------------------
 
 def tree(tmp_path, version="1.2.3", changelog=None):
-    (tmp_path / "unifi_sentinel").mkdir()
-    (tmp_path / "unifi_sentinel" / "__init__.py").write_text(f'"""x"""\n\n__version__ = "{version}"\n')
+    (tmp_path / "homelab_probe").mkdir()
+    (tmp_path / "homelab_probe" / "__init__.py").write_text(f'"""x"""\n\n__version__ = "{version}"\n')
     text = changelog if changelog is not None else (
         "# Changelog\n\n## [Unreleased]\n\n### Added\n\n- next thing\n\n## [1.2.3] - 2026-10-02\n\n### Added\n\n"
         "- the thing\n\n### Fixed\n\n- the bug\n\n## [1.2.2] - 2026-09-01\n\n- older\n")
@@ -157,14 +157,14 @@ def test_an_empty_entry_is_refused(tmp_path):
 
 def test_a_package_without_a_version_is_refused(tmp_path):
     root = tree(tmp_path)
-    (root / "unifi_sentinel" / "__init__.py").write_text('"""no version here"""\n')
+    (root / "homelab_probe" / "__init__.py").write_text('"""no version here"""\n')
     with pytest.raises(ReleaseError, match="has no __version__"):
         package_version(root)
 
 
 def test_the_real_changelog_becomes_publishable_once_it_has_a_date(tmp_path):
     """Today the entry says Unreleased, which the tool refuses on purpose; dating it must be enough."""
-    version = unifi_sentinel.__version__
+    version = homelab_probe.__version__
     root = tree(tmp_path, version, CHANGELOG.replace(f"## [{version}] - Unreleased", f"## [{version}] - 2026-10-02"))
     notes = release_notes(f"v{version}", root)
     assert notes.startswith("The first tagged release") or notes.startswith("###") or notes.strip()

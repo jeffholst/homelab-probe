@@ -3,12 +3,12 @@
 
     uv run tools/record_fixture.py [--output FILE] [--env-file FILE] [--event-days N]
 
-It reads the controller named by ``CONTROLLER_URL``/``API_KEY`` (environment or ``./.env``) once, the way ``diagnose``
+It reads the controller named by ``UNIFI_URL``/``UNIFI_API_KEY`` (environment or ``./.env``) once, the way ``diagnose``
 does, with GET requests and the one approved read-only event log query (the recording session refuses anything
 else). From what came back it keeps only the fields ``tests/contract.py`` lists (nothing else the controller says
 about itself, its users or its keys is ever written), replaces every MAC, address, id and name with a synthetic
 one (``tools/sanitize.py``), proves nothing real is left (the leak check), and writes the result in the shape of
-``unifi_sentinel/demo/controller.json``, owner-only, to ``tools/recorded/controller.json`` (git-ignored).
+``homelab_probe/demo/controller.json``, owner-only, to ``tools/recorded/controller.json`` (git-ignored).
 
 The recording is for checking the contract and reproducing a problem on realistic data; it does not replace the
 hand-written fixture, which the tests depend on name by name. Output to the terminal is counts and field names,
@@ -30,9 +30,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from contract import CONTRACT, RecordingSession, endpoint_of, problems, records_of, segments  # noqa: E402
 from sanitize import LeakError, Sanitizer, check_no_leaks  # noqa: E402
 
-from unifi_sentinel.client import UniFiAPIError, UniFiClient  # noqa: E402
-from unifi_sentinel.config import ConfigError, load_config  # noqa: E402
-from unifi_sentinel.snapshot import EventQuery, Needs, collect_snapshot  # noqa: E402
+from homelab_probe.client import UniFiAPIError, UniFiClient  # noqa: E402
+from homelab_probe.config import ConfigError, load_config  # noqa: E402
+from homelab_probe.snapshot import EventQuery, Needs, collect_snapshot  # noqa: E402
 
 DEFAULT_OUTPUT = Path(__file__).resolve().parent / "recorded" / "controller.json"
 INFO_FIELDS = [["applicationVersion"]]
@@ -61,7 +61,7 @@ def _specs(endpoint: str) -> List[List[str]]:
 
 
 def build_fixture(exchanges: List[Tuple[str, str, Any]], now_ms: float) -> Dict[str, Any]:
-    """The recorded responses in the shape of ``unifi_sentinel/demo/controller.json``, reduced to the contract.
+    """The recorded responses in the shape of ``homelab_probe/demo/controller.json``, reduced to the contract.
 
     Times become ages (``age_s``, ``last_seen_age_s``), as the fixture stores them, so the recording stays
     current whenever it is replayed."""

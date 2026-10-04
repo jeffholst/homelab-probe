@@ -6,11 +6,11 @@ import time
 
 import pytest
 
-from unifi_sentinel import cli
-from unifi_sentinel.diagnose import CRITICAL, INFO, WARNING, _pool_findings, apply_ignores, diagnose
-from unifi_sentinel.reservations import dhcp_pool
-from unifi_sentinel.settings import IgnoreRule
-from unifi_sentinel.snapshot import Needs, collect_snapshot
+from homelab_probe import cli
+from homelab_probe.diagnose import CRITICAL, INFO, WARNING, _pool_findings, apply_ignores, diagnose
+from homelab_probe.reservations import dhcp_pool
+from homelab_probe.settings import IgnoreRule
+from homelab_probe.snapshot import Needs, collect_snapshot
 
 
 def net(**kw):
@@ -177,8 +177,8 @@ def test_diagnose_includes_the_check(fake_client):
 def test_diagnose_json_end_to_end(fake_client, monkeypatch, capsys):
     fake_client.session.fx["legacy"]["device"][0]["overheating"] = False
     snapshot(fake_client, reservations=[("cc:00:00:00:00:01", "media-box", "10.0.0.150")])
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     assert cli.main(["diagnose", "--json", "--no-events"]) == 1
     doc = json.loads(capsys.readouterr().out)

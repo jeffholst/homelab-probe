@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pytest
 
-import unifi_sentinel.diagnose as diagnose_package
-import unifi_sentinel.diagnose.areas as areas_module
-from unifi_sentinel.diagnose import diagnose
-from unifi_sentinel.diagnose.model import Finding
-from unifi_sentinel.settings import DiagnoseSettings
-from unifi_sentinel.snapshot import Needs, collect_snapshot
+import homelab_probe.diagnose as diagnose_package
+import homelab_probe.diagnose.areas as areas_module
+from homelab_probe.diagnose import diagnose
+from homelab_probe.diagnose.model import Finding
+from homelab_probe.settings import DiagnoseSettings
+from homelab_probe.snapshot import Needs, collect_snapshot
 
 PACKAGE = Path(diagnose_package.__file__).parent
 MODULES = ["addresses", "areas", "devices", "event_checks", "health", "model", "output", "ports", "reserved", "wireless"]
@@ -33,7 +33,7 @@ CHECK_ORDER = [
 def test_the_package_is_split_into_the_documented_modules():
     assert sorted(p.stem for p in PACKAGE.glob("*.py") if p.stem != "__init__") == MODULES
     for name in MODULES:
-        assert importlib.import_module(f"unifi_sentinel.diagnose.{name}").__doc__, name
+        assert importlib.import_module(f"homelab_probe.diagnose.{name}").__doc__, name
 
 
 def test_the_public_names_are_unchanged():
@@ -92,7 +92,7 @@ def test_checks_are_listed_in_the_module_of_their_topic():
         "event_checks": {"_event_findings"},
     }
     for module, names in expected.items():
-        loaded = importlib.import_module(f"unifi_sentinel.diagnose.{module}")
+        loaded = importlib.import_module(f"homelab_probe.diagnose.{module}")
         assert all(callable(getattr(loaded, n)) for n in names), module
     assert {n for names in expected.values() for n in names} == set(CHECK_ORDER)
 
@@ -116,12 +116,12 @@ def test_every_package_directory_is_included_when_the_project_is_installed():
     config = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["setuptools"]
     packages = config.get("packages")
     patterns = packages.get("find", {}).get("include") if isinstance(packages, dict) else None
-    assert patterns == ["unifi_sentinel*"], "use [tool.setuptools.packages.find] with include = [\"unifi_sentinel*\"]"
+    assert patterns == ["homelab_probe*"], "use [tool.setuptools.packages.find] with include = [\"homelab_probe*\"]"
     from fnmatch import fnmatch
 
     on_disk = {
         p.parent.relative_to(root).as_posix().replace("/", ".")
-        for p in (root / "unifi_sentinel").rglob("__init__.py")
+        for p in (root / "homelab_probe").rglob("__init__.py")
     }
-    assert "unifi_sentinel.diagnose" in on_disk
+    assert "homelab_probe.diagnose" in on_disk
     assert all(any(fnmatch(name, pattern) for pattern in patterns) for name in on_disk), on_disk

@@ -9,11 +9,11 @@ import pytest
 import requests
 from golden_support import run_command
 
-from unifi_sentinel import cli, demo
-from unifi_sentinel.client import UniFiClient
-from unifi_sentinel.demo import DEMO_URL, DemoSession, demo_client, demo_config
-from unifi_sentinel.demo.session import FIXTURE
-from unifi_sentinel.settings import load_settings as real_load_settings
+from homelab_probe import cli, demo
+from homelab_probe.client import UniFiClient
+from homelab_probe.demo import DEMO_URL, DemoSession, demo_client, demo_config
+from homelab_probe.demo.session import FIXTURE
+from homelab_probe.settings import load_settings as real_load_settings
 
 ROOT = Path(__file__).resolve().parent.parent
 POISON_URL = "https://real-controller.example.net"
@@ -30,19 +30,19 @@ COMMANDS = [
 @pytest.fixture
 def hostile_machine(monkeypatch, tmp_path):
     """A machine on which any attempt to read the user's settings or to reach a network fails loudly."""
-    (Path.cwd() / ".env").write_text(f"CONTROLLER_URL={POISON_URL}\nAPI_KEY={POISON_KEY}\n")
-    (Path.cwd() / "unifi-sentinel.toml").write_text("this is [not valid toml\n")
-    for name, value in (("CONTROLLER_URL", POISON_URL), ("API_KEY", POISON_KEY), ("NOTIFY_WEBHOOK_URL", POISON_HOOK),
-                        ("UNIFI_SENTINEL_ENV", str(tmp_path / "elsewhere.env")), ("SITE_ID", "real-site")):
+    (Path.cwd() / ".env").write_text(f"UNIFI_URL={POISON_URL}\nUNIFI_API_KEY={POISON_KEY}\n")
+    (Path.cwd() / "hlp.toml").write_text("this is [not valid toml\n")
+    for name, value in (("UNIFI_URL", POISON_URL), ("UNIFI_API_KEY", POISON_KEY), ("NOTIFY_WEBHOOK_URL", POISON_HOOK),
+                        ("HLP_ENV", str(tmp_path / "elsewhere.env")), ("UNIFI_SITE_ID", "real-site")):
         monkeypatch.setenv(name, value)
 
     def forbidden(*args, **kwargs):
         raise AssertionError("a demo must not read settings or use the network")
 
-    for target in ("unifi_sentinel.cli.load_config", "unifi_sentinel.config.load_dotenv",
-                   "unifi_sentinel.settings.load_settings"):
+    for target in ("homelab_probe.cli.load_config", "homelab_probe.config.load_dotenv",
+                   "homelab_probe.settings.load_settings"):
         monkeypatch.setattr(target, forbidden)
-    monkeypatch.setattr("unifi_sentinel.cli.load_settings", forbidden)
+    monkeypatch.setattr("homelab_probe.cli.load_settings", forbidden)
     monkeypatch.setattr(socket.socket, "connect", forbidden)
     monkeypatch.setattr(socket, "getaddrinfo", forbidden)
     monkeypatch.setattr(requests.Session, "request", forbidden)
@@ -95,7 +95,7 @@ def test_the_verbose_header_says_demo_and_names_no_address(hostile_machine, caps
     code = cli.main(["--demo", "--verbose", "info"])
     err = capsys.readouterr().err
     assert code == 0
-    assert "[verbose] unifi-sentinel " in err and "demo mode, synthetic data, no controller is contacted" in err
+    assert "[verbose] hlp " in err and "demo mode, synthetic data, no controller is contacted" in err
     assert "demo.invalid" not in err and "settings from" not in err
     assert "GET /proxy/network/integration/v1/info" in err
 
@@ -108,7 +108,7 @@ def test_the_settings_file_in_the_working_directory_is_not_the_demos(hostile_mac
 
 
 def test_a_named_settings_file_is_used(hostile_machine, capsys, monkeypatch, tmp_path):
-    monkeypatch.setattr("unifi_sentinel.cli.load_settings", real_load_settings)
+    monkeypatch.setattr("homelab_probe.cli.load_settings", real_load_settings)
     named = tmp_path / "mine.toml"
     named.write_text('[[ignore]]\nmessage = "offline"\nreason = "demo"\n')
     code, out, _ = run(capsys, "diagnose", "--config", str(named), "--no-emoji")
@@ -147,7 +147,7 @@ def test_the_demo_is_the_fake_controller_of_the_tests(fake_client):
 
     assert FakeSession is DemoSession and isinstance(fake_client.session, DemoSession)
     assert demo.FIXTURE is FIXTURE
-    assert (ROOT / "unifi_sentinel" / "demo" / "controller.json").is_file()
+    assert (ROOT / "homelab_probe" / "demo" / "controller.json").is_file()
     assert not (ROOT / "tests" / "fixtures" / "controller.json").exists()      # one copy only
 
 
@@ -158,7 +158,7 @@ def test_a_demo_can_be_a_parallel_read(hostile_machine, capsys):
 
 
 def test_the_demo_event_log_honors_the_controllers_filters():
-    from unifi_sentinel.demo.session import SYSTEM_LOG
+    from homelab_probe.demo.session import SYSTEM_LOG
 
     session = DemoSession()
     everything = session.post(f"{DEMO_URL}{SYSTEM_LOG}", json={"pageSize": 500}).json()["data"]

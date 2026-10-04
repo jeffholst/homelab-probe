@@ -242,7 +242,7 @@ class UniFiClient:
     def _quiet_insecure_warnings(self) -> Iterator[None]:
         """Hide urllib3's "unverified HTTPS request" warning for this client's own requests only.
 
-        The user chose ``VERIFY_SSL=false``, so repeating the warning is noise; but it is not
+        The user chose ``UNIFI_VERIFY_SSL=false``, so repeating the warning is noise; but it is not
         turned off for the whole process (the old ``urllib3.disable_warnings`` did that).
         ``warnings.catch_warnings`` is not thread-safe, so a future parallel fetch must set the
         filter once up front instead of per request.
@@ -264,13 +264,13 @@ class UniFiClient:
         if isinstance(self.verify_ssl, str):
             return UniFiAPIError(
                 f"TLS certificate verification failed for {self.base_url}: the certificate is not signed "
-                f"by anything in the CA bundle {self.verify_ssl} (VERIFY_SSL). Use the CA that signed the "
+                f"by anything in the CA bundle {self.verify_ssl} (UNIFI_VERIFY_SSL). Use the CA that signed the "
                 f"controller's certificate, or its own certificate file.", kind="tls"
             )
         return UniFiAPIError(
             f"TLS certificate verification failed for {self.base_url}. Install a "
-            f"trusted certificate on the controller, point VERIFY_SSL at a CA bundle that "
-            f"trusts it, or set VERIFY_SSL=false in .env if you accept an unverified connection.", kind="tls"
+            f"trusted certificate on the controller, point UNIFI_VERIFY_SSL at a CA bundle that "
+            f"trusts it, or set UNIFI_VERIFY_SSL=false in .env if you accept an unverified connection.", kind="tls"
         )
 
     def _decode_response(self, resp: requests.Response, url: str, attempt: int = 1) -> Any:

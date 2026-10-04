@@ -5,12 +5,12 @@ import math
 
 import pytest
 
-from unifi_sentinel import cli
-from unifi_sentinel.config import ConfigError
-from unifi_sentinel.diagnose import diagnose, needs_for
-from unifi_sentinel.diagnose.devices import _recent_reboot_findings
-from unifi_sentinel.settings import DiagnoseSettings, load_settings
-from unifi_sentinel.snapshot import Snapshot, collect_snapshot
+from homelab_probe import cli
+from homelab_probe.config import ConfigError
+from homelab_probe.diagnose import diagnose, needs_for
+from homelab_probe.diagnose.devices import _recent_reboot_findings
+from homelab_probe.settings import DiagnoseSettings, load_settings
+from homelab_probe.snapshot import Snapshot, collect_snapshot
 
 GATEWAY, SWITCH, AP, GARAGE = 0, 1, 2, 3                       # the order of the fixture's devices
 
@@ -28,8 +28,8 @@ def found(*uptimes, settings=None, **kwargs):
 
 
 def run(fake_client, monkeypatch, capsys, *argv):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     code = cli.main(list(argv))
     out = capsys.readouterr()
@@ -158,7 +158,7 @@ def test_it_is_information_only_so_it_never_changes_the_exit_code(fake_client, m
 
 
 def test_the_settings_file_changes_the_window(fake_client, monkeypatch, capsys, tmp_path):
-    config = tmp_path / "unifi-sentinel.toml"
+    config = tmp_path / "hlp.toml"
     config.write_text("[thresholds]\nrecent_reboot_minutes = 4\n")                 # the AP is up for 5 minutes
     assert reboots(fake_client, monkeypatch, capsys, "--config", str(config)) == []
     config.write_text("[thresholds]\nrecent_reboot_minutes = 6\n")
@@ -194,7 +194,7 @@ def test_no_extra_request_is_made_for_it(fake_client, monkeypatch, capsys):
 
 
 def test_an_ignore_rule_by_code_or_by_name_silences_it(fake_client, monkeypatch, capsys, tmp_path):
-    config = tmp_path / "unifi-sentinel.toml"
+    config = tmp_path / "hlp.toml"
     for rule in ('code = "device.recent_reboot"', 'subject = "office ap"\nmessage = "restarted"',
                  'code = "device.recent_reboot"\nsubject = "Office*"'):
         config.write_text(f'[[ignore]]\n{rule}\nreason = "it was updated tonight"\n')
@@ -217,7 +217,7 @@ def test_it_is_sent_only_when_the_minimum_severity_is_information(fake_client, m
 
 def test_when_the_legacy_data_is_unreadable_there_is_no_finding_and_the_one_notice_stays(fake_client, monkeypatch,
                                                                                          capsys):
-    from unifi_sentinel.client import UniFiAPIError
+    from homelab_probe.client import UniFiAPIError
     legacy_stat = fake_client.legacy_stat
 
     def fail_device_read(site_ref, resource):
@@ -243,7 +243,7 @@ def test_the_client_view_lists_it_for_a_device_on_the_clients_path(fake_client, 
 # -- the setting ---------------------------------------------------------------------------------------------------
 
 def write(tmp_path, text):
-    path = tmp_path / "unifi-sentinel.toml"
+    path = tmp_path / "hlp.toml"
     path.write_text(text)
     return path
 
@@ -251,7 +251,7 @@ def write(tmp_path, text):
 def test_the_default_and_the_example_file():
     from docs_support import ROOT
     assert DiagnoseSettings().recent_reboot_minutes == 60
-    assert load_settings(ROOT / "unifi-sentinel.example.toml").recent_reboot_minutes == 60
+    assert load_settings(ROOT / "hlp.example.toml").recent_reboot_minutes == 60
 
 
 @pytest.mark.parametrize("value, minutes", [("1", 1), ("60", 60), ("1440", 1440), ("90.0", 90)])

@@ -8,14 +8,14 @@ import pytest
 from test_notify import FakePost, finding, make_env
 from test_notify import diagnose as notify_args
 
-from unifi_sentinel import cli
-from unifi_sentinel import notify as notify_module
-from unifi_sentinel.commands import diagnose_areas
-from unifi_sentinel.diagnose import AREA_NAMES, AREAS, CODES, area_of, codes_of, diagnose, needs_for, parse_areas
-from unifi_sentinel.diagnose import areas as areas_module
-from unifi_sentinel.notify import baseline, plan
-from unifi_sentinel.settings import DiagnoseSettings
-from unifi_sentinel.snapshot import Needs, collect_snapshot
+from homelab_probe import cli
+from homelab_probe import notify as notify_module
+from homelab_probe.commands import diagnose_areas
+from homelab_probe.diagnose import AREA_NAMES, AREAS, CODES, area_of, codes_of, diagnose, needs_for, parse_areas
+from homelab_probe.diagnose import areas as areas_module
+from homelab_probe.notify import baseline, plan
+from homelab_probe.settings import DiagnoseSettings
+from homelab_probe.snapshot import Needs, collect_snapshot
 
 PACKAGE = Path(areas_module.__file__).parent
 ALL = list(AREA_NAMES)
@@ -179,8 +179,8 @@ def test_the_default_reads_everything_and_events_use_the_window():
 # -- the options -----------------------------------------------------------------------------------------------
 
 def run(fake_client, monkeypatch, argv):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     return cli.main(argv)
 

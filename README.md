@@ -1,12 +1,12 @@
-# UniFi Sentinel
+# Homelab Probe
 
-A command-line tool for querying, troubleshooting and inventorying a UniFi Network controller. It is **read-only**: it never changes anything on the controller. Every request is a GET, with one exception: the event log can only be queried with a POST, so `events`, and `diagnose` and `client` by default (`--no-events` skips it), send a read-only query to that one endpoint (see [Event history](#event-history)). Nothing else is ever sent anywhere, with one opt-in exception: `diagnose --notify` can send a short message to a notification service or mail server you configure (see [Notifications](docs/notifications.md#notifications)).
+A command-line tool for probing a homelab. Today it queries, troubleshoots and inventories a UniFi Network controller (more platforms may follow). It is **read-only**: it never changes anything on the controller. Every request is a GET, with one exception: the event log can only be queried with a POST, so `events`, and `diagnose` and `client` by default (`--no-events` skips it), send a read-only query to that one endpoint (see [Event history](#event-history)). Nothing else is ever sent anywhere, with one opt-in exception: `diagnose --notify` can send a short message to a notification service or mail server you configure (see [Notifications](docs/notifications.md#notifications)).
 
-> **Status: early development.** Tested against one live controller (Network 10.6.106); other versions and hardware may differ. See [open issues](https://github.com/jeffholst/unifi-sentinel/issues) for the roadmap.
+> **Status: early development.** Tested against one live controller (Network 10.6.106); other versions and hardware may differ. See [open issues](https://github.com/jeffholst/homelab-probe/issues) for the roadmap.
 
 ## Credits
 
-UniFi Sentinel is a fork of [ericfitz/unifi-clients-export](https://github.com/ericfitz/unifi-clients-export) by Eric Fitzgerald, whose CSV export is the foundation of the `export` command. It is licensed under the Apache License 2.0, as is the original.
+Homelab Probe is a fork of [ericfitz/unifi-clients-export](https://github.com/ericfitz/unifi-clients-export) by Eric Fitzgerald, whose CSV export is the foundation of the `export` command. It is licensed under the Apache License 2.0, as is the original.
 
 ## Commands
 
@@ -47,21 +47,21 @@ All of them, in full, are in [docs/features.md](docs/features.md).
 ## Installation
 
 ```bash
-git clone https://github.com/jeffholst/unifi-sentinel
-cd unifi-sentinel
+git clone https://github.com/jeffholst/homelab-probe
+cd homelab-probe
 cp example.env .env
 chmod 600 .env
 ```
 
 ### Configure
 
-Edit `.env`: the controller's address and an API key are all you need (a self-signed certificate is the usual first hurdle; see `VERIFY_SSL`):
+Edit `.env`: the controller's address and an API key are all you need (a self-signed certificate is the usual first hurdle; see `UNIFI_VERIFY_SSL`):
 
 ```env
-CONTROLLER_URL=https://your-controller-ip:443
-API_KEY=your-api-key-here
-SITE_ID=default
-VERIFY_SSL=true
+UNIFI_URL=https://your-controller-ip:443
+UNIFI_API_KEY=your-api-key-here
+UNIFI_SITE_ID=default
+UNIFI_VERIFY_SSL=true
 ```
 
 Every setting, how the file is found (`--env-file`), TLS, timeouts, speed and the notification settings are in [docs/configuration.md](docs/configuration.md#configure).
@@ -93,44 +93,44 @@ source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install .
 ```
 
-This installs a `unifi-sentinel` command.
+This installs an `hlp` command.
 
-**A tagged release, without a clone:** each release is listed on the [releases page](https://github.com/jeffholst/unifi-sentinel/releases) with its notes and a wheel, and the [changelog](CHANGELOG.md) says what changed in every version and which parts of the interface scripts can rely on (exit codes, finding codes, JSON versions). The first release is `v0.2.0`; use the newest tag you find there in place of `vX.Y.Z`:
+**A tagged release, without a clone:** each release is listed on the [releases page](https://github.com/jeffholst/homelab-probe/releases) with its notes and a wheel, and the [changelog](CHANGELOG.md) says what changed in every version and which parts of the interface scripts can rely on (exit codes, finding codes, JSON versions). The first release is `v0.2.0`; use the newest tag you find there in place of `vX.Y.Z`:
 
 ```bash
-uv tool install git+https://github.com/jeffholst/unifi-sentinel@vX.Y.Z      # an isolated install with uv
-pip install git+https://github.com/jeffholst/unifi-sentinel@vX.Y.Z          # or into a virtual environment
+uv tool install git+https://github.com/jeffholst/homelab-probe@vX.Y.Z      # an isolated install with uv
+pip install git+https://github.com/jeffholst/homelab-probe@vX.Y.Z          # or into a virtual environment
 ```
 
-Either installs the `unifi-sentinel` command (its `--version` option shows which version you have). The `.env` file is still read from the directory you run it in (or `--env-file`), so put it there. `uv tool upgrade unifi-sentinel` does not move a pinned tag; install the newer tag instead.
+Either installs the `hlp` command (its `--version` option shows which version you have). The `.env` file is still read from the directory you run it in (or `--env-file`), so put it there. `uv tool upgrade homelab-probe` does not move a pinned tag; install the newer tag instead.
 
 ## Usage
 
 ```bash
-uv run unifi-sentinel.py --demo diagnose                      # no controller yet? synthetic data, nothing read or sent
-uv run unifi-sentinel.py info                                 # the controller's version and its sites
-uv run unifi-sentinel.py --site Lab diagnose --no-events      # another site for this run (beats SITE_ID)
-uv run unifi-sentinel.py export -o ./out --include-offline    # CSV files (--output-dir; --format json for one JSON file); also offline clients
-uv run unifi-sentinel.py query clients -s printer --json      # filter (long form: --search), as JSON; --csv for a spreadsheet
-uv run unifi-sentinel.py query wlans                          # Wi-Fi networks (also: query networks; query clients --ssid guest)
-uv run unifi-sentinel.py snapshot                             # save the inventory to ./snapshots/
-uv run unifi-sentinel.py diff                                 # what changed since the newest snapshot?
-uv run unifi-sentinel.py topology --clients                   # how the gateway, switches and APs are wired
-uv run unifi-sentinel.py wifi --band 2.4 --ap hall            # radios and a channel plan from the neighbors
-uv run unifi-sentinel.py wan --days 90                        # is it my internet or my LAN?
-uv run unifi-sentinel.py firewall --all --zones               # policies, port forwards, zones and the matrix
-uv run unifi-sentinel.py events --since 7d --severity high    # recent serious events
-uv run unifi-sentinel.py client desktop                       # one client: attachment, link, findings
-uv run unifi-sentinel.py new-clients                          # clients in no client group
-uv run unifi-sentinel.py audit                                # settings that are probably not what you want
-uv run unifi-sentinel.py doctor                               # is the tool set up right? (--offline: no controller)
-uv run unifi-sentinel.py completion zsh                       # a completion script for bash, zsh or fish
-uv run unifi-sentinel.py diagnose                             # health checks (--json for scripts, --notify for alerts)
-uv run unifi-sentinel.py diagnose --only ports,wifi           # just those checks, reading only what they need
-uv run unifi-sentinel.py diagnose --watch 60                  # every minute, print only what changed (Ctrl-C to stop)
+uv run hlp.py --demo diagnose                      # no controller yet? synthetic data, nothing read or sent
+uv run hlp.py info                                 # the controller's version and its sites
+uv run hlp.py --site Lab diagnose --no-events      # another site for this run (beats UNIFI_SITE_ID)
+uv run hlp.py export -o ./out --include-offline    # CSV files (--output-dir; --format json for one JSON file); also offline clients
+uv run hlp.py query clients -s printer --json      # filter (long form: --search), as JSON; --csv for a spreadsheet
+uv run hlp.py query wlans                          # Wi-Fi networks (also: query networks; query clients --ssid guest)
+uv run hlp.py snapshot                             # save the inventory to ./snapshots/
+uv run hlp.py diff                                 # what changed since the newest snapshot?
+uv run hlp.py topology --clients                   # how the gateway, switches and APs are wired
+uv run hlp.py wifi --band 2.4 --ap hall            # radios and a channel plan from the neighbors
+uv run hlp.py wan --days 90                        # is it my internet or my LAN?
+uv run hlp.py firewall --all --zones               # policies, port forwards, zones and the matrix
+uv run hlp.py events --since 7d --severity high    # recent serious events
+uv run hlp.py client desktop                       # one client: attachment, link, findings
+uv run hlp.py new-clients                          # clients in no client group
+uv run hlp.py audit                                # settings that are probably not what you want
+uv run hlp.py doctor                               # is the tool set up right? (--offline: no controller)
+uv run hlp.py completion zsh                       # a completion script for bash, zsh or fish
+uv run hlp.py diagnose                             # health checks (--json for scripts, --notify for alerts)
+uv run hlp.py diagnose --only ports,wifi           # just those checks, reading only what they need
+uv run hlp.py diagnose --watch 60                  # every minute, print only what changed (Ctrl-C to stop)
 ```
 
-Run these from the project root (uv uses `pyproject.toml`); after `pip install .` use `unifi-sentinel <command>` instead. Run `--help` on the tool or any command for options, and `--version` for the version. More examples, with sample output, are in [docs/examples.md](docs/examples.md). For supported commands, `--demo` ([details](docs/configuration.md#trying-it-without-a-controller---demo)) serves synthetic data; it does not support `doctor`, `snapshot` or `diff`, and refuses notification options.
+Run these from the project root (uv uses `pyproject.toml`); after `pip install .` use `hlp <command>` instead. Run `--help` on the tool or any command for options, and `--version` for the version. More examples, with sample output, are in [docs/examples.md](docs/examples.md). For supported commands, `--demo` ([details](docs/configuration.md#trying-it-without-a-controller---demo)) serves synthetic data; it does not support `doctor`, `snapshot` or `diff`, and refuses notification options.
 
 ### Diagnose
 
@@ -206,7 +206,7 @@ Clients that use a private Wi-Fi MAC address are flagged in `query clients`, `ne
 `--fail-on {info,warning,critical}` sets the lowest severity that gives a non-zero code (default `warning`). Critical always exits 2. Example cron entry that only alerts on outages (the tested cron, systemd, launchd and Docker setups are in [Running on a schedule](docs/scheduling.md)):
 
 ```bash
-*/15 * * * * cd /path/to/unifi-sentinel && uv run unifi-sentinel.py diagnose --fail-on critical || notify-me
+*/15 * * * * cd /path/to/homelab-probe && uv run hlp.py diagnose --fail-on critical || notify-me
 ```
 
 Event-based warnings ([Recent events](docs/diagnose.md#recent-events)) count towards exit code 1 like any other warning. `--json` does not change any exit code.
@@ -241,7 +241,7 @@ Apache License 2.0. See [LICENSE](LICENSE).
 
 ## Contributing
 
-Issues and pull requests are welcome; read [CONTRIBUTING.md](CONTRIBUTING.md) first. Report a security problem privately, as [SECURITY.md](SECURITY.md) describes. Work is tracked in [GitHub issues](https://github.com/jeffholst/unifi-sentinel/issues).
+Issues and pull requests are welcome; read [CONTRIBUTING.md](CONTRIBUTING.md) first. Report a security problem privately, as [SECURITY.md](SECURITY.md) describes. Work is tracked in [GitHub issues](https://github.com/jeffholst/homelab-probe/issues).
 
 ## Acknowledgments
 

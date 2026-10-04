@@ -9,10 +9,10 @@ import pytest
 import requests
 import urllib3
 
-from unifi_sentinel import cli
-from unifi_sentinel import client as client_module
-from unifi_sentinel.client import GET_RETRIES, UniFiAPIError, UniFiClient
-from unifi_sentinel.config import DEFAULT_TIMEOUT, Config, ConfigError, load_config, parse_timeout, parse_verify
+from homelab_probe import cli
+from homelab_probe import client as client_module
+from homelab_probe.client import GET_RETRIES, UniFiAPIError, UniFiClient
+from homelab_probe.config import DEFAULT_TIMEOUT, Config, ConfigError, load_config, parse_timeout, parse_verify
 
 KEY = "sekret-key-0123456789"
 URL = "https://controller.example"
@@ -249,7 +249,7 @@ def test_the_tls_message_points_at_a_ca_bundle_or_names_the_one_in_use(tmp_path)
     client, _ = make(requests.exceptions.SSLError("bad"))
     with pytest.raises(UniFiAPIError) as caught:
         client.info()
-    assert "point VERIFY_SSL at a CA bundle" in str(caught.value)
+    assert "point UNIFI_VERIFY_SSL at a CA bundle" in str(caught.value)
     bundle = str(tmp_path / "lab-ca.pem")
     client, _ = make(requests.exceptions.SSLError("bad"), verify_ssl=bundle)
     with pytest.raises(UniFiAPIError) as caught:
@@ -294,7 +294,7 @@ def test_creating_a_client_changes_no_global_warning_filters():
     assert list(warnings.filters) == before
 
 
-# -- VERIFY_SSL as a CA bundle and TIMEOUT ------------------------------------------------------------
+# -- UNIFI_VERIFY_SSL as a CA bundle and UNIFI_TIMEOUT ------------------------------------------------------------
 
 def test_verify_accepts_words_and_existing_bundle_paths(tmp_path):
     assert parse_verify(None) is True and parse_verify("") is True and parse_verify("  ") is True
@@ -329,7 +329,7 @@ def test_an_unreadable_bundle_is_rejected(tmp_path):
 
 @pytest.mark.parametrize("text", ["sometimes", "off-ish", "maybe", "2"])
 def test_other_words_still_get_the_accepted_words_message(text):
-    with pytest.raises(ConfigError, match="VERIFY_SSL must be one of true, yes, 1, on, false, no, 0, off, "
+    with pytest.raises(ConfigError, match="UNIFI_VERIFY_SSL must be one of true, yes, 1, on, false, no, 0, off, "
                                           "or the path of a CA bundle"):
         parse_verify(text)
 
@@ -337,13 +337,13 @@ def test_other_words_still_get_the_accepted_words_message(text):
 def test_load_config_carries_the_bundle_and_the_timeout(monkeypatch, tmp_path):
     bundle = tmp_path / "ca.pem"
     bundle.write_text("x")
-    monkeypatch.setenv("CONTROLLER_URL", URL)
-    monkeypatch.setenv("API_KEY", KEY)
-    monkeypatch.setenv("VERIFY_SSL", str(bundle))
-    monkeypatch.setenv("TIMEOUT", "45")
+    monkeypatch.setenv("UNIFI_URL", URL)
+    monkeypatch.setenv("UNIFI_API_KEY", KEY)
+    monkeypatch.setenv("UNIFI_VERIFY_SSL", str(bundle))
+    monkeypatch.setenv("UNIFI_TIMEOUT", "45")
     cfg = load_config()
     assert (cfg.verify_ssl, cfg.timeout) == (str(bundle), 45.0)
-    monkeypatch.delenv("TIMEOUT")
+    monkeypatch.delenv("UNIFI_TIMEOUT")
     assert load_config().timeout == DEFAULT_TIMEOUT
 
 
@@ -355,7 +355,7 @@ def test_timeout_values(text, seconds):
 
 @pytest.mark.parametrize("text", ["fast", "0", "0.5", "-3", "601", "inf", "nan", "10s"])
 def test_bad_timeouts_are_rejected(text):
-    with pytest.raises(ConfigError, match="TIMEOUT must be"):
+    with pytest.raises(ConfigError, match="UNIFI_TIMEOUT must be"):
         parse_timeout(text)
 
 
@@ -363,8 +363,8 @@ def test_bad_timeouts_are_rejected(text):
 
 def run(fake_client, monkeypatch, argv, seen=None):
     fake_client.session.fx["legacy"]["device"][0]["overheating"] = False
-    monkeypatch.setenv("CONTROLLER_URL", URL)
-    monkeypatch.setenv("API_KEY", KEY)
+    monkeypatch.setenv("UNIFI_URL", URL)
+    monkeypatch.setenv("UNIFI_API_KEY", KEY)
 
     def from_config(cls, cfg):
         if seen is not None:
@@ -378,7 +378,7 @@ def run(fake_client, monkeypatch, argv, seen=None):
 def test_the_option_beats_the_env_file_which_beats_the_default(fake_client, monkeypatch):
     seen = []
     assert run(fake_client, monkeypatch, ["info"], seen) == 0 and seen[-1].timeout == DEFAULT_TIMEOUT
-    monkeypatch.setenv("TIMEOUT", "20")
+    monkeypatch.setenv("UNIFI_TIMEOUT", "20")
     assert run(fake_client, monkeypatch, ["info"], seen) == 0 and seen[-1].timeout == 20
     assert run(fake_client, monkeypatch, ["--timeout", "45", "info"], seen) == 0 and seen[-1].timeout == 45
 
@@ -387,13 +387,13 @@ def test_the_option_beats_the_env_file_which_beats_the_default(fake_client, monk
 def test_a_bad_option_is_a_usage_error(fake_client, monkeypatch, capsys, value):
     with pytest.raises(SystemExit) as caught:
         run(fake_client, monkeypatch, ["--timeout", value, "info"])
-    assert caught.value.code == cli.EXIT_USAGE and "TIMEOUT must be" in capsys.readouterr().err
+    assert caught.value.code == cli.EXIT_USAGE and "UNIFI_TIMEOUT must be" in capsys.readouterr().err
 
 
 def test_a_bad_timeout_in_the_environment_is_a_config_error(fake_client, monkeypatch, capsys):
-    monkeypatch.setenv("TIMEOUT", "soon")
+    monkeypatch.setenv("UNIFI_TIMEOUT", "soon")
     assert run(fake_client, monkeypatch, ["info"]) == cli.EXIT_ERROR
-    assert "TIMEOUT must be a number of seconds" in capsys.readouterr().err
+    assert "UNIFI_TIMEOUT must be a number of seconds" in capsys.readouterr().err
 
 
 # -- what each command does when a legacy read fails ---------------------------------------------------

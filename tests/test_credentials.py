@@ -7,12 +7,12 @@ from pathlib import Path
 import pytest
 import requests
 
-from unifi_sentinel import cli
-from unifi_sentinel.client import UniFiAPIError, UniFiClient
-from unifi_sentinel.config import Config, ConfigError, env_file_warning, load_config, validate_controller_url
+from homelab_probe import cli
+from homelab_probe.client import UniFiAPIError, UniFiClient
+from homelab_probe.config import Config, ConfigError, env_file_warning, load_config, validate_controller_url
 
 KEY = "sekret-key-0123456789"
-GOOD = f"CONTROLLER_URL=https://controller.example\nAPI_KEY={KEY}\n"
+GOOD = f"UNIFI_URL=https://controller.example\nUNIFI_API_KEY={KEY}\n"
 
 posix_only = pytest.mark.skipif(sys.platform.startswith("win"), reason="POSIX file modes")
 
@@ -85,8 +85,8 @@ def test_an_explicit_env_file_is_checked_too(tmp_path):
 
 
 def test_no_file_means_nothing_to_check(monkeypatch):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", KEY)
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", KEY)
     assert load_config().warnings == ()
 
 
@@ -172,8 +172,8 @@ def test_a_query_or_fragment_is_refused(given):
 
 
 def test_load_config_refuses_http_and_allows_it_with_the_opt_in(monkeypatch):
-    monkeypatch.setenv("API_KEY", KEY)
-    monkeypatch.setenv("CONTROLLER_URL", "http://192.0.2.1:8080/")
+    monkeypatch.setenv("UNIFI_API_KEY", KEY)
+    monkeypatch.setenv("UNIFI_URL", "http://192.0.2.1:8080/")
     with pytest.raises(ConfigError, match="clear text"):
         load_config()
     monkeypatch.setenv("ALLOW_INSECURE_HTTP", "true")
@@ -181,12 +181,12 @@ def test_load_config_refuses_http_and_allows_it_with_the_opt_in(monkeypatch):
 
 
 def test_using_the_opt_in_is_not_silent(monkeypatch):
-    monkeypatch.setenv("API_KEY", KEY)
-    monkeypatch.setenv("CONTROLLER_URL", "http://192.0.2.1")
+    monkeypatch.setenv("UNIFI_API_KEY", KEY)
+    monkeypatch.setenv("UNIFI_URL", "http://192.0.2.1")
     monkeypatch.setenv("ALLOW_INSECURE_HTTP", "1")
     cfg = load_config()
     assert len(cfg.warnings) == 1 and "clear text" in cfg.warnings[0] and KEY not in cfg.warnings[0]
-    monkeypatch.setenv("CONTROLLER_URL", "https://192.0.2.1")
+    monkeypatch.setenv("UNIFI_URL", "https://192.0.2.1")
     assert load_config().warnings == ()
 
 
@@ -202,8 +202,8 @@ def test_the_opt_in_value_is_validated(tmp_path):
 
 
 def test_the_opt_in_does_nothing_for_https_and_is_off_by_default(monkeypatch):
-    monkeypatch.setenv("API_KEY", KEY)
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", KEY)
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
     monkeypatch.setenv("ALLOW_INSECURE_HTTP", "no")
     assert load_config().controller_url == "https://controller.example"
 
@@ -295,8 +295,8 @@ def test_the_redaction_does_not_touch_ordinary_text():
 
 @pytest.mark.parametrize("name", FAILURES)
 def test_no_command_prints_the_key_on_any_failure_path(monkeypatch, capsys, name):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", KEY)
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", KEY)
     monkeypatch.setattr(cli.UniFiClient, "from_config",
                         classmethod(lambda cls, cfg: stubbed_client(FAILURES[name])))
     for argv in (["info"], ["query", "devices"], ["events"], ["diagnose"], ["client", "x"]):
@@ -307,14 +307,14 @@ def test_no_command_prints_the_key_on_any_failure_path(monkeypatch, capsys, name
 
 
 @pytest.mark.parametrize("bad", [
-    {"CONTROLLER_URL": "controller.example"},
-    {"CONTROLLER_URL": "https://controller.example", "VERIFY_SSL": "sometimes"},
-    {"CONTROLLER_URL": "https://controller.example", "SITE_ID": "a/b"},
-    {"CONTROLLER_URL": "http://controller.example"},
-    {"CONTROLLER_URL": f"https://admin:{KEY}@controller.example"},
+    {"UNIFI_URL": "controller.example"},
+    {"UNIFI_URL": "https://controller.example", "UNIFI_VERIFY_SSL": "sometimes"},
+    {"UNIFI_URL": "https://controller.example", "UNIFI_SITE_ID": "a/b"},
+    {"UNIFI_URL": "http://controller.example"},
+    {"UNIFI_URL": f"https://admin:{KEY}@controller.example"},
 ])
 def test_configuration_errors_do_not_print_the_key(monkeypatch, capsys, bad):
-    for name, value in {"API_KEY": KEY, **bad}.items():
+    for name, value in {"UNIFI_API_KEY": KEY, **bad}.items():
         monkeypatch.setenv(name, value)
     assert cli.main(["info"]) == cli.EXIT_ERROR
     captured = capsys.readouterr()
@@ -322,7 +322,7 @@ def test_configuration_errors_do_not_print_the_key(monkeypatch, capsys, bad):
 
 
 def test_a_placeholder_key_is_refused_without_printing_anything_secret(monkeypatch, capsys):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", "your-api-key-here")
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", "your-api-key-here")
     assert cli.main(["info"]) == cli.EXIT_ERROR
     assert "placeholder" in capsys.readouterr().err

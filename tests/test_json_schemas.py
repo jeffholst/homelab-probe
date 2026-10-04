@@ -19,16 +19,16 @@ from docs_support import ROOT
 from golden_support import run_command
 from jsonschema import Draft202012Validator, ValidationError
 
-from unifi_sentinel import cli, events, history, topology, wan, wifi
-from unifi_sentinel import client_view as client_view_module
-from unifi_sentinel import doctor as doctor_module
-from unifi_sentinel import export as export_module
-from unifi_sentinel import firewall as firewall_module
-from unifi_sentinel.client import UniFiClient
-from unifi_sentinel.diagnose import JSON_VERSION as FINDINGS_VERSION
-from unifi_sentinel.diagnose import areas as diagnose_areas
-from unifi_sentinel.history import Change as ChangeRecord
-from unifi_sentinel.history import (
+from homelab_probe import cli, events, history, topology, wan, wifi
+from homelab_probe import client_view as client_view_module
+from homelab_probe import doctor as doctor_module
+from homelab_probe import export as export_module
+from homelab_probe import firewall as firewall_module
+from homelab_probe.client import UniFiClient
+from homelab_probe.diagnose import JSON_VERSION as FINDINGS_VERSION
+from homelab_probe.diagnose import areas as diagnose_areas
+from homelab_probe.history import Change as ChangeRecord
+from homelab_probe.history import (
     ChangedRecord,
     ClientRecord,
     ControllerRecord,
@@ -41,12 +41,12 @@ from unifi_sentinel.history import (
     capture,
     diff_snapshots,
 )
-from unifi_sentinel.notify import Event, render_payload
-from unifi_sentinel.snapshot import Needs, collect_snapshot
-from unifi_sentinel.topology import ClientCounts, Node, NodeFinding, Summary, Topology
+from homelab_probe.notify import Event, render_payload
+from homelab_probe.snapshot import Needs, collect_snapshot
+from homelab_probe.topology import ClientCounts, Node, NodeFinding, Summary, Topology
 
 SCHEMAS = ROOT / "docs" / "schemas"
-BASE = "https://raw.githubusercontent.com/jeffholst/unifi-sentinel/main/docs/schemas/"
+BASE = "https://raw.githubusercontent.com/jeffholst/homelab-probe/main/docs/schemas/"
 
 
 def load(name):

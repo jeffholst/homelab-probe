@@ -6,56 +6,56 @@ Every command with its options, and sample output generated from the checked-in 
 
 
 ```bash
-uv run unifi-sentinel.py --demo diagnose             # no controller: the synthetic network, nothing read or sent
-uv run unifi-sentinel.py --demo topology --clients   # supported reports use the same synthetic data
-uv run unifi-sentinel.py info
-uv run unifi-sentinel.py export
-uv run unifi-sentinel.py export -o ./out   # write CSVs to a directory (long form: --output-dir)
-uv run unifi-sentinel.py export --include-offline   # also list previously seen clients
-uv run unifi-sentinel.py export --format json -o ./out   # one file, unifi_inventory.json, instead of the CSVs
-uv run unifi-sentinel.py query devices               # UniFi devices with firmware and uptime
-uv run unifi-sentinel.py query clients -s printer --json   # filter (long form: --search), JSON output
-uv run unifi-sentinel.py query clients --include-offline   # also previously seen clients
-uv run unifi-sentinel.py query clients --csv > clients.csv  # CSV for a spreadsheet (same columns as --json)
-uv run unifi-sentinel.py query reservations          # DHCP fixed IP reservations
-uv run unifi-sentinel.py query reservations --offline   # reserved clients that have been offline for a day or more
-uv run unifi-sentinel.py query ports                 # every switch port
-uv run unifi-sentinel.py query ports --down --switch rack   # down ports on matching switches
-uv run unifi-sentinel.py query ports --errors        # ports with rx/tx errors
-uv run unifi-sentinel.py snapshot                    # save the inventory to ./snapshots/
-uv run unifi-sentinel.py diff                        # what changed since the newest snapshot?
-uv run unifi-sentinel.py topology                    # how the gateway, switches and APs are wired
-uv run unifi-sentinel.py topology --clients          # ...with the wired clients under each device
-uv run unifi-sentinel.py wifi                        # radios and a channel plan from the neighbors
-uv run unifi-sentinel.py wifi --band 2.4 --ap hall   # one band, one AP
-uv run unifi-sentinel.py wan                         # is it my internet or my LAN?
-uv run unifi-sentinel.py wan --days 90               # a longer speedtest history
-uv run unifi-sentinel.py firewall                    # your firewall policies, port forwards and findings
-uv run unifi-sentinel.py firewall --all --zones      # ...plus the built-in policies, the zones and the zone matrix
-uv run unifi-sentinel.py firewall --search plex --json   # filter by text, as JSON
-uv run unifi-sentinel.py events                      # the last 24 hours, newest first
-uv run unifi-sentinel.py events --since 7d --severity high   # recent serious events
-uv run unifi-sentinel.py events --client phone --event disconnected   # one client's drops
-uv run unifi-sentinel.py events --summary --since 7d   # counts and the noisiest clients
-uv run unifi-sentinel.py client desktop              # one client: attachment, link, findings
-uv run unifi-sentinel.py client aa:bb:cc:dd:ee:ff --json   # by MAC (any format) or IP, as JSON
-uv run unifi-sentinel.py new-clients                 # clients in no client group
-uv run unifi-sentinel.py audit                       # settings that are probably not what you want
-uv run unifi-sentinel.py audit --json --fail-on info # as JSON; any finding gives exit code 1
-uv run unifi-sentinel.py diagnose                    # health checks
-uv run unifi-sentinel.py diagnose --json             # the same, as JSON with a stable code per finding
-uv run unifi-sentinel.py diagnose --only ports,wifi  # just those checks, and read only what they need
-uv run unifi-sentinel.py diagnose --skip events      # everything except the event-log checks (no POST)
-uv run unifi-sentinel.py diagnose --watch 60         # every minute, print only what changed (Ctrl-C to stop)
-uv run unifi-sentinel.py --site Lab diagnose --no-events   # another site for this run (beats SITE_ID)
-uv run unifi-sentinel.py completion zsh > _unifi-sentinel   # a completion script (bash, zsh or fish)
+uv run hlp.py --demo diagnose             # no controller: the synthetic network, nothing read or sent
+uv run hlp.py --demo topology --clients   # supported reports use the same synthetic data
+uv run hlp.py info
+uv run hlp.py export
+uv run hlp.py export -o ./out   # write CSVs to a directory (long form: --output-dir)
+uv run hlp.py export --include-offline   # also list previously seen clients
+uv run hlp.py export --format json -o ./out   # one file, unifi_inventory.json, instead of the CSVs
+uv run hlp.py query devices               # UniFi devices with firmware and uptime
+uv run hlp.py query clients -s printer --json   # filter (long form: --search), JSON output
+uv run hlp.py query clients --include-offline   # also previously seen clients
+uv run hlp.py query clients --csv > clients.csv  # CSV for a spreadsheet (same columns as --json)
+uv run hlp.py query reservations          # DHCP fixed IP reservations
+uv run hlp.py query reservations --offline   # reserved clients that have been offline for a day or more
+uv run hlp.py query ports                 # every switch port
+uv run hlp.py query ports --down --switch rack   # down ports on matching switches
+uv run hlp.py query ports --errors        # ports with rx/tx errors
+uv run hlp.py snapshot                    # save the inventory to ./snapshots/
+uv run hlp.py diff                        # what changed since the newest snapshot?
+uv run hlp.py topology                    # how the gateway, switches and APs are wired
+uv run hlp.py topology --clients          # ...with the wired clients under each device
+uv run hlp.py wifi                        # radios and a channel plan from the neighbors
+uv run hlp.py wifi --band 2.4 --ap hall   # one band, one AP
+uv run hlp.py wan                         # is it my internet or my LAN?
+uv run hlp.py wan --days 90               # a longer speedtest history
+uv run hlp.py firewall                    # your firewall policies, port forwards and findings
+uv run hlp.py firewall --all --zones      # ...plus the built-in policies, the zones and the zone matrix
+uv run hlp.py firewall --search plex --json   # filter by text, as JSON
+uv run hlp.py events                      # the last 24 hours, newest first
+uv run hlp.py events --since 7d --severity high   # recent serious events
+uv run hlp.py events --client phone --event disconnected   # one client's drops
+uv run hlp.py events --summary --since 7d   # counts and the noisiest clients
+uv run hlp.py client desktop              # one client: attachment, link, findings
+uv run hlp.py client aa:bb:cc:dd:ee:ff --json   # by MAC (any format) or IP, as JSON
+uv run hlp.py new-clients                 # clients in no client group
+uv run hlp.py audit                       # settings that are probably not what you want
+uv run hlp.py audit --json --fail-on info # as JSON; any finding gives exit code 1
+uv run hlp.py diagnose                    # health checks
+uv run hlp.py diagnose --json             # the same, as JSON with a stable code per finding
+uv run hlp.py diagnose --only ports,wifi  # just those checks, and read only what they need
+uv run hlp.py diagnose --skip events      # everything except the event-log checks (no POST)
+uv run hlp.py diagnose --watch 60         # every minute, print only what changed (Ctrl-C to stop)
+uv run hlp.py --site Lab diagnose --no-events   # another site for this run (beats UNIFI_SITE_ID)
+uv run hlp.py completion zsh > _hlp   # a completion script (bash, zsh or fish)
 ```
 
 **`query --csv`** prints CSV on stdout instead of the table, with the columns and rows of `--json` (`Private MAC` for clients, `Offline For` with `--offline`, every column for `ports`) and no row-count footer; a result with no rows is just the header. It cannot be combined with `--json` (usage error, exit 64). Cells are quoted by Python's `csv` writer, so commas, quotes and line breaks are safe, and every text cell is cleaned first (control characters and invisible characters removed, line breaks turned into spaces) and then checked for a leading `=`, `+`, `-` or `@`: such a name gets a leading `'`, which a spreadsheet shows as plain text instead of running it as a formula. The `'` is part of the value you see in the file (the `export` files follow the same rule); numbers are left as numbers, so a negative error count stays `-5`. `--json` stays raw.
 
 **`--watch`, `--site` and `completion`.** `diagnose --watch SECONDS` prints the full report once and then, every SECONDS (10 to 86400), only what is new, worse or fixed; it cannot be combined with `--json` or `--notify` (see [Diagnose](diagnose.md#diagnose)). `--site` goes before the command and chooses the site for that run ([Configuration](configuration.md#configure)). `completion` prints a script for the shell you name and needs no `.env` ([Shell completion](configuration.md#shell-completion)).
 
-`query` takes an optional kind (`all` by default, `devices`, `clients`, `reservations` or `ports`). Run these from the project root (uv uses `pyproject.toml`). After `pip install .` use `unifi-sentinel <command>` instead. Run `--help` on the tool or any command for options, and `--version` for the version.
+`query` takes an optional kind (`all` by default, `devices`, `clients`, `reservations` or `ports`). Run these from the project root (uv uses `pyproject.toml`). After `pip install .` use `hlp <command>` instead. Run `--help` on the tool or any command for options, and `--version` for the version.
 
 ## Example Output
 

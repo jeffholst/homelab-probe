@@ -18,7 +18,7 @@ else:  # Python 3.10
 from .config import ConfigError
 from .util import printable
 
-DEFAULT_FILENAME = "unifi-sentinel.toml"
+DEFAULT_FILENAME = "hlp.toml"
 
 
 @dataclass(frozen=True)
@@ -278,7 +278,7 @@ def _parse(data: Dict[str, Any]) -> DiagnoseSettings:
 
 
 def load_settings(path: Optional[Path] = None) -> DiagnoseSettings:
-    """Settings from ``path``, else ``./unifi-sentinel.toml`` if present, else defaults.
+    """Settings from ``path``, else ``./hlp.toml`` if present, else defaults.
 
     An explicit ``path`` must exist. Any problem raises ConfigError.
     """

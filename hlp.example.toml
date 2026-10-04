@@ -1,4 +1,4 @@
-# Copy to unifi-sentinel.toml (git-ignored: it may name your devices) to tune `diagnose`.
+# Copy to hlp.toml (git-ignored: it may name your devices) to tune `diagnose`.
 # It is read from the current directory, or pass --config FILE.
 
 # Every value is optional; these are the defaults.

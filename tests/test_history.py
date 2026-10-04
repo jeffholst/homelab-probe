@@ -9,10 +9,10 @@ from pathlib import Path
 
 import pytest
 
-from unifi_sentinel import cli, commands
-from unifi_sentinel.client_view import DeviceIndex, known_clients
-from unifi_sentinel.config import ConfigError
-from unifi_sentinel.history import (
+from homelab_probe import cli, commands
+from homelab_probe.client_view import DeviceIndex, known_clients
+from homelab_probe.config import ConfigError
+from homelab_probe.history import (
     FILE_PREFIX,
     MAX_LISTED,
     SCHEMA_VERSION,
@@ -27,7 +27,7 @@ from unifi_sentinel.history import (
     resolve,
     save_snapshot,
 )
-from unifi_sentinel.snapshot import Needs, collect_snapshot
+from homelab_probe.snapshot import Needs, collect_snapshot
 
 NOW = datetime(2026, 9, 30, 20, 15, 30, tzinfo=timezone(timedelta(hours=-5)))
 
@@ -217,7 +217,7 @@ def test_force_sets_permissions_before_writing(record, tmp_path, monkeypatch):
         assert stat.S_IMODE(os.fstat(file.fileno()).st_mode) == 0o600
         return original_dump(value, file, **kwargs)
 
-    monkeypatch.setattr("unifi_sentinel.history.json.dump", check_mode_before_write)
+    monkeypatch.setattr("homelab_probe.history.json.dump", check_mode_before_write)
     save_snapshot(record, target, force=True)
 
 
@@ -492,8 +492,8 @@ def test_label_for_shows_the_capture_time():
 # -- command line ------------------------------------------------------------
 
 def _run(fake_client, monkeypatch, argv):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     return cli.main(argv)
 

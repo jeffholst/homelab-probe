@@ -11,10 +11,10 @@ import pytest
 import requests
 import urllib3
 
-from unifi_sentinel import cli
-from unifi_sentinel.client import UniFiAPIError, UniFiClient
-from unifi_sentinel.config import DEFAULT_PARALLEL, MAX_PARALLEL, Config, ConfigError, load_config, parse_parallel
-from unifi_sentinel.snapshot import EventQuery, Needs, collect_snapshot, extend_snapshot
+from homelab_probe import cli
+from homelab_probe.client import UniFiAPIError, UniFiClient
+from homelab_probe.config import DEFAULT_PARALLEL, MAX_PARALLEL, Config, ConfigError, load_config, parse_parallel
+from homelab_probe.snapshot import EventQuery, Needs, collect_snapshot, extend_snapshot
 
 FULL = Needs(reservations=True, groups=True, health=True, speedtests=True, neighbors=True, events=EventQuery())
 
@@ -277,15 +277,15 @@ def test_parallel_values(text, expected):
 
 @pytest.mark.parametrize("text", ["0", "-2", str(MAX_PARALLEL + 1), "many", "2.5"])
 def test_bad_parallel_values_are_config_errors(text):
-    with pytest.raises(ConfigError, match="PARALLEL_REQUESTS must be"):
+    with pytest.raises(ConfigError, match="UNIFI_PARALLEL_REQUESTS must be"):
         parse_parallel(text)
 
 
 def test_the_setting_reaches_the_client(monkeypatch):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     assert load_config().parallel == DEFAULT_PARALLEL
-    monkeypatch.setenv("PARALLEL_REQUESTS", "4")
+    monkeypatch.setenv("UNIFI_PARALLEL_REQUESTS", "4")
     config = load_config()
     assert config.parallel == 4 and UniFiClient.from_config(config).workers == 4
     assert UniFiClient.from_config(Config("https://c", "k", parallel=1)).workers == 1
@@ -299,23 +299,23 @@ def test_the_option_beats_the_environment_and_a_bad_one_is_a_usage_error(fake_cl
         seen.append(config.parallel)
         return fake_client
 
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(from_config))
     assert cli.main(["info"]) == 0 and seen[-1] == DEFAULT_PARALLEL
-    monkeypatch.setenv("PARALLEL_REQUESTS", "3")
+    monkeypatch.setenv("UNIFI_PARALLEL_REQUESTS", "3")
     assert cli.main(["info"]) == 0 and seen[-1] == 3
     assert cli.main(["--parallel", "9", "info"]) == 0 and seen[-1] == 9
     capsys.readouterr()
     with pytest.raises(SystemExit) as caught:
         cli.main(["--parallel", "0", "info"])
-    assert caught.value.code == cli.EXIT_USAGE and "PARALLEL_REQUESTS must be" in capsys.readouterr().err
+    assert caught.value.code == cli.EXIT_USAGE and "UNIFI_PARALLEL_REQUESTS must be" in capsys.readouterr().err
     assert cli.main(["--verbose", "--parallel", "5", "info"]) == 0
     assert "up to 5 requests at once" in capsys.readouterr().err
 
 
 def test_extending_reports_what_the_snapshot_now_holds_when_tracing():
-    from unifi_sentinel.snapshot import describe_snapshot
+    from homelab_probe.snapshot import describe_snapshot
     client = other_client(1)
     snap = collect_snapshot(client, "default", Needs(offline=True))
     lines = []

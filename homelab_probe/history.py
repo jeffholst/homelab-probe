@@ -262,7 +262,7 @@ def load_snapshot(path: Path) -> SnapshotRecord:
         or record["schema_version"] != SCHEMA_VERSION
     ):
         raise ConfigError(f"{path} uses snapshot format {record['schema_version']!r}; "
-                          f"this version of unifi-sentinel reads format {SCHEMA_VERSION}")
+                          f"this version of hlp reads format {SCHEMA_VERSION}")
     record.setdefault("tool_version", "")
     record.setdefault("captured_at", "")
     for key in ("site", "controller"):

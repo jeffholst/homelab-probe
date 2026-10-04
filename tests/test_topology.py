@@ -2,11 +2,11 @@ import json
 
 import pytest
 
-from unifi_sentinel import cli
-from unifi_sentinel.diagnose import Finding
-from unifi_sentinel.settings import DiagnoseSettings, IgnoreRule
-from unifi_sentinel.snapshot import Snapshot, collect_snapshot
-from unifi_sentinel.topology import _assign_findings, build_topology, render_text, to_json
+from homelab_probe import cli
+from homelab_probe.diagnose import Finding
+from homelab_probe.settings import DiagnoseSettings, IgnoreRule
+from homelab_probe.snapshot import Snapshot, collect_snapshot
+from homelab_probe.topology import _assign_findings, build_topology, render_text, to_json
 
 
 def dev(mac, name, parent=None, port=None, speed=None, kind="usw", own=None, **kw):
@@ -239,8 +239,8 @@ def test_json_is_nested_and_complete(fixture_tree):
 # -- command line ----------------------------------------------------------
 
 def _run(fake_client, monkeypatch, argv):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     return cli.main(argv)
 

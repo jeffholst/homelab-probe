@@ -1,18 +1,18 @@
-"""`--site NAME|REF|UUID`: a global option that beats SITE_ID, like --timeout beats TIMEOUT."""
+"""`--site NAME|REF|UUID`: a global option that beats UNIFI_SITE_ID, like --timeout beats UNIFI_TIMEOUT."""
 
 import pytest
 
-from unifi_sentinel import cli
-from unifi_sentinel.config import MAX_SITE_LENGTH, ConfigError, validate_site
+from homelab_probe import cli
+from homelab_probe.config import MAX_SITE_LENGTH, ConfigError, validate_site
 
 SECOND_SITE = {"id": "site-2", "internalReference": "lab", "name": "Lab Site"}
 
 
 def run(fake_client, monkeypatch, *argv, site_id=None):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     if site_id is not None:
-        monkeypatch.setenv("SITE_ID", site_id)
+        monkeypatch.setenv("UNIFI_SITE_ID", site_id)
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     return cli.main(list(argv))
 
@@ -37,7 +37,7 @@ def test_the_option_beats_site_id_in_the_environment(fake_client, monkeypatch, c
     assert run(fake_client, monkeypatch, "--site", "Default", "query", "devices", site_id="no-such-site") == 0
     assert "Gateway" in capsys.readouterr().out
     assert run(fake_client, monkeypatch, "query", "devices", site_id="a/b") == cli.EXIT_ERROR
-    assert "SITE_ID" in capsys.readouterr().err
+    assert "UNIFI_SITE_ID" in capsys.readouterr().err
     assert run(fake_client, monkeypatch, "--site", "Default", "query", "devices", site_id="a/b") == 0
     assert "Gateway" in capsys.readouterr().out
 
@@ -74,7 +74,7 @@ def test_a_bad_site_is_a_usage_error_that_names_the_option_before_any_request(fa
         run(fake_client, monkeypatch, "--site", site, "query", "devices")
     assert stop.value.code == cli.EXIT_USAGE
     err = capsys.readouterr().err
-    assert "--site" in err and "SITE_ID" not in err and fake_client.session.calls == []
+    assert "--site" in err and "UNIFI_SITE_ID" not in err and fake_client.session.calls == []
 
 
 def test_the_option_belongs_before_the_command_like_the_other_global_options(fake_client, monkeypatch, capsys):
@@ -90,7 +90,7 @@ def test_surrounding_space_is_ignored_and_a_name_with_a_space_is_fine(fake_clien
 
 
 def test_the_environment_variable_still_reports_itself_by_its_own_name():
-    with pytest.raises(ConfigError, match="SITE_ID 'a/b' contains '/'"):
+    with pytest.raises(ConfigError, match="UNIFI_SITE_ID 'a/b' contains '/'"):
         validate_site("a/b")
     with pytest.raises(ConfigError, match="--site 'a/b' contains '/'"):
         validate_site("a/b", "--site")

@@ -4,10 +4,10 @@ import re
 
 import pytest
 
-from unifi_sentinel import cli, commands
-from unifi_sentinel.diagnose import CRITICAL, INFO, WARNING, Finding
-from unifi_sentinel.notify import plan
-from unifi_sentinel.watch import MAX_SECONDS, MIN_SECONDS, changes, start
+from homelab_probe import cli, commands
+from homelab_probe.diagnose import CRITICAL, INFO, WARNING, Finding
+from homelab_probe.notify import plan
+from homelab_probe.watch import MAX_SECONDS, MIN_SECONDS, changes, start
 
 STAMP = r"\d\d:\d\d:\d\d"
 
@@ -28,8 +28,8 @@ class Script:
 
 def run(fake_client, monkeypatch, script, *argv, interval="30"):
     fake_client.session.fx["legacy"]["device"][0]["overheating"] = False
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     monkeypatch.setattr(commands, "WATCH_SLEEP", script)
     return cli.main(["diagnose", "--no-events", "--no-emoji", "--watch", interval, *argv])
@@ -37,8 +37,8 @@ def run(fake_client, monkeypatch, script, *argv, interval="30"):
 
 def plain(fake_client, monkeypatch, capsys, *extra):
     fake_client.session.fx["legacy"]["device"][0]["overheating"] = False
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     code = cli.main(["diagnose", "--no-events", "--no-emoji", *extra])
     return code, capsys.readouterr().out
@@ -73,7 +73,7 @@ def lines(captured):
 def test_the_first_pass_prints_everything_exactly_as_diagnose_does(fake_client, monkeypatch, capsys):
     from conftest import FakeSession
 
-    from unifi_sentinel.client import UniFiClient
+    from homelab_probe.client import UniFiClient
 
     reference = UniFiClient("https://controller", "key")
     reference.session = FakeSession()
@@ -144,7 +144,7 @@ def test_every_severity_is_followed_including_information(fake_client, monkeypat
 
 
 def test_ignored_findings_are_never_reported_when_they_change(fake_client, monkeypatch, capsys, tmp_path):
-    config = tmp_path / "unifi-sentinel.toml"
+    config = tmp_path / "hlp.toml"
     config.write_text('[[ignore]]\ncode = "device.offline"\nreason = "spare"\n')
     run(fake_client, monkeypatch, Script(all_online(fake_client)), "--config", str(config))
     assert lines(capsys.readouterr()) == []
@@ -222,8 +222,8 @@ def test_an_incomplete_first_pass_waits_for_a_complete_baseline(monkeypatch, cap
 
 
 def test_an_unavailable_optional_collection_marks_the_pass_incomplete(fake_client, monkeypatch, capsys):
-    from unifi_sentinel.client import UniFiAPIError
-    from unifi_sentinel.settings import DiagnoseSettings
+    from homelab_probe.client import UniFiAPIError
+    from homelab_probe.settings import DiagnoseSettings
 
     real_legacy_stat = fake_client.legacy_stat
 
@@ -245,8 +245,8 @@ def test_an_unavailable_optional_collection_marks_the_pass_incomplete(fake_clien
 
 
 def test_an_unavailable_device_statistics_read_marks_the_pass_incomplete(fake_client, monkeypatch, capsys):
-    from unifi_sentinel.client import UniFiAPIError
-    from unifi_sentinel.settings import DiagnoseSettings
+    from homelab_probe.client import UniFiAPIError
+    from homelab_probe.settings import DiagnoseSettings
 
     def failed_statistics(site, device_id):
         raise UniFiAPIError("HTTP 500 for device statistics")
@@ -264,8 +264,8 @@ def test_an_unavailable_device_statistics_read_marks_the_pass_incomplete(fake_cl
 
 
 def test_a_missing_statistics_record_for_an_online_device_is_incomplete(fake_client, monkeypatch, capsys):
-    from unifi_sentinel.client import UniFiAPIError
-    from unifi_sentinel.settings import DiagnoseSettings
+    from homelab_probe.client import UniFiAPIError
+    from homelab_probe.settings import DiagnoseSettings
 
     def missing_statistics(site, device_id):
         raise UniFiAPIError("HTTP 404 for device statistics")

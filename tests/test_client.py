@@ -1,7 +1,7 @@
 import pytest
 
-from unifi_sentinel import client as client_module
-from unifi_sentinel.client import UniFiAPIError
+from homelab_probe import client as client_module
+from homelab_probe.client import UniFiAPIError
 
 
 def test_info_and_site_resolution(fake_client):

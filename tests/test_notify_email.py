@@ -13,14 +13,14 @@ from pathlib import Path
 import pytest
 from test_notify import finding
 
-from unifi_sentinel import cli
-from unifi_sentinel import notify as notify_module
-from unifi_sentinel.config import ConfigError, SmtpSettings, load_config, validate_smtp
-from unifi_sentinel.diagnose import CRITICAL, WARNING
-from unifi_sentinel.notify import Destination, destinations_from_config, plan, render_text, send
+from homelab_probe import cli
+from homelab_probe import notify as notify_module
+from homelab_probe.config import ConfigError, SmtpSettings, load_config, validate_smtp
+from homelab_probe.diagnose import CRITICAL, WARNING
+from homelab_probe.notify import Destination, destinations_from_config, plan, render_text, send
 
 HOST, USER, PASSWORD = "smtp.secret-mail.example", "alerts-account@secret-mail.example", "SECRET-APP-PASSWORD-9137"
-SENDER, TO_A, TO_B = "sentinel@secret-mail.example", "owner@secret-mail.example", "partner@other-secret.example"
+SENDER, TO_A, TO_B = "hlp@secret-mail.example", "owner@secret-mail.example", "partner@other-secret.example"
 SECRETS = (HOST, USER, PASSWORD, SENDER, TO_A, TO_B)
 
 
@@ -219,14 +219,14 @@ def test_the_settings_and_the_destination_hide_everything_in_repr(monkeypatch):
     shown = repr(smtp) + repr(Destination("email", smtp=smtp))
     assert not any(secret in shown for secret in SECRETS)
     for name, value in {**BASE, "NOTIFY_SMTP_USER": USER, "NOTIFY_SMTP_PASSWORD": PASSWORD,
-                        "CONTROLLER_URL": "https://controller.example", "API_KEY": "key"}.items():
+                        "UNIFI_URL": "https://controller.example", "UNIFI_API_KEY": "key"}.items():
         monkeypatch.setenv(name, value)
     config = load_config()
     assert config.notify_smtp is not None and not any(secret in repr(config) for secret in SECRETS)
 
 
 def test_load_config_reads_email_and_carries_the_plain_smtp_warning(monkeypatch):
-    for name, value in {"CONTROLLER_URL": "https://controller.example", "API_KEY": "key", **BASE,
+    for name, value in {"UNIFI_URL": "https://controller.example", "UNIFI_API_KEY": "key", **BASE,
                         "NOTIFY_SMTP_SECURITY": "none", "ALLOW_INSECURE_HTTP": "true"}.items():
         monkeypatch.setenv(name, value)
     config = load_config()
@@ -237,7 +237,7 @@ def test_load_config_reads_email_and_carries_the_plain_smtp_warning(monkeypatch)
 
 
 def test_email_is_a_destination_after_ntfy_and_the_webhook(monkeypatch):
-    for name, value in {"CONTROLLER_URL": "https://controller.example", "API_KEY": "key", **BASE,
+    for name, value in {"UNIFI_URL": "https://controller.example", "UNIFI_API_KEY": "key", **BASE,
                         "NOTIFY_NTFY_URL": "https://ntfy.example/t", "NOTIFY_WEBHOOK_URL": "https://hook.example/h"}.items():
         monkeypatch.setenv(name, value)
     assert [d.kind for d in destinations_from_config(load_config())] == ["ntfy", "webhook", "email"]
@@ -359,7 +359,7 @@ def test_a_failure_after_connecting_still_closes_the_connection():
 
 
 def test_an_address_the_message_builder_rejects_is_a_fixed_reason_not_a_crash():
-    results, plain, _ = deliver(settings(sender="sentinel@secret-mail.example\nBcc: evil@example.net"))
+    results, plain, _ = deliver(settings(sender="hlp@secret-mail.example\nBcc: evil@example.net"))
     assert results == [("email", False, "the message could not be built (an invalid address)")]
     assert plain.sent == []
 
@@ -395,7 +395,7 @@ def test_the_trace_line_names_the_destination_and_the_outcome_only():
 # -- the command line -----------------------------------------------------------------------------------------------------
 
 def email_env(monkeypatch, **extra):
-    for name, value in {"CONTROLLER_URL": "https://controller.example", "API_KEY": "sekret-api-key-0123456789",
+    for name, value in {"UNIFI_URL": "https://controller.example", "UNIFI_API_KEY": "sekret-api-key-0123456789",
                         "NOTIFY_SMTP_HOST": HOST, "NOTIFY_SMTP_USER": USER, "NOTIFY_SMTP_PASSWORD": PASSWORD,
                         "NOTIFY_EMAIL_FROM": SENDER, "NOTIFY_EMAIL_TO": f"{TO_A},{TO_B}", **extra}.items():
         monkeypatch.setenv(name, value)
@@ -464,8 +464,8 @@ def test_nothing_secret_is_printed_by_a_verbose_run(fake_client, monkeypatch, ca
 
 
 def test_the_missing_destination_hint_mentions_email(fake_client, monkeypatch, capsys):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     assert cli.main(["diagnose", "--no-events", "--notify"]) == cli.EXIT_ERROR
     assert "NOTIFY_SMTP_HOST" in capsys.readouterr().err

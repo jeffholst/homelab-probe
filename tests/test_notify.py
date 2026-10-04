@@ -8,11 +8,11 @@ from pathlib import Path
 import pytest
 import requests
 
-from unifi_sentinel import cli
-from unifi_sentinel import notify as notify_module
-from unifi_sentinel.config import Config, ConfigError, load_config, validate_notify_token, validate_notify_url
-from unifi_sentinel.diagnose import CODES, CRITICAL, INFO, WARNING, Finding
-from unifi_sentinel.notify import (
+from homelab_probe import cli
+from homelab_probe import notify as notify_module
+from homelab_probe.config import Config, ConfigError, load_config, validate_notify_token, validate_notify_url
+from homelab_probe.diagnose import CODES, CRITICAL, INFO, WARNING, Finding
+from homelab_probe.notify import (
     MAX_LINES,
     Destination,
     Event,
@@ -27,7 +27,7 @@ from unifi_sentinel.notify import (
     save_state,
     send,
 )
-from unifi_sentinel.settings import DiagnoseSettings, load_settings
+from homelab_probe.settings import DiagnoseSettings, load_settings
 
 HOUR = 3600
 NOW = 1_800_000_000.0
@@ -150,7 +150,7 @@ def events_for(*findings):
 def test_the_text_names_the_subjects_and_counts_in_an_ascii_title():
     title, body = render_text(events_for(finding(CRITICAL, "Gateway", "device is offline (gateway)"),
                                          finding(WARNING, "Office AP", "weak signal", code="wifi.weak_signal")))
-    assert title == "unifi-sentinel: 2 problem(s)" and title.isascii()
+    assert title == "hlp: 2 problem(s)" and title.isascii()
     assert body.splitlines() == ["[CRITICAL] NEW  Gateway: device is offline (gateway)",
                                  "[WARNING] NEW  Office AP: weak signal"]
 
@@ -161,9 +161,9 @@ def test_recoveries_and_reminders_are_worded():
     assert render_text(events)[1] == "[CRITICAL] STILL  GW: still down (reminder: still unresolved)"
     events, _ = plan([], state, NOW + HOUR)
     title, body = render_text(events)
-    assert title == "unifi-sentinel: 1 recovered" and body == "[OK] RECOVERED  GW (device.offline)"
+    assert title == "hlp: 1 recovered" and body == "[OK] RECOVERED  GW (device.offline)"
     mixed = events_for(finding(WARNING, "new-one")) + events
-    assert render_text(mixed)[0] == "unifi-sentinel: 1 problem(s), 1 recovered"
+    assert render_text(mixed)[0] == "hlp: 1 problem(s), 1 recovered"
 
 
 def test_names_are_cleaned_and_a_long_list_is_cut():
@@ -180,7 +180,7 @@ def test_redaction_sends_only_the_generic_description_and_counts():
              finding(WARNING, "den-tv (10.0.0.78)", "weak signal", code="wifi.weak_signal"),
              finding(CRITICAL, "Gateway", "offline", code="device.offline")]
     title, body = render_text(events_for(*found), redact=True)
-    assert title == "unifi-sentinel: 3 problem(s)"
+    assert title == "hlp: 3 problem(s)"
     assert body.splitlines() == ["[CRITICAL] NEW  " + CODES["device.offline"],
                                  "[WARNING] NEW  " + CODES["wifi.weak_signal"] + " (x2)"]
     for secret in ("kitchen", "echo", "10.0.0", "BB:00", "Gateway", "den-tv"):
@@ -196,7 +196,7 @@ def test_redacted_recoveries_carry_no_name():
 def test_the_webhook_payload_shape_with_and_without_redaction():
     events = events_for(finding(CRITICAL, "Gateway", "device is offline", code="device.offline"))
     payload = render_payload(events)
-    assert payload["source"] == "unifi-sentinel" and payload["version"] == 1 and payload["redacted"] is False
+    assert payload["source"] == "homelab-probe" and payload["version"] == 1 and payload["redacted"] is False
     assert payload["events"] == [{"event": "new", "severity": "critical", "code": "device.offline",
                                   "description": CODES["device.offline"], "subject": "Gateway",
                                   "message": "device is offline"}]
@@ -241,7 +241,7 @@ def test_ntfy_gets_the_text_with_priority_tags_and_a_bearer_token():
     (url, kwargs), = post.calls
     assert url == NTFY and kwargs["timeout"] == 12.0 and kwargs["allow_redirects"] is False and kwargs["verify"] is True
     assert kwargs["data"].decode("utf-8").startswith("[CRITICAL] NEW  Gateway — café: offline")
-    assert kwargs["headers"] == {"Authorization": f"Bearer {TOKEN}", "Title": "unifi-sentinel: 1 problem(s)",
+    assert kwargs["headers"] == {"Authorization": f"Bearer {TOKEN}", "Title": "hlp: 1 problem(s)",
                                  "Priority": "5", "Tags": "rotating_light"}
 
 
@@ -382,8 +382,8 @@ def test_tokens_are_trimmed_and_checked():
 
 
 def test_load_config_reads_the_destinations(monkeypatch):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     assert load_config().notify_ntfy_url == "" and load_config().notify_webhook_url == ""
     monkeypatch.setenv("NOTIFY_NTFY_URL", NTFY)
     monkeypatch.setenv("NOTIFY_NTFY_TOKEN", TOKEN)
@@ -423,8 +423,8 @@ def test_notify_py_is_the_only_outbound_channel_and_never_touches_the_controller
 # -- the command line ------------------------------------------------------------------------------------------
 
 def make_env(monkeypatch, ntfy=NTFY, webhook="", token=""):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", "sekret-api-key-0123456789")
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", "sekret-api-key-0123456789")
     for name, value in (("NOTIFY_NTFY_URL", ntfy), ("NOTIFY_WEBHOOK_URL", webhook), ("NOTIFY_NTFY_TOKEN", token)):
         if value:
             monkeypatch.setenv(name, value)
@@ -453,7 +453,7 @@ def test_notify_without_a_destination_is_a_config_error_before_any_request(fake_
     assert run(fake_client, monkeypatch, diagnose(state=tmp_path / "s.json")) == cli.EXIT_ERROR
     error = capsys.readouterr().err
     assert "--notify needs a destination" in error
-    assert "https://github.com/jeffholst/unifi-sentinel/blob/main/docs/notifications.md" in error
+    assert "https://github.com/jeffholst/homelab-probe/blob/main/docs/notifications.md" in error
     assert fake_client.session.calls == [] and post.calls == [] and not (tmp_path / "s.json").exists()
 
 
@@ -538,7 +538,7 @@ def test_dry_run_prints_what_would_be_sent_and_changes_nothing(fake_client, monk
     state = tmp_path / "state.json"
     assert run(fake_client, monkeypatch, diagnose("--notify-dry-run", state=state)) == 1
     err = capsys.readouterr().err
-    assert "Notification dry run (nothing sent, state unchanged): unifi-sentinel:" in err and "Garage AP" in err
+    assert "Notification dry run (nothing sent, state unchanged): hlp:" in err and "Garage AP" in err
     assert post.calls == [] and not state.exists()
 
 

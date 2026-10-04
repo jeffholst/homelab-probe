@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/jeffholst/unifi-sentinel/main/docs/schemas/query-wlans.v1.schema.json",
+  "$id": "https://raw.githubusercontent.com/jeffholst/homelab-probe/main/docs/schemas/query-wlans.v1.schema.json",
   "title": "query wlans",
-  "description": "Output of `unifi-sentinel query wlans --json`: one object per Wi-Fi network (SSID), in the controller's order. The passphrase is never part of it.",
+  "description": "Output of `hlp query wlans --json`: one object per Wi-Fi network (SSID), in the controller's order. The passphrase is never part of it.",
   "type": "array",
   "items": {
     "type": "object",

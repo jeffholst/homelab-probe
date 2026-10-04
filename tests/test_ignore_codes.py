@@ -8,11 +8,11 @@ from pathlib import Path
 import pytest
 from docs_support import all_docs_text
 
-from unifi_sentinel import cli
-from unifi_sentinel.audit import AUDIT_CODES
-from unifi_sentinel.config import ConfigError
-from unifi_sentinel.diagnose import CODES, Finding, apply_ignores, format_ignored
-from unifi_sentinel.settings import IgnoreRule, known_codes, load_settings
+from homelab_probe import cli
+from homelab_probe.audit import AUDIT_CODES
+from homelab_probe.config import ConfigError
+from homelab_probe.diagnose import CODES, Finding, apply_ignores, format_ignored
+from homelab_probe.settings import IgnoreRule, known_codes, load_settings
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def write(tmp_path, text):
-    path = tmp_path / "unifi-sentinel.toml"
+    path = tmp_path / "hlp.toml"
     path.write_text(text, encoding="utf-8")
     return path
 
@@ -152,8 +152,8 @@ def test_the_codes_a_rule_may_name_are_those_of_diagnose_and_audit():
 # -- everywhere ignore rules are used -----------------------------------------------------------------------------
 
 def run(fake_client, monkeypatch, argv):
-    monkeypatch.setenv("CONTROLLER_URL", "https://controller.example")
-    monkeypatch.setenv("API_KEY", "key")
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
     monkeypatch.setattr(cli.UniFiClient, "from_config", classmethod(lambda cls, c: fake_client))
     return cli.main(argv)
 
@@ -235,7 +235,7 @@ def test_audit_codes_work_in_the_same_file(fake_client, monkeypatch, capsys, tmp
 # -- the documentation ---------------------------------------------------------------------------------------------
 
 def test_the_example_file_parses_and_shows_a_code_rule():
-    settings = load_settings(ROOT / "unifi-sentinel.example.toml")
+    settings = load_settings(ROOT / "hlp.example.toml")
     coded = [r for r in settings.ignore if r.code]
     assert coded and coded[0].code == "port.slow_link" and coded[0].subject and coded[0].reason
     assert any(not r.code for r in settings.ignore)                       # the older style is still shown

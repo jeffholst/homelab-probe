@@ -3,7 +3,7 @@
 The ``.env`` file is found like this, first match wins:
 
 1. the file given with ``--env-file``;
-2. the file named by the ``UNIFI_SENTINEL_ENV`` environment variable;
+2. the file named by the ``HLP_ENV`` environment variable;
 3. ``.env`` in the **current working directory**.
 
 Parent directories are not searched, and neither is the installed package's directory,
@@ -33,7 +33,7 @@ from dotenv import load_dotenv
 
 from .logs import FORMAT_WORDS, LEVEL_WORDS
 
-ENV_FILE_VAR = "UNIFI_SENTINEL_ENV"
+ENV_FILE_VAR = "HLP_ENV"
 DEFAULT_ENV_FILE = ".env"
 DEFAULT_SITE = "default"
 MAX_SITE_LENGTH = 128
@@ -131,20 +131,20 @@ def parse_bool(name: str, text: Optional[str], default: bool = True) -> bool:
 
 
 def parse_verify(text: Optional[str]) -> bool | str:
-    """``VERIFY_SSL``: the usual yes/no words, or the path of a CA bundle (a PEM file, or a directory
+    """``UNIFI_VERIFY_SSL``: the usual yes/no words, or the path of a CA bundle (a PEM file, or a directory
     of certificates) to trust instead of the system store, which is the proper way to accept a
     self-signed controller certificate. Unset or blank verifies with the system store."""
     value = (text or "").strip()
     if not value or value.lower() in TRUE_WORDS + FALSE_WORDS:
-        return parse_bool("VERIFY_SSL", value)
+        return parse_bool("UNIFI_VERIFY_SSL", value)
     path = Path(value).expanduser()
     if not (path.is_file() or path.is_dir()):
         if not (any(c in value for c in "/\\~") or value.lower().endswith(_CA_BUNDLE_SUFFIXES)):
-            raise ConfigError(f"VERIFY_SSL must be one of {', '.join(TRUE_WORDS + FALSE_WORDS)}, "
+            raise ConfigError(f"UNIFI_VERIFY_SSL must be one of {', '.join(TRUE_WORDS + FALSE_WORDS)}, "
                               f"or the path of a CA bundle file (got {text!r})")
-        raise ConfigError(f"VERIFY_SSL names a CA bundle that does not exist: {value}")
+        raise ConfigError(f"UNIFI_VERIFY_SSL names a CA bundle that does not exist: {value}")
     if not os.access(path, os.R_OK):
-        raise ConfigError(f"VERIFY_SSL names a CA bundle that cannot be read: {value}")
+        raise ConfigError(f"UNIFI_VERIFY_SSL names a CA bundle that cannot be read: {value}")
     return str(path)
 
 
@@ -255,21 +255,21 @@ def validate_smtp(
 
 
 def parse_timeout(text: Optional[str]) -> float:
-    """The per-request timeout in seconds (``TIMEOUT`` or ``--timeout``); blank means the default."""
+    """The per-request timeout in seconds (``UNIFI_TIMEOUT`` or ``--timeout``); blank means the default."""
     value = (text or "").strip()
     if not value:
         return DEFAULT_TIMEOUT
     try:
         seconds = float(value)
     except ValueError:
-        raise ConfigError(f"TIMEOUT must be a number of seconds (got {text!r})") from None
+        raise ConfigError(f"UNIFI_TIMEOUT must be a number of seconds (got {text!r})") from None
     if not math.isfinite(seconds) or not MIN_TIMEOUT <= seconds <= MAX_TIMEOUT:
-        raise ConfigError(f"TIMEOUT must be between {MIN_TIMEOUT:g} and {MAX_TIMEOUT:g} seconds (got {text!r})")
+        raise ConfigError(f"UNIFI_TIMEOUT must be between {MIN_TIMEOUT:g} and {MAX_TIMEOUT:g} seconds (got {text!r})")
     return seconds
 
 
 def parse_parallel(text: Optional[str]) -> int:
-    """How many requests may be in flight at once (``PARALLEL_REQUESTS`` or ``--parallel``); 1 means one by
+    """How many requests may be in flight at once (``UNIFI_PARALLEL_REQUESTS`` or ``--parallel``); 1 means one by
     one. Blank means the default."""
     value = (text or "").strip()
     if not value:
@@ -277,9 +277,10 @@ def parse_parallel(text: Optional[str]) -> int:
     try:
         number = int(value)
     except ValueError:
-        raise ConfigError(f"PARALLEL_REQUESTS must be a whole number from 1 to {MAX_PARALLEL} (got {text!r})") from None
+        raise ConfigError(
+            f"UNIFI_PARALLEL_REQUESTS must be a whole number from 1 to {MAX_PARALLEL} (got {text!r})") from None
     if not 1 <= number <= MAX_PARALLEL:
-        raise ConfigError(f"PARALLEL_REQUESTS must be between 1 and {MAX_PARALLEL} (got {text!r})")
+        raise ConfigError(f"UNIFI_PARALLEL_REQUESTS must be between 1 and {MAX_PARALLEL} (got {text!r})")
     return number
 
 
@@ -300,10 +301,10 @@ def parse_log_format(text: Optional[str]) -> str:
     return word
 
 
-def validate_site(text: Optional[str], name: str = "SITE_ID") -> str:
+def validate_site(text: Optional[str], name: str = "UNIFI_SITE_ID") -> str:
     """The site name, reference or UUID, safe to use in a URL. Names may contain spaces and
     non-ASCII letters; path separators, ``?``, ``#`` and control characters are rejected. ``name`` is what the
-    messages call the setting (``SITE_ID``, or ``--site`` for the command-line option)."""
+    messages call the setting (``UNIFI_SITE_ID``, or ``--site`` for the command-line option)."""
     site = (text or "").strip() or DEFAULT_SITE
     if len(site) > MAX_SITE_LENGTH:
         raise ConfigError(f"{name} is too long ({len(site)} characters, at most {MAX_SITE_LENGTH})")
@@ -323,23 +324,23 @@ def validate_controller_url(text: Optional[str], allow_http: bool = False) -> st
     a user name or password, a query or a fragment is refused."""
     url = (text or "").strip()
     if any(c.isspace() or c == "\\" or ord(c) < 32 or 127 <= ord(c) <= 159 for c in url):
-        raise ConfigError("CONTROLLER_URL must not contain spaces, backslashes or control characters")
+        raise ConfigError("UNIFI_URL must not contain spaces, backslashes or control characters")
     try:
         parts = urlsplit(url)
         _ = parts.port                         # raises ValueError for a bad port
     except ValueError as e:
-        raise ConfigError(f"CONTROLLER_URL is not a valid URL ({e})") from e
+        raise ConfigError(f"UNIFI_URL is not a valid URL ({e})") from e
     if parts.scheme.lower() not in ("http", "https") or not parts.hostname:
         raise ConfigError(
-            "CONTROLLER_URL must look like https://host[:port] (a scheme and a host are required)")
+            "UNIFI_URL must look like https://host[:port] (a scheme and a host are required)")
     if parts.username is not None or parts.password is not None:
-        raise ConfigError("CONTROLLER_URL must not contain a user name or password")
+        raise ConfigError("UNIFI_URL must not contain a user name or password")
     if parts.query or parts.fragment:
-        raise ConfigError("CONTROLLER_URL must not contain a query (?) or fragment (#)")
+        raise ConfigError("UNIFI_URL must not contain a query (?) or fragment (#)")
     if parts.scheme.lower() == "http" and not allow_http:
         raise ConfigError(
-            "CONTROLLER_URL uses http://, which would send the API key in clear text. Use "
-            "https:// (set VERIFY_SSL=false for a self-signed certificate), or set "
+            "UNIFI_URL uses http://, which would send the API key in clear text. Use "
+            "https:// (set UNIFI_VERIFY_SSL=false for a self-signed certificate), or set "
             "ALLOW_INSECURE_HTTP=true for a lab network you trust.")
     return url.rstrip("/")
 
@@ -387,24 +388,24 @@ def load_config(env_file: Optional[Path] = None, site_override: Optional[str] = 
         except OSError as e:
             raise ConfigError(f"cannot read env file {path}: {e.strerror or e}") from e
 
-    controller_url = os.getenv("CONTROLLER_URL")
-    api_key = os.getenv("API_KEY")
+    controller_url = os.getenv("UNIFI_URL")
+    api_key = os.getenv("UNIFI_API_KEY")
 
     if not controller_url:
         raise ConfigError(
-            "CONTROLLER_URL is not set. Copy example.env to .env in the directory you run "
+            "UNIFI_URL is not set. Copy example.env to .env in the directory you run "
             "the command from (or pass --env-file) and configure it."
         )
     if not api_key or api_key == "your-api-key-here":
         raise ConfigError(
-            "API_KEY is not set or is the placeholder value. Create one under "
+            "UNIFI_API_KEY is not set or is the placeholder value. Create one under "
             "Settings > Control Plane > Integrations and add it to .env."
         )
 
     allow_http = parse_bool("ALLOW_INSECURE_HTTP", os.getenv("ALLOW_INSECURE_HTTP"), False)
     url = validate_controller_url(controller_url, allow_http)
     if url.lower().startswith("http://"):
-        warnings.append("CONTROLLER_URL uses http://: the API key is sent in clear text "
+        warnings.append("UNIFI_URL uses http://: the API key is sent in clear text "
                         "(allowed by ALLOW_INSECURE_HTTP)")
     smtp, smtp_warnings = validate_smtp(os.environ, allow_http)
     warnings += smtp_warnings
@@ -416,10 +417,10 @@ def load_config(env_file: Optional[Path] = None, site_override: Optional[str] = 
         notify_webhook_token=validate_notify_token("NOTIFY_WEBHOOK_TOKEN", os.getenv("NOTIFY_WEBHOOK_TOKEN")),
         controller_url=url,
         api_key=api_key,
-        site=site_override if site_override is not None else validate_site(os.getenv("SITE_ID")),
-        verify_ssl=parse_verify(os.getenv("VERIFY_SSL")),
-        timeout=parse_timeout(os.getenv("TIMEOUT")),
-        parallel=parse_parallel(os.getenv("PARALLEL_REQUESTS")),
+        site=site_override if site_override is not None else validate_site(os.getenv("UNIFI_SITE_ID")),
+        verify_ssl=parse_verify(os.getenv("UNIFI_VERIFY_SSL")),
+        timeout=parse_timeout(os.getenv("UNIFI_TIMEOUT")),
+        parallel=parse_parallel(os.getenv("UNIFI_PARALLEL_REQUESTS")),
         log_level=parse_log_level(os.getenv("LOG_LEVEL")),
         log_format=parse_log_format(os.getenv("LOG_FORMAT")),
         env_file=path,
