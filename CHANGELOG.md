@@ -92,6 +92,7 @@ and `wep` Wi-Fi security values) the README says so.
 
 ### Changed
 
+- **Logging foundation (stderr only):** the tool's diagnostics now go through one logger (`unifi_sentinel`, standard library) with a redaction filter. Nothing changes by default: `Warning: ...` lines and `--verbose` `[verbose] ...` lines are byte-for-byte what they were. New settings `LOG_LEVEL` (`DEBUG`, `INFO`, `WARNING`, `ERROR`) and `LOG_FORMAT` (`text` or `json`, one record per line with `ts`, `level`, `logger`, `msg`, `event`, `request_id`, `user`, `site` and the event's fields); a run has a `request_id` that also reaches the threads of a parallel read. Secrets (the API key, notification URLs, tokens and the mail account) and the values of `Authorization`/`Cookie` headers never reach a record; INFO and above never carry client names, MACs or addresses. `notify.delivery` and `watch.pass`/`watch.unavailable` are new records. See [docs/logging.md](docs/logging.md).
 - **The tool talks to the Integration API first** (`/proxy/network/integration/v1`). The legacy endpoints are used
   only for data it lacks (per-port counters, client-to-port mapping, reservations, network and Wi-Fi settings,
   health), and the zone-based firewall comes from the v2 endpoints.

@@ -68,7 +68,7 @@ Every setting, how the file is found (`--env-file`), TLS, timeouts, speed and th
 
 ### Seeing what the tool does: `--verbose`
 
-`--verbose` (before the command) logs every request and what was read to stderr, never the API key. See [docs/configuration.md](docs/configuration.md#seeing-what-the-tool-does---verbose).
+`--verbose` (before the command) logs every request and what was read to stderr, never the API key. See [docs/configuration.md](docs/configuration.md#seeing-what-the-tool-does---verbose); log levels, JSON lines and what is never logged are in [docs/logging.md](docs/logging.md).
 
 ### Getting an API key
 

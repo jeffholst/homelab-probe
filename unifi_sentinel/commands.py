@@ -8,6 +8,7 @@ handler declares what it reads with a ``Needs``), analysis and rendering in the 
 import argparse
 import datetime
 import json
+import logging
 import sys
 import time
 from collections.abc import Callable
@@ -15,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from . import logs
 from .audit import AUDIT_AREAS, audit
 from .client import UniFiAPIError, UniFiClient
 from .client_view import build_client_detail, find_clients, render_candidates, render_detail, to_json
@@ -88,6 +90,8 @@ from .wifi import DEFAULT_MIN_SIGNAL, build_wifi, parse_band
 from .wifi import render_text as render_wifi
 from .wifi import to_json as wifi_json
 
+_log = logging.getLogger(__name__)
+
 EXIT_ERROR = 3  # config or connection failure; 1 and 2 are reserved for diagnose findings
 EXIT_NO_MATCH = 4  # `client` found no client, or several (it lists them)
 EXIT_USAGE = 64
@@ -144,8 +148,9 @@ def say(text: Any = "", file: Any = None) -> None:
     print(safe_output(str(text)), file=file)
 
 
-def verbose(message: str) -> None:
-    say(f"[verbose] {message}", file=sys.stderr)
+def verbose(message: str, event: str = "run.settings") -> None:
+    """A ``--verbose`` line: a DEBUG record that the command-line log format shows as ``[verbose] ...``."""
+    logs.verbose(message, event)
 
 
 def _duration(text: str) -> int:
@@ -775,8 +780,7 @@ def _notify(findings: List[Any], config: Any, settings: Any, args: argparse.Name
         title, body = render_text(events, args.notify_redact)
         say(f"Notification dry run (nothing sent, state unchanged): {title}\n{body}", file=sys.stderr)
         return False
-    results = send(destinations_from_config(config), events, args.notify_redact, config.timeout,
-                   trace=verbose if args.verbose else None)
+    results = send(destinations_from_config(config), events, args.notify_redact, config.timeout)
     for kind, delivered, reason in results:
         say(f"Notification to {kind}: " + ("sent" if delivered else f"FAILED ({reason})"), file=sys.stderr)
     delivered_somewhere = any(ok for _, ok, _ in results)
@@ -816,9 +820,16 @@ def _watch_diagnose(ctx: Context, settings: DiagnoseSettings, first: List[Any], 
                 next_findings, _ignored, complete = _diagnose_once(ctx, settings)
             except (UniFiAPIError, OSError) as e:
                 reason = str(e) if isinstance(e, UniFiAPIError) else (e.strerror or type(e).__name__)
+                logs.log_event(_log, logging.WARNING, "watch.unavailable", "could not read the controller",
+                               reason=e.kind if isinstance(e, UniFiAPIError) and e.kind else "error",
+                               retry_s=args.watch)
                 say(f"{time.strftime('%H:%M:%S')}  could not read the controller ({reason}); "
                     f"trying again in {args.watch} s", file=sys.stderr)
                 continue
+            logs.log_event(_log, logging.INFO if complete else logging.WARNING,
+                           "watch.pass" if complete else "watch.unavailable",
+                           "pass finished" if complete else "optional controller data unavailable",
+                           findings=len(next_findings), complete=complete, retry_s=args.watch)
             if not complete:
                 status = "waiting for a complete baseline" if state is None else "keeping the last complete watch state"
                 say(f"{time.strftime('%H:%M:%S')}  optional controller data unavailable; {status} "

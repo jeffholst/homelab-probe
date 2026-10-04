@@ -31,6 +31,8 @@ from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
 
+from .logs import FORMAT_WORDS, LEVEL_WORDS
+
 ENV_FILE_VAR = "UNIFI_SENTINEL_ENV"
 DEFAULT_ENV_FILE = ".env"
 DEFAULT_SITE = "default"
@@ -98,8 +100,20 @@ class Config:
     notify_webhook_url: str = field(default="", repr=False)
     notify_webhook_token: str = field(default="", repr=False)
     notify_smtp: Optional[SmtpSettings] = field(default=None, repr=False)
+    log_level: str = ""                     # LOG_LEVEL: DEBUG, INFO, WARNING or ERROR; blank: the command's default
+    log_format: str = ""                    # LOG_FORMAT: text or json; blank means the command line's own format
     env_file: Optional[Path] = field(default=None, compare=False)    # the .env that was read, if any (for --verbose)
     warnings: Tuple[str, ...] = field(default=(), compare=False)   # for cli.main to print
+
+    def secret_values(self) -> Tuple[str, ...]:
+        """Every value that must never reach a log line: the API key, the notification URLs, tokens and mail
+        account (``logs.register_secrets`` hides them in any spelling)."""
+        values = [self.api_key, self.notify_ntfy_url, self.notify_ntfy_token, self.notify_webhook_url,
+                  self.notify_webhook_token]
+        if self.notify_smtp is not None:
+            smtp = self.notify_smtp
+            values += [smtp.host, smtp.user, smtp.password, smtp.sender, *smtp.recipients]
+        return tuple(value for value in values if value)
 
 
 def parse_bool(name: str, text: Optional[str], default: bool = True) -> bool:
@@ -269,6 +283,23 @@ def parse_parallel(text: Optional[str]) -> int:
     return number
 
 
+def parse_log_level(text: Optional[str]) -> str:
+    """``LOG_LEVEL``: one of the documented words in any case, or blank (the command's default)."""
+    word = (text or "").strip().lower()
+    by_word = {level.lower(): level for level in LEVEL_WORDS}
+    if word and word not in by_word:
+        raise ConfigError(f"LOG_LEVEL must be one of {', '.join(LEVEL_WORDS)} (got {text!r})")
+    return by_word.get(word, "")
+
+
+def parse_log_format(text: Optional[str]) -> str:
+    """``LOG_FORMAT``: ``text`` or ``json`` in any case, or blank (the command line keeps its own format)."""
+    word = (text or "").strip().lower()
+    if word and word not in FORMAT_WORDS:
+        raise ConfigError(f"LOG_FORMAT must be one of {', '.join(FORMAT_WORDS)} (got {text!r})")
+    return word
+
+
 def validate_site(text: Optional[str], name: str = "SITE_ID") -> str:
     """The site name, reference or UUID, safe to use in a URL. Names may contain spaces and
     non-ASCII letters; path separators, ``?``, ``#`` and control characters are rejected. ``name`` is what the
@@ -389,6 +420,8 @@ def load_config(env_file: Optional[Path] = None, site_override: Optional[str] = 
         verify_ssl=parse_verify(os.getenv("VERIFY_SSL")),
         timeout=parse_timeout(os.getenv("TIMEOUT")),
         parallel=parse_parallel(os.getenv("PARALLEL_REQUESTS")),
+        log_level=parse_log_level(os.getenv("LOG_LEVEL")),
+        log_format=parse_log_format(os.getenv("LOG_FORMAT")),
         env_file=path,
         warnings=tuple(warnings),
     )

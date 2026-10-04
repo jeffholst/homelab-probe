@@ -14,6 +14,7 @@ That query changes nothing on the controller, and it is sent only by
 general-purpose POST/PUT/PATCH/DELETE method on this class.
 """
 
+import logging
 import threading
 import time
 import warnings
@@ -28,6 +29,9 @@ import urllib3
 from requests.adapters import HTTPAdapter
 
 from .config import DEFAULT_TIMEOUT, Config
+from .logs import log_event
+
+_log = logging.getLogger(__name__)
 
 INTEGRATION_PREFIX = "/proxy/network/integration/v1"
 LEGACY_PREFIX = "/proxy/network/api"
@@ -196,16 +200,32 @@ class UniFiClient:
         with self._lock:
             self.attempts_made += 1
             self.seconds_waiting += elapsed
-            if self.trace is not None:
-                self.trace(self._redact(f"{label} -> {outcome} ({elapsed * 1000:.0f} ms)"))
+            if self.tracing():
+                method, _, path = label.partition(" ")
+                self.debug(f"{label} -> {outcome} ({elapsed * 1000:.0f} ms)", "http.request",
+                           method=method, path=path, outcome=outcome, duration_ms=round(elapsed * 1000))
 
     def _back_off(self, label: str, attempt: int, attempts: int) -> None:
         pause = RETRY_BACKOFF_S * 2 ** (attempt - 1)
         with self._lock:
             self.attempts_retried += 1
-            if self.trace is not None:
-                self.trace(self._redact(f"{label} -> retrying in {pause:g} s (attempt {attempt + 1} of {attempts})"))
+            if self.tracing():
+                method, _, path = label.partition(" ")
+                self.debug(f"{label} -> retrying in {pause:g} s (attempt {attempt + 1} of {attempts})", "http.retry",
+                           method=method, path=path, pause_s=pause, attempt=attempt + 1, attempts=attempts)
         self._sleep(pause)
+
+    def tracing(self) -> bool:
+        """True when a trace line would go anywhere: a ``trace`` function is set or DEBUG logging is on."""
+        return self.trace is not None or _log.isEnabledFor(logging.DEBUG)
+
+    def debug(self, message: str, event: str, /, **fields: Any) -> None:
+        """One trace line (``--verbose``): a DEBUG record with the API key hidden, and ``trace`` when it is set.
+        The message and fields come only from the path, status and fixed words, never from a response."""
+        line = self._redact(message)
+        log_event(_log, logging.DEBUG, event, line, **fields)
+        if self.trace is not None:
+            self.trace(line)
 
     def summary(self) -> str:
         """One line for the end of a --verbose run."""
