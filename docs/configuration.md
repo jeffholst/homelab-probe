@@ -153,7 +153,7 @@ A demo run **touches nothing of yours**:
 - No `.env`, environment variable, `--env-file`, `UNIFI_SENTINEL_ENV` or `unifi-sentinel.toml` is read (a settings file is used only if you name it with `--config`), so a real address or API key in your environment cannot end up in a demo.
 - No controller is contacted: the address is on the `.invalid` top-level domain, which never resolves, and the answers come from the data packaged with the tool (`unifi_sentinel/demo/controller.json`).
 - Nothing can be sent: `--notify` is refused. `doctor` (it checks your real setup), `snapshot` and `diff` (they would mix synthetic data into your own saved snapshots) are refused too. All of these are usage errors (exit code 64).
-- A line on stderr says `Demo mode: synthetic data, no controller is contacted.`, so stdout (and `--json`) stays clean and nobody mistakes the output for a real network.
+- Except for the controller-independent `completion` command, a line on stderr says `Demo mode: synthetic data, no controller is contacted.`, so stdout (and `--json`) stays clean and nobody mistakes the output for a real network.
 
 `--site` is accepted (the demo has one site, `default`), as are `--timeout`, `--parallel` and `--verbose`. The data is the same on every run, apart from the ages, so it is also what the sample output in this documentation is made from.
 
