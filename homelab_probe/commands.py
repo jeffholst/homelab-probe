@@ -44,6 +44,7 @@ from .documents import (
     diff_document,
     doctor_document,
     events_document,
+    export_document,
     firewall_document,
     info_document,
     new_clients_document,
@@ -54,7 +55,7 @@ from .documents import (
     wifi_document,
 )
 from .events import DEFAULT_LIMIT, DEFAULT_SINCE, SEVERITIES, parse_duration, render_events_text
-from .export import EXPORT_FORMATS, JSON_FILENAME, run_export
+from .export import EXPORT_FORMATS, JSON_FILENAME, write_export
 from .firewall import render_text as render_firewall
 from .history import (
     DEFAULT_DIR,
@@ -79,7 +80,7 @@ from .notify import (
 )
 from .query import render_csv, render_table
 from .settings import DiagnoseSettings, expired_rules
-from .snapshot import EventQuery, Needs, collect_snapshot, warn
+from .snapshot import EventQuery, warn
 from .topology import render_text as render_topology
 from .util import printable, safe_output
 from .wan import DEFAULT_DAYS
@@ -235,8 +236,9 @@ def _add_export(parser: argparse.ArgumentParser) -> None:
 
 
 def _run_export(ctx: Context) -> int:
-    snap = collect_snapshot(ctx.client, ctx.config.site, Needs(offline=ctx.args.include_offline))
-    run_export(snap, ctx.args.output_dir, ctx.args.format)
+    document = export_document(ctx.client, ctx.config.site, ctx.args.include_offline)
+    write_export(document.data, document.meta["rows"], document.meta["switches"], document.meta["site"],
+                 document.meta["connected"], ctx.args.output_dir, ctx.args.format)
     return 0
 
 
