@@ -935,6 +935,9 @@ def _add_serve(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--allow-public-controller", action="store_true",
                         help="Let the guided setup (a server with no settings) connect to a controller on a public "
                              "address; by default it only connects to addresses on your own network")
+    parser.add_argument("--read-only", action="store_true",
+                        help="Write no file on this machine: the settings editor and the setup's files answer 403 "
+                             "(logging in and the audit log still work)")
     parser.add_argument("--port", type=_port, default=DEFAULT_PORT, metavar="PORT",
                         help=f"The port to listen on (default {DEFAULT_PORT})")
     parser.add_argument("--data-dir", type=Path, default=Path("."), metavar="DIR",
@@ -1003,7 +1006,8 @@ def _run_serve(args: argparse.Namespace) -> int:
         + ("" if setup_state is not None else " Log in with an account made by `hlp web-user`."), file=sys.stderr)
     run(config, args.host, args.port, args.config, args.data_dir, demo=args.demo,
         announce=lambda message: say(message, file=sys.stderr), allowed=args.allowed_host,
-        forwarded_allow_ips=args.forwarded_allow_ips, setup=setup_state, reload=reload)
+        forwarded_allow_ips=args.forwarded_allow_ips, setup=setup_state, reload=reload,
+        read_only=args.read_only)
     return 0
 
 

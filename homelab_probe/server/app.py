@@ -19,7 +19,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from .. import __version__, logs
 from ..config import Config
 from ..util import is_loopback
-from . import routes, wizard
+from . import routes, settings_api, wizard
 from .auth import AuthState, OriginGuard, guard, public, public_router, session_router
 from .errors import ApiError, api_error_handler, request_validation_error_handler
 from .security import SecurityHeaders
@@ -63,7 +63,8 @@ class RequestLog:
 
 def create_app(config: Config, settings_path: Optional[Path] = None, state_dir: Optional[Path] = None, *,
                service: Optional[ControllerService] = None, auth: Optional[AuthState] = None, demo: bool = False,
-               hosts: Optional[List[str]] = None, setup: Optional[SetupState] = None) -> FastAPI:
+               hosts: Optional[List[str]] = None, setup: Optional[SetupState] = None,
+               read_only: bool = False) -> FastAPI:
     """The app for ``config``. ``settings_path`` is the ``hlp.toml`` to use and ``state_dir`` the data directory (the
     accounts file and the audit log are there), ``service`` the way to the controller (one is made from ``config``
     when none is given: the synthetic network for a ``demo``), ``auth`` the accounts, sessions and throttle (made from
@@ -82,6 +83,7 @@ def create_app(config: Config, settings_path: Optional[Path] = None, state_dir: 
                     Middleware(OriginGuard)],
     )
     app.state.config, app.state.settings_path, app.state.state_dir = config, settings_path, state_dir
+    app.state.read_only = read_only
     app.state.setup = setup
     unconfigured = setup is not None and bool(setup.mode)         # a server in a setup mode reads no controller yet
     app.state.service = None if unconfigured else service or ControllerService(config, demo=demo)
@@ -91,6 +93,7 @@ def create_app(config: Config, settings_path: Optional[Path] = None, state_dir: 
     app.add_exception_handler(RequestValidationError, request_validation_error_handler)
     routes.install(app)
     app.include_router(wizard.router())
+    app.include_router(settings_api.router())
     app.include_router(public_router())
     app.include_router(session_router())
 
@@ -125,7 +128,8 @@ def create_app(config: Config, settings_path: Optional[Path] = None, state_dir: 
         """What a client may know before it logs in: the version, and whether setup and login are needed."""
         mode = getattr(request.app.state.setup, "mode", None)
         return {"version": __version__, "needs_setup": bool(mode), "setup_mode": mode, "login_required": True,
-                "demo": bool(request.app.state.demo), "https": request.url.scheme == "https",
+                "demo": bool(request.app.state.demo), "read_only": bool(request.app.state.read_only),
+                "https": request.url.scheme == "https",
                 "loopback": is_loopback(request.url.hostname or "")}
 
     @app.get(f"{API}/platforms")

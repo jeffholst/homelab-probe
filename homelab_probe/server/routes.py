@@ -32,7 +32,7 @@ from ..documents import (
     wifi_document,
 )
 from ..events import DEFAULT_LIMIT, SEVERITIES, parse_duration
-from ..settings import DiagnoseSettings, load_settings
+from ..settings import DiagnoseSettings
 from ..snapshot import EventQuery
 from ..util import normalize_mac
 from ..wan import DEFAULT_DAYS
@@ -40,6 +40,7 @@ from ..wifi import DEFAULT_MIN_SIGNAL, parse_band
 from . import apischema
 from .errors import ApiError, from_controller
 from .service import Built
+from .settings_api import load_effective, settings_file
 
 _log = logging.getLogger(__name__)
 UNIFI = "/api/v1/unifi"
@@ -117,7 +118,7 @@ def _name(value: Optional[str], what: str, required: bool = False) -> str:
 
 def _settings(request: Request) -> DiagnoseSettings:
     try:
-        return load_settings(request.app.state.settings_path)
+        return load_effective(settings_file(request))
     except ConfigError as error:
         logs.warn(f"the settings file could not be used: {error}")
         raise ApiError(500, "settings_invalid", "The settings file could not be read; see the server log.") from None

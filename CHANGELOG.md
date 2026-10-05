@@ -29,6 +29,14 @@ always listed here.
 
 ## [Unreleased]
 
+### Added
+
+- **Settings over the API (#186, part 1):** `GET` and `PUT /api/v1/settings` read and change the `hlp.toml` that `diagnose` and `audit` use (thresholds and ignore rules). A change is validated by the loader every command uses (its own message in a `422`), keeps the file's comments (`tomlkit`, new in the `web` extra only), is refused with `409` when the file changed since it was read (a version hash, also checked right before the write), keeps the file's permissions, saves the old content as `hlp.toml.bak` and is audited as `settings.updated` (names and counts, never rule text). Administrators only, CSRF-protected. **`serve --read-only`** writes no file on this machine: the settings editor and the setup's `finish` answer `403 read_only`, and `/api/v1/meta` and the settings document say `read_only`. See [docs/web.md](docs/web.md#settings-apiv1settings).
+
+### Changed
+
+- **`serve` reads `hlp.toml` from the data directory** (`--data-dir`, the current directory by default) unless `--config` names a file; the report routes used `./hlp.toml` of the working directory before, and `serve --demo` no longer reads one at all.
+
 ## [0.3.0] - 2026-10-05
 
 ### Added

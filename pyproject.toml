@@ -39,6 +39,7 @@ dependencies = [
 web = [
     "fastapi>=0.115",
     "uvicorn>=0.30",
+    "tomlkit>=0.13",          # edits hlp.toml from the settings page and keeps the user's comments
 ]
 
 [dependency-groups]
