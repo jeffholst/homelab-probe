@@ -2,6 +2,8 @@
 
 Every `--json` output of the tool, the snapshot files and the webhook payload have a [JSON Schema](https://json-schema.org/) (draft 2020-12) in [`docs/schemas/`](schemas/), so a script or a dashboard can check what it receives instead of guessing. Each file is named `<document>.v<N>.schema.json` and its `$id` is its address on the `main` branch; the copy in the release you installed (the tag) is the authority for that release.
 
+The web server (see [the web interface](web.md#the-api-apiv1unifi)) returns the same documents with two more keys, `generated_at` and `warnings`; the documents that are bare arrays come back as `{"items": [...], "generated_at", "warnings"}`. Those API responses are described in the server's `/api/v1/openapi.json` (built from the schemas below), and the schemas themselves are served at `/api/v1/schemas/{name}`.
+
 | Command | Document | Schema |
 | ------- | -------- | ------ |
 | `diagnose --json` | findings, with `areas` and `summary` | [`diagnose.v1.schema.json`](schemas/diagnose.v1.schema.json) |

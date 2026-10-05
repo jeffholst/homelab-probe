@@ -59,7 +59,7 @@ def test_the_names_agree():
     text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert re.search(r'^name = "homelab-probe"$', text, re.M)
     assert re.search(r'^hlp = "homelab_probe\.cli:main"$', text, re.M)
-    assert 'include = ["homelab_probe*"]' in text and re.search(r"^\[project\.scripts\]\nhlp = ", text, re.M)
+    assert '"homelab_probe.server"' in text and re.search(r"^\[project\.scripts\]\nhlp = ", text, re.M)
     assert completion.PROGRAM == "hlp" == cli.build_parser().prog
     assert (ROOT / "hlp.py").is_file() and (ROOT / "hlp.example.toml").is_file()
     assert not (ROOT / "homelab_probe" / "demo" / "unifi_sentinel").exists()

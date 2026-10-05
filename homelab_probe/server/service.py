@@ -11,6 +11,7 @@ The only requests that can leave are the ones ``UniFiClient`` can make: GETs, an
 
 import http.cookiejar
 import logging
+import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -73,6 +74,9 @@ class ControllerService:
         if session is None:
             session = DemoSession() if demo else self._real_session(config)
         self.session = session
+        self._clock = clock
+        self._last_refresh: Optional[float] = None
+        self._refresh_lock = threading.Lock()
 
     @staticmethod
     def _real_session(config: Config) -> Any:
@@ -88,9 +92,16 @@ class ControllerService:
         return CachingClient(self.cache, self.session, config.controller_url, config.api_key, config.verify_ssl,
                              config.timeout, GET_RETRIES, config.parallel)
 
-    def refresh(self) -> None:
-        """Forget the cache: the next requests read the controller again."""
+    def refresh(self, min_interval: float = 0.0) -> bool:
+        """Forget the cache: the next requests read the controller again. False (and nothing forgotten) when the cache
+        was cleared less than ``min_interval`` seconds ago, so a loop of refreshes cannot become a loop of reads."""
+        with self._refresh_lock:
+            now = self._clock()
+            if self._last_refresh is not None and now - self._last_refresh < min_interval:
+                return False
+            self._last_refresh = now
         self.cache.clear()
+        return True
 
     def build(self, make: Callable[[UniFiClient], Document]) -> "Built":
         """``make(client)`` with a client of its own. ``generated_at`` is the age of the oldest answer it used (UTC),
