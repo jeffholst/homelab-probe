@@ -148,3 +148,42 @@ def test_binding_every_address_needs_an_allowed_host_and_nothing_else_does():
     for host in ("0.0.0.0", "::", ""):
         with pytest.raises(ValueError, match="--allowed-host"):
             check_bind(host)
+
+
+def test_networks_that_mean_everyone_are_refused_as_proxies_whatever_their_spelling():
+    from homelab_probe.util import parse_forwarded_ips
+
+    for bad in ("0.0.0.0/0", "::/0", "1.2.3.4/0", "10.0.0.1, 0.0.0.0/0", "::/0,127.0.0.1", "0.0.0.0/00"):
+        with pytest.raises(ValueError, match="every client"):
+            parse_forwarded_ips(bad)
+    assert parse_forwarded_ips("0.0.0.0/1,128.0.0.0/1") == "0.0.0.0/1,128.0.0.0/1"       # wide, but not everyone at once
+
+
+@pytest.mark.parametrize("host, expected", [("192.168.1.5", "192.168.1.5"), ("fd00::5", "[fd00::5]"),
+                                            ("[fd00::5]", "[fd00::5]"), ("FD00:0:0::5", "[fd00::5]"),
+                                            ("HLP.lan", "hlp.lan"), ("localhost", "localhost")])
+def test_the_bind_host_is_spelled_the_way_a_host_header_spells_it(host, expected):
+    from homelab_probe.util import bind_host_name
+
+    assert bind_host_name(host) == expected
+
+
+@pytest.mark.parametrize("host", ["*", "*.lan", "a b", "x/y", "http://x", "", "under_score"])
+def test_a_bind_host_that_is_not_a_name_or_an_address_is_refused(host):
+    from homelab_probe.util import bind_host_name, check_bind
+
+    with pytest.raises(ValueError):
+        bind_host_name(host)
+    if host:                                                     # "" means every address: it needs an allowed host
+        with pytest.raises(ValueError, match="not a host name or address"):
+            check_bind(host, ["hlp.lan"])
+
+
+def test_a_wildcard_among_the_allowed_hosts_is_refused_by_the_bind_check_itself():
+    from homelab_probe.util import check_bind
+
+    for allowed in (["*"], ["*.lan"], ["hlp.lan", "*"], [" "], ["http://hlp.lan"]):
+        with pytest.raises(ValueError, match="not a host name or address"):
+            check_bind("0.0.0.0", allowed)
+        with pytest.raises(ValueError, match="not a host name or address"):
+            check_bind("127.0.0.1", allowed)

@@ -272,3 +272,23 @@ def test_meta_tells_a_client_whether_to_warn_about_a_login_over_plain_http(tmp_p
                                   ("http://localhost:8787", False, True), ("http://127.0.0.1", False, True)):
         meta = TestClient(app, base_url=base).get("/api/v1/meta").json()
         assert (meta["https"], meta["loopback"]) == (https, loopback), base
+
+
+@pytest.mark.parametrize("extra", [["*"], ["*.lan"], ["hlp.lan", "*"], ["a b"], ["http://hlp.lan"], [""]])
+def test_the_allowed_host_list_refuses_a_wildcard_even_when_the_caller_skipped_the_command_line(extra):
+    with pytest.raises(ValueError, match="not a host name or address"):
+        allowed_hosts("127.0.0.1", 8787, extra)
+    with pytest.raises(ValueError, match="not a host name or address"):
+        allowed_hosts("0.0.0.0", 8787, extra)
+
+
+@pytest.mark.parametrize("host", ["*", "*.lan", "a b", "http://x"])
+def test_a_bind_address_that_is_a_pattern_cannot_become_an_allowed_host(host):
+    with pytest.raises(ValueError):
+        allowed_hosts(host, 8787, ["hlp.lan"])
+
+
+def test_the_allowed_hosts_are_spelled_both_ways_for_ipv6_and_never_duplicated():
+    names = allowed_hosts("fd00::5", 8787, ["[fd00::5]", "hlp.lan", "HLP.LAN:80"])
+    assert names.count("[fd00::5]") == 1 and names.count("fd00::5") == 1 and names.count("hlp.lan") == 1
+    assert "*" not in names and all("*" not in n for n in names)

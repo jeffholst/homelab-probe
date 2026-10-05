@@ -13,7 +13,7 @@ from typing import List, Sequence, Tuple
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from ..util import is_wildcard_bind
+from ..util import bind_host_name, is_wildcard_bind, parse_allowed_host
 
 CSP = ("default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; "
        "img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'")
@@ -36,10 +36,10 @@ def _forms(host: str) -> List[str]:
 def allowed_hosts(host: str, port: int, extra: Sequence[str] = ()) -> List[str]:
     """The ``Host`` header values the server answers to: the loopback names, its own bind address (unless that is
     "every address") and the names given with ``--allowed-host``. Never a wildcard. (Starlette compares the host part
-    and ignores the port.)"""
+    and ignores the port.) Raises ``ValueError`` for a name that is a wildcard or not a host at all."""
     names = ["localhost", "127.0.0.1", "[::1]", "::1"]
-    wanted = ([] if is_wildcard_bind(host) else [host]) + list(extra)
-    for name in wanted:
+    wanted = ([] if is_wildcard_bind(host) else [bind_host_name(host)]) + [parse_allowed_host(name) for name in extra]
+    for name in wanted:                # checked here, not only by the command: a caller that skips argparse is safe too
         for form in _forms(name):
             if form not in names:
                 names.append(form)

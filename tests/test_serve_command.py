@@ -238,3 +238,25 @@ def test_a_damaged_accounts_file_is_a_start_up_error_not_a_traceback(content, co
     err = capsys.readouterr().err
     assert err.startswith("Serving on") or "ERROR:" in err
     assert "Traceback" not in err and "ERROR:" in err
+
+
+@pytest.mark.parametrize("host", ["*", "*.lan", "a b", "http://x"])
+def test_a_host_that_is_not_a_name_or_an_address_is_a_usage_error(host, configured, served, capsys):
+    with pytest.raises(SystemExit) as caught:
+        cli.main(["serve", "--host", host])
+    assert caught.value.code == 64 and "not a host name or address" in capsys.readouterr().err and served == []
+
+
+@pytest.mark.parametrize("value", ["0.0.0.0/0", "::/0", "10.0.0.1,0.0.0.0/0"])
+def test_a_network_that_means_everyone_is_not_a_proxy_either(value, configured, served, capsys):
+    with pytest.raises(SystemExit) as caught:
+        cli.main(["serve", "--forwarded-allow-ips", value])
+    assert caught.value.code == 64 and "every client" in capsys.readouterr().err and served == []
+
+
+def test_the_runner_refuses_a_wildcard_allowed_host_for_a_caller_that_skips_the_command_line(configured, served, data):
+    config = commands.Config(controller_url="https://c.example", api_key="k")
+    for allowed in (["*"], ["*.lan"]):
+        with pytest.raises(ValueError, match="not a host name or address"):
+            runner.run(config, "127.0.0.1", 1, None, data, allowed=allowed)
+    assert served == []

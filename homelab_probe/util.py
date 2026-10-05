@@ -242,10 +242,12 @@ def parse_forwarded_ips(text: str) -> str:
         raise ValueError("name at least one proxy address")
     for part in parts:
         try:
-            ipaddress.ip_network(part, strict=False)
+            network = ipaddress.ip_network(part, strict=False)
         except ValueError:
             raise ValueError(f"{part!r} is not an IP address or network (and * is not accepted: it would trust "
                              "every client)") from None
+        if network.prefixlen == 0:
+            raise ValueError(f"{part!r} would trust every client, like *: name the proxies")
     return ",".join(parts)
 
 
@@ -253,7 +255,23 @@ def check_bind(host: str, allowed: Sequence[str] = ()) -> str:
     """``host`` unchanged, or a ``ValueError`` saying why it cannot be bound. A loopback address is always fine; a
     specific other address or name is (its own name is allowed as a ``Host``); "every address" needs at least one
     allowed host, so that the server knows which names it is reached by."""
-    if is_wildcard_bind(host) and not allowed:
-        raise ValueError(f"listening on every address ({host or 'all'}) needs at least one --allowed-host naming how "
-                         "the server is reached (for example the machine's name)")
+    for name in allowed:
+        parse_allowed_host(name)                                   # a wildcard here would open the Host list
+    if is_wildcard_bind(host):
+        if not allowed:
+            raise ValueError(f"listening on every address ({host or 'all'}) needs at least one --allowed-host naming "
+                             "how the server is reached (for example the machine's name)")
+    elif not is_loopback(host):
+        bind_host_name(host)                                       # a name or an address, never "*" or a pattern
     return host
+
+
+def bind_host_name(host: str) -> str:
+    """The ``Host`` spelling of the address or name the server is bound to (an IPv6 address in brackets). Raises
+    ``ValueError`` when ``host`` is not a host name or an address."""
+    bare = host.strip().strip("[]")
+    try:
+        address = ipaddress.ip_address(bare)
+    except ValueError:
+        return parse_allowed_host(host)
+    return f"[{address}]" if address.version == 6 else str(address)

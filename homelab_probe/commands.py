@@ -760,7 +760,8 @@ def _add_serve(parser: argparse.ArgumentParser) -> None:
                              "wildcards are not accepted")
     parser.add_argument("--forwarded-allow-ips", type=_forwarded_ips, metavar="IPS",
                         help="Believe X-Forwarded-For and X-Forwarded-Proto from these reverse proxies "
-                             "(addresses or networks, comma-separated); by default from none. * is not accepted")
+                             "(addresses or networks, comma-separated); by default from none. * and 0.0.0.0/0 are "
+                             "not accepted")
     parser.add_argument("--port", type=_port, default=DEFAULT_PORT, metavar="PORT",
                         help=f"The port to listen on (default {DEFAULT_PORT})")
     parser.add_argument("--data-dir", type=Path, default=Path("."), metavar="DIR",
