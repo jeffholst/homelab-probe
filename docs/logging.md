@@ -52,6 +52,7 @@ The `logger` field is the module's name under `homelab_probe` (for example `home
 | `run.settings` | DEBUG | | Which settings a run uses (DEBUG, with `--verbose`): the controller address, the site, limits. |
 | `run.summary` | DEBUG | | How many requests a run made and how long they took (DEBUG, with `--verbose`). |
 | `notify.delivery` | INFO or WARNING | `destination`, `delivered`, `reason`, `duration_ms` | The outcome of one notification destination (INFO delivered, WARNING failed): the kind, a fixed reason, milliseconds; never the message, the URL or a recipient. |
+| `audit.event` | INFO | `action`, `actor`, `account`, `role` | A change to the web accounts was made (INFO): the action, who did it and which user; never a password. |
 | `watch.pass` | INFO | `findings`, `complete`, `retry_s` | One pass of `diagnose --watch` finished (INFO): how many findings, whether the read was complete. |
 | `watch.unavailable` | WARNING | `reason`, `findings`, `complete`, `retry_s` | A pass of `diagnose --watch` could not read the controller or got only part of its data (WARNING). |
 

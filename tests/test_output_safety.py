@@ -142,7 +142,7 @@ def test_every_subcommand_has_a_hostile_name_case():
     """A new subcommand must be added to COMMANDS (or to the list below with the reason)."""
     parser = cli.build_parser()
     subcommands = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
-    covered = {argv[0] for argv in COMMANDS} | {"export", "snapshot", "diff", "completion"}   # their own tests; completion prints no controller data
+    covered = {argv[0] for argv in COMMANDS} | {"export", "snapshot", "diff", "completion", "web-user"}   # their own tests; completion prints no controller data, web-user only usernames that the accounts module has checked
     assert set(subcommands.choices) <= covered, set(subcommands.choices) - covered
 
 

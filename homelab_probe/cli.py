@@ -103,6 +103,7 @@ DEMO_REFUSED = {
     "doctor": "it checks your real installation and settings",
     "snapshot": "it would save synthetic data among your own snapshots",
     "diff": "it compares against your own saved snapshots",
+    "web-user": "it reads and writes your own accounts file",
 }
 
 
@@ -125,10 +126,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         _check_demo(parser, args)
     logs.reset()                                            # a fresh logger state for this run
     logs.configure("cli", "DEBUG" if args.verbose else "WARNING")
-    if command.run_local is not None:                       # needs no .env and no controller
-        return command.run_local(args)
     client: Optional[UniFiClient] = None
     try:
+        if command.run_local is not None:                   # needs no .env and no controller
+            return command.run_local(args)
         if args.demo:        # nothing from the machine: no .env, no environment, no settings file, no destinations
             config = demo_config(args.site or "default")
         else:

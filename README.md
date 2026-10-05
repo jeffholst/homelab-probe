@@ -26,6 +26,7 @@ Homelab Probe is a fork of [ericfitz/unifi-clients-export](https://github.com/er
 | `audit` | Configuration audit: Wi-Fi networks that are open or WPA2-only, default device names, firmware updates, unnamed clients | [details](docs/diagnose.md#audit) |
 | `doctor` | Check the installation and the settings, and that the controller answers | [details](docs/configuration.md#checking-your-setup-doctor) |
 | `completion` | Print a shell completion script for bash, zsh or fish | [details](docs/configuration.md#shell-completion) |
+| `web-user` | Manage the accounts of the web interface: users, roles and passwords | [details](docs/web.md#managing-accounts-web-user) |
 | `diagnose` | Read-only health checks with 🛑 critical, ⚠️ warning and ℹ️ info findings (`--json` for scripts) | [details](docs/diagnose.md#diagnose) |
 | `info` | Show the controller application info and available sites | [details](docs/configuration.md#finding-your-site-info) |
 
@@ -109,10 +110,8 @@ Either installs the `hlp` command (its `--version` option shows which version yo
 ```bash
 uv run hlp.py --demo diagnose                      # no controller yet? synthetic data, nothing read or sent
 uv run hlp.py info                                 # the controller's version and its sites
-uv run hlp.py --site Lab diagnose --no-events      # another site for this run (beats UNIFI_SITE_ID)
 uv run hlp.py export -o ./out --include-offline    # CSV files (--output-dir; --format json for one JSON file); also offline clients
 uv run hlp.py query clients -s printer --json      # filter (long form: --search), as JSON; --csv for a spreadsheet
-uv run hlp.py query wlans                          # Wi-Fi networks (also: query networks; query clients --ssid guest)
 uv run hlp.py snapshot                             # save the inventory to ./snapshots/
 uv run hlp.py diff                                 # what changed since the newest snapshot?
 uv run hlp.py topology --clients                   # how the gateway, switches and APs are wired
@@ -125,9 +124,8 @@ uv run hlp.py new-clients                          # clients in no client group
 uv run hlp.py audit                                # settings that are probably not what you want
 uv run hlp.py doctor                               # is the tool set up right? (--offline: no controller)
 uv run hlp.py completion zsh                       # a completion script for bash, zsh or fish
+uv run hlp.py web-user list                        # the web interface's accounts (add, set-role, disable, ...)
 uv run hlp.py diagnose                             # health checks (--json for scripts, --notify for alerts)
-uv run hlp.py diagnose --only ports,wifi           # just those checks, reading only what they need
-uv run hlp.py diagnose --watch 60                  # every minute, print only what changed (Ctrl-C to stop)
 ```
 
 Run these from the project root (uv uses `pyproject.toml`); after `pip install .` use `hlp <command>` instead. Run `--help` on the tool or any command for options, and `--version` for the version. More examples, with sample output, are in [docs/examples.md](docs/examples.md). For supported commands, `--demo` ([details](docs/configuration.md#trying-it-without-a-controller---demo)) serves synthetic data; it does not support `doctor`, `snapshot` or `diff`, and refuses notification options.
@@ -222,6 +220,7 @@ These sections moved to `docs/`; links to their old README anchors still land he
 - [Inventory, queries and exports](docs/inventory.md): `query`, `export`, snapshots, reservations, ports
 - [Network views](docs/network.md): topology, Wi-Fi, WAN, firewall, events, the client view
 - [Configuration and troubleshooting](docs/configuration.md): every setting, `--verbose`, when something fails
+- [Web accounts](docs/web.md): users, roles, passwords and the audit log of the web interface
 - [JSON output schemas](docs/schemas.md): a versioned JSON Schema for every `--json` output, the snapshot file and the webhook payload
 - [Examples](docs/examples.md): more commands and sample output
 - [Features](docs/features.md) and [Development and API documentation](docs/development.md)

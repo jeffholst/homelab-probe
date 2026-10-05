@@ -6,6 +6,7 @@ Every command with its options, and sample output generated from the checked-in 
 
 
 ```bash
+uv run hlp.py web-user list               # the web interface's accounts (see docs/web.md)
 uv run hlp.py --demo diagnose             # no controller: the synthetic network, nothing read or sent
 uv run hlp.py --demo topology --clients   # supported reports use the same synthetic data
 uv run hlp.py info
@@ -22,6 +23,7 @@ uv run hlp.py query reservations --offline   # reserved clients that have been o
 uv run hlp.py query ports                 # every switch port
 uv run hlp.py query ports --down --switch rack   # down ports on matching switches
 uv run hlp.py query ports --errors        # ports with rx/tx errors
+uv run hlp.py query wlans                 # Wi-Fi networks (also: query networks; query clients --ssid guest)
 uv run hlp.py snapshot                    # save the inventory to ./snapshots/
 uv run hlp.py diff                        # what changed since the newest snapshot?
 uv run hlp.py topology                    # how the gateway, switches and APs are wired

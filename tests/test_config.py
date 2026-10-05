@@ -282,3 +282,26 @@ def test_example_env_verifies_certificates_and_every_value_is_valid():
     assert validate_site(values["UNIFI_SITE_ID"]) == "default"
     assert values["UNIFI_URL"].startswith("https://")
     assert "ALLOW_INSECURE_HTTP" not in values                      # the lab opt-in stays commented out
+
+
+# -- the audit log limits (issue #182) -------------------------------------------------------------------------
+
+def test_the_audit_log_limits_default_parse_and_reject_what_is_not_a_whole_number_in_range(monkeypatch, tmp_path):
+    from homelab_probe.config import ConfigError, load_config, parse_audit_log_files, parse_audit_log_mb
+
+    assert (parse_audit_log_mb(None), parse_audit_log_mb(" "), parse_audit_log_mb("1024")) == (5, 5, 1024)
+    assert (parse_audit_log_files(""), parse_audit_log_files("2"), parse_audit_log_files("1000")) == (10, 2, 1000)
+    for parse, name, bad in ((parse_audit_log_mb, "AUDIT_LOG_MAX_MB", ["0", "1025", "five", "2.5", "-1"]),
+                             (parse_audit_log_files, "AUDIT_LOG_FILES", ["1", "1001", "many", "3.5"])):
+        for text in bad:
+            with pytest.raises(ConfigError, match=name):
+                parse(text)
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
+    assert (load_config().audit_log_mb, load_config().audit_log_files) == (5, 10)
+    monkeypatch.setenv("AUDIT_LOG_MAX_MB", "2")
+    monkeypatch.setenv("AUDIT_LOG_FILES", "4")
+    assert (load_config().audit_log_mb, load_config().audit_log_files) == (2, 4)
+    monkeypatch.setenv("AUDIT_LOG_FILES", "one")
+    with pytest.raises(ConfigError, match="AUDIT_LOG_FILES"):
+        load_config()
