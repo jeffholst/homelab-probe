@@ -4,7 +4,7 @@ import re
 
 import pytest
 
-from homelab_probe import cli, commands
+from homelab_probe import cli, commands, documents
 from homelab_probe.diagnose import CRITICAL, INFO, WARNING, Finding
 from homelab_probe.notify import plan
 from homelab_probe.watch import MAX_SECONDS, MIN_SECONDS, changes, start
@@ -237,7 +237,7 @@ def test_an_unavailable_optional_collection_marks_the_pass_incomplete(fake_clien
     class Context:
         client = fake_client
         config = type("Config", (), {"site": "default"})()
-        args = type("Args", (), {"areas": None, "since": 86400})()
+        args = type("Args", (), {"areas": None, "since": 86400, "show_ignored": False})()
 
     _, _, complete = commands._diagnose_once(Context(), DiagnoseSettings())
     assert not complete
@@ -256,7 +256,7 @@ def test_an_unavailable_device_statistics_read_marks_the_pass_incomplete(fake_cl
     class Context:
         client = fake_client
         config = type("Config", (), {"site": "default"})()
-        args = type("Args", (), {"areas": None, "since": 86400})()
+        args = type("Args", (), {"areas": None, "since": 86400, "show_ignored": False})()
 
     _, _, complete = commands._diagnose_once(Context(), DiagnoseSettings())
     assert not complete
@@ -275,7 +275,7 @@ def test_a_missing_statistics_record_for_an_online_device_is_incomplete(fake_cli
     class Context:
         client = fake_client
         config = type("Config", (), {"site": "default"})()
-        args = type("Args", (), {"areas": None, "since": 86400})()
+        args = type("Args", (), {"areas": None, "since": 86400, "show_ignored": False})()
 
     _, _, complete = commands._diagnose_once(Context(), DiagnoseSettings())
     assert not complete
@@ -290,7 +290,7 @@ def test_the_first_read_failing_is_an_error_as_for_any_command(fake_client, monk
 
 
 def test_ctrl_c_during_a_read_stops_cleanly(fake_client, monkeypatch, capsys):
-    real = commands.collect_snapshot
+    real = documents.collect_snapshot
     calls = []
 
     def interrupted(*args, **kwargs):
@@ -299,7 +299,7 @@ def test_ctrl_c_during_a_read_stops_cleanly(fake_client, monkeypatch, capsys):
             raise KeyboardInterrupt
         return real(*args, **kwargs)
 
-    monkeypatch.setattr(commands, "collect_snapshot", interrupted)
+    monkeypatch.setattr(documents, "collect_snapshot", interrupted)
     assert run(fake_client, monkeypatch, Script(lambda: None, lambda: None)) == 1
     assert "Stopped." in capsys.readouterr().err and len(calls) == 2
 
