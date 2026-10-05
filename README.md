@@ -26,6 +26,7 @@ Homelab Probe is a fork of [ericfitz/unifi-clients-export](https://github.com/er
 | `audit` | Configuration audit: Wi-Fi networks that are open or WPA2-only, default device names, firmware updates, unnamed clients | [details](docs/diagnose.md#audit) |
 | `doctor` | Check the installation and the settings, and that the controller answers | [details](docs/configuration.md#checking-your-setup-doctor) |
 | `completion` | Print a shell completion script for bash, zsh or fish | [details](docs/configuration.md#shell-completion) |
+| `serve` | Serve the read-only web API on this machine (needs the web extra; no login yet, so loopback only) | [details](docs/web.md#running-the-server-serve) |
 | `web-user` | Manage the accounts of the web interface: users, roles and passwords | [details](docs/web.md#managing-accounts-web-user) |
 | `diagnose` | Read-only health checks with 🛑 critical, ⚠️ warning and ℹ️ info findings (`--json` for scripts) | [details](docs/diagnose.md#diagnose) |
 | `info` | Show the controller application info and available sites | [details](docs/configuration.md#finding-your-site-info) |
@@ -65,11 +66,7 @@ UNIFI_SITE_ID=default
 UNIFI_VERIFY_SSL=true
 ```
 
-Every setting, how the file is found (`--env-file`), TLS, timeouts, speed and the notification settings are in [docs/configuration.md](docs/configuration.md#configure).
-
-### Seeing what the tool does: `--verbose`
-
-`--verbose` (before the command) logs every request and what was read to stderr, never the API key. See [docs/configuration.md](docs/configuration.md#seeing-what-the-tool-does---verbose); log levels, JSON lines and what is never logged are in [docs/logging.md](docs/logging.md).
+Every setting, how the file is found (`--env-file`), TLS, timeouts, speed and the notification settings are in [docs/configuration.md](docs/configuration.md#configure). `--verbose` (before the command) logs every request and what was read to stderr, never the API key ([details](docs/configuration.md#seeing-what-the-tool-does---verbose); levels and JSON lines: [docs/logging.md](docs/logging.md)).
 
 ### Getting an API key
 
@@ -124,6 +121,7 @@ uv run hlp.py new-clients                          # clients in no client group
 uv run hlp.py audit                                # settings that are probably not what you want
 uv run hlp.py doctor                               # is the tool set up right? (--offline: no controller)
 uv run hlp.py completion zsh                       # a completion script for bash, zsh or fish
+uv run hlp.py serve                                # the read-only web API on 127.0.0.1:8787 (pip install 'homelab-probe[web]')
 uv run hlp.py web-user list                        # the web interface's accounts (add, set-role, disable, ...)
 uv run hlp.py diagnose                             # health checks (--json for scripts, --notify for alerts)
 ```
@@ -212,7 +210,7 @@ Event-based warnings ([Recent events](docs/diagnose.md#recent-events)) count tow
 ## Documentation
 
 These sections moved to `docs/`; links to their old README anchors still land here: <a id="controller-health"></a>[Controller health](docs/diagnose.md#controller-health) · <a id="port-health"></a>[Port health](docs/diagnose.md#port-health) · <a id="recent-events"></a>[Recent events](docs/diagnose.md#recent-events) · <a id="wi-fi-quality"></a>[Wi-Fi quality](docs/diagnose.md#wi-fi-quality) · <a id="configuration-thresholds-and-ignore-list"></a>[Thresholds and ignore list](docs/diagnose.md#configuration-thresholds-and-ignore-list) · <a id="json-output-and-finding-codes"></a>[JSON and finding codes](docs/diagnose.md#json-output-and-finding-codes) · <a id="notifications"></a>[Notifications](docs/notifications.md) ·
-<a id="the-one-post-and-why-it-is-safe"></a>[The one POST](docs/network.md#the-one-post-and-why-it-is-safe) · <a id="names-in-exports-and-output"></a>[Names in exports](docs/inventory.md#names-in-exports-and-output) · <a id="example-output"></a>[Example output](docs/examples.md#example-output) · <a id="unificlientscsv"></a>[Client CSV](docs/examples.md#unificlientscsv) · <a id="switchswitch---dencsv"></a>[Switch CSV](docs/examples.md#switchoffice-switchcsv) · <a id="api-documentation"></a>[API documentation](docs/development.md#api-documentation).
+<a id="the-one-post-and-why-it-is-safe"></a>[The one POST](docs/network.md#the-one-post-and-why-it-is-safe) · <a id="names-in-exports-and-output"></a>[Names in exports](docs/inventory.md#names-in-exports-and-output) · <a id="example-output"></a>[Example output](docs/examples.md#example-output) · <a id="unificlientscsv"></a>[Client CSV](docs/examples.md#unificlientscsv) · <a id="switchswitch---dencsv"></a>[Switch CSV](docs/examples.md#switchoffice-switchcsv) · <a id="api-documentation"></a>[API documentation](docs/development.md#api-documentation) · <a id="seeing-what-the-tool-does---verbose"></a>[`--verbose`](docs/configuration.md#seeing-what-the-tool-does---verbose).
 
 - [Diagnose and audit](docs/diagnose.md): the checks, thresholds and ignore list, `--json` and the finding codes
 - [Notifications](docs/notifications.md): ntfy, webhook and email
@@ -220,7 +218,7 @@ These sections moved to `docs/`; links to their old README anchors still land he
 - [Inventory, queries and exports](docs/inventory.md): `query`, `export`, snapshots, reservations, ports
 - [Network views](docs/network.md): topology, Wi-Fi, WAN, firewall, events, the client view
 - [Configuration and troubleshooting](docs/configuration.md): every setting, `--verbose`, when something fails
-- [Web accounts](docs/web.md): users, roles, passwords and the audit log of the web interface
+- [Web interface](docs/web.md): the server, its safety rules, and the accounts, passwords and audit log
 - [JSON output schemas](docs/schemas.md): a versioned JSON Schema for every `--json` output, the snapshot file and the webhook payload
 - [Examples](docs/examples.md): more commands and sample output
 - [Features](docs/features.md) and [Development and API documentation](docs/development.md)

@@ -30,7 +30,7 @@ jobs:
       - name: Lockfile matches pyproject.toml
         run: uv lock --check
       - name: Install
-        run: uv sync --locked
+        run: uv sync --locked --extra web
       - name: The tag, the package version and the changelog agree
         run: uv run python tools/release_notes.py "$TAG" > release-notes.md
       - name: Tests
