@@ -27,7 +27,9 @@ always listed here.
 - The package never changes anything on the controller. Every request is a GET, with one read-only exception: the
   event log can only be queried with a POST (`events`, and `diagnose` and `client` unless `--no-events`).
 
-## [0.2.0] - Unreleased
+## [Unreleased]
+
+## [0.2.0] - 2026-10-04
 
 The first tagged release. Everything since the fork is listed below.
 
@@ -119,9 +121,7 @@ and `wep` Wi-Fi security values) the README says so.
 - **`--show-ignored` lists each finding's code**, so it can be copied into an ignore rule.
 - The version is written in one place, `homelab_probe.__version__`.
 - **Documentation:** the README is now a short quickstart (what it is, install, configure, the commands with one example each, the exit codes) and the detail is in `docs/` (diagnose and audit, notifications, inventory, network views, configuration and troubleshooting, running on a schedule, examples, features, development). Historical README anchors remain at their original URLs, and output samples are generated from the checked-in fixture.
-- **`diagnose`, `snapshot`, `diff` and `export` build a document first** (the last of the commands to do so): `diagnose` builds the findings document that `--json` prints, and the text, the exit code, `--notify` and `--watch` all work from it; `snapshot` and `diff` build the snapshot record and the diff, and `export` builds the rows that both its CSV files and its JSON file are written from. Their output, the snapshot file format (`schema_version` 1), the notification state files and the exit codes are unchanged.
-- **`events`, `client`, `query` and `new-clients` build a document first** like the commands below: the `--json` data (a bare array where it always was one) plus the warnings of the read, with the table, CSV and detail views rendered from it. Their output is unchanged.
-- **`wifi`, `topology`, `firewall` and `audit` build a document first** (the dict that `--json` prints, plus the warnings of the read), like `wan`, and the text output is rendered from it; the text and `--json` output are unchanged except for one additive key: each `firewall --json` zone now has an `id` (the key of the matrix cells, so a consumer can name the columns; `null` when the controller sent none).
+- **Every command builds a document first** (the dict that `--json` prints, or a bare array where it always was one, plus the warnings of the read), and the text, CSV and detail views, the exit code, `--notify` and `--watch` are rendered or derived from it, so that a later API cannot drift from the command line. Nothing changes for a user: the output, the snapshot file format (`schema_version` 1), the notification state files and the exit codes are the same.
 
 ### Fixed
 
