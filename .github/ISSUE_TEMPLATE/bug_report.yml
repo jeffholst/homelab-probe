@@ -30,7 +30,7 @@ body:
     attributes:
       label: Version
       description: The output of `hlp --version`.
-      placeholder: hlp 0.2.0
+      placeholder: hlp 0.3.0
     validations:
       required: true
   - type: input

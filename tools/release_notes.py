@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The release checks and notes for a version tag (a development tool, not part of the package).
 
-    python tools/release_notes.py v0.2.0 > notes.md
+    python tools/release_notes.py v0.3.0 > notes.md
 
 Used by ``.github/workflows/release.yml``. It stops (exit 1, with the reason on stderr) unless the tag is
 ``v`` plus ``homelab_probe.__version__`` and ``CHANGELOG.md`` has a dated entry for that version, then prints that
