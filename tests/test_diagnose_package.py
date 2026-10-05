@@ -105,7 +105,8 @@ def test_each_check_module_builds_findings(module):
 
 def test_every_package_directory_is_included_when_the_project_is_installed():
     """An editable install finds any folder, a built wheel only what pyproject lists: a subpackage that is not
-    matched would be missing from `pip install .` and from a release. (Found when diagnose.py became a package.)"""
+    listed would be missing from `pip install .` and from a release. (Found when diagnose.py became a package; the
+    list is by hand since docs/schemas is mapped in as ``homelab_probe.schemas``.)"""
     import sys
 
     root = Path(__file__).resolve().parent.parent
@@ -114,14 +115,10 @@ def test_every_package_directory_is_included_when_the_project_is_installed():
     else:  # pragma: no cover  (Python 3.10 only)
         import tomli as tomllib
     config = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["setuptools"]
-    packages = config.get("packages")
-    patterns = packages.get("find", {}).get("include") if isinstance(packages, dict) else None
-    assert patterns == ["homelab_probe*"], "use [tool.setuptools.packages.find] with include = [\"homelab_probe*\"]"
-    from fnmatch import fnmatch
-
+    listed = set(config["packages"])
     on_disk = {
         p.parent.relative_to(root).as_posix().replace("/", ".")
         for p in (root / "homelab_probe").rglob("__init__.py")
     }
-    assert "homelab_probe.diagnose" in on_disk
-    assert all(any(fnmatch(name, pattern) for pattern in patterns) for name in on_disk), on_disk
+    assert "homelab_probe.diagnose" in on_disk and "homelab_probe.server" in on_disk
+    assert on_disk <= listed, on_disk - listed

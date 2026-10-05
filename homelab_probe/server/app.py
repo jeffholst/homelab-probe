@@ -17,6 +17,8 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from .. import __version__, logs
 from ..config import Config
+from . import routes
+from .errors import ApiError, api_error_handler
 from .security import SecurityHeaders
 from .service import ControllerService
 
@@ -70,6 +72,8 @@ def create_app(config: Config, settings_path: Optional[Path] = None, state_dir: 
     )
     app.state.config, app.state.settings_path, app.state.state_dir = config, settings_path, state_dir
     app.state.service, app.state.demo = service or ControllerService(config, demo=demo), demo
+    app.add_exception_handler(ApiError, api_error_handler)   # type: ignore[arg-type]
+    routes.install(app)
 
     @app.get("/", include_in_schema=False)
     def root() -> Dict[str, str]:
