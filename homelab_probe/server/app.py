@@ -18,6 +18,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from .. import __version__, logs
 from ..config import Config
+from ..util import is_loopback
 from . import routes
 from .auth import AuthState, OriginGuard, guard, public, public_router, session_router
 from .errors import ApiError, api_error_handler, request_validation_error_handler
@@ -114,7 +115,8 @@ def create_app(config: Config, settings_path: Optional[Path] = None, state_dir: 
     def meta(request: Request) -> Dict[str, Any]:
         """What a client may know before it logs in: the version, and whether setup and login are needed."""
         return {"version": __version__, "needs_setup": False, "login_required": True,
-                "demo": bool(request.app.state.demo)}
+                "demo": bool(request.app.state.demo), "https": request.url.scheme == "https",
+                "loopback": is_loopback(request.url.hostname or "")}
 
     @app.get(f"{API}/platforms")
     def platforms() -> List[Dict[str, Any]]:

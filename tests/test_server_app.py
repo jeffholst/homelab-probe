@@ -41,7 +41,8 @@ def test_healthz_says_ok_and_nothing_else(client):
 def test_readyz_and_meta_say_what_a_client_may_know_before_login(client):
     assert client.get("/readyz").json() == {"ready": True}
     assert client.get("/api/v1/meta").json() == {"version": __version__, "needs_setup": False,
-                                                  "login_required": True, "demo": False}
+                                                  "login_required": True, "demo": False, "https": False,
+                                                  "loopback": False}
 
 
 def test_a_demo_app_says_so(app, tmp_path):
@@ -262,3 +263,12 @@ def test_readyz_costs_the_controller_one_read_however_often_it_is_probed(app):
     for _ in range(10):
         assert client.get("/readyz").status_code == 200
     assert app.state.service.session.calls == ["/proxy/network/integration/v1/info"]
+
+
+def test_meta_tells_a_client_whether_to_warn_about_a_login_over_plain_http(tmp_path):
+    app = create_app(CONFIG, state_dir=tmp_path, hosts=["testserver", "localhost", "127.0.0.1"],
+                     auth=auth_for(tmp_path), service=ControllerService(CONFIG, session=DemoSession()))
+    for base, https, loopback in (("http://testserver", False, False), ("https://testserver", True, False),
+                                  ("http://localhost:8787", False, True), ("http://127.0.0.1", False, True)):
+        meta = TestClient(app, base_url=base).get("/api/v1/meta").json()
+        assert (meta["https"], meta["loopback"]) == (https, loopback), base

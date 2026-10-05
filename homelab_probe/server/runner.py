@@ -5,14 +5,14 @@ import secrets
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Optional, Sequence
 
 import uvicorn
 
 from .. import logs
 from ..accounts import AccountError, AccountStore
 from ..config import Config, ConfigError
-from ..util import require_loopback
+from ..util import check_bind, is_loopback
 from .app import create_app
 from .auth import AuthState
 from .security import allowed_hosts
@@ -33,11 +33,14 @@ def require_administrator(store: AccountStore, directory: Path) -> None:
 
 
 def run(config: Config, host: str, port: int, settings_path: Optional[Path], state_dir: Path,
-        demo: bool = False, announce: Callable[[str], None] = lambda message: None) -> None:
-    """Serve until interrupted. Raises ``ValueError`` for a ``host`` that is not a loopback address and ``ConfigError``
-    when no administrator exists. A demo keeps its accounts in a temporary directory, with an administrator ``demo``
-    and a random password that ``announce`` shows once; the directory is removed when the server stops."""
-    host = require_loopback(host)
+        demo: bool = False, announce: Callable[[str], None] = lambda message: None,
+        allowed: Sequence[str] = (), forwarded_allow_ips: Optional[str] = None) -> None:
+    """Serve until interrupted. Raises ``ValueError`` for a ``host`` that cannot be bound (every address, with no
+    ``allowed`` host) and ``ConfigError`` when no administrator exists. ``allowed`` are the extra ``Host`` names the
+    server answers to; ``forwarded_allow_ips`` the proxies whose ``X-Forwarded-*`` headers are believed (none by
+    default). A demo keeps its accounts in a temporary directory, with an administrator ``demo`` and a random password
+    that ``announce`` shows once; the directory is removed when the server stops."""
+    host = check_bind(host, allowed)
     scratch = Path(tempfile.mkdtemp(prefix="hlp-demo-")) if demo else None
     try:
         directory = scratch or state_dir
@@ -47,13 +50,22 @@ def run(config: Config, host: str, port: int, settings_path: Optional[Path], sta
             auth.accounts.store.add(DEMO_USER, "admin", password)
             announce(f"Demo login: user {DEMO_USER}, password {password} (synthetic data; valid until you stop it)")
         require_administrator(auth.accounts.store, directory)
-        app = create_app(config, settings_path, directory, auth=auth, demo=demo, hosts=allowed_hosts(host, port))
+        app = create_app(config, settings_path, directory, auth=auth, demo=demo,
+                         hosts=allowed_hosts(host, port, allowed))
+        if not is_loopback(host):
+            announce("This server can be reached from other machines: a login travels in clear text over plain HTTP. "
+                     "Put a reverse proxy that terminates TLS in front of it, or use an SSH tunnel (docs/web.md).")
         logs.log_event(_log, logging.INFO, "server.start", f"Serving on http://{host}:{port}", host=host, port=port,
                        demo=demo)
-        # No proxy headers are trusted: the address of a client is the one that connected (the throttle and the audit
-        # log depend on it), not whatever a local process puts in X-Forwarded-For.
+        # Proxy headers are believed only from the proxies named with --forwarded-allow-ips (and then the client address
+        # and the scheme come from them). By default none: the address of a client is the one that connected (the
+        # throttle and the audit log depend on it), not whatever a local process puts in X-Forwarded-For.
+        proxies = {"proxy_headers": True, "forwarded_allow_ips": forwarded_allow_ips} if forwarded_allow_ips \
+            else {"proxy_headers": False}
+        if forwarded_allow_ips:
+            announce(f"Believing X-Forwarded-For and X-Forwarded-Proto from: {forwarded_allow_ips}")
         uvicorn.run(app, host=host, port=port, log_config=None, access_log=False, server_header=False,
-                    date_header=False, proxy_headers=False)
+                    date_header=False, **proxies)
     finally:
         if scratch is not None:
             shutil.rmtree(scratch, ignore_errors=True)

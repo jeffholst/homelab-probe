@@ -84,7 +84,7 @@ from .query import format_table, render_csv, render_table
 from .settings import DiagnoseSettings, expired_rules
 from .snapshot import EventQuery, warn
 from .topology import render_text as render_topology
-from .util import printable, require_loopback, safe_output
+from .util import check_bind, parse_allowed_host, parse_forwarded_ips, printable, safe_output
 from .wan import DEFAULT_DAYS
 from .wan import render_text as render_wan
 from .watch import MAX_SECONDS, MIN_SECONDS
@@ -735,10 +735,32 @@ def _port(text: str) -> int:
     return value
 
 
+def _allowed_host(text: str) -> str:
+    try:
+        return parse_allowed_host(text)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(str(e)) from e
+
+
+def _forwarded_ips(text: str) -> str:
+    try:
+        return parse_forwarded_ips(text)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(str(e)) from e
+
+
 def _add_serve(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--host", default="127.0.0.1", metavar="ADDRESS",
-                        help="The address to listen on (default 127.0.0.1). Only a loopback address is accepted "
-                             "for now")
+                        help="The address to listen on (default 127.0.0.1, this machine only). Another address "
+                             "makes the server reachable from the network: logins then need TLS in front "
+                             "(see --forwarded-allow-ips)")
+    parser.add_argument("--allowed-host", action="append", default=[], type=_allowed_host, metavar="NAME",
+                        help="A name the server is reached by, such as hlp.lan or 192.168.1.5 (repeatable). A "
+                             "request with another Host header is refused. Required with --host 0.0.0.0 or ::; "
+                             "wildcards are not accepted")
+    parser.add_argument("--forwarded-allow-ips", type=_forwarded_ips, metavar="IPS",
+                        help="Believe X-Forwarded-For and X-Forwarded-Proto from these reverse proxies "
+                             "(addresses or networks, comma-separated); by default from none. * is not accepted")
     parser.add_argument("--port", type=_port, default=DEFAULT_PORT, metavar="PORT",
                         help=f"The port to listen on (default {DEFAULT_PORT})")
     parser.add_argument("--data-dir", type=Path, default=Path("."), metavar="DIR",
@@ -750,7 +772,7 @@ def _add_serve(parser: argparse.ArgumentParser) -> None:
 
 def _check_serve(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     try:
-        require_loopback(args.host)
+        check_bind(args.host, args.allowed_host)
     except ValueError as e:
         parser.error(str(e))
 
@@ -768,7 +790,8 @@ def _run_serve(ctx: Context) -> int:
     say(f"Serving on http://{host}:{args.port} (Ctrl-C to stop). Log in with an account made by `hlp web-user`.",
         file=sys.stderr)
     run(config, args.host, args.port, args.config, args.data_dir, demo=args.demo,
-        announce=lambda message: say(message, file=sys.stderr))
+        announce=lambda message: say(message, file=sys.stderr), allowed=args.allowed_host,
+        forwarded_allow_ips=args.forwarded_allow_ips)
     return 0
 
 
