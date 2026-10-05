@@ -34,15 +34,20 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 
-from .config import Config, SmtpSettings
+from .config import Config, ConfigError, SmtpSettings
 from .diagnose import CODES, CRITICAL, INFO, SEVERITY_ORDER, WARNING, Finding, area_of
 from .logs import log_event
-from .util import printable
+from .util import printable, site_key
 
 _log = logging.getLogger(__name__)
 
 STATE_VERSION = 1
-DEFAULT_STATE_FILE = "snapshots/notify-state.json"     # the git-ignored directory that holds saved inventories
+STATE_DIR = "snapshots"                                 # the git-ignored directory that holds saved inventories
+STATE_FILE_NAME = "notify-state.json"
+# Before there was one state per site the file was shared; it is still read (for the site "default" only) when the
+# site has none of its own yet, and is never changed or removed.
+LEGACY_STATE_FILE = f"{STATE_DIR}/{STATE_FILE_NAME}"
+LEGACY_SITE_REF = "default"
 MAX_LINES = 20                                          # events spelled out in one message
 KIND_ORDER = {"new": 0, "worsened": 1, "reminder": 2, "recovered": 3}
 KIND_WORD = {"new": "NEW", "worsened": "WORSE", "reminder": "STILL", "recovered": "RECOVERED"}
@@ -364,6 +369,20 @@ def send(destinations: List[Destination], events: List[Event], redact: bool, tim
 
 
 # -- the state file ------------------------------------------------------------------------------
+
+def state_path_for(site: Dict[str, Any], base: Path = Path(STATE_DIR)) -> Path:
+    """The default state file of ``site`` (a dict with its ``id``): ``snapshots/<site id>/notify-state.json``."""
+    return base / site_key(site.get("id")) / STATE_FILE_NAME
+
+
+def check_state_site(state: Dict[str, Any], site: Dict[str, Any], path: Path) -> None:
+    """Refuse a state that says it is from another site: its findings would look fixed in this one (and the other way
+    round). A state that does not say (made before sites were recorded) is accepted and stamped when it is saved."""
+    recorded = state.get("site")
+    if recorded is not None and recorded != str(site.get("id") or ""):
+        raise ConfigError(f"{path} remembers the findings of another site; give this site a state file of its own "
+                          f"(the default is {state_path_for(site)})")
+
 
 def load_state(path: Path) -> Tuple[Dict[str, Any], str]:
     """(state, warning). A missing file is an empty state; an unreadable or damaged one is too, with a

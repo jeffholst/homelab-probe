@@ -12,7 +12,7 @@ import logging
 import os
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -70,17 +70,23 @@ from .history import (
     render_diff,
     resolve,
     save_snapshot,
+    site_dir,
+    site_snapshots,
 )
 from .new_clients import render_table as render_new_clients
 from .notify import (
-    DEFAULT_STATE_FILE,
+    LEGACY_SITE_REF,
+    LEGACY_STATE_FILE,
+    STATE_DIR,
     baseline,
+    check_state_site,
     destinations_from_config,
     load_state,
     plan,
     render_text,
     save_state,
     send,
+    state_path_for,
 )
 from .query import format_table, render_csv, render_table
 from .settings import DiagnoseSettings, expired_rules, load_settings
@@ -415,21 +421,28 @@ def _run_topology(ctx: Context) -> int:
 def _add_snapshot(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("-o", "--output", type=Path, metavar="FILE",
                         help="Write to this file instead of a timestamped one in --dir")
-    parser.add_argument("--dir", type=Path, default=Path(DEFAULT_DIR), metavar="DIR",
-                        help=f"Directory for timestamped snapshots (default: ./{DEFAULT_DIR}/)")
+    parser.add_argument("--dir", type=Path, default=None, metavar="DIR",
+                        help=f"Directory for timestamped snapshots (default: ./{DEFAULT_DIR}/<site id>/, one "
+                             "directory per site)")
     parser.add_argument("--keep", type=_positive, metavar="N",
-                        help="Afterwards delete the oldest snapshots in --dir, keeping the newest N")
+                        help="Afterwards delete the oldest snapshots in --dir (of this site, by default), keeping "
+                             "the newest N")
     parser.add_argument("--force", action="store_true", help="Allow -o to replace an existing file")
 
 
 def _run_snapshot(ctx: Context) -> int:
     args = ctx.args
     record = snapshot_document(ctx.client, ctx.config.site).data
-    path = save_snapshot(record, args.output, args.dir, args.force)
+    base = Path(DEFAULT_DIR)
+    directory = args.dir if args.dir is not None else site_dir(base, record["site"])
+    path = save_snapshot(record, args.output, directory, args.force)
     say(f"Saved {len(record['devices'])} devices, {len(record['clients'])} clients and "
         f"{len(record['reservations'])} reservations to {path}")
     if args.keep:
-        for gone in prune(args.dir, args.keep, protect=path):
+        # In the default place the snapshots counted are this site's (also the older ones saved straight into
+        # snapshots/); a directory given with --dir is counted as it is.
+        files = site_snapshots(base, record["site"]) if args.dir is None else None
+        for gone in prune(directory, args.keep, protect=path, files=files):
             say(f"Removed old snapshot {gone}")
     return 0
 
@@ -438,8 +451,9 @@ def _add_diff(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("refs", nargs="*", metavar="OLD [NEW]",
                         help="Snapshot files (or names inside --dir). One file is compared with the live "
                              "network; none uses the newest saved snapshot")
-    parser.add_argument("--dir", type=Path, default=Path(DEFAULT_DIR), metavar="DIR",
-                        help=f"Snapshot directory (default: ./{DEFAULT_DIR}/)")
+    parser.add_argument("--dir", type=Path, default=None, metavar="DIR",
+                        help=f"Snapshot directory (default: this site's directory in ./{DEFAULT_DIR}/; finding it "
+                             "asks the controller which site is meant, so give --dir to work offline)")
     parser.add_argument("--last-two", action="store_true",
                         help="Compare the two newest saved snapshots (no controller needed)")
     parser.add_argument("--all", action="store_true",
@@ -453,24 +467,46 @@ def _check_diff(parser: argparse.ArgumentParser, args: argparse.Namespace) -> No
         parser.error("give at most two snapshots, and none with --last-two")
 
 
+def _snapshot_places(ctx: Context) -> Tuple[Path, Sequence[Path], Callable[[], List[Path]]]:
+    """(the directory to look in, other places for a name, the saved snapshots oldest first) for ``diff``. With
+    ``--dir`` that directory is everything. Without it the place is this site's own directory (plus the older
+    snapshots saved straight into ``snapshots/`` that name this site), found by asking the controller which site is
+    meant; that is done only when a snapshot has to be looked for."""
+    args = ctx.args
+    if args.dir is not None:
+        return args.dir, (), lambda: list_snapshots(args.dir)
+    base = Path(DEFAULT_DIR)
+    try:
+        site = ctx.client.resolve_site(ctx.config.site)
+    except UniFiAPIError as e:
+        raise ConfigError(f"{e}; the snapshots are kept per site, so the controller is asked which site is meant "
+                          "(give --dir DIR to work without it)") from e
+    return site_dir(base, site), (base,), lambda: site_snapshots(base, site)
+
+
 def _run_diff(ctx: Context) -> int:
     args = ctx.args
     new_path: Optional[Path]
+    names = [ref for ref in args.refs if not Path(ref).is_file()]
+    if args.last_two or not args.refs or names:
+        directory, also, saved_list = _snapshot_places(ctx)
+    else:
+        directory, also, saved_list = Path(DEFAULT_DIR), (), list
     if args.last_two:
-        saved = list_snapshots(args.dir)
+        saved = saved_list()
         if len(saved) < 2:
-            raise ConfigError(f"need at least two saved snapshots in {args.dir}/ (found {len(saved)}); "
+            raise ConfigError(f"need at least two saved snapshots in {directory}/ (found {len(saved)}); "
                               "run `snapshot` first")
         old_path, new_path = saved[-2], saved[-1]
     else:
         if args.refs:
-            old_path = resolve(args.refs[0], args.dir)
+            old_path = resolve(args.refs[0], directory, also)
         else:
-            saved = list_snapshots(args.dir)
+            saved = saved_list()
             if not saved:
-                raise ConfigError(f"no saved snapshots in {args.dir}/; run `snapshot` first")
+                raise ConfigError(f"no saved snapshots in {directory}/; run `snapshot` first")
             old_path = saved[-1]
-        new_path = resolve(args.refs[1], args.dir) if len(args.refs) == 2 else None
+        new_path = resolve(args.refs[1], directory, also) if len(args.refs) == 2 else None
 
     old = load_snapshot(old_path)
     new = load_snapshot(new_path) if new_path else None
@@ -1015,7 +1051,8 @@ def _add_diagnose(parser: argparse.ArgumentParser) -> None:
                         help="with --notify: record the current findings as already reported and send nothing "
                              "(avoids a first message about everything)")
     parser.add_argument("--notify-state", type=Path, default=None, metavar="FILE",
-                        help=f"with --notify: where reported findings are remembered (default: {DEFAULT_STATE_FILE})")
+                        help=f"with --notify: where reported findings are remembered (default: "
+                             f"{STATE_DIR}/<site id>/notify-state.json, one file per site)")
 
 
 def diagnose_areas(args: argparse.Namespace) -> Optional[List[str]]:
@@ -1067,17 +1104,31 @@ def _prepare_diagnose(args: argparse.Namespace, config: Config) -> None:
                           "docs/notifications.md); nothing was sent")
 
 
-def _notify(findings: List[Any], config: Any, settings: Any, args: argparse.Namespace) -> bool:
+def _load_site_state(args: argparse.Namespace, site: Dict[str, str]) -> Tuple[Path, Dict[str, Any], str]:
+    """(where the state is kept, the state, a warning) for ``site``. The default file is the site's own; a state
+    that belongs to another site is refused. The shared file of earlier versions is read, for the site ``default``
+    only, while that site has no file of its own (it is never changed: the next save writes the new file)."""
+    path = args.notify_state or state_path_for(site)
+    if args.notify_state is None and not path.exists() and site.get("ref") == LEGACY_SITE_REF \
+            and Path(LEGACY_STATE_FILE).exists():
+        state, problem = load_state(Path(LEGACY_STATE_FILE))
+    else:
+        state, problem = load_state(path)
+    check_state_site(state, site, path)
+    return path, state, problem
+
+
+def _notify(findings: List[Any], config: Any, settings: Any, args: argparse.Namespace, site: Dict[str, str]) -> bool:
     """Run the notification step of ``diagnose --notify``. True when a message had to be sent and
-    every destination failed (the caller turns that into exit code 3 if nothing else applies)."""
-    state_path = args.notify_state or Path(DEFAULT_STATE_FILE)
+    every destination failed (the caller turns that into exit code 3 if nothing else applies). ``site`` is the site
+    that was read: its findings are remembered apart from every other site's."""
     minimum = args.notify_min or WARNING
-    state, problem = load_state(state_path)
+    state_path, state, problem = _load_site_state(args, site)
     if problem:
         warn(problem)
     now = time.time()
     if args.notify_baseline:
-        saved = baseline(findings, now, minimum, args.areas, state)
+        saved = {**baseline(findings, now, minimum, args.areas, state), "site": site["id"]}
         try:
             save_state(state_path, saved)
         except OSError as e:
@@ -1088,6 +1139,7 @@ def _notify(findings: List[Any], config: Any, settings: Any, args: argparse.Name
              file=sys.stderr)
         return False
     events, new_state = plan(findings, state, now, minimum, settings.notify_repeat_hours, args.areas)
+    new_state = {**new_state, "site": site["id"]}
     if not events:
         if new_state != state:
             try:
@@ -1187,7 +1239,7 @@ def _run_diagnose(ctx: Context) -> int:
     if args.watch is not None:
         return _watch_diagnose(ctx, settings, findings, complete)
     code = exit_code(findings, args.fail_on)
-    if args.notify and _notify(findings, ctx.config, settings, args) and code == 0:
+    if args.notify and _notify(findings, ctx.config, settings, args, document.meta["site"]) and code == 0:
         return EXIT_ERROR              # the message could not be delivered and nothing else says so
     return code
 

@@ -229,19 +229,27 @@ def new_clients_document(client: UniFiClient, site: str, search: str = "", echo:
 
 # -- diagnose ---------------------------------------------------------------------------------------
 
+def site_identity(site: Dict[str, Any]) -> Dict[str, str]:
+    """Which site a document is about (``id``, ``name`` and internal reference ``ref``), for what is kept per site."""
+    return {"id": str(site.get("id") or ""), "name": str(site.get("name") or ""),
+            "ref": str(site.get("internalReference") or "")}
+
+
 def diagnose_document(client: UniFiClient, site: str, settings: Optional[DiagnoseSettings] = None,
                       areas: Optional[Sequence[str]] = None, since: int = parse_duration(DEFAULT_SINCE),
                       show_ignored: bool = False, echo: bool = True,
                       today: Optional[datetime.date] = None) -> Document:
     """The health checks of ``areas`` (all of them by default) after the ignore list: the dict that ``diagnose
     --json`` prints. ``areas`` also say what is read (see ``needs_for``). ``meta["complete"]`` is False when an
-    optional read failed, so a caller that compares passes (``--watch``) can skip a pass that missed data."""
+    optional read failed, so a caller that compares passes (``--watch``) can skip a pass that missed data, and
+    ``meta["site"]`` says which site was read."""
     settings = settings or DiagnoseSettings()
     with logs.collect_warnings(quiet=not echo) as warnings:
         snap = collect_snapshot(client, site, needs_for(areas, since))
         findings, ignored = apply_ignores(diagnose(snap, settings, areas=areas), settings.ignore, today)
     return Document("diagnose", findings_document(findings, ignored, show_ignored, areas),
-                    [logs.scrub(w) for w in warnings], {"complete": not snap.degraded})
+                    [logs.scrub(w) for w in warnings],
+                    {"complete": not snap.degraded, "site": site_identity(snap.site)})
 
 
 # -- snapshot and diff ------------------------------------------------------------------------------

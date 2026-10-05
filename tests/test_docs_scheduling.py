@@ -340,7 +340,7 @@ def test_the_volume_is_where_the_program_keeps_its_notification_state():
     """The image's last WORKDIR plus the program's relative default is the directory the volume must cover."""
     steps = instructions()
     workdir = [arguments for name, arguments in steps if name == "WORKDIR"][-1]
-    state = f"{workdir}/{notify.DEFAULT_STATE_FILE}"
+    state = f"{workdir}/{notify.state_path_for({'id': 'site-1'})}"
     mount = re.search(r"-v homelab-probe-state:(\S+)", section("Docker")).group(1)
     assert state.startswith(mount + "/")
     assert re.search(rf"mkdir -p {re.escape(mount)}\b", " ".join(a for n, a in steps if n == "RUN"))

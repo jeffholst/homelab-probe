@@ -20,7 +20,7 @@ from .config import ConfigError
 from .query import query_rows
 from .reservations import build_reservations
 from .snapshot import Snapshot
-from .util import clean_data, normalize_mac
+from .util import clean_data, normalize_mac, site_key
 
 SCHEMA_VERSION = 1
 DEFAULT_DIR = "snapshots"
@@ -175,6 +175,31 @@ def list_snapshots(directory: Path) -> List[Path]:
     return [p for _, p in sorted(found, key=lambda item: item[0])]
 
 
+def site_dir(base: Path, site: Dict[str, Any]) -> Path:
+    """Where the snapshots of ``site`` (a dict with its ``id``) go inside ``base``: one directory per site."""
+    return base / site_key(site.get("id"))
+
+
+def recorded_site_id(path: Path) -> Optional[str]:
+    """The site id a snapshot file says it is from, or None when it cannot be read as one."""
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+        site = record["site"]["id"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    return site if isinstance(site, str) else None
+
+
+def site_snapshots(base: Path, site: Dict[str, Any]) -> List[Path]:
+    """The saved snapshots of ``site``, oldest first: those in its own directory in ``base`` and the older ones
+    that were saved straight into ``base`` (before there was a directory per site), which belong to the site their
+    own record names. A snapshot of another site is never listed."""
+    wanted = str(site.get("id") or "")
+    legacy = [p for p in list_snapshots(base) if (recorded_site_id(p) or "") == wanted]
+    found = [(key, p) for p in [*list_snapshots(site_dir(base, site)), *legacy] if (key := _age_key(p)) is not None]
+    return [p for _, p in sorted(found, key=lambda item: item[0])]
+
+
 def _age_key(path: Path) -> Optional[Tuple[datetime, int]]:
     """When a snapshot file name says it was taken (as a UTC instant), then its collision suffix
     as a number, or None when the name is not one this tool writes (or not a real date).
@@ -223,7 +248,7 @@ def save_snapshot(record: SnapshotRecord, path: Optional[Path] = None, directory
     elif path.exists() and not force:
         raise ConfigError(f"{path} already exists; choose another name or use --force")
 
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         os.fchmod(f.fileno(), 0o600)
@@ -232,10 +257,12 @@ def save_snapshot(record: SnapshotRecord, path: Optional[Path] = None, directory
     return path
 
 
-def prune(directory: Path, keep: int, protect: Optional[Path] = None) -> List[Path]:
+def prune(directory: Path, keep: int, protect: Optional[Path] = None,
+          files: Optional[List[Path]] = None) -> List[Path]:
     """Delete the oldest snapshot files beyond the newest ``keep``. Only files named like
-    ones this tool writes are touched, and ``protect`` (the one just saved) never is."""
-    files = list_snapshots(directory)
+    ones this tool writes are touched, and ``protect`` (the one just saved) never is. ``files`` (oldest first) are the
+    ones to count instead of everything in ``directory``: the snapshots of one site."""
+    files = list_snapshots(directory) if files is None else files
     protected = Path(os.path.abspath(protect)) if protect is not None else None
     candidates = [p for p in files if protected is None or Path(os.path.abspath(p)) != protected]
     doomed = candidates[:max(0, len(files) - keep)]
@@ -312,15 +339,16 @@ def load_snapshot(path: Path) -> SnapshotRecord:
     return cast(SnapshotRecord, record)
 
 
-def resolve(ref: str, directory: Path) -> Path:
-    """A snapshot reference: a path, or a file name inside ``directory``."""
+def resolve(ref: str, directory: Path, also: Sequence[Path] = ()) -> Path:
+    """A snapshot reference: a path, or a file name inside ``directory`` (then inside the directories of ``also``)."""
     path = Path(ref)
     if path.is_file():
         return path
-    inside = directory / ref
-    if inside.is_file():
-        return inside
-    raise ConfigError(f"snapshot not found: {ref} (also looked in {directory}/)")
+    looked = [directory, *also]
+    for place in looked:
+        if (place / ref).is_file():
+            return place / ref
+    raise ConfigError(f"snapshot not found: {ref} (also looked in {', '.join(f'{p}/' for p in looked)})")
 
 
 # -- comparing ---------------------------------------------------------------
