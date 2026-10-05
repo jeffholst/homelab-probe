@@ -70,6 +70,38 @@ def test_clearing_forces_a_new_read_for_every_key(cache):
     assert cache.fetch("k", source) == {"n": 2} and source.reads == 2
 
 
+def test_a_read_started_before_clear_cannot_repopulate_the_cache(cache):
+    started, release, results = threading.Event(), threading.Event(), []
+
+    def slow():
+        started.set()
+        release.wait(5)
+        return {"n": 1}
+
+    thread = threading.Thread(target=lambda: results.append(cache.fetch("k", slow)))
+    thread.start()
+    assert started.wait(5)
+    cache.clear()
+    release.set()
+    thread.join(5)
+    assert not thread.is_alive() and results == [{"n": 1}]
+    assert cache.fetch("k", lambda: {"n": 2}) == {"n": 2}
+
+
+def test_cache_entries_and_errors_are_bounded_and_expired_entries_are_pruned(clock):
+    bounded = ResponseCache(ttl=30, stale_ttl=10, error_ttl=5, clock=clock, max_entries=2)
+    for key in ("a", "b", "c"):
+        bounded.fetch(key, lambda value=key: value)
+    assert len(bounded._entries) == 2 and list(bounded._entries) == ["b", "c"]
+    for key in ("x", "y", "z"):
+        with pytest.raises(UniFiAPIError):
+            bounded.fetch(key, lambda: (_ for _ in ()).throw(error()))
+    assert len(bounded._errors) == 2 and list(bounded._errors) == ["y", "z"]
+    clock.now += 11
+    bounded.fetch("new", lambda: "new")
+    assert list(bounded._entries) == ["new"] and bounded._errors == {}
+
+
 def test_nobody_can_change_what_another_request_will_see(cache):
     first = cache.fetch("k", lambda: {"list": [1, 2]})
     first["list"].append(99)                                 # the caller who read it
@@ -101,7 +133,7 @@ def test_many_requests_at_once_cause_one_read(cache):
     gate.set()
     for t in threads:
         t.join(5)
-    assert len(reads) == 1 and results == [{"slow": True}] * 20
+    assert len(reads) == 1 and results == [{"slow": True}] * 20 and cache._key_locks == {}
 
 
 def test_at_most_max_in_flight_reads_are_on_the_wire_at_once(cache):
@@ -138,6 +170,18 @@ def test_a_failed_read_with_an_older_answer_serves_that_with_a_warning(cache, cl
     with logs.collect_warnings(quiet=True) as warnings:
         assert cache.fetch("k", source) == {"n": 1}
     assert len(warnings) == 1 and "timeout" in warnings[0] and "served from the cache as of" in warnings[0]
+
+
+def test_failures_that_serve_stale_data_are_coalesced(cache, clock):
+    source = Source()
+    cache.fetch("k", source)
+    clock.now += 100
+    source.fail = error("timeout")
+    for _ in range(3):
+        with logs.collect_warnings(quiet=True) as warnings:
+            assert cache.fetch("k", source) == {"n": 1}
+        assert len(warnings) == 1 and "timeout" in warnings[0]
+    assert source.reads == 2
 
 
 def test_an_answer_older_than_the_stale_limit_is_not_served(cache, clock):
@@ -179,6 +223,14 @@ def test_only_the_api_errors_of_the_client_are_swallowed(cache):
 
     with pytest.raises(ValueError):
         cache.fetch("k", broken)
+
+
+def test_a_miss_returns_a_copy_without_changing_reader_owned_data(cache):
+    original = {"list": [1, 2]}
+    result = cache.fetch("k", lambda: original)
+    result["list"].append(3)
+    assert original == {"list": [1, 2]}
+    assert cache.fetch("k", lambda: pytest.fail("fresh")) == {"list": [1, 2]}
 
 
 def test_a_success_forgets_the_remembered_failure(cache, clock):
