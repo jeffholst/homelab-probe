@@ -17,6 +17,7 @@ The value helpers further down (``number``, ``plural``, ``normalize_mac``, ``for
 copied into several modules; they live here once.
 """
 
+import ipaddress
 import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -184,3 +185,25 @@ def record_for(table: Dict[str, Dict[str, Any]], key: Any) -> Dict[str, Any]:
     """``table[key]`` for a record keyed by device id, or ``{}`` when the key is missing or unknown.
     The id of a record may itself be missing (None), which is not a valid key, so it is checked here once."""
     return (table.get(key) if isinstance(key, str) else None) or {}
+
+
+LOOPBACK_NAMES = ("localhost",)
+
+
+def is_loopback(host: str) -> bool:
+    """True for ``localhost`` and for any loopback address (``127.0.0.0/8``, ``::1``)."""
+    if host.lower() in LOOPBACK_NAMES:
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def require_loopback(host: str) -> str:
+    """``host`` unchanged, or a ``ValueError`` saying why it is refused: ``hlp serve`` binds only a loopback address
+    until login exists."""
+    if not is_loopback(host):
+        raise ValueError(f"the server binds only a loopback address (127.0.0.1 or ::1) until login exists, "
+                         f"not {host!r}")
+    return host

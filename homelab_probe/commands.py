@@ -23,6 +23,7 @@ from .client_view import render_candidates, render_detail
 from .completion import SHELLS
 from .completion import script as completion_script
 from .config import Config, ConfigError, parse_audit_log_files, parse_audit_log_mb
+from .demo import demo_client
 from .diagnose import (
     AREA_NAMES,
     CRITICAL,
@@ -84,7 +85,7 @@ from .query import format_table, render_csv, render_table
 from .settings import DiagnoseSettings, expired_rules
 from .snapshot import EventQuery, warn
 from .topology import render_text as render_topology
-from .util import printable, safe_output
+from .util import printable, require_loopback, safe_output
 from .wan import DEFAULT_DAYS
 from .wan import render_text as render_wan
 from .watch import MAX_SECONDS, MIN_SECONDS
@@ -713,6 +714,56 @@ def _run_web_user(args: argparse.Namespace) -> int:
     return 0
 
 
+# -- serve ------------------------------------------------------------------------------------------
+
+DEFAULT_PORT = 8787
+
+
+def _port(text: str) -> int:
+    try:
+        value = int(text)
+    except ValueError:
+        value = 0
+    if not 1 <= value <= 65535:
+        raise argparse.ArgumentTypeError(f"invalid port {text!r}: use a whole number from 1 to 65535")
+    return value
+
+
+def _add_serve(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--host", default="127.0.0.1", metavar="ADDRESS",
+                        help="The address to listen on (default 127.0.0.1). Only a loopback address is accepted "
+                             "until login exists")
+    parser.add_argument("--port", type=_port, default=DEFAULT_PORT, metavar="PORT",
+                        help=f"The port to listen on (default {DEFAULT_PORT})")
+    parser.add_argument("--data-dir", type=Path, default=Path("."), metavar="DIR",
+                        help="Where the server keeps its own files (default: the current directory)")
+    parser.add_argument("--config", type=Path, metavar="FILE",
+                        help="TOML file with diagnose thresholds and ignore list "
+                             "(default: ./hlp.toml if present)")
+
+
+def _check_serve(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    try:
+        require_loopback(args.host)
+    except ValueError as e:
+        parser.error(str(e))
+
+
+def _run_serve(ctx: Context) -> int:
+    args = ctx.args
+    try:
+        from .server.runner import run  # only here: the command line never needs the web extra
+    except ImportError as e:
+        raise ConfigError("`hlp serve` needs the web extra: pip install 'homelab-probe[web]' "
+                          f"(missing: {e.name or 'a module'})") from e
+    config = ctx.config
+    say(f"Serving on http://{args.host}:{args.port} (Ctrl-C to stop). Anyone who can reach this machine can read "
+        "the API: login is not built in yet.", file=sys.stderr)
+    run(config, args.host, args.port, args.config, args.data_dir,
+        (lambda: demo_client(config)) if args.demo else (lambda: UniFiClient.from_config(config)), demo=args.demo)
+    return 0
+
+
 # -- diagnose ---------------------------------------------------------------------------------------
 
 def _add_diagnose(parser: argparse.ArgumentParser) -> None:
@@ -969,6 +1020,8 @@ COMMANDS: List[Command] = [
             run_local=_run_doctor),
     Command("completion", "Print a shell completion script (bash, zsh or fish)", _add_completion, _not_run,
             run_local=_run_completion),
+    Command("serve", "Serve the read-only web API on this machine (needs the web extra)", _add_serve, _run_serve,
+            validate=_check_serve, wants_settings=_always),
     Command("web-user", "Manage the accounts of the web interface: users, roles and passwords", _add_web_user,
             _not_run, validate=_check_web_user, run_local=_run_web_user),
     Command("diagnose", "Run read-only health checks (offline devices, port errors, ...)", _add_diagnose,

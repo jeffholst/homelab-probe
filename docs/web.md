@@ -1,6 +1,35 @@
-# Web accounts
+# Web interface
 
-The web interface is built in stages (see the roadmap in issue #160). This page covers the first stage: the **accounts** that will be allowed to log in, and `web-user`, the command that manages them. It needs nothing beyond the base install, and nothing here contacts the controller or reads your `.env`.
+The web interface is built in stages (see the roadmap in issue #160). This page covers what exists so far: the **server** (`serve`, which needs the `web` extra, and today answers only a few routes without data) and the **accounts** that will be allowed to log in, with `web-user`, the command that manages them (base install only; it does not contact the controller or read your `.env`).
+
+## Running the server: `serve`
+
+```bash
+pip install 'homelab-probe[web]'        # FastAPI and uvicorn; the command line never needs them
+uv run hlp.py serve                     # http://127.0.0.1:8787, until Ctrl-C
+uv run hlp.py serve --port 9000 --config lab.toml
+uv run hlp.py --demo serve              # the synthetic network: no controller, no .env
+```
+
+Without the extra it exits with code 3 and says what to install. Options:
+
+- **`--host ADDRESS`** (default `127.0.0.1`): only a loopback address (`127.0.0.1`, `::1`, `localhost`) is accepted. Anything else is a usage error **until login exists**, so the server cannot be exposed by accident.
+- **`--port PORT`** (default `8787`).
+- **`--data-dir DIR`** (default: the current directory): where the server keeps its own files; used by the stages that follow.
+- **`--config FILE`**: the `hlp.toml` with the `diagnose` thresholds and ignore rules, as for the other commands.
+
+What it answers today: `/healthz` and `/readyz` (is it up, is it ready; no data and no controller read), `/api/v1/meta` (version and whether setup and login are needed), `/api/v1/platforms` and `/api/v1/openapi.json` (the API description, built into the server; the Swagger and ReDoc pages are off because they load scripts from a CDN). Only `GET` is answered. The routes that return the reports follow in the next stages.
+
+**Until login is built in, anyone who can reach this machine can read the API.** That is why it binds loopback only. What protects it meanwhile:
+
+| Protection | What it does |
+| ---------- | ------------ |
+| Loopback bind | Nobody else on the network can connect |
+| `Host` check | A request whose `Host` header is not the server's own address (the loopback names and the bind address) is refused with 400, so a web page cannot reach it through DNS rebinding |
+| No CORS | A browser never lets another site read an answer |
+| Headers on every response | A strict content-security policy (`default-src 'none'`), `nosniff`, no referrer, no framing, `no-store`, no server banner |
+| GET only, no passthrough | No route accepts a path to forward to the controller, and nothing writes to it |
+| Request log | One `INFO` record per request (`server.request`, [logging](logging.md)): method, route **template** (never the path asked for, which can hold a MAC address), status and milliseconds, with a request id that is also sent back as `X-Request-ID` (an id a client sends is ignored) |
 
 ## Roles
 
@@ -65,4 +94,4 @@ Both live in the data directory, readable by the owner only (`0600`, and `0700` 
 
 ## What is not here yet
 
-The login page, sessions and the server itself come with later stages of the roadmap. The accounts module already has the interface they will use: an `Authenticator` that turns a username and password into a `Principal(username, role, source)`, with `LocalAccounts` (this page's accounts) as the first implementation. A wrong password, an unknown user and a disabled one all take the same work and give the same answer, so the answer does not reveal which usernames exist.
+The login page, sessions, the report routes and the web app come with later stages of the roadmap. The accounts module already has the interface they will use: an `Authenticator` that turns a username and password into a `Principal(username, role, source)`, with `LocalAccounts` (this page's accounts) as the first implementation. A wrong password, an unknown user and a disabled one all take the same work and give the same answer, so the answer does not reveal which usernames exist.

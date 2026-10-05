@@ -45,7 +45,7 @@ def test_coverage_is_a_locked_dev_dependency_not_something_each_run_fetches():
 def test_ci_has_one_job_that_runs_the_tests_under_coverage_and_then_the_report():
     job = coverage_job()
     steps = commands(job)
-    assert "uv sync --locked" in steps
+    assert "uv sync --locked --extra web" in steps          # the server tests and their coverage need the extra
     assert RUN in steps and REPORT in steps and steps.index(RUN) < steps.index(REPORT)
     assert all("--cov" not in step and "--omit" not in step for step in steps)      # nothing narrows what is measured
 
