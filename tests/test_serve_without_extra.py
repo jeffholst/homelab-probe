@@ -28,4 +28,5 @@ def test_without_the_extra_it_says_what_to_install_and_exits_3(configured, monke
     monkeypatch.setattr(builtins, "__import__", blocked)
     assert cli.main(["serve"]) == 3
     err = capsys.readouterr().err
-    assert "pip install 'homelab-probe[web]'" in err and "Traceback" not in err
+    assert "uv run --extra web hlp.py serve" in err
+    assert "python -m pip install 'homelab-probe[web]'" in err and "Traceback" not in err

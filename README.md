@@ -121,7 +121,7 @@ uv run hlp.py new-clients                          # clients in no client group
 uv run hlp.py audit                                # settings that are probably not what you want
 uv run hlp.py doctor                               # is the tool set up right? (--offline: no controller)
 uv run hlp.py completion zsh                       # a completion script for bash, zsh or fish
-uv run hlp.py serve                                # the read-only web API on 127.0.0.1:8787 (pip install 'homelab-probe[web]')
+uv run --extra web hlp.py serve                    # the read-only web API on 127.0.0.1:8787
 uv run hlp.py web-user list                        # the web interface's accounts (add, set-role, disable, ...)
 uv run hlp.py diagnose                             # health checks (--json for scripts, --notify for alerts)
 ```
