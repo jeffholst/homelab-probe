@@ -268,3 +268,19 @@ def test_the_cache_logs_each_read_at_debug_without_values(cache):
     records = [json.loads(line) for line in stream.getvalue().splitlines() if "server.cache" in line]
     assert [r["outcome"] for r in records] == ["miss", "hit"] and all(r["label"] == "GET /x" for r in records)
     assert "value" not in stream.getvalue()
+
+
+def test_a_failure_that_arrives_after_a_refresh_is_raised_but_not_remembered(cache):
+    """A manual refresh (`clear`) while a read is in flight makes that read's outcome obsolete: its failure must not
+    be remembered, or the next request would be refused for 5 s on account of a read the refresh had replaced."""
+    reads = []
+
+    def failing_during_a_refresh():
+        reads.append(1)
+        cache.clear()
+        raise error("timeout")
+
+    with pytest.raises(UniFiAPIError):
+        cache.fetch("k", failing_during_a_refresh)
+    assert cache.fetch("k", lambda: {"fresh": True}) == {"fresh": True}        # not refused: nothing was remembered
+    assert reads == [1]
