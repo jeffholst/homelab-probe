@@ -35,6 +35,8 @@ CI runs all of these on every pull request, with the tests on Python 3.10 to 3.1
 
 Work happens on a branch, never on `main`, and the pull request says `Fixes #N`. A pull request normally gets an automated review (GitHub Copilot) first; fix what it finds on the same branch. The maintainer merges.
 
+Maintainers can find versioning, release procedures, and recovery steps in [MAINTAINING.md](MAINTAINING.md).
+
 ## License
 
 By contributing you agree that your contribution is licensed under the [Apache License 2.0](LICENSE), like the rest of the project. Homelab Probe is a fork of [ericfitz/unifi-clients-export](https://github.com/ericfitz/unifi-clients-export), and that credit stays in the README.
