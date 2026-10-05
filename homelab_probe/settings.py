@@ -135,6 +135,12 @@ class DiagnoseSettings:
     ignore: Tuple[IgnoreRule, ...] = ()
 
 
+def server_settings_path(named: Optional[Path], data_dir: Path) -> Path:
+    """The settings file of ``hlp serve``: the one named with ``--config``, else ``hlp.toml`` in the data directory.
+    The server, its pre-flight check at start and the settings API all use this one answer."""
+    return named if named is not None else data_dir / DEFAULT_FILENAME
+
+
 def known_codes() -> Dict[str, str]:
     """Every finding code an ignore rule may name: those of ``diagnose`` and of ``audit`` (one settings file serves
     both). Imported on use because ``diagnose`` itself imports this module."""

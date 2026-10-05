@@ -30,7 +30,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictFloat, StrictInt
 from tomlkit.exceptions import TOMLKitError
 
 from ..config import ConfigError
-from ..settings import DEFAULT_FILENAME, DiagnoseSettings, IgnoreRule, known_codes, load_settings
+from ..settings import DiagnoseSettings, IgnoreRule, known_codes, load_settings, server_settings_path
 from ..setup import SETTINGS_STUB
 from ..util import printable
 from .auth import admin, audit_event, local_write
@@ -44,8 +44,7 @@ _LOCK = threading.Lock()          # one change at a time: the version check and 
 
 def settings_file(request: Request) -> Path:
     """The ``hlp.toml`` of this server: the one named with ``--config``, else the one in the data directory."""
-    named: Optional[Path] = request.app.state.settings_path
-    return named if named is not None else Path(request.app.state.state_dir or ".") / DEFAULT_FILENAME
+    return server_settings_path(request.app.state.settings_path, Path(request.app.state.state_dir or "."))
 
 
 def load_effective(path: Path) -> DiagnoseSettings:
@@ -175,7 +174,7 @@ def validate(text: str) -> DiagnoseSettings:
     """Load ``text`` with the loader every command uses (through a temporary file named like the real one, so its
     messages read the same). A refusal is a 422 with the loader's own message."""
     with tempfile.TemporaryDirectory(prefix="hlp-settings-") as directory:
-        path = Path(directory) / DEFAULT_FILENAME
+        path = Path(directory) / "hlp.toml"
         path.write_text(text, encoding="utf-8")
         try:
             return load_settings(path)

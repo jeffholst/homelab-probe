@@ -89,7 +89,7 @@ from .notify import (
     state_path_for,
 )
 from .query import format_table, render_csv, render_table
-from .settings import DiagnoseSettings, expired_rules, load_settings
+from .settings import DiagnoseSettings, expired_rules, load_settings, server_settings_path
 from .snapshot import EventQuery, warn
 from .topology import render_text as render_topology
 from .util import check_bind, parse_allowed_host, parse_forwarded_ips, printable, safe_output
@@ -999,8 +999,11 @@ def _run_serve(args: argparse.Namespace) -> int:
         apply_logging(config, args.verbose)
         for message in config.warnings:
             warn(message)
-    if not args.demo or args.config is not None:    # a demo ignores the implicit hlp.toml, as everywhere
-        load_settings(args.config)         # a bad settings file fails now, not at the first request
+    # A bad settings file fails now, not at the first request. It is the file the server will use: the one named with
+    # --config, else hlp.toml in the data directory (a demo has a data directory of its own and no file in it).
+    settings_file = server_settings_path(args.config, args.data_dir)
+    if args.config is not None or (not args.demo and settings_file.is_file()):
+        load_settings(settings_file)
     host = f"[{args.host}]" if ":" in args.host else args.host
     say(f"Serving on http://{host}:{args.port} (Ctrl-C to stop)."
         + ("" if setup_state is not None else " Log in with an account made by `hlp web-user`."), file=sys.stderr)
