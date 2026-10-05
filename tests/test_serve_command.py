@@ -38,7 +38,7 @@ def test_it_starts_uvicorn_on_loopback_with_nothing_extra_exposed(configured, se
     assert "the-api-key" not in err
 
 
-def test_the_options_reach_the_server(configured, served, tmp_path):
+def test_the_options_reach_the_server(configured, served, tmp_path, capsys):
     settings = tmp_path / "hlp.toml"
     settings.write_text("")
     assert cli.main(["serve", "--host", "::1", "--port", "9000", "--data-dir", str(tmp_path), "--config",
@@ -46,6 +46,7 @@ def test_the_options_reach_the_server(configured, served, tmp_path):
     ((app, kwargs),) = served
     assert (kwargs["host"], kwargs["port"]) == ("::1", 9000)
     assert app.state.state_dir == tmp_path and app.state.settings_path == settings
+    assert "Serving on http://[::1]:9000" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize("host", ["0.0.0.0", "192.168.1.5", "::", "example.com", ""])

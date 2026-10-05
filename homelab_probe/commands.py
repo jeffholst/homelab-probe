@@ -757,7 +757,8 @@ def _run_serve(ctx: Context) -> int:
         raise ConfigError("`hlp serve` needs the web extra: pip install 'homelab-probe[web]' "
                           f"(missing: {e.name or 'a module'})") from e
     config = ctx.config
-    say(f"Serving on http://{args.host}:{args.port} (Ctrl-C to stop). Anyone who can reach this machine can read "
+    host = f"[{args.host}]" if ":" in args.host else args.host
+    say(f"Serving on http://{host}:{args.port} (Ctrl-C to stop). Anyone who can reach this machine can read "
         "the API: login is not built in yet.", file=sys.stderr)
     run(config, args.host, args.port, args.config, args.data_dir,
         (lambda: demo_client(config)) if args.demo else (lambda: UniFiClient.from_config(config)), demo=args.demo)

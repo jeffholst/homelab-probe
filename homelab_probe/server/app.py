@@ -1,7 +1,7 @@
 """The application factory: ``create_app`` builds the FastAPI app of ``hlp serve``.
 
 Read-only and local: it makes no request toward the controller on its own account (the document routes of the next
-stage do, through ``ControllerService``), it has no route that forwards a path, and it only answers GET and HEAD.
+stage do, through ``ControllerService``), it has no route that forwards a path, and it only answers GET.
 """
 
 import logging

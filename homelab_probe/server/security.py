@@ -44,11 +44,24 @@ class SecurityHeaders:
             await self.app(scope, receive, send)
             return
 
+        response_started = False
+
         async def wrapped(message: Message) -> None:
+            nonlocal response_started
             if message["type"] == "http.response.start":
+                response_started = True
                 names = {name for name, _ in SECURITY_HEADERS} | {b"server"}
                 kept = [(k, v) for k, v in message.get("headers", []) if k.lower() not in names]
                 message = {**message, "headers": kept + SECURITY_HEADERS}
             await send(message)
 
-        await self.app(scope, receive, wrapped)
+        try:
+            await self.app(scope, receive, wrapped)
+        except Exception:
+            if not response_started:
+                body = b"Internal Server Error"
+                await wrapped({"type": "http.response.start", "status": 500,
+                               "headers": [(b"content-type", b"text/plain; charset=utf-8"),
+                                           (b"content-length", str(len(body)).encode("ascii"))]})
+                await wrapped({"type": "http.response.body", "body": body})
+            raise

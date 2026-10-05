@@ -190,8 +190,27 @@ def test_a_handler_that_raises_is_logged_as_a_500_without_its_message(app):
     logs.configure("json", "INFO", stream=stream)
     response = TestClient(app, raise_server_exceptions=False).get("/boom")
     assert response.status_code == 500 and "secret text" not in response.text
+    for name, value in SECURITY_HEADERS:
+        assert response.headers[name.decode()] == value.decode()
     (record,) = [json.loads(line) for line in stream.getvalue().splitlines() if "server.request" in line]
     assert record["status"] == 500 and record["route"] == "/boom" and "secret text" not in json.dumps(record)
+
+
+def test_a_streaming_handler_failure_keeps_the_headers_on_its_started_response(app):
+    from starlette.responses import StreamingResponse
+
+    @app.get("/stream-boom")
+    async def stream_boom():
+        async def body():
+            yield b"started"
+            raise RuntimeError("secret text from a streaming exception")
+
+        return StreamingResponse(body())
+
+    response = TestClient(app, raise_server_exceptions=False).get("/stream-boom")
+    assert response.status_code == 200
+    for name, value in SECURITY_HEADERS:
+        assert response.headers[name.decode()] == value.decode()
 
 
 def test_the_server_never_calls_the_controller_on_its_own(app, monkeypatch):
