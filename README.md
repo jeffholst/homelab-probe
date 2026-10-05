@@ -26,7 +26,7 @@ Homelab Probe is a fork of [ericfitz/unifi-clients-export](https://github.com/er
 | `audit` | Configuration audit: Wi-Fi networks that are open or WPA2-only, default device names, firmware updates, unnamed clients | [details](docs/diagnose.md#audit) |
 | `doctor` | Check the installation and the settings, and that the controller answers | [details](docs/configuration.md#checking-your-setup-doctor) |
 | `completion` | Print a shell completion script for bash, zsh or fish | [details](docs/configuration.md#shell-completion) |
-| `serve` | Serve the read-only web API on this machine (needs the web extra; no login yet, so loopback only) | [details](docs/web.md#running-the-server-serve) |
+| `serve` | Serve the read-only web API on this machine (needs the web extra; login required, loopback only for now) | [details](docs/web.md#running-the-server-serve) |
 | `web-user` | Manage the accounts of the web interface: users, roles and passwords | [details](docs/web.md#managing-accounts-web-user) |
 | `diagnose` | Read-only health checks with 🛑 critical, ⚠️ warning and ℹ️ info findings (`--json` for scripts) | [details](docs/diagnose.md#diagnose) |
 | `info` | Show the controller application info and available sites | [details](docs/configuration.md#finding-your-site-info) |

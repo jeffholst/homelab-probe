@@ -5,6 +5,7 @@ import os
 import pytest
 
 from homelab_probe import logs
+from homelab_probe.accounts import ScryptParams
 from homelab_probe.client import UniFiClient
 from homelab_probe.demo.session import (  # noqa: F401  (the tests import these names from here)
     FIXTURE,
@@ -23,7 +24,8 @@ CONFIG_VARIABLES = ("UNIFI_URL", "UNIFI_API_KEY", "UNIFI_SITE_ID", "UNIFI_VERIFY
                     "UNIFI_PARALLEL_REQUESTS", "HLP_ENV", "NOTIFY_NTFY_URL", "NOTIFY_NTFY_TOKEN", "NOTIFY_WEBHOOK_URL",
                     "NOTIFY_WEBHOOK_TOKEN", "NOTIFY_SMTP_HOST", "NOTIFY_SMTP_PORT", "NOTIFY_SMTP_SECURITY",
                     "NOTIFY_SMTP_USER", "NOTIFY_SMTP_PASSWORD", "NOTIFY_EMAIL_FROM", "NOTIFY_EMAIL_TO", "LOG_LEVEL",
-                    "LOG_FORMAT", "AUDIT_LOG_MAX_MB", "AUDIT_LOG_FILES")
+                    "LOG_FORMAT", "AUDIT_LOG_MAX_MB", "AUDIT_LOG_FILES",
+                    "SESSION_IDLE_MINUTES", "SESSION_MAX_HOURS")
 
 
 @pytest.fixture(autouse=True)
@@ -44,6 +46,7 @@ def _isolated_environment(request, tmp_path, monkeypatch):
     for name in CONFIG_VARIABLES:
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr("homelab_probe.client.RETRY_BACKOFF_S", 0)    # retries must not make the suite wait
+    monkeypatch.setattr("homelab_probe.accounts.PARAMS", ScryptParams(n=16, r=8, p=1))    # scrypt at its real cost is slow
     logs.reset()                   # the logger, its secrets and its context are process-wide
     yield
     logs.reset()

@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import threading
 import time
 import types
@@ -15,14 +16,16 @@ pytest.importorskip("httpx2")
 from conftest import FakeResponse  # noqa: E402
 from contract import RecordingSession  # noqa: E402
 from docs_support import ROOT  # noqa: E402
-from fastapi.routing import APIRoute  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
 from jsonschema import Draft202012Validator  # noqa: E402
+from server_support import (  # noqa: E402
+    CONFIG,  # noqa: E402
+    auth_for,
+    logged_in,
+)
 from test_json_schemas import strict  # noqa: E402
 
 from homelab_probe import documents  # noqa: E402
 from homelab_probe.client import UniFiClient  # noqa: E402
-from homelab_probe.config import Config  # noqa: E402
 from homelab_probe.demo.session import DemoSession  # noqa: E402
 from homelab_probe.server import apischema  # noqa: E402
 from homelab_probe.server.app import create_app  # noqa: E402
@@ -31,7 +34,6 @@ from homelab_probe.server.routes import _client_found  # noqa: E402
 from homelab_probe.server.service import ControllerService  # noqa: E402
 from homelab_probe.snapshot import EventQuery  # noqa: E402
 
-CONFIG = Config(controller_url="https://controller.example", api_key="the-api-key-0123456789", parallel=4)
 SITE = "/api/v1/unifi/sites/default"
 NOW_MS = 1_800_000_000_000
 DESKTOP = "BB:00:00:00:00:01"
@@ -56,13 +58,20 @@ def session():
 
 
 @pytest.fixture
-def app(session):
-    return create_app(CONFIG, hosts=["testserver"], service=ControllerService(CONFIG, session=session))
+def app(session, tmp_path):
+    return create_app(CONFIG, state_dir=tmp_path, hosts=["testserver"], auth=auth_for(tmp_path),
+                      service=ControllerService(CONFIG, session=session))
+
+
+def served(tmp_path, service, settings=None):
+    """A logged-in client of an app that reads through ``service``."""
+    app = create_app(CONFIG, settings, tmp_path, hosts=["testserver"], auth=auth_for(tmp_path), service=service)
+    return logged_in(app)
 
 
 @pytest.fixture
 def client(app):
-    return TestClient(app)
+    return logged_in(app)
 
 
 def plain(session):
@@ -201,10 +210,10 @@ def test_a_degraded_read_is_a_200_with_warnings(client, session):
 @pytest.mark.parametrize("status, http, code", [(401, 502, "controller_unauthorized"),
                                                  (403, 502, "controller_forbidden"),
                                                  (500, 502, "controller_error")])
-def test_a_controller_error_is_a_fixed_sentence_and_never_its_text(session, status, http, code):
+def test_a_controller_error_is_a_fixed_sentence_and_never_its_text(session, tmp_path, status, http, code):
     session.status = status
     service = ControllerService(CONFIG, session=session)
-    client = TestClient(create_app(CONFIG, hosts=["testserver"], service=service))
+    client = served(tmp_path, service)
     response = client.get(f"{SITE}/wan")
     assert response.status_code == http and response.json()["error"] == code
     for secret in ("controller.example", "the-api-key", "forced"):
@@ -214,7 +223,7 @@ def test_a_controller_error_is_a_fixed_sentence_and_never_its_text(session, stat
 @pytest.mark.parametrize("raised, http, code", [
     ("timeout", 504, "controller_timeout"), ("connection", 502, "controller_unreachable"),
     ("tls", 502, "controller_tls")])
-def test_transport_failures_have_their_own_codes(session, raised, http, code):
+def test_transport_failures_have_their_own_codes(session, tmp_path, raised, http, code):
     import requests
 
     errors = {"timeout": requests.exceptions.Timeout("secret.host timed out"),
@@ -225,7 +234,7 @@ def test_transport_failures_have_their_own_codes(session, raised, http, code):
         raise errors[raised]
 
     session.get = get
-    client = TestClient(create_app(CONFIG, hosts=["testserver"], service=ControllerService(CONFIG, session=session)))
+    client = served(tmp_path, ControllerService(CONFIG, session=session))
     response = client.get(f"{SITE}/wan")
     assert response.status_code == http and response.json()["error"] == code and "secret" not in response.text
 
@@ -238,8 +247,7 @@ def test_an_unknown_site_is_a_404(client):
 def test_a_settings_file_that_cannot_be_used_is_a_500_that_does_not_quote_it(tmp_path, session):
     bad = tmp_path / "hlp.toml"
     bad.write_text("this is [not toml\n")
-    app = create_app(CONFIG, bad, hosts=["testserver"], service=ControllerService(CONFIG, session=session))
-    response = TestClient(app).get(f"{SITE}/diagnose")
+    response = served(tmp_path, ControllerService(CONFIG, session=session), bad).get(f"{SITE}/diagnose")
     assert response.status_code == 500 and response.json()["error"] == "settings_invalid"
     assert "toml" not in response.text.lower() and str(tmp_path) not in response.text
 
@@ -285,15 +293,19 @@ def test_the_schemas_are_listed_and_served_by_name_and_nothing_else_is(client):
         assert client.get(f"/api/v1/schemas/{bad}").status_code in (404, 422), bad
 
 
-def test_every_report_route_is_a_get_without_a_path_parameter_and_only_named_parameters_are_taken(app):
-    routes = [r for r in app.routes if isinstance(r, APIRoute)]
-    assert routes
-    for route in routes:
-        assert route.methods == {"GET"}, route.path
-        assert ":path" not in route.path, route.path                  # nothing can carry a path to forward
-        assert set(route.param_convertors) <= {"site", "mac", "name"}, route.path
-        assert all(p.name not in {"url", "path", "target", "host", "proxy"} for p in route.dependant.query_params), \
-            route.path
+def test_every_report_route_is_a_get_without_a_path_parameter_and_only_named_parameters_are_taken(client):
+    """Read off the OpenAPI document: FastAPI keeps included routers as opaque objects, so `app.routes` shows a few."""
+    spec = client.get("/api/v1/openapi.json").json()
+    reports = {p: item for p, item in spec["paths"].items() if p.startswith(("/api/v1/unifi", "/api/v1/schemas"))}
+    assert len(reports) > 15
+    for path, item in reports.items():
+        assert set(item) == {"get"}, path
+        assert all(p["name"] not in {"url", "path", "target", "host", "proxy"} for p in item["get"].get("parameters", [])
+                   if p["in"] == "path"), path
+        assert set(re.findall(r"\{(\w+)\}", path)) <= {"site", "mac", "name"}, path
+    for module in ("routes.py", "app.py", "auth.py"):
+        source = (ROOT / "homelab_probe" / "server" / module).read_text(encoding="utf-8")
+        assert ":path}" not in source, module                       # a Starlette `path` convertor takes slashes
 
 
 def test_the_openapi_document_lists_every_route_with_its_schema_and_matches_the_checked_in_copy(client):
@@ -317,7 +329,7 @@ def test_the_openapi_document_lists_every_route_with_its_schema_and_matches_the_
 
 
 def test_many_requests_for_the_same_report_read_the_controller_once(app, session):
-    client = TestClient(app)
+    client = logged_in(app)
     statuses = []
 
     def ask():
@@ -345,10 +357,9 @@ def test_the_second_request_is_answered_from_the_cache_and_a_refresh_reads_again
     assert any("refresh skipped" in w for w in again.json()["warnings"]) and len(session.calls) == 2 * first
 
 
-def test_only_gets_and_the_one_event_log_post_reach_the_controller_whatever_the_routes_ask(session):
+def test_only_gets_and_the_one_event_log_post_reach_the_controller_whatever_the_routes_ask(session, tmp_path):
     recording = RecordingSession(session)
-    client = TestClient(create_app(CONFIG, hosts=["testserver"],
-                                   service=ControllerService(CONFIG, session=recording)))
+    client = served(tmp_path, ControllerService(CONFIG, session=recording))
     for name in CASES:
         assert client.get(CASES[name][0]).status_code == 200, name
     assert {method for method, _, _ in recording.exchanges} <= {"GET", "POST"}

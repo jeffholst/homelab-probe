@@ -1,4 +1,4 @@
-"""What keeps the server from being reached the wrong way, until login exists.
+"""What keeps the server from being reached the wrong way (the login itself is in ``auth``).
 
 * It binds only a loopback address (``require_loopback``): nobody else on the network can connect.
 * A ``Host`` header that is not the server's own address is refused (``TrustedHostMiddleware``): a page on another

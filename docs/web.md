@@ -16,23 +16,35 @@ the command line never needs them. For a standalone installation, use
 
 Without the extra it exits with code 3 and says what to install. Options:
 
-- **`--host ADDRESS`** (default `127.0.0.1`): only a loopback address (`127.0.0.1`, `::1`, `localhost`) is accepted. Anything else is a usage error **until login exists**, so the server cannot be exposed by accident.
+- **`--host ADDRESS`** (default `127.0.0.1`): only a loopback address (`127.0.0.1`, `::1`, `localhost`) is accepted for now; anything else is a usage error until the options that make a network bind safe exist.
 - **`--port PORT`** (default `8787`).
 - **`--data-dir DIR`** (default: the current directory): where the server keeps its own files; used by the stages that follow.
 - **`--config FILE`**: the `hlp.toml` with the `diagnose` thresholds and ignore rules, as for the other commands.
 
-What it answers: `/healthz` (is the process up; no data and no controller read), `/readyz` (can the controller be read: 200, or 503 with a one-word reason such as `unauthorized` or `timeout`), `/api/v1/meta` (version and whether setup and login are needed), `/api/v1/platforms` and `/api/v1/openapi.json` (the API description, built into the server; the Swagger and ReDoc pages are off because they load scripts from a CDN). Only `GET` is answered. The reports are under `/api/v1/unifi` (next section).
+What it answers: `/healthz` (is the process up; no data and no controller read), `/readyz` (can the controller be read: 200 or 503 and `{"ready": ...}`, the reason is in the server log), `/api/v1/meta` (version, and that login is required), then, after a login, `/api/v1/platforms` and `/api/v1/openapi.json` (the API description, built into the server; the Swagger and ReDoc pages are off because they load scripts from a CDN). The report and schema routes answer only `GET`; the only `POST`s are the login and the logout (CSRF below). The reports are under `/api/v1/unifi`.
 
-**Until login is built in, anyone who can reach this machine can read the API.** That is why it binds loopback only. What protects it meanwhile:
+**Every route except five needs a login.** Only `/`, `/healthz`, `/readyz` (yes or no, nothing more), `/api/v1/meta` and the login itself answer without one, from `127.0.0.1` as well. A route nobody declared anything about needs a login too (the rule is the default of the whole application, and a test pins the list of public routes). The server **refuses to start without an enabled administrator** (`hlp web-user add NAME --role admin`), and for now it binds only a loopback address. What protects it:
 
 | Protection | What it does |
 | ---------- | ------------ |
-| Loopback bind | Nobody else on the network can connect |
+| Login | A session cookie from `POST /api/v1/auth/login` (below) for everything but the five routes |
+| Loopback bind | Nobody else on the network can connect (for now) |
 | `Host` check | A request whose `Host` header is not the server's own address (the loopback names and the bind address) is refused with 400, so a web page cannot reach it through DNS rebinding |
+| CSRF | Every `POST`, `PUT`, `PATCH` and `DELETE` needs an `Origin` that names the server's own `Host` **and** the session's token in `X-CSRF-Token`; its body must be JSON. A script that sends neither is meant to use the command line |
 | No CORS | A browser never lets another site read an answer |
 | Headers on every response | A strict content-security policy (`default-src 'none'`), `nosniff`, no referrer, no framing, `no-store`, no server banner |
-| GET only, no passthrough | No route accepts a path to forward to the controller, and nothing writes to it |
+| GET only, no passthrough | No report route accepts a path to forward to the controller, and nothing writes to it |
 | Request log | One `INFO` record per request (`server.request`, [logging](logging.md)): method, route **template** (never the path asked for, which can hold a MAC address), status and milliseconds, with a request id that is also sent back as `X-Request-ID` (an id a client sends is ignored) |
+| No proxy headers | The address of a client is the connection's own; `X-Forwarded-For` is not believed (the throttle and the audit log depend on it) |
+
+### Logging in: `/api/v1/auth`
+
+- **`POST /api/v1/auth/login`** with `{"username": ..., "password": ...}` (JSON, and an `Origin` header, which a browser sends) returns `{username, role, csrf_token, idle_seconds_left, session_seconds_left}` and sets the session cookie. The only error for a wrong password, an unknown user or a disabled one is `401 invalid_credentials` ("Invalid username or password."), and they cost the same work. The CSRF token goes into `X-CSRF-Token` on every unsafe request.
+- **`GET /api/v1/auth/me`** says who is logged in and how long the session has left; **`POST /api/v1/auth/logout`** ends it.
+- **The cookie** is `HttpOnly`, `SameSite=Strict`, `Path=/`, with no `Domain` and no expiry. Over HTTPS it is also `Secure` and named `__Host-hlp_session` (a browser then refuses to let a subdomain or a plain-HTTP page replace it); over HTTP it is `hlp_session`, and each name is accepted only on its own scheme. Its value is 32 random bytes; the server keeps only a hash of it, in memory, so a restart logs everybody out. There is no "remember me".
+- **A session ends** after `SESSION_IDLE_MINUTES` without a request (default 30) or `SESSION_MAX_HOURS` after the login (default 12), and **on the next request after its user's password was changed or reset, the user was disabled or deleted, or the role changed**, whether that was done by the `web-user` command or anything else. A new login ends the session it replaces, and each user keeps at most 10 sessions.
+- **Guessing is slowed down**, not blocked for good. Failures are counted per address and per username; the first three cost nothing, then the wait doubles (2, 4, 8 ... seconds) up to 5 minutes for an address and **30 seconds for a username**, so nobody can lock a real user out for long. While a wait lasts every attempt, right password or wrong, gets `429 too_many_attempts` with `Retry-After`. A success clears the counts.
+- **The audit log** gets `auth.login` (with the role), `auth.login_failed`, `auth.throttled` (once, when a wait begins) and `auth.logout`, each with the user and the address. A username that does not exist is written as `(unknown user)`, never as typed (it may be a password typed in the wrong box). A login that cannot be written to the audit log does not happen (500); a failure is still refused if its entry cannot be written. Passwords and session ids never reach the log or the audit trail.
 
 ### The API: `/api/v1/unifi`
 
@@ -149,4 +161,4 @@ Both live in the data directory, readable by the owner only (`0600`, and `0700` 
 
 ## What is not here yet
 
-The login page, sessions, the report routes and the web app come with later stages of the roadmap. The accounts module already has the interface they will use: an `Authenticator` that turns a username and password into a `Principal(username, role, source)`, with `LocalAccounts` (this page's accounts) as the first implementation. A wrong password, an unknown user and a disabled one all take the same work and give the same answer, so the answer does not reveal which usernames exist. Authentication checks the current account record and records the login under the same file lock, so a concurrent disable, role change or deletion cannot return a stale principal.
+The setup wizard, the network exposure options, settings and user management over the API, and the web app come with later stages of the roadmap. The login uses the interface the accounts module was built for: an `Authenticator` that turns a username and password into a `Principal(username, role, source)`, with `LocalAccounts` (this page's accounts) as the first implementation. A wrong password, an unknown user and a disabled one all take the same work and give the same answer, so the answer does not reveal which usernames exist. Authentication checks the current account record and records the login under the same file lock, so a concurrent disable, role change or deletion cannot return a stale principal.
