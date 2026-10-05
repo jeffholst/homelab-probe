@@ -34,6 +34,10 @@ always listed here.
 - **`web-user`** (`hlp web-user add|list|set-role|disable|enable|delete|reset-password`): the accounts of the coming web interface, kept in an owner-only users file (`--data-dir`, the current directory by default) with scrypt password hashes that are upgraded at the next login, two roles (viewer and admin), protection of the last administrator, and an owner-only, size-rotated audit log file (`AUDIT_LOG_MAX_MB`, `AUDIT_LOG_FILES`). A password is read from a prompt or `--password-stdin`, never an argument. Standard library only. See [docs/web.md](docs/web.md).
 - A new log event, audit.event, and the settings `AUDIT_LOG_MAX_MB` and `AUDIT_LOG_FILES`.
 
+### Fixed
+
+- Web account reads tighten existing `users.json` permissions, authentication revalidates account status and role under the file lock, and failed audit writes are reported with the account change rolled back.
+
 ## [0.2.0] - 2026-10-04
 
 The first tagged release. Everything since the fork is listed below.
