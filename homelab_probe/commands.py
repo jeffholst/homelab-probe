@@ -89,7 +89,7 @@ from .notify import (
     state_path_for,
 )
 from .query import format_table, render_csv, render_table
-from .settings import DiagnoseSettings, expired_rules, load_settings
+from .settings import DiagnoseSettings, expired_rules, load_settings, server_settings_path
 from .snapshot import EventQuery, warn
 from .topology import render_text as render_topology
 from .util import check_bind, parse_allowed_host, parse_forwarded_ips, printable, safe_output
@@ -935,6 +935,9 @@ def _add_serve(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--allow-public-controller", action="store_true",
                         help="Let the guided setup (a server with no settings) connect to a controller on a public "
                              "address; by default it only connects to addresses on your own network")
+    parser.add_argument("--read-only", action="store_true",
+                        help="Write no file on this machine: the settings editor and the setup's files answer 403 "
+                             "(logging in and the audit log still work)")
     parser.add_argument("--port", type=_port, default=DEFAULT_PORT, metavar="PORT",
                         help=f"The port to listen on (default {DEFAULT_PORT})")
     parser.add_argument("--data-dir", type=Path, default=Path("."), metavar="DIR",
@@ -996,14 +999,18 @@ def _run_serve(args: argparse.Namespace) -> int:
         apply_logging(config, args.verbose)
         for message in config.warnings:
             warn(message)
-    if not args.demo or args.config is not None:    # a demo ignores the implicit hlp.toml, as everywhere
-        load_settings(args.config)         # a bad settings file fails now, not at the first request
+    # A bad settings file fails now, not at the first request. It is the file the server will use: the one named with
+    # --config, else hlp.toml in the data directory (a demo has a data directory of its own and no file in it).
+    settings_file = server_settings_path(args.config, args.data_dir)
+    if args.config is not None or (not args.demo and settings_file.is_file()):
+        load_settings(settings_file)
     host = f"[{args.host}]" if ":" in args.host else args.host
     say(f"Serving on http://{host}:{args.port} (Ctrl-C to stop)."
         + ("" if setup_state is not None else " Log in with an account made by `hlp web-user`."), file=sys.stderr)
     run(config, args.host, args.port, args.config, args.data_dir, demo=args.demo,
         announce=lambda message: say(message, file=sys.stderr), allowed=args.allowed_host,
-        forwarded_allow_ips=args.forwarded_allow_ips, setup=setup_state, reload=reload)
+        forwarded_allow_ips=args.forwarded_allow_ips, setup=setup_state, reload=reload,
+        read_only=args.read_only)
     return 0
 
 

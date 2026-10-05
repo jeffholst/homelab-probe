@@ -155,6 +155,50 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "IgnoreBody": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "default": "",
+            "maxLength": 1000,
+            "title": "Message",
+            "type": "string"
+          },
+          "reason": {
+            "default": "",
+            "maxLength": 1000,
+            "title": "Reason",
+            "type": "string"
+          },
+          "subject": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Subject",
+            "type": "string"
+          },
+          "until": {
+            "anyOf": [
+              {
+                "maxLength": 10,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The last day it applies: 2026-10-10",
+            "title": "Until"
+          }
+        },
+        "title": "IgnoreBody",
+        "type": "object"
+      },
       "LoginBody": {
         "properties": {
           "password": {
@@ -173,6 +217,62 @@
           "password"
         ],
         "title": "LoginBody",
+        "type": "object"
+      },
+      "SettingsBody": {
+        "additionalProperties": false,
+        "description": "``thresholds`` sets the keys given (``null`` removes one, so the default applies again) and leaves the others;\n``ignore``, when given, is the whole list of rules.",
+        "properties": {
+          "ignore": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/IgnoreBody"
+                },
+                "maxItems": 500,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ignore"
+          },
+          "thresholds": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "maxProperties": 100,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thresholds"
+          },
+          "version": {
+            "maxLength": 100,
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "title": "SettingsBody",
         "type": "object"
       },
       "ValidationError": {
@@ -401,6 +501,70 @@
           }
         },
         "summary": "One JSON Schema"
+      }
+    },
+    "/api/v1/settings": {
+      "get": {
+        "operationId": "get_settings_api_v1_settings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Settings Api V1 Settings Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "The diagnose settings: thresholds and ignore rules",
+        "tags": [
+          "settings"
+        ]
+      },
+      "put": {
+        "operationId": "put_settings_api_v1_settings_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Put Settings Api V1 Settings Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Change the diagnose settings",
+        "tags": [
+          "settings"
+        ]
       }
     },
     "/api/v1/setup/certificate": {

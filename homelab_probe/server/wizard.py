@@ -61,7 +61,7 @@ from ..documents import diagnose_document, info_document
 from ..settings import DiagnoseSettings
 from ..setup import validate_field
 from ..util import printable
-from .auth import address_of, admin, audit_event, setup_ok
+from .auth import address_of, admin, audit_event, local_write, refuse_if_read_only, setup_ok
 from .errors import ApiError, from_controller
 from .service import ControllerService
 
@@ -297,7 +297,13 @@ def administrator_exists(store: AccountStore) -> bool:
 
 def setup_access(request: Request) -> None:
     """The dependency of every setup route: the setup token while the server is in a setup mode and has no
-    administrator, an administrator's session (with the CSRF token of an unsafe request) otherwise."""
+    administrator, an administrator's session (with the CSRF token of an unsafe request) otherwise. A route that
+    writes files is then refused when the server is ``--read-only``."""
+    _authenticate_setup(request)
+    refuse_if_read_only(request)
+
+
+def _authenticate_setup(request: Request) -> None:
     state: Optional[SetupState] = request.app.state.setup
     auth = request.app.state.auth
     if state is None or state.mode is None:
@@ -555,6 +561,7 @@ def router() -> APIRouter:
 
     @api.post("/finish", summary="Save the settings, create the administrator and leave the setup mode")
     @setup_ok
+    @local_write
     def setup_finish(request: Request, body: FinishBody) -> Dict[str, Any]:
         state = _state(request, "finish")
         auth = request.app.state.auth

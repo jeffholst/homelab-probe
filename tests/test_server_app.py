@@ -41,8 +41,8 @@ def test_healthz_says_ok_and_nothing_else(client):
 def test_readyz_and_meta_say_what_a_client_may_know_before_login(client):
     assert client.get("/readyz").json() == {"ready": True}
     assert client.get("/api/v1/meta").json() == {"version": __version__, "needs_setup": False, "setup_mode": None,
-                                                  "login_required": True, "demo": False, "https": False,
-                                                  "loopback": False}
+                                                  "login_required": True, "demo": False, "read_only": False,
+                                                  "https": False, "loopback": False}
 
 
 def test_a_demo_app_says_so(app, tmp_path):

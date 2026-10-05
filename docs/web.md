@@ -20,6 +20,7 @@ Without the extra it exits with code 3 and says what to install. Options:
 - **`--allowed-host NAME`** (repeatable): a name the server is reached by, such as `hlp.lan` or `192.168.1.5` (a port is ignored). A request whose `Host` header is none of these, the loopback names and the bind address is refused. **Required with `--host 0.0.0.0` or `::`**. Wildcards, schemes and paths are usage errors: the list is never open.
 - **`--forwarded-allow-ips IPS`**: believe `X-Forwarded-For` and `X-Forwarded-Proto` from these reverse proxies (addresses or networks, comma-separated) and from nobody else; by default from none. `*` and a network of prefix length 0 (`0.0.0.0/0`, `::/0`), which also mean "everyone", are refused.
 - **`--allow-public-controller`**: let the [guided setup](#first-run-setup-a-server-with-no-settings) connect to a controller on a **public** address (by default it refuses them, so the setup cannot be used to probe other people's machines). It changes nothing for a server that already has settings.
+- **`--read-only`**: write no file on this machine. The settings editor ([below](#settings-apiv1settings)) and the setup's `finish` answer `403 read_only`; logging in, the sessions in memory and the audit log keep working. `/api/v1/meta` and `GET /api/v1/settings` say `read_only: true` so a page can hide its edit buttons. A test lists every route that is not a read, and fails on one that neither writes nothing nor is refused here.
 - **`--port PORT`** (default `8787`).
 - **`--data-dir DIR`** (default: the current directory): where the server keeps its own files (the accounts, the audit log) and, when no `--env-file` or `HLP_ENV` names one, the `.env` it reads ([first-run setup](#first-run-setup-a-server-with-no-settings)).
 - **`--config FILE`**: the `hlp.toml` with the `diagnose` thresholds and ignore rules, as for the other commands.
@@ -124,6 +125,21 @@ Every route also takes `refresh=true`, which reads the controller again instead 
 | 504 | `controller_timeout` | the controller did not answer in time |
 
 No route takes a path to forward to the controller, and none writes anything: every request that leaves is a `GET`, plus the one read-only event-log query.
+
+### Settings: `/api/v1/settings`
+
+The thresholds and ignore rules of `diagnose` and `audit` are the `hlp.toml` the command line reads, and this is the same file: a change here is a change there. It is the file named with `--config`, else **`hlp.toml` in the data directory** (`--data-dir`; with the default, the current directory, as before). The report routes read it from there too.
+
+| Method and path | What it does |
+| --------------- | ------------ |
+| `GET /api/v1/settings` | Anyone logged in: the effective `thresholds` with their `defaults` and `set_in_file` (which of them the file sets), the `ignore` rules (`code`, `subject`, `message`, `reason`, `until`, `expired`), the valid finding `codes`, whether the file `exists`, a `version` and `read_only`. Notification destinations appear only as `notifications: {ntfy, webhook, email}` flags: never a URL, token or address |
+| `PUT /api/v1/settings` | An administrator, with the CSRF token. Body: `version` (from the `GET`), `thresholds` (a map: a number sets that key, `null` removes it so the default applies again; keys not named stay) and/or `ignore` (the **whole** list of rules). Answers with the new document |
+
+- **One loader.** The new text is written to a temporary file and loaded with the function every command uses, so a value it refuses is a `422 invalid_settings` with **its own message** (`[thresholds] resource_warn_pct must be between 0 and 100`, `[[ignore]] #1: unknown code 'device.offlin' (did you mean 'device.offline'?)`) and nothing is written. A value of the wrong JSON type (`true`, a string) is a `422` too.
+- **Comments stay.** The file is edited in place (`tomlkit`, in the `web` extra): comments, blank lines and the order of keys are kept, and an ignore rule that did not change keeps its table and the comments around it. A new file starts from the commented stub `hlp init` writes. The comments of a rule you remove go with it.
+- **Nobody is overwritten.** `version` is a hash of the file (`absent` for no file). If the file is different when the `PUT` arrives, or becomes different while it works, the answer is `409 settings_changed` and nothing is written: load it again. Two changes with the same version cannot both win.
+- **Safe writes.** The file is replaced in one step with its permissions kept (a new file is owner-only), the old content is kept as `hlp.toml.bak`, and a symbolic link is left alone (`409`). A `PUT` that changes nothing writes nothing: no new version, no `.bak`, no audit entry. A file the loader refuses cannot be edited here (`409 settings_file_invalid`; `GET` says `500 settings_invalid`): fix it by hand, `hlp diagnose` shows the reason.
+- **Audit.** `settings.updated` with the user, the names of the thresholds that changed and the number of ignore rules (`"2 rule(s)"` or `"unchanged"`), never a rule's text.
 
 ### How the server reads the controller
 
@@ -237,4 +253,4 @@ Both live in the data directory, readable by the owner only (`0600`, and `0700` 
 
 ## What is not here yet
 
-Settings and user management over the API, and the web app (the screens of the setup wizard among them), come with later stages of the roadmap. The login uses the interface the accounts module was built for: an `Authenticator` that turns a username and password into a `Principal(username, role, source)`, with `LocalAccounts` (this page's accounts) as the first implementation. A wrong password, an unknown user and a disabled one all take the same work and give the same answer, so the answer does not reveal which usernames exist. Authentication checks the current account record and records the login under the same file lock, so a concurrent disable, role change or deletion cannot return a stale principal.
+User management and the scheduler over the API, and the web app (the screens of the setup wizard among them), come with later stages of the roadmap. The login uses the interface the accounts module was built for: an `Authenticator` that turns a username and password into a `Principal(username, role, source)`, with `LocalAccounts` (this page's accounts) as the first implementation. A wrong password, an unknown user and a disabled one all take the same work and give the same answer, so the answer does not reveal which usernames exist. Authentication checks the current account record and records the login under the same file lock, so a concurrent disable, role change or deletion cannot return a stale principal.

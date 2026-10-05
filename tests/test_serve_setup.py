@@ -282,3 +282,52 @@ def test_the_admin_mode_of_a_served_configuration_finishes_with_the_command_line
     state.service_factory = lambda config: ControllerService(config, session=DemoSession())
     assert client.post("/api/v1/setup/finish", json=body, headers=headers).json()["admin_created"] is True
     assert app.state.config.timeout == 9 and app.state.service is not None
+
+
+# -- the settings file the server checks at start is the one it will use ----------------------------------------
+
+BAD_TOML = "[thresholds]\nresource_warn_pct = 500\n"
+
+
+def test_the_settings_file_of_the_data_directory_is_checked_before_the_server_starts(served, tmp_path, capsys):
+    (tmp_path / ".env").write_text(GOOD)
+    AccountStore(tmp_path).add("alice", "admin", PASSWORD)
+    (tmp_path / "hlp.toml").write_text(BAD_TOML)
+    assert serve("--data-dir", str(tmp_path)) == 3 and served == []
+    assert "resource_warn_pct must be between 0 and 100" in capsys.readouterr().err
+
+
+def test_the_working_directorys_file_is_not_the_one_checked_when_the_data_directory_is_elsewhere(
+        served, tmp_path, monkeypatch):
+    here, data = tmp_path / "here", tmp_path / "data"
+    here.mkdir()
+    (here / "hlp.toml").write_text(BAD_TOML)
+    monkeypatch.chdir(here)
+    assert serve("--data-dir", str(data)) == 0 and len(served) == 1
+
+
+def test_a_good_settings_file_in_the_data_directory_lets_the_server_start(served, tmp_path):
+    (tmp_path / "hlp.toml").write_text("[thresholds]\nresource_warn_pct = 80\n")
+    assert serve("--data-dir", str(tmp_path)) == 0 and len(served) == 1
+
+
+def test_a_named_file_is_checked_instead_of_the_one_in_the_data_directory(served, tmp_path):
+    (tmp_path / "hlp.toml").write_text(BAD_TOML)
+    good = tmp_path / "other.toml"
+    good.write_text("[thresholds]\nresource_warn_pct = 80\n")
+    assert serve("--data-dir", str(tmp_path), "--config", str(good)) == 0
+    bad = tmp_path / "bad.toml"
+    bad.write_text(BAD_TOML)
+    assert serve("--data-dir", str(tmp_path), "--config", str(bad)) == 3
+
+
+def test_a_demo_has_a_data_directory_of_its_own_so_the_one_named_is_not_checked(served, tmp_path):
+    (tmp_path / "hlp.toml").write_text(BAD_TOML)
+    assert cli.main(["--demo", "serve", "--data-dir", str(tmp_path)]) == 0 and len(served) == 1
+
+
+def test_one_function_names_the_file_for_the_start_up_check_and_the_api(tmp_path):
+    from homelab_probe.settings import server_settings_path
+
+    assert server_settings_path(None, tmp_path) == tmp_path / "hlp.toml"
+    assert server_settings_path(tmp_path / "x.toml", tmp_path) == tmp_path / "x.toml"

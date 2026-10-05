@@ -103,6 +103,7 @@ def address_of(request: Request) -> str:
 
 PUBLIC_ENDPOINTS: Set[str] = set()       # the endpoints that answer without a session (see ``public``)
 SETUP_ENDPOINTS: Set[str] = set()        # the endpoints of the guided setup (see ``setup_ok``)
+LOCAL_WRITE_ENDPOINTS: Set[str] = set()  # the endpoints that write a file of this machine (see ``local_write``)
 
 
 def public(endpoint: Callable[..., Any]) -> Callable[..., Any]:
@@ -111,6 +112,23 @@ def public(endpoint: Callable[..., Any]) -> Callable[..., Any]:
     endpoint.is_public = True        # type: ignore[attr-defined]
     PUBLIC_ENDPOINTS.add(endpoint.__name__)
     return endpoint
+
+
+def local_write(endpoint: Callable[..., Any]) -> Callable[..., Any]:
+    """Mark an endpoint that writes a file on this machine (settings, snapshots, accounts, the setup's files). With
+    ``serve --read-only`` it answers 403 ``read_only`` once the caller is known (``refuse_if_read_only``). Apply it
+    **under** the route decorator; ``tests/test_server_read_only.py`` enumerates every unsafe route and fails on one
+    that neither is marked nor is on its list of routes that write nothing."""
+    endpoint.is_local_write = True       # type: ignore[attr-defined]
+    LOCAL_WRITE_ENDPOINTS.add(endpoint.__name__)
+    return endpoint
+
+
+def refuse_if_read_only(request: Request) -> None:
+    """403 ``read_only`` for a ``local_write`` endpoint when the server was started with ``--read-only``."""
+    endpoint = getattr(request.scope.get("route"), "endpoint", None)
+    if getattr(endpoint, "is_local_write", False) and request.app.state.read_only:
+        raise ApiError(403, "read_only", "This server was started with --read-only: it writes no files.")
 
 
 def setup_ok(endpoint: Callable[..., Any]) -> Callable[..., Any]:
@@ -153,6 +171,7 @@ class Require:
                 request.headers.get("x-csrf-token", "").encode("utf-8"), session.csrf.encode("utf-8")):
             raise ApiError(403, "csrf_token", "The CSRF token is missing or wrong.")
         request.state.session = session
+        refuse_if_read_only(request)
         return session
 
 
