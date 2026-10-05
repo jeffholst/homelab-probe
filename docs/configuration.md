@@ -148,7 +148,7 @@ There is one `Site:` line per site, with its name, internal reference (`ref`) an
 
 ```text
 $ hlp --verbose wan --json > wan.json
-[verbose] hlp 0.2.0: settings from /home/me/homelab-probe/.env; controller https://192.168.1.1:443, site default, timeout 15 s, TLS verification off
+[verbose] hlp 0.3.0: settings from /home/me/homelab-probe/.env; controller https://192.168.1.1:443, site default, timeout 15 s, TLS verification off
 [verbose] GET /proxy/network/integration/v1/sites?offset=0&limit=200 -> 200 (41 ms)
 [verbose] GET /proxy/network/api/s/default/stat/health -> 503 (35 ms)
 [verbose] GET /proxy/network/api/s/default/stat/health -> retrying in 0.5 s (attempt 2 of 3)

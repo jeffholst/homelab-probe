@@ -1,4 +1,4 @@
-# Publishes a GitHub release when the owner pushes a version tag (git tag -a v0.2.0 && git push origin v0.2.0).
+# Publishes a GitHub release when the owner pushes a version tag (git tag -a v0.3.0 && git push origin v0.3.0).
 #
 # It never runs on a pull request or a push to a branch, it is the only workflow that can write to the repository
 # (`contents: write`, on its one job), and it uses no third-party publishing action: the release is made with the `gh`
