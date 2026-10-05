@@ -17,11 +17,13 @@ Nothing here contacts the controller, prints a secret or puts one in a message.
 import io
 import os
 import re
+import stat
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, List, Mapping, Optional, Tuple
+from typing import Callable, Dict, List, Mapping, Optional, Tuple
 
+from dotenv import dotenv_values
 from dotenv.parser import parse_stream
 
 from .accounts import AccountError, AccountStore
@@ -110,15 +112,19 @@ def render_env(values: Mapping[str, Optional[str]], existing: str = "") -> str:
     for binding in parse_stream(io.StringIO(existing)):
         original = binding.original.string
         if binding.key is None or binding.error or binding.key not in values:
-            out.append(original if original.endswith("\n") else original + "\n")
+            out.append(original)                                  # untouched, even a last line with no newline
         elif binding.key in lines and binding.key not in written:
             out.append(lines[binding.key])
             written.add(binding.key)
         # else: a repeat of a setting that was replaced, or one that is being removed
     missing = [name for name in lines if name not in written]
     if missing:
-        if out and out[-1].strip():
-            out.append("\n")
+        if out:
+            blank = not out[-1].strip()
+            if not out[-1].endswith("\n"):
+                out.append("\n")                                  # only now is a newline added to an unterminated line
+            if not blank:
+                out.append("\n")
         out.append("# Added by hlp init\n")
         out.extend(lines[name] for name in missing)
     return "".join(out)
@@ -174,9 +180,16 @@ def write_private_file(step: str, path: Path, text: str, backup: bool = True) ->
 
 
 def ensure_private_dir(step: str, path: Path) -> StepResult:
-    """Make the directory ``path`` (owner-only) if there is none."""
+    """Make the directory ``path`` (owner-only) if there is none; one that exists is made owner-only too."""
     _refuse_symlink(path)
     if path.is_dir():
+        if stat.S_IMODE(path.stat().st_mode) & 0o077:
+            try:
+                os.chmod(path, 0o700)
+            except OSError as e:
+                raise SetupError(f"{path} is readable by others and could not be made private "
+                                 f"({e.strerror or type(e).__name__})") from e
+            return StepResult(step, "updated", f"{path} was readable by others: now readable by you only", path)
         return StepResult(step, "kept", f"{path} exists", path)
     path.mkdir(parents=True, mode=0o700)
     return StepResult(step, "created", f"created {path} (readable by you only)", path)
@@ -246,7 +259,11 @@ def validate_field(values: Mapping[str, Optional[str]], name: str) -> Optional[s
                 check(values)
             except ConfigError as error:
                 message = printable(str(error))
-                return message.replace(key, "***") if len(key) >= 4 else message
+                if key and key in message:
+                    # A long key is replaced and the sentence stays readable; a short one would garble it.
+                    return (message.replace(key, "***") if len(key) >= 4
+                            else f"{name} is not acceptable (the message would have repeated the API key)")
+                return message
     return None
 
 
@@ -264,19 +281,45 @@ def validate_values(values: Mapping[str, Optional[str]]) -> List[Tuple[str, str]
 
 # -- doing it --------------------------------------------------------------------------------------------------
 
+def read_existing_env(path: Path) -> str:
+    """The text of the ``.env`` at ``path`` ("" when there is none). A symbolic link is refused **before** anything is
+    read, so a link cannot make the setup import settings from another file."""
+    _refuse_symlink(path)
+    if not path.is_file():
+        return ""
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as e:
+        raise SetupError(f"cannot read {path} ({type(e).__name__})") from e
+
+
+def existing_values(text: str) -> Dict[str, str]:
+    """The settings of this tool in the text of a ``.env``."""
+    return {k: v for k, v in dotenv_values(stream=io.StringIO(text)).items() if v is not None and k in KNOWN_VARIABLES}
+
+
 def apply(values: Mapping[str, Optional[str]], directory: Path,
           admin: Optional[Tuple[str, str]] = None) -> List[StepResult]:
     """Check ``values`` and then set ``directory`` up: ``.env`` (merged into the one that is there, which is kept as
     ``.env.bak``), ``hlp.toml`` if there is none, the private ``snapshots/`` directory and, with ``admin`` (a username
     and a password), the first administrator. Raises ``SetupError`` before writing anything if the values are not
     good."""
-    problems = validate_values(values)
-    if problems:
-        raise SetupError("; ".join(f"{name}: {message}" if name else message for name, message in problems))
     directory = Path(directory)
     env_path = directory / ENV_FILE
-    _refuse_symlink(env_path)
-    existing = env_path.read_text(encoding="utf-8") if env_path.exists() else ""
+    existing = read_existing_env(env_path)
+    # What the file will hold: the settings already in it that are not being replaced, and the new ones. That is what
+    # every command will load, so that is what is checked: a bad value that was already there would fail them too.
+    merged = existing_values(existing)
+    for name, value in values.items():
+        if value is None:
+            merged.pop(name, None)
+        else:
+            merged[name] = value
+    problems = validate_values(merged)
+    if problems:
+        old = " (already in the existing .env)"
+        raise SetupError("; ".join(f"{name}: {message}{'' if name in values else old}" if name else message
+                                   for name, message in problems))
     text = render_env(values, existing)                              # may raise SetupError: still nothing written
     steps = [write_private_file("setup.env", env_path, text),
              write_settings_stub(directory / SETTINGS_FILE),

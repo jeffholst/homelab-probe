@@ -312,3 +312,95 @@ def test_a_temporary_file_that_cannot_be_removed_does_not_hide_the_real_error(tm
     monkeypatch.setattr(setup.os, "unlink", stuck)
     with pytest.raises(OSError, match="disk gone"):                      # not "cannot remove"
         setup.write_private_file("setup.env", home / ".env", "NEW=1\n")
+
+
+# -- fixes from the review of this change ----------------------------------------------------------------------
+
+def test_a_file_without_a_final_newline_is_kept_byte_for_byte_unless_something_is_appended():
+    for existing in ("A=1", "# note", "UNIFI_URL=https://c\n# end", "LOG_LEVEL=INFO"):
+        assert setup.render_env({}, existing) == existing
+        assert setup.render_env({"UNIFI_URL": "https://c"} if "UNIFI_URL" in existing else {}, existing) == existing
+    assert setup.render_env({"UNIFI_SITE_ID": "lab"}, "# note") == "# note\n\n# Added by hlp init\nUNIFI_SITE_ID=lab\n"
+    assert setup.render_env({"UNIFI_SITE_ID": "lab"}, "A=1") == "A=1\n\n# Added by hlp init\nUNIFI_SITE_ID=lab\n"
+    assert setup.render_env({"LOG_LEVEL": "DEBUG"}, "# a\nLOG_LEVEL=INFO") == "# a\nLOG_LEVEL=DEBUG\n"
+
+
+def test_applying_nothing_new_to_a_file_without_a_final_newline_leaves_it_alone(tmp_path):
+    (tmp_path / ".env").write_text(f"UNIFI_URL=https://192.168.1.1\nUNIFI_API_KEY={KEY}")
+    steps = setup.apply({"UNIFI_URL": "https://192.168.1.1"}, tmp_path)
+    assert steps[0].status == "kept" and not (tmp_path / ".env.bak").exists()
+    assert (tmp_path / ".env").read_text() == f"UNIFI_URL=https://192.168.1.1\nUNIFI_API_KEY={KEY}"
+
+
+@posix
+def test_an_existing_directory_that_others_can_read_is_made_private(tmp_path):
+    directory = tmp_path / "snapshots"
+    directory.mkdir()
+    os.chmod(directory, 0o755)
+    result = setup.ensure_private_dir("setup.snapshots", directory)
+    assert result.status == "updated" and "readable by others" in result.message and mode(directory) == 0o700
+    assert setup.ensure_private_dir("setup.snapshots", directory).status == "kept"
+
+
+@posix
+def test_a_directory_that_cannot_be_made_private_is_an_error_not_a_silent_success(tmp_path, monkeypatch):
+    directory = tmp_path / "snapshots"
+    directory.mkdir()
+    os.chmod(directory, 0o755)
+
+    def refuse(path, mode):
+        raise PermissionError(1, "Operation not permitted")
+
+    monkeypatch.setattr(setup.os, "chmod", refuse)
+    with pytest.raises(SetupError, match="could not be made private"):
+        setup.ensure_private_dir("setup.snapshots", directory)
+
+
+def test_what_is_checked_is_the_whole_file_that_would_result_not_only_the_new_values(tmp_path):
+    (tmp_path / ".env").write_text("LOG_LEVEL=LOUD\nNOTIFY_NTFY_URL=http://ntfy.example/t\nUNIFI_URL=https://old\n")
+    with pytest.raises(SetupError) as raised:
+        setup.apply(GOOD, tmp_path)
+    message = str(raised.value)
+    assert "LOG_LEVEL" in message and "already in the existing .env" in message and "NOTIFY_" in message
+    assert "UNIFI_URL" not in message                                         # the new value is fine
+    assert (tmp_path / ".env").read_text().startswith("LOG_LEVEL=LOUD") and not (tmp_path / ".env.bak").exists()
+    assert not (tmp_path / "hlp.toml").exists() and not (tmp_path / "snapshots").exists()
+
+
+def test_a_bad_setting_that_the_new_values_replace_or_remove_is_not_held_against_them(tmp_path):
+    (tmp_path / ".env").write_text("LOG_LEVEL=LOUD\nUNIFI_URL=ftp://old\n")
+    steps = setup.apply({**GOOD, "LOG_LEVEL": "INFO"}, tmp_path)
+    assert steps[0].status == "updated"
+    (tmp_path / ".env").write_text("LOG_LEVEL=LOUD\n")
+    assert setup.apply({**GOOD, "LOG_LEVEL": None}, tmp_path)[0].status == "updated"
+    assert "LOG_LEVEL" not in read_env_values(tmp_path / ".env")
+
+
+def test_settings_that_are_only_in_the_environment_are_not_part_of_the_file_check(tmp_path, monkeypatch):
+    monkeypatch.setenv("LOG_LEVEL", "LOUD")
+    assert setup.apply(GOOD, tmp_path)[0].status == "created"
+
+
+def test_the_existing_file_is_read_through_a_link_never(tmp_path):
+    target = tmp_path / "real.env"
+    target.write_text("UNIFI_API_KEY=leaked-key-0123456789\n")
+    link = tmp_path / ".env"
+    link.symlink_to(target)
+    with pytest.raises(SetupError, match="symbolic link"):
+        setup.read_existing_env(link)
+    assert setup.read_existing_env(tmp_path / "missing.env") == ""
+    (tmp_path / "latin.env").write_bytes(b"A=caf\xe9\n")
+    with pytest.raises(SetupError, match="cannot read"):
+        setup.read_existing_env(tmp_path / "latin.env")
+    assert setup.existing_values("UNIFI_URL=https://c\nNOT_OURS=1\nLOG_LEVEL=\n") == {"UNIFI_URL": "https://c",
+                                                                                  "LOG_LEVEL": ""}
+
+
+@pytest.mark.parametrize("key", ["a", "ab", "abc", "abcd", KEY])
+def test_a_key_of_any_length_is_kept_out_of_the_messages(key):
+    values = {**GOOD, "UNIFI_API_KEY": key, "UNIFI_SITE_ID": f"{key}/x"}
+    problems = setup.validate_values(values)
+    shown = " ".join(message for _, message in problems)
+    assert problems and (key not in shown if len(key) >= 4 else
+                         "would have repeated the API key" in shown and "/x" not in shown)
+    assert key not in (setup.validate_field(values, "UNIFI_SITE_ID") or "") or len(key) < 4

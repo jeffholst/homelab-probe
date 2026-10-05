@@ -225,3 +225,32 @@ def test_a_setup_step_that_fails_after_the_checks_is_an_error_not_a_traceback(ca
     code, _, err = init(capsys, monkeypatch, "--dir", str(home), "--url", URL, "--api-key-stdin", stdin=KEY)
     assert code == 3 and "symbolic link" in err and "Traceback" not in err and KEY not in err
     assert real.read_text() == "KEEP=1\n"
+
+
+@pytest.mark.skipif(sys.platform == "win32" or os.geteuid() == 0, reason="needs a file that even the owner cannot read")
+def test_an_env_that_is_a_link_is_refused_before_a_byte_of_its_target_is_read(capsys, monkeypatch, home):
+    home.mkdir()
+    target = home.parent / "real.env"
+    target.write_text(f"UNIFI_API_KEY={KEY}\n")
+    os.chmod(target, 0o000)                                   # reading it would fail with a different message
+    (home / ".env").symlink_to(target)
+    try:
+        code, out, err = init(capsys, monkeypatch, "--dir", str(home), "--url", URL, "--no-input")
+    finally:
+        os.chmod(target, 0o600)
+    assert code == 3 and "symbolic link" in err and "cannot read" not in err and KEY not in out + err
+
+
+def test_settings_already_in_the_env_that_every_command_would_refuse_stop_init_with_their_names(capsys, monkeypatch, home):
+    home.mkdir()
+    (home / ".env").write_text(f"LOG_LEVEL=LOUD\nUNIFI_URL=https://old\nUNIFI_API_KEY={KEY}\n")
+    before = (home / ".env").read_text()
+    code, _, err = init(capsys, monkeypatch, "--dir", str(home), "--url", URL, "--no-input")
+    assert code == 3 and "LOG_LEVEL" in err and "already in the existing .env" in err
+    assert (home / ".env").read_text() == before and not (home / ".env.bak").exists() and KEY not in err
+
+
+def test_a_short_key_does_not_come_back_in_an_error(capsys, monkeypatch, home):
+    code, _, err = init(capsys, monkeypatch, "--dir", str(home), "--url", URL, "--site", "ab/x", "--api-key-stdin",
+                        stdin="ab\n")
+    assert code == 3 and "UNIFI_SITE_ID" in err and "ab/x" not in err

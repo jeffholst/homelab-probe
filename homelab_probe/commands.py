@@ -808,7 +808,10 @@ def _read_api_key(args: argparse.Namespace, existing: Dict[str, str], interactiv
 def _run_init(args: argparse.Namespace) -> int:
     directory: Path = args.dir
     env_path = directory / setup.ENV_FILE
-    existing = config_module.read_env_values(env_path) if env_path.is_file() else {}
+    try:
+        existing = setup.existing_values(setup.read_existing_env(env_path))
+    except setup.SetupError as e:
+        raise ConfigError(str(e)) from e
     interactive = not (args.no_input or args.api_key_stdin)
     values: Dict[str, Optional[str]] = {}
     if interactive:
