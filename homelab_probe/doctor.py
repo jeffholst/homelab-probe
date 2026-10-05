@@ -25,6 +25,7 @@ import requests
 from . import __version__
 from .client import UniFiAPIError, UniFiClient
 from .config import (
+    ENV_FILE_VAR,
     Config,
     ConfigError,
     EnvFileReport,
@@ -217,9 +218,10 @@ def env_contents_check(report: EnvFileReport) -> Check:
         problems.append(what + (f", did you mean {suggestion}?" if suggestion else ""))
     if report.unknown:
         fixes.append("correct or remove the names that are not settings (they are ignored)")
-    for line in report.misplaced:
-        problems.append(f"HLP_ENV (line {line}) does nothing in a .env file, because it names the file; set it in "
-                        "the environment")
+    for line, name in report.misplaced:
+        why = ("because it names the file" if name == ENV_FILE_VAR
+               else "because it is read from the environment only, so that a secret is not kept in a file")
+        problems.append(f"{name} (line {line}) does nothing in a .env file, {why}; set it in the environment")
     for line in report.bad_lines:
         problems.append(f"line {line} cannot be read (check quotes and the = sign)")
     if report.misplaced or report.bad_lines:

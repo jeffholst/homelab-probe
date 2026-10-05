@@ -36,6 +36,7 @@ from dotenv.parser import parse_stream
 from .logs import FORMAT_WORDS, LEVEL_WORDS
 
 ENV_FILE_VAR = "HLP_ENV"
+SETUP_TOKEN_VAR = "HLP_SETUP_TOKEN"     # the token of the guided setup, from the environment only (never a file)
 DEFAULT_ENV_FILE = ".env"
 DEFAULT_SITE = "default"
 MAX_SITE_LENGTH = 128
@@ -53,7 +54,9 @@ _UNSAFE_SITE_CHARACTERS = "/\\?#"
 SECRET_FILE_GROUP_OTHER_BITS = 0o077   # any of these set means someone besides the owner can read
 
 # Every variable the code reads (``example.env`` documents them; ``tests/test_env_contents.py`` pins the list). Not
-# ``HLP_ENV``: it names the file, so it is read before the file and does nothing inside it.
+# ``HLP_ENV`` (it names the file, so it is read before the file and does nothing inside it) and ``HLP_SETUP_TOKEN``
+# (a secret that is read from the environment only).
+NOT_FOR_THE_FILE = (ENV_FILE_VAR, SETUP_TOKEN_VAR)
 KNOWN_VARIABLES = (
     "UNIFI_URL", "UNIFI_API_KEY", "UNIFI_SITE_ID", "UNIFI_VERIFY_SSL", "UNIFI_TIMEOUT", "UNIFI_PARALLEL_REQUESTS",
     "ALLOW_INSECURE_HTTP", "LOG_LEVEL", "LOG_FORMAT", "AUDIT_LOG_MAX_MB", "AUDIT_LOG_FILES",
@@ -441,7 +444,7 @@ class EnvFileReport:
     settings: int = 0                                                  # distinct known variables in the file
     duplicates: Dict[str, List[int]] = field(default_factory=dict)     # a known variable on several lines
     unknown: List[Tuple[int, str, str]] = field(default_factory=list)
-    misplaced: List[int] = field(default_factory=list)                 # lines setting HLP_ENV, which does nothing here
+    misplaced: List[Tuple[int, str]] = field(default_factory=list)     # (line, name) of settings that do nothing here
     bad_lines: List[int] = field(default_factory=list)                 # lines the parser cannot read
     empty: List[str] = field(default_factory=list)                     # known variables whose value is blank
     overridden: List[str] = field(default_factory=list)                # the environment sets these differently
@@ -473,7 +476,7 @@ def inspect_env_file(path: Path) -> EnvFileReport:
     lines: Dict[str, List[int]] = {}
     last: Dict[str, Optional[str]] = {}
     unknown: List[Tuple[int, str, str]] = []
-    misplaced: List[int] = []
+    misplaced: List[Tuple[int, str]] = []
     bad_lines: List[int] = []
     unknown_seen = set()
     for binding in bindings:
@@ -485,8 +488,8 @@ def inspect_env_file(path: Path) -> EnvFileReport:
         elif binding.key in KNOWN_VARIABLES:
             lines.setdefault(binding.key, []).append(line)
             last[binding.key] = binding.value
-        elif binding.key == ENV_FILE_VAR:
-            misplaced.append(line)
+        elif binding.key in NOT_FOR_THE_FILE:
+            misplaced.append((line, binding.key))
         elif binding.key not in unknown_seen:
             unknown_seen.add(binding.key)
             shown = binding.key if len(binding.key) <= MAX_NAME_LENGTH and _NAME.fullmatch(binding.key) else ""

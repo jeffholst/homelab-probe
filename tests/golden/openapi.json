@@ -1,6 +1,92 @@
 {
   "components": {
     "schemas": {
+      "DraftBody": {
+        "additionalProperties": false,
+        "description": "The fields of the draft that change; the ones left out stay as they are.",
+        "properties": {
+          "api_key": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "confirm": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The sentence that turns checking off",
+            "title": "Confirm"
+          },
+          "fingerprint": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "To accept the fetched certificate",
+            "title": "Fingerprint"
+          },
+          "site": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Site"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "verify": {
+            "anyOf": [
+              {
+                "enum": [
+                  "true",
+                  "pin",
+                  "false"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verify"
+          }
+        },
+        "title": "DraftBody",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -260,6 +346,141 @@
           }
         },
         "summary": "One JSON Schema"
+      }
+    },
+    "/api/v1/setup/certificate": {
+      "post": {
+        "operationId": "setup_certificate_api_v1_setup_certificate_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Setup Certificate Api V1 Setup Certificate Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Fetch the certificate the controller shows",
+        "tags": [
+          "setup"
+        ]
+      }
+    },
+    "/api/v1/setup/connection": {
+      "post": {
+        "operationId": "setup_connection_api_v1_setup_connection_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Setup Connection Api V1 Setup Connection Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Test the connection with the draft",
+        "tags": [
+          "setup"
+        ]
+      }
+    },
+    "/api/v1/setup/draft": {
+      "post": {
+        "operationId": "setup_draft_api_v1_setup_draft_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Setup Draft Api V1 Setup Draft Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Change the draft of the settings",
+        "tags": [
+          "setup"
+        ]
+      }
+    },
+    "/api/v1/setup/preview": {
+      "post": {
+        "operationId": "setup_preview_api_v1_setup_preview_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Setup Preview Api V1 Setup Preview Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Run the health checks on the draft",
+        "tags": [
+          "setup"
+        ]
+      }
+    },
+    "/api/v1/setup/status": {
+      "get": {
+        "operationId": "setup_status_api_v1_setup_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Setup Status Api V1 Setup Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "The state of the setup",
+        "tags": [
+          "setup"
+        ]
       }
     },
     "/api/v1/unifi/sites": {

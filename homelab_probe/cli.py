@@ -19,6 +19,7 @@ from .commands import (
     EXIT_NO_MATCH,
     EXIT_USAGE,
     Context,
+    apply_logging,
     say,
     verbose,
 )
@@ -140,9 +141,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         if args.parallel is not None:
             config = replace(config, parallel=args.parallel)
         if not args.demo:
-            logs.register_secrets(*config.secret_values())
-            if config.log_format or config.log_level:
-                logs.configure(config.log_format or "cli", "DEBUG" if args.verbose else config.log_level or "WARNING")
+            apply_logging(config, args.verbose)
         with logs.bind(request_id=logs.new_id(), site=config.site):
             message = f"hlp {__version__}: " + (
                 "demo mode, synthetic data, no controller is contacted" if args.demo else _describe_connection(config))
