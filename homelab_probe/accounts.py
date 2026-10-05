@@ -398,26 +398,6 @@ class AccountStore:
             self._save_change(before, after, current, on_upgrade if upgraded else None)
             return current
 
-    def record_login(self, username: str, upgraded_from: Optional[str] = None, password: Optional[str] = None) -> bool:
-        """Note a successful login. With ``password`` and the old hash ``upgraded_from``, the stored hash is replaced
-        by one made with the current parameters, unless the password was changed meanwhile. True when the hash was
-        upgraded."""
-        upgraded = False
-        name = normalize_username(username)
-
-        def change(users: List[User]) -> Tuple[List[User], None]:
-            nonlocal upgraded
-            for i, user in enumerate(users):
-                if user.username == name:
-                    hashed = user.password_hash
-                    if password is not None and upgraded_from == user.password_hash:
-                        hashed, upgraded = hash_password(password), True
-                    users[i] = replace(user, last_login=_now(), password_hash=hashed)
-            return users, None
-
-        self._change(change)
-        return upgraded
-
 
 class LocalAccounts:
     """The accounts of ``users.json`` as an ``Authenticator``."""
