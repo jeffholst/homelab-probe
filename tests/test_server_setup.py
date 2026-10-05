@@ -212,7 +212,8 @@ def test_a_trailing_slash_and_spaces_are_cleaned_and_an_unchanged_value_changes_
 @pytest.mark.parametrize("fields, setting", [
     ({"url": "http://192.168.1.1"}, "UNIFI_URL"), ({"url": "192.168.1.1"}, "UNIFI_URL"), ({"url": ""}, "UNIFI_URL"),
     ({"url": "https://user:pw@192.168.1.1"}, "UNIFI_URL"), ({"url": "https://192.168.1.1/?a=b"}, "UNIFI_URL"),
-    ({"url": "https://bad host"}, "UNIFI_URL"), ({"site": ""}, "UNIFI_SITE_ID"), ({"site": "a/b"}, "UNIFI_SITE_ID"),
+    ({"url": "https://bad host"}, "UNIFI_URL"), ({"url": "https://[::1"}, "UNIFI_URL"),
+    ({"url": "https://[not-an-address]"}, "UNIFI_URL"), ({"site": ""}, "UNIFI_SITE_ID"), ({"site": "a/b"}, "UNIFI_SITE_ID"),
     ({"api_key": ""}, "UNIFI_API_KEY"), ({"api_key": "your-api-key-here"}, "UNIFI_API_KEY"),
 ])
 def test_a_value_that_does_not_validate_is_a_422_with_the_setting(client, fields, setting):
@@ -647,3 +648,20 @@ def test_a_failed_connection_does_not_go_on_to_read_the_sites(client, state, mon
     filled(client)
     body = send(client, "POST", "/connection").json()
     assert body["ok"] is False and body["sites"] == []
+
+
+def test_a_draft_changed_while_the_connection_is_tested_is_not_marked_as_tested(client, state):
+    def factory(config):
+        draft(client, site="other")                       # the owner edits the draft while the controller answers
+        return demo_client(config)
+
+    state.client_factory = factory
+    filled(client)
+    assert send(client, "POST", "/connection").json()["ok"] is True
+    assert send(client, "GET", "/status").json()["draft"]["connection_ok"] is None
+
+
+def test_a_connection_test_that_nothing_interrupted_is_recorded(client):
+    filled(client)
+    send(client, "POST", "/connection")
+    assert send(client, "GET", "/status").json()["draft"]["connection_ok"] is True

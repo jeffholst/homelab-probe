@@ -34,7 +34,7 @@ import tempfile
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Literal, Optional
+from typing import Any, Callable, Dict, Iterator, List, Literal, Optional, Tuple
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, Request
@@ -101,6 +101,7 @@ class SetupState:
         self.resolver = resolver
         self.client_factory = client_factory
         self.draft = Draft(site=site)
+        self.generation = 0                          # counts the changes of the draft: a result is for one of them
         self.lock = threading.RLock()
         logs.register_secrets(self.token)
 
@@ -147,6 +148,8 @@ class SetupState:
             if new.api_key and new.api_key != self.draft.api_key:
                 logs.register_secrets(new.api_key)
             self.draft = new
+            if changed:
+                self.generation += 1
             return changed
 
     @staticmethod
@@ -154,7 +157,10 @@ class SetupState:
         """``value`` for the setting ``name``, or a 422. The message of the check is used as it is (it never contains
         the API key); the address is refused here when it carries credentials, before any message could repeat it."""
         if name == "UNIFI_URL":
-            parts = urlsplit(value)
+            try:
+                parts = urlsplit(value)
+            except ValueError:                      # such as https://[::1: let the check below word it
+                parts = urlsplit("")
             if value and (parts.username is not None or parts.password is not None):
                 raise ApiError(422, "invalid_setting", "The address must not contain a user name or password.",
                                setting=name)
@@ -193,10 +199,13 @@ class SetupState:
         return draft
 
     @contextlib.contextmanager
-    def config(self) -> Iterator[Config]:
-        """A ``Config`` for the draft. With a pinned certificate the certificate is a private file for as long as the
-        block lasts (``UNIFI_VERIFY_SSL`` names a file), removed when it ends."""
-        draft = self.require()
+    def config(self) -> Iterator[Tuple[Config, int]]:
+        """(a ``Config`` for the draft, the generation of the draft it was made from). With a pinned certificate the
+        certificate is a private file for as long as the block lasts (``UNIFI_VERIFY_SSL`` names a file), removed when
+        it ends. The draft is copied under the lock, so a change made while a test runs does not mix into it."""
+        with self.lock:
+            draft = dataclasses.replace(self.require())
+            generation = self.generation
         with tempfile.TemporaryDirectory(prefix="hlp-setup-") as directory:
             verify = draft.verify
             if verify == "pin":
@@ -212,7 +221,7 @@ class SetupState:
                     "UNIFI_VERIFY_SSL": verify, "UNIFI_TIMEOUT": str(CONNECTION_TIMEOUT)})
             except ConfigError:
                 raise ApiError(422, "invalid_setting", "The settings typed so far cannot be used together.") from None
-            yield config
+            yield config, generation
 
     def client(self, config: Config) -> UniFiClient:
         """The client of a test: one that does not follow a redirect, because the API key would go with it."""
@@ -354,7 +363,7 @@ def router() -> APIRouter:
     @setup_ok
     def setup_connection(request: Request) -> Dict[str, Any]:
         state = _state(request)
-        with state.config() as config:
+        with state.config() as (config, generation):
             try:
                 tlsprobe.resolve_target(config.controller_url, state.allow_public, state.resolver)
             except tlsprobe.ProbeError as error:
@@ -363,8 +372,9 @@ def router() -> APIRouter:
             ok = not exit_failed(checks)
             sites = _sites(state, config) if ok else []
         with state.lock:
-            state.draft.connection_ok = ok
-        audit_event(request, "setup.connection_tested", _actor(request), url=state.draft.url, ok=ok)
+            if state.generation == generation:              # a draft changed meanwhile was not the one tested
+                state.draft.connection_ok = ok
+        audit_event(request, "setup.connection_tested", _actor(request), url=config.controller_url, ok=ok)
         return {"ok": ok, "sites": sites,
                 "checks": [{**c.to_dict(), "message": state.scrub(c.message), "fix": state.scrub(c.fix)}
                            for c in checks]}
@@ -374,7 +384,7 @@ def router() -> APIRouter:
     def setup_preview(request: Request) -> Dict[str, Any]:
         state = _state(request)
         areas = [name for name in AREA_NAMES if name != "events"]
-        with state.config() as config:
+        with state.config() as (config, _):
             try:
                 tlsprobe.resolve_target(config.controller_url, state.allow_public, state.resolver)
                 document = diagnose_document(state.client(config), config.site, DiagnoseSettings(), areas,
@@ -384,7 +394,7 @@ def router() -> APIRouter:
             except UniFiAPIError as error:
                 raise from_controller(error) from None
         data = document.data
-        audit_event(request, "setup.preview_run", _actor(request), url=state.draft.url)
+        audit_event(request, "setup.preview_run", _actor(request), url=config.controller_url)
         return {"areas": data["areas"], "summary": data["summary"],
                 "findings": data["findings"][:MAX_PREVIEW_FINDINGS], "total": len(data["findings"]),
                 "warnings": [state.scrub(w) for w in document.warnings]}

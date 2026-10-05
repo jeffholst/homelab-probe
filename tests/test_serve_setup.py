@@ -214,3 +214,10 @@ def test_resolve_config_is_pure(tmp_path, monkeypatch):
     assert dict(os.environ) == before
     with pytest.raises(ConfigError):
         runner.resolve_config(tmp_path / "nope.env", tmp_path)
+
+
+def test_the_demo_ignores_an_implicit_settings_file_but_honors_a_named_one(served, tmp_path, capsys, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "hlp.toml").write_text("this is [not toml")
+    assert cli.main(["--demo", "serve"]) == 0 and len(served) == 1
+    assert cli.main(["--demo", "serve", "--config", str(tmp_path / "hlp.toml")]) == 3 and len(served) == 1

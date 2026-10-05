@@ -948,7 +948,8 @@ def _run_serve(args: argparse.Namespace) -> int:
         apply_logging(config, args.verbose)
         for message in config.warnings:
             warn(message)
-    load_settings(args.config)             # a bad settings file fails now, not at the first request
+    if not args.demo or args.config is not None:    # a demo ignores the implicit hlp.toml, as everywhere
+        load_settings(args.config)         # a bad settings file fails now, not at the first request
     host = f"[{args.host}]" if ":" in args.host else args.host
     say(f"Serving on http://{host}:{args.port} (Ctrl-C to stop)."
         + ("" if setup_state is not None else " Log in with an account made by `hlp web-user`."), file=sys.stderr)
