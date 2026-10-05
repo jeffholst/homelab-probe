@@ -27,7 +27,7 @@ from ..util import check_bind, is_loopback
 from .app import create_app
 from .auth import AuthState
 from .security import allowed_hosts
-from .wizard import MIN_TOKEN_LENGTH, MODE_SETUP, SetupState, administrator_exists
+from .wizard import MIN_TOKEN_LENGTH, MODE_ADMIN, MODE_SETUP, SetupState, administrator_exists
 
 _log = logging.getLogger(__name__)
 DEMO_USER = "demo"
@@ -40,14 +40,16 @@ def has_administrator(store: AccountStore) -> bool:
         raise ConfigError(str(error)) from error
 
 
-def require_administrator(store: AccountStore, directory: Path) -> None:
-    """Refuse to start without an enabled administrator: nobody could log in, and the server would be a locked door."""
-    if not has_administrator(store):
-        raise ConfigError(f"there is no administrator to log in as: create one with "
-                          f"`hlp web-user add NAME --role admin --data-dir {directory}`")
-
-
 UNCONFIGURED_URL, UNCONFIGURED_KEY = "https://unconfigured.invalid", "unconfigured"
+
+
+def setup_token() -> Optional[str]:
+    """The setup token the operator chose (``HLP_SETUP_TOKEN``), or None to have one made."""
+    token = os.environ.get(SETUP_TOKEN_VAR, "").strip() or None
+    if token is not None and len(token) < MIN_TOKEN_LENGTH:
+        raise ConfigError(f"{SETUP_TOKEN_VAR} must be at least {MIN_TOKEN_LENGTH} characters (leave it unset and the "
+                          f"server makes one)")
+    return token
 
 
 def resolve_config(env_file: Optional[Path], directory: Path, site_override: Optional[str] = None,
@@ -77,17 +79,14 @@ def resolve_config(env_file: Optional[Path], directory: Path, site_override: Opt
         problem = str(error)
     standin = {**values, "UNIFI_URL": UNCONFIGURED_URL, "UNIFI_API_KEY": UNCONFIGURED_KEY}
     config = build_config(standin, path, warnings, site_override)          # another broken setting stays an error
-    token = os.environ.get(SETUP_TOKEN_VAR, "").strip() or None
-    if token is not None and len(token) < MIN_TOKEN_LENGTH:
-        raise ConfigError(f"{SETUP_TOKEN_VAR} must be at least {MIN_TOKEN_LENGTH} characters (leave it unset and the "
-                          f"server makes one)")
-    return config, SetupState(MODE_SETUP, "no_config", token, site=config.site, allow_public=allow_public), problem
+    return config, SetupState(MODE_SETUP, "no_config", setup_token(), site=config.site, allow_public=allow_public,
+                              env_named=named is not None), problem
 
 
 def run(config: Config, host: str, port: int, settings_path: Optional[Path], state_dir: Path,
         demo: bool = False, announce: Callable[[str], None] = lambda message: None,
         allowed: Sequence[str] = (), forwarded_allow_ips: Optional[str] = None,
-        setup: Optional[SetupState] = None) -> None:
+        setup: Optional[SetupState] = None, reload: Optional[Callable[[], Config]] = None) -> None:
     """Serve until interrupted. Raises ``ValueError`` for a ``host`` that cannot be bound (every address, with no
     ``allowed`` host) and ``ConfigError`` when no administrator exists. ``allowed`` are the extra ``Host`` names the
     server answers to; ``forwarded_allow_ips`` the proxies whose ``X-Forwarded-*`` headers are believed (none by
@@ -105,15 +104,23 @@ def run(config: Config, host: str, port: int, settings_path: Optional[Path], sta
             password = secrets.token_urlsafe(12)
             auth.accounts.store.add(DEMO_USER, "admin", password)
             announce(f"Demo login: user {DEMO_USER}, password {password} (synthetic data; valid until you stop it)")
-        if setup is None or not setup.mode:
-            require_administrator(auth.accounts.store, directory)
-        elif has_administrator(auth.accounts.store):
-            announce("Not set up: log in as an administrator in a browser to finish the setup.")
-        else:
-            announce(f"Not set up: open the server in a browser to finish the setup with this token: {setup.token}"
-                     if setup.token_shown else
-                     f"Not set up: open the server in a browser to finish the setup; the token is the value of "
-                     f"{SETUP_TOKEN_VAR}.")
+        administrator = has_administrator(auth.accounts.store)
+        if setup is None and not administrator:       # settings but nobody to log in: the first administrator only
+            setup = SetupState(MODE_ADMIN, "no_admin", setup_token(), site=config.site)
+        if setup is not None:
+            setup.reload = reload
+        if setup is not None and setup.mode == MODE_ADMIN:
+            how = f"with this token: {setup.token}" if setup.token_shown else f"with the token in {SETUP_TOKEN_VAR}"
+            announce(f"No administrator yet: open the server in a browser and create one {how} "
+                     f"(or run `hlp web-user add NAME --role admin --data-dir {directory}` and restart).")
+        elif setup is not None and setup.mode:
+            if administrator:
+                announce("Not set up: log in as an administrator in a browser to finish the setup.")
+            else:
+                announce(f"Not set up: open the server in a browser to finish the setup with this token: {setup.token}"
+                         if setup.token_shown else
+                         f"Not set up: open the server in a browser to finish the setup; the token is the value of "
+                         f"{SETUP_TOKEN_VAR}.")
         app = create_app(config, settings_path, directory, auth=auth, demo=demo,
                          hosts=allowed_hosts(host, port, allowed), setup=setup)
         if not is_loopback(host):

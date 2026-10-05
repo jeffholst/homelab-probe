@@ -20,11 +20,20 @@ mode every endpoint answers 503 ``not_configured`` except the public ones and th
   not follow redirects (a redirect would carry the key to another host), use a short timeout, and answer with fixed
   text only.
 
+* **Finishing.** ``/finish`` checks that the draft has passed the connection test, validates the first administrator,
+  writes the files (``setup.apply``: ``.env``, ``hlp.toml``, ``snapshots/``, and ``certs/controller.pem`` for a pinned
+  certificate), creates the administrator, reloads the configuration, starts the controller service and leaves the
+  setup mode, all without a restart. When the files cannot be written (a read-only volume, a settings file named
+  elsewhere, settings that the environment sets) nothing is written and the answer is the finished ``.env`` and a
+  compose snippet to copy, with a placeholder where the API key goes: the key is never returned. A server that has
+  settings but no administrator is in the **admin mode**: the token may create the first administrator, and only that.
+
 Every step is an audit entry (``setup.*``) with the address of the controller and never a key or a token.
 """
 
 import contextlib
 import dataclasses
+import json
 import logging
 import math
 import os
@@ -42,21 +51,27 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .. import config as config_module
 from .. import logs, tlsprobe
-from ..accounts import AccountError, AccountStore
+from .. import setup as setup_engine
+from ..accounts import AccountError, AccountStore, check_password_policy, check_username
 from ..client import UniFiAPIError, UniFiClient
-from ..config import Config, ConfigError
+from ..config import KNOWN_VARIABLES, Config, ConfigError
 from ..diagnose.areas import AREA_NAMES
-from ..doctor import check_controller, exit_failed
+from ..doctor import check_controller, check_notifications, exit_failed
 from ..documents import diagnose_document, info_document
 from ..settings import DiagnoseSettings
 from ..setup import validate_field
 from ..util import printable
 from .auth import address_of, admin, audit_event, setup_ok
 from .errors import ApiError, from_controller
+from .service import ControllerService
 
 _log = logging.getLogger(__name__)
 API = "/api/v1"
-MODE_SETUP = "setup"
+MODE_SETUP, MODE_ADMIN = "setup", "admin"
+ADMIN_MODE_STEPS = frozenset({"status", "finish"})       # what the admin mode offers: the first administrator only
+NOTIFY_NAMES = tuple(name for name in KNOWN_VARIABLES if name.startswith("NOTIFY_"))
+CERT_DIR, CERT_FILE = "certs", "controller.pem"           # in the data directory: the pinned certificate
+MAX_NOTIFY_VALUE = 1024
 TOKEN_HEADER = "x-setup-token"
 SETUP_ACTOR = "(setup)"
 MIN_TOKEN_LENGTH = 16
@@ -85,6 +100,7 @@ class Draft:
     certificate: Optional[tlsprobe.Certificate] = None      # the last one fetched
     problem: str = ""                                       # why it would not be accepted (a tlsprobe reason), or ""
     connection_ok: Optional[bool] = None                    # the last test of the connection, if any
+    notify: Dict[str, str] = field(default_factory=dict, repr=False)      # NOTIFY_* settings (secrets)
 
 
 class SetupState:
@@ -93,8 +109,14 @@ class SetupState:
     def __init__(self, mode: Optional[str], reason: str, token: Optional[str] = None, *,
                  site: str = config_module.DEFAULT_SITE, allow_public: bool = False,
                  resolver: tlsprobe.Resolver = tlsprobe.system_resolver,
-                 client_factory: Optional[Callable[[Config], UniFiClient]] = None) -> None:
+                 client_factory: Optional[Callable[[Config], UniFiClient]] = None,
+                 reload: Optional[Callable[[], Config]] = None,
+                 service_factory: Optional[Callable[[Config], ControllerService]] = None,
+                 env_named: bool = False) -> None:
         self.mode, self.reason = mode, reason
+        self.reload = reload                  # the configuration as the server reads it (set by the runner)
+        self.service_factory = service_factory
+        self.env_named = env_named            # the settings file is named by --env-file or HLP_ENV
         self.token_shown = token is None                    # a token the operator chose is not repeated on the console
         self.token = token or new_token()
         self.allow_public = allow_public
@@ -116,7 +138,7 @@ class SetupState:
         return {"mode": self.mode, "reason": self.reason, "unverified_phrase": UNVERIFIED_PHRASE,
                 "draft": {"url": draft.url, "site": draft.site, "api_key_set": bool(draft.api_key),
                           "verify": draft.verify, "certificate": certificate,
-                          "connection_ok": draft.connection_ok}}
+                          "connection_ok": draft.connection_ok, "notify": sorted(draft.notify)}}
 
     def update(self, body: "DraftBody") -> List[str]:
         """Apply the fields of ``body`` that are set, all or nothing. Returns the names of the settings that changed;
@@ -145,12 +167,37 @@ class SetupState:
                 if verify != new.verify:
                     new.verify, new.connection_ok = verify, None
                     changed.append("UNIFI_VERIFY_SSL")
+            if body.notify is not None:
+                notify = self._notify(new.notify, body.notify)
+                if notify != new.notify:
+                    new.notify = notify
+                    changed.append("NOTIFY_*")
             if new.api_key and new.api_key != self.draft.api_key:
                 logs.register_secrets(new.api_key)
+            logs.register_secrets(*new.notify.values())
             self.draft = new
             if changed:
                 self.generation += 1
             return changed
+
+    @staticmethod
+    def _notify(current: Dict[str, str], given: Dict[str, Optional[str]]) -> Dict[str, str]:
+        """``current`` with the NOTIFY_* settings of ``given`` applied (a blank value removes one), checked together
+        with the rules of the commands. The message of a failed check never repeats a value."""
+        merged = dict(current)
+        for name, value in given.items():
+            text = (value or "").strip()
+            if name not in NOTIFY_NAMES or len(text) > MAX_NOTIFY_VALUE:
+                raise ApiError(422, "invalid_setting", "That is not a notification setting, or its value is too long.",
+                               setting="NOTIFY_*")
+            if text:
+                merged[name] = text
+            else:
+                merged.pop(name, None)
+        problem = validate_field(dict(merged), "NOTIFY_*")
+        if problem is not None:
+            raise ApiError(422, "invalid_setting", problem, setting="NOTIFY_*")
+        return merged
 
     @staticmethod
     def _valid(name: str, value: str) -> str:
@@ -218,7 +265,7 @@ class SetupState:
             try:
                 config = config_module.build_config({
                     "UNIFI_URL": draft.url, "UNIFI_API_KEY": draft.api_key, "UNIFI_SITE_ID": draft.site,
-                    "UNIFI_VERIFY_SSL": verify, "UNIFI_TIMEOUT": str(CONNECTION_TIMEOUT)})
+                    "UNIFI_VERIFY_SSL": verify, "UNIFI_TIMEOUT": str(CONNECTION_TIMEOUT), **draft.notify})
             except ConfigError:
                 raise ApiError(422, "invalid_setting", "The settings typed so far cannot be used together.") from None
             yield config, generation
@@ -282,11 +329,93 @@ def _actor(request: Request) -> str:
     return session.username if session is not None else SETUP_ACTOR
 
 
-def _state(request: Request) -> SetupState:
+def _state(request: Request, step: str) -> SetupState:
     state: Optional[SetupState] = request.app.state.setup
     if state is None:
         raise ApiError(404, "no_setup", "This server has no guided setup.")
+    if state.mode == MODE_ADMIN and step not in ADMIN_MODE_STEPS:
+        raise ApiError(409, "step_unavailable", "This server has its settings: only the first administrator is "
+                       "missing, and that is the one step available.")
     return state
+
+
+# -- finishing ------------------------------------------------------------------------------------------------
+
+def _credentials(store: AccountStore, body: "FinishBody", needs_admin: bool) -> Optional[Tuple[str, str]]:
+    """The validated (username, password) of the first administrator, None when one exists already. Everything is
+    checked before anything is written."""
+    if not needs_admin:
+        if body.username or body.password:
+            raise ApiError(422, "admin_exists", "An administrator exists already.")
+        return None
+    if not body.username or not body.password:
+        raise ApiError(422, "admin_required", "Choose a user name and a password for the first administrator.")
+    try:
+        name = check_username(body.username)
+        check_password_policy(body.password)
+        taken = store.get(name) is not None
+    except AccountError as error:
+        raise ApiError(422, "invalid_admin", printable(str(error))) from None
+    if taken:
+        raise ApiError(422, "invalid_admin", "That user name is taken.")
+    return name, body.password
+
+
+def _compose_snippet(values: Dict[str, str]) -> str:
+    """The settings as the ``environment`` of a compose service (``$`` doubled: compose would expand it)."""
+    lines = ["services:", "  hlp:", "    environment:"]
+    lines += [f"      {name}: {json.dumps(value.replace('$', '$$'))}" for name, value in values.items()]
+    return "\n".join(lines) + "\n"
+
+
+def _fallback(state: SetupState, reason: str, values: Dict[str, str], detail: str = "",
+              names: Optional[List[str]] = None) -> Dict[str, Any]:
+    """What to do by hand when the settings cannot be saved here: the finished ``.env`` and a compose snippet, with a
+    placeholder where the API key goes (the key is never sent back) and, for a pinned certificate, the certificate to
+    save and a path to put in its place."""
+    shown = {**values, "UNIFI_API_KEY": setup_engine.PLACEHOLDER_KEY}
+    pinned = state.draft.verify == "pin" and state.draft.certificate is not None
+    if pinned:
+        shown["UNIFI_VERIFY_SSL"] = "/path/to/controller.pem"
+    return {"finished": False, "written": False, "reason": reason, "detail": detail,
+            "environment_names": names or [], "env": setup_engine.render_env(shown),
+            "compose": _compose_snippet(shown),
+            "certificate": state.draft.certificate.pem if pinned and state.draft.certificate else None}
+
+
+def _write_settings(state: SetupState, directory: Path, written: List[Dict[str, str]]) -> Optional[Dict[str, Any]]:
+    """Save the draft in ``directory``; the fallback (see ``_fallback``) instead of an answer when it cannot be
+    saved there. Nothing is written when the environment or a named settings file would win over the saved one."""
+    draft = state.draft
+    certificate = (Path(directory) / CERT_DIR / CERT_FILE).resolve()
+    values: Dict[str, str] = {
+        "UNIFI_URL": draft.url, "UNIFI_API_KEY": draft.api_key, "UNIFI_SITE_ID": draft.site,
+        "UNIFI_VERIFY_SSL": str(certificate) if draft.verify == "pin" else draft.verify, **draft.notify}
+    overridden = sorted(name for name, value in values.items()
+                        if os.environ.get(name, "").strip() not in ("", value))
+    if overridden:
+        return _fallback(state, "environment", values, names=overridden)
+    if state.env_named:
+        return _fallback(state, "env_file_named", values)
+    try:
+        steps = []
+        if draft.verify == "pin" and draft.certificate is not None:
+            steps.append(setup_engine.ensure_private_dir("setup.certificates", certificate.parent))
+            steps.append(setup_engine.write_private_file("setup.certificate", certificate, draft.certificate.pem))
+        steps += setup_engine.apply(values, directory)
+    except setup_engine.SetupError as error:
+        return _fallback(state, "not_writable", values, detail=printable(str(error)))
+    except OSError as error:
+        return _fallback(state, "not_writable", values, detail=printable(error.strerror or type(error).__name__))
+    written.extend({"id": step.id, "status": step.status, "message": step.message} for step in steps)
+    return None
+
+
+def _reload_default(directory: Path) -> Config:
+    """The configuration as the server reads it when nothing else was arranged: the ``.env`` of the data directory
+    and the environment."""
+    path = Path(directory) / config_module.DEFAULT_ENV_FILE
+    return config_module.build_config(config_module.layered_values(path if path.is_file() else None), path)
 
 
 # -- the routes -----------------------------------------------------------------------------------------------
@@ -301,6 +430,16 @@ class DraftBody(BaseModel):
     verify: Optional[Literal["true", "pin", "false"]] = None
     fingerprint: Optional[str] = Field(default=None, max_length=200, description="To accept the fetched certificate")
     confirm: Optional[str] = Field(default=None, max_length=200, description="The sentence that turns checking off")
+    notify: Optional[Dict[str, Optional[str]]] = Field(
+        default=None, max_length=32, description="NOTIFY_* settings; a blank value removes one")
+
+
+class FinishBody(BaseModel):
+    """The first administrator, needed while there is none."""
+
+    model_config = ConfigDict(extra="forbid")
+    username: Optional[str] = Field(default=None, max_length=256)
+    password: Optional[str] = Field(default=None, max_length=1024)
 
 
 def _refusal(error: tlsprobe.ProbeError) -> ApiError:
@@ -324,12 +463,12 @@ def router() -> APIRouter:
     @api.get("/status", summary="The state of the setup")
     @setup_ok
     def setup_status(request: Request) -> Dict[str, Any]:
-        return _state(request).snapshot()
+        return _state(request, "status").snapshot()
 
     @api.post("/draft", summary="Change the draft of the settings")
     @setup_ok
     def setup_draft(request: Request, body: DraftBody) -> Dict[str, Any]:
-        state = _state(request)
+        state = _state(request, "draft")
         changed = state.update(body)
         if changed:
             audit_event(request, "setup.draft_changed", _actor(request), settings=",".join(changed),
@@ -339,7 +478,7 @@ def router() -> APIRouter:
     @api.post("/certificate", summary="Fetch the certificate the controller shows")
     @setup_ok
     def setup_certificate(request: Request) -> Dict[str, Any]:
-        state = _state(request)
+        state = _state(request, "certificate")
         with state.lock:
             url = state.require(key=False).url
         try:
@@ -362,7 +501,7 @@ def router() -> APIRouter:
     @api.post("/connection", summary="Test the connection with the draft")
     @setup_ok
     def setup_connection(request: Request) -> Dict[str, Any]:
-        state = _state(request)
+        state = _state(request, "connection")
         with state.config() as (config, generation):
             try:
                 tlsprobe.resolve_target(config.controller_url, state.allow_public, state.resolver)
@@ -382,7 +521,7 @@ def router() -> APIRouter:
     @api.post("/preview", summary="Run the health checks on the draft")
     @setup_ok
     def setup_preview(request: Request) -> Dict[str, Any]:
-        state = _state(request)
+        state = _state(request, "preview")
         areas = [name for name in AREA_NAMES if name != "events"]
         with state.config() as (config, _):
             try:
@@ -398,5 +537,62 @@ def router() -> APIRouter:
         return {"areas": data["areas"], "summary": data["summary"],
                 "findings": data["findings"][:MAX_PREVIEW_FINDINGS], "total": len(data["findings"]),
                 "warnings": [state.scrub(w) for w in document.warnings]}
+
+    @api.post("/notifications", summary="Dry run of the notification destinations of the draft")
+    @setup_ok
+    def setup_notifications(request: Request) -> Dict[str, Any]:
+        state = _state(request, "notifications")
+        with state.config() as (config, _):
+            checks = check_notifications(config)
+        audit_event(request, "setup.notifications_checked", _actor(request), url=config.controller_url)
+        return {"checks": [{**c.to_dict(), "message": state.scrub(c.message), "fix": state.scrub(c.fix)}
+                           for c in checks]}
+
+    @api.post("/finish", summary="Save the settings, create the administrator and leave the setup mode")
+    @setup_ok
+    def setup_finish(request: Request, body: FinishBody) -> Dict[str, Any]:
+        state = _state(request, "finish")
+        auth = request.app.state.auth
+        directory = Path(request.app.state.state_dir or ".")
+        with state.lock:
+            if state.mode is None:
+                raise ApiError(409, "already_set_up", "This server is set up already.")
+            try:
+                needs_admin = not administrator_exists(auth.accounts.store)
+                credentials = _credentials(auth.accounts.store, body, needs_admin)
+            except AccountError:
+                raise ApiError(500, "accounts_unreadable", "The accounts file cannot be read; see the server log.") \
+                    from None
+            written: List[Dict[str, str]] = []
+            if state.mode == MODE_SETUP:
+                if state.require().connection_ok is not True:
+                    raise ApiError(409, "not_tested", "Test the connection with these settings first.")
+                fallback = _write_settings(state, directory, written)
+                if fallback is not None:
+                    audit_event(request, "setup.finish_fallback", _actor(request), reason=fallback["reason"])
+                    return fallback
+            if credentials is not None:
+                def record(user: Any) -> None:
+                    auth.audit.write("user.added", _actor(request), user=user.username, role=user.role,
+                                     address=address_of(request))
+
+                try:
+                    auth.accounts.store.add(credentials[0], "admin", credentials[1], on_change=record)
+                except AccountError:
+                    raise ApiError(500, "admin_not_created", "The settings are saved but the administrator could not "
+                                   "be created: run `hlp web-user add NAME --role admin` and restart.") from None
+            try:
+                config = (state.reload or (lambda: _reload_default(directory)))()
+            except ConfigError:
+                raise ApiError(500, "reload_failed", "The settings are saved but could not be loaded: restart the "
+                               "server.") from None
+            request.app.state.service = (state.service_factory or ControllerService)(config)
+            request.app.state.config = config
+            logs.register_secrets(*config.secret_values())
+            state.mode, state.draft = None, Draft(site=state.draft.site)
+            state.generation += 1
+        audit_event(request, "setup.finished", _actor(request), url=config.controller_url,
+                    admin_created=credentials is not None)
+        return {"finished": True, "written": written, "admin_created": credentials is not None}
 
     return api

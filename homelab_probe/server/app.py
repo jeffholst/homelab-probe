@@ -83,7 +83,9 @@ def create_app(config: Config, settings_path: Optional[Path] = None, state_dir: 
     )
     app.state.config, app.state.settings_path, app.state.state_dir = config, settings_path, state_dir
     app.state.setup = setup
-    app.state.service, app.state.demo = (None if setup else service or ControllerService(config, demo=demo)), demo
+    unconfigured = setup is not None and bool(setup.mode)         # a server in a setup mode reads no controller yet
+    app.state.service = None if unconfigured else service or ControllerService(config, demo=demo)
+    app.state.demo = demo
     app.state.auth = auth or AuthState.for_directory(state_dir or Path("."), config)
     app.add_exception_handler(ApiError, api_error_handler)   # type: ignore[arg-type]
     app.add_exception_handler(RequestValidationError, request_validation_error_handler)

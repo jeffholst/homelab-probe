@@ -931,6 +931,21 @@ def _run_serve(args: argparse.Namespace) -> int:
         raise ConfigError("`hlp serve` needs the web extra: uv run --extra web hlp.py serve "
                           "(from the project checkout), or python -m pip install 'homelab-probe[web]' "
                           f"(missing: {e.name or 'a module'})") from e
+
+    def overridden(config: Config) -> Config:
+        if args.timeout is not None:
+            config = replace(config, timeout=args.timeout)          # the command line beats .env
+        if args.parallel is not None:
+            config = replace(config, parallel=args.parallel)
+        return config
+
+    def reload() -> Config:
+        """The configuration after the guided setup saved the settings: read again the way it was at start."""
+        fresh, again, _ = resolve_config(args.env_file, args.data_dir, args.site, args.allow_public_controller)
+        if again is not None:
+            raise ConfigError("the settings are still missing")
+        return overridden(fresh)
+
     setup_state = None
     if args.demo:
         config = demo_config(args.site or "default")
@@ -940,10 +955,7 @@ def _run_serve(args: argparse.Namespace) -> int:
                                                       args.allow_public_controller)
         if setup_state is not None:
             say(f"Not configured ({problem.split('. ')[0].rstrip('.')}).", file=sys.stderr)   # the first sentence
-    if args.timeout is not None:
-        config = replace(config, timeout=args.timeout)          # the command line beats .env
-    if args.parallel is not None:
-        config = replace(config, parallel=args.parallel)
+    config = overridden(config)
     if not args.demo:
         apply_logging(config, args.verbose)
         for message in config.warnings:
@@ -955,7 +967,7 @@ def _run_serve(args: argparse.Namespace) -> int:
         + ("" if setup_state is not None else " Log in with an account made by `hlp web-user`."), file=sys.stderr)
     run(config, args.host, args.port, args.config, args.data_dir, demo=args.demo,
         announce=lambda message: say(message, file=sys.stderr), allowed=args.allowed_host,
-        forwarded_allow_ips=args.forwarded_allow_ips, setup=setup_state)
+        forwarded_allow_ips=args.forwarded_allow_ips, setup=setup_state, reload=reload)
     return 0
 
 

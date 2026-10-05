@@ -43,6 +43,29 @@
             "description": "To accept the fetched certificate",
             "title": "Fingerprint"
           },
+          "notify": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "maxProperties": 32,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "NOTIFY_* settings; a blank value removes one",
+            "title": "Notify"
+          },
           "site": {
             "anyOf": [
               {
@@ -85,6 +108,38 @@
           }
         },
         "title": "DraftBody",
+        "type": "object"
+      },
+      "FinishBody": {
+        "additionalProperties": false,
+        "description": "The first administrator, needed while there is none.",
+        "properties": {
+          "password": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          }
+        },
+        "title": "FinishBody",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -432,6 +487,72 @@
           }
         },
         "summary": "Change the draft of the settings",
+        "tags": [
+          "setup"
+        ]
+      }
+    },
+    "/api/v1/setup/finish": {
+      "post": {
+        "operationId": "setup_finish_api_v1_setup_finish_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FinishBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Setup Finish Api V1 Setup Finish Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save the settings, create the administrator and leave the setup mode",
+        "tags": [
+          "setup"
+        ]
+      }
+    },
+    "/api/v1/setup/notifications": {
+      "post": {
+        "operationId": "setup_notifications_api_v1_setup_notifications_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Setup Notifications Api V1 Setup Notifications Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Dry run of the notification destinations of the draft",
         "tags": [
           "setup"
         ]

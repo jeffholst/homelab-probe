@@ -62,11 +62,14 @@ def test_the_options_reach_the_server(configured, served, data, tmp_path, capsys
     assert "Serving on http://[::1]:9000" in capsys.readouterr().err
 
 
-def test_without_an_administrator_it_refuses_to_start_and_says_how_to_make_one(configured, served, tmp_path, capsys):
+def test_without_an_administrator_the_server_starts_in_the_admin_mode_and_says_how_to_make_one(
+        configured, served, tmp_path, capsys):
     empty = tmp_path / "empty"
-    assert cli.main(["serve", "--data-dir", str(empty)]) == 3 and served == []
+    assert cli.main(["serve", "--data-dir", str(empty)]) == 0 and len(served) == 1
+    setup = served[0][0].state.setup
     err = capsys.readouterr().err
-    assert "no administrator to log in as" in err and f"hlp web-user add NAME --role admin --data-dir {empty}" in err
+    assert setup.mode == "admin" and setup.reason == "no_admin" and served[0][0].state.service is None
+    assert f"with this token: {setup.token}" in err and f"hlp web-user add NAME --role admin --data-dir {empty}" in err
 
 
 def test_a_viewer_or_a_disabled_administrator_is_not_enough(configured, served, tmp_path, capsys):
@@ -74,15 +77,30 @@ def test_a_viewer_or_a_disabled_administrator_is_not_enough(configured, served, 
 
     viewers = tmp_path / "viewers"
     AccountStore(viewers).add("bob", "viewer", PASSWORD)
-    assert cli.main(["serve", "--data-dir", str(viewers)]) == 3
+    assert cli.main(["serve", "--data-dir", str(viewers)]) == 0
     disabled = tmp_path / "disabled"
     AccountStore(disabled).add("alice", "admin", PASSWORD)
     path = disabled / "users.json"
     document = json.loads(path.read_text())
     document["users"][0]["disabled"] = True                           # as a hand-edited file could be
     path.write_text(json.dumps(document))
-    assert cli.main(["serve", "--data-dir", str(disabled)]) == 3
-    assert capsys.readouterr().err.count("no administrator to log in as") == 2 and served == []
+    assert cli.main(["serve", "--data-dir", str(disabled)]) == 0
+    assert [app.state.setup.mode for app, _ in served] == ["admin", "admin"]
+    assert capsys.readouterr().err.count("No administrator yet") == 2
+
+
+def test_a_server_with_an_administrator_is_not_in_a_setup_mode(configured, served, data):
+    assert cli.main(["serve", "--data-dir", str(data)]) == 0
+    assert served[0][0].state.setup is None and served[0][0].state.service is not None
+
+
+def test_the_admin_mode_token_can_be_chosen_by_the_operator_and_is_then_not_printed(
+        configured, served, tmp_path, capsys, monkeypatch):
+    monkeypatch.setenv("HLP_SETUP_TOKEN", "an-operator-token-0123456789")
+    assert cli.main(["serve", "--data-dir", str(tmp_path)]) == 0
+    err = capsys.readouterr().err
+    assert served[0][0].state.setup.token == "an-operator-token-0123456789" and "an-operator-token" not in err
+    assert "with the token in HLP_SETUP_TOKEN" in err
 
 
 @pytest.mark.parametrize("host", ["0.0.0.0", "::", ""])
