@@ -201,8 +201,15 @@ def site_snapshots(base: Path, site: Dict[str, Any]) -> List[Path]:
 
 
 def is_snapshot_name(name: str) -> bool:
-    """Is ``name`` a bare file name of the kind ``snapshot`` writes (no directory part, nothing else)?"""
-    return bool(_FILE_RE.match(name)) and "/" not in name and "\\" not in name
+    """Is ``name`` a bare file name of the kind ``snapshot`` writes (no directory part, a real date and time)?"""
+    match = _FILE_RE.fullmatch(name)                   # fullmatch: ``$`` alone would let a trailing newline through
+    if not match or "/" in name or "\\" in name:
+        return False
+    try:
+        datetime.strptime(match.group(1), "%Y%m%d-%H%M%S")        # a real date and time, as `save_snapshot` writes
+    except ValueError:
+        return False
+    return True
 
 
 def find_snapshot(base: Path, site: Dict[str, Any], name: str) -> Optional[Path]:

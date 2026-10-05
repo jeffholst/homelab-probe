@@ -29,6 +29,7 @@ from ..history import (
     site_snapshots,
     snapshot_summary,
 )
+from ..setup import SetupError, ensure_private_dir
 from . import apischema
 from .auth import admin, audit_event, local_write
 from .errors import ApiError, from_controller
@@ -74,6 +75,31 @@ def _unreadable(error: Exception) -> ApiError:
     return ApiError(500, "snapshots_unreadable", "The saved snapshots cannot be read; see the server log.")
 
 
+def _unsafe() -> ApiError:
+    return ApiError(500, "snapshots_unsafe", "The snapshots directory is a symbolic link, which is left alone: use a "
+                    "real directory in the data directory.")
+
+
+def refuse_links(*directories: Path) -> None:
+    """The snapshots directory and the site's are never followed through a symbolic link: a link could lead a logged-in
+    request to read or write outside the data directory (the setup refuses the same)."""
+    if any(directory.is_symlink() for directory in directories):
+        raise _unsafe()
+
+
+def plain(files: List[Path]) -> List[Path]:
+    """``files`` without the symbolic links among them: a link in the directory is not a snapshot of this server."""
+    return [path for path in files if not path.is_symlink()]
+
+
+def errors(*codes: int) -> Dict[int | str, Dict[str, Any]]:
+    """The error responses of a route, for the OpenAPI document."""
+    text = {404: "No such site or snapshot", 422: "A parameter is not valid", 500: "The snapshots cannot be used",
+            502: "The controller could not be read", 504: "The controller timed out"}
+    return {code: {"description": text[code], "content": {"application/json": {"schema": ERROR_SCHEMA}}}
+            for code in codes}
+
+
 class SaveBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     keep: Optional[int] = Field(default=None, ge=1, le=MAX_KEEP, description="Afterwards keep only the newest N")
@@ -84,14 +110,16 @@ def router() -> APIRouter:
 
     def listed(request: Request, site: str) -> tuple[Dict[str, Any], List[Path]]:
         record = site_of(request, checked_site(site))
+        base = snapshot_base(request)
+        refuse_links(base, site_dir(base, record))
         try:
-            return record, site_snapshots(snapshot_base(request), record)
+            return record, plain(site_snapshots(base, record))
         except ConfigError as error:
             raise _unreadable(error) from error
 
     @api.get("/snapshots", summary="The saved snapshots of a site, newest first",
              responses={200: {"description": "The newest snapshots", "content": {"application/json": {
-                 "schema": LIST_SCHEMA}}}})
+                 "schema": LIST_SCHEMA}}}, **errors(404, 422, 500, 502, 504)})
     def snapshots_list(request: Request, site: SiteP, limit: LimitQ = 50) -> Dict[str, Any]:
         record, files = listed(request, site)
         return {"site": {"id": str(record.get("id") or ""), "name": str(record.get("name") or "")},
@@ -100,8 +128,7 @@ def router() -> APIRouter:
     @api.post("/snapshots", dependencies=[Depends(admin)], status_code=201,
               summary="Save a snapshot of the network now (a local write)",
               responses={201: {"description": "The snapshot that was saved", "content": {"application/json": {
-                  "schema": SAVED_SCHEMA}}}, 500: {"description": "The file could not be written", "content": {
-                      "application/json": {"schema": ERROR_SCHEMA}}}})
+                  "schema": SAVED_SCHEMA}}}, **errors(404, 422, 500, 502, 504)})
     @local_write
     def snapshots_save(request: Request, site: SiteP, body: SaveBody) -> JSONResponse:
         name = checked_site(site)
@@ -115,11 +142,14 @@ def router() -> APIRouter:
         base = snapshot_base(request)
         directory = site_dir(base, record["site"])
         with _SAVE_LOCK:
+            refuse_links(base, directory)
             try:
+                ensure_private_dir("snapshots", base)                  # owner-only, as the setup makes it
+                ensure_private_dir("snapshots.site", directory)
                 path = save_snapshot(record, None, directory)
                 gone = prune(directory, body.keep, protect=path, files=site_snapshots(base, record["site"])) \
                     if body.keep else []
-            except (OSError, ConfigError) as error:
+            except (OSError, ConfigError, SetupError) as error:
                 raise ApiError(500, "snapshot_not_written", "The snapshot could not be written; see the server log.") \
                     from error
         summary = snapshot_summary(path)
@@ -132,7 +162,7 @@ def router() -> APIRouter:
              responses={200: {"description": "The comparison with when it was read", "content": {
                  "application/json": {"schema": apischema.response_schema("diff", {
                      "old": {"type": "string"}, "new": {"type": ["string", "null"]}})}}},
-                 404: {"description": "No such snapshot", "content": {"application/json": {"schema": ERROR_SCHEMA}}}})
+                 **errors(404, 422, 500, 502, 504)})
     def snapshots_diff(request: Request, site: SiteP, old: NameQ = None, new: NameQ = None,
                        refresh: RefreshQ = False) -> JSONResponse:
         record, files = listed(request, site)
@@ -140,7 +170,7 @@ def router() -> APIRouter:
 
         def pick(name: Optional[str]) -> Path:
             found = find_snapshot(base, record, name) if name else (files[-1] if files else None)
-            if found is None:
+            if found is None or found.is_symlink():
                 raise ApiError(404, "snapshot_not_found", "No such saved snapshot for this site.")
             return found
 

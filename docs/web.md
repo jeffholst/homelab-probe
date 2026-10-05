@@ -153,6 +153,7 @@ The saved snapshots of [`snapshot` and `diff`](inventory.md#snapshots-and-diff),
 
 - **Names, not paths.** A snapshot is named by its bare file name from the list. A name with a directory part, a name that is not the kind `snapshot` writes, and the snapshot of another site are a `404 snapshot_not_found`; no path a caller sends reaches the disk.
 - **The site is looked up first** (one cached request), because the directory is named by the site's id: when the controller cannot be read, these routes answer `502` or `504` like the other site routes.
+- **Links and permissions.** A `snapshots/` directory or a site directory that is a symbolic link is never followed (`500 snapshots_unsafe`), and a snapshot file that is a link is neither listed nor reachable. A save makes the directories owner-only (`0700`, tightening ones that were not), like the setup does. A name must be a real date and time, as `snapshot` writes it.
 - **The write** is refused by `serve --read-only` (`403 read_only`), is audited as `snapshot.saved` (the file name and the counts) and fails with a fixed `500 snapshot_not_written` when the disk does. The file is owner-only in a `0700` directory, as the command writes it.
 
 ### How the server reads the controller

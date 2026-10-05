@@ -329,3 +329,82 @@ def test_a_snapshot_is_of_now_not_of_what_the_cache_still_holds(tmp_path):
     name = admin.post(LIST, json={}).json()["snapshot"]["name"]
     record = history.load_snapshot(tmp_path / "snapshots" / "site-1" / name)
     assert "Renamed Device" in [d["name"] for d in record["devices"]]
+
+
+# -- symbolic links, private directories, impossible names, the OpenAPI document --------------------------------
+
+def test_a_snapshots_directory_that_is_a_link_is_never_followed(admin, tmp_path):
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (tmp_path / "snapshots").symlink_to(elsewhere)
+    for response in (admin.get(LIST), admin.get(DIFF), save(admin)):
+        assert response.status_code == 500 and response.json()["error"] in ("snapshots_unsafe", "snapshot_not_written")
+        assert str(tmp_path) not in response.text
+    assert list(elsewhere.iterdir()) == []                                 # nothing was written through the link
+
+
+def test_a_site_directory_that_is_a_link_is_never_followed(admin, tmp_path):
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (tmp_path / "snapshots").mkdir()
+    (tmp_path / "snapshots" / "site-1").symlink_to(elsewhere)
+    assert admin.get(LIST).json()["error"] == "snapshots_unsafe"
+    assert save(admin).json()["error"] == "snapshots_unsafe"
+    assert list(elsewhere.iterdir()) == []
+
+
+def test_a_snapshot_file_that_is_a_link_is_neither_listed_nor_addressable(admin, tmp_path):
+    real = old_file(tmp_path, "20200101-000000Z", directory=tmp_path / "outside")
+    directory = tmp_path / "snapshots" / "site-1"
+    directory.mkdir(parents=True)
+    (directory / real.name).symlink_to(real)
+    assert admin.get(LIST).json()["items"] == []
+    assert admin.get(DIFF, params={"old": real.name}).status_code == 404
+
+
+def test_saving_makes_the_directories_owner_only_and_tightens_ones_that_were_not(admin, tmp_path):
+    base = tmp_path / "snapshots"
+    (base / "site-1").mkdir(parents=True)
+    os.chmod(base, 0o755)
+    os.chmod(base / "site-1", 0o755)
+    assert save(admin).status_code == 201
+    assert stat.S_IMODE(os.stat(base).st_mode) == 0o700 and stat.S_IMODE(os.stat(base / "site-1").st_mode) == 0o700
+
+
+def test_a_directory_that_cannot_be_made_private_is_a_500_with_a_fixed_message(admin, tmp_path, monkeypatch):
+    from homelab_probe.setup import SetupError
+
+    def refuse(step, path):
+        raise SetupError(f"{path} is readable by others and could not be made private")
+
+    monkeypatch.setattr(snapshots_api, "ensure_private_dir", refuse)
+    response = save(admin)
+    assert response.status_code == 500 and response.json()["error"] == "snapshot_not_written"
+    assert str(tmp_path) not in response.text
+
+
+@pytest.mark.parametrize("name, ok", [
+    ("snapshot-20261001-011530Z.json", True), ("snapshot-20261001-011530Z-2.json", True),
+    ("snapshot-20261001-011530.json", True),                                  # an earlier version's local time
+    ("snapshot-20261399-250000Z.json", False), ("snapshot-20260230-000000Z.json", False),
+    ("snapshot-20261001-246000Z.json", False), ("snapshot-2026-10-01.json", False), ("x/snapshot-20261001-011530Z.json", False),
+    ("snapshot-20261001-011530Z.json\n", False),
+])
+def test_a_name_is_a_real_date_and_time_of_the_kind_snapshot_writes(name, ok):
+    assert history.is_snapshot_name(name) is ok
+
+
+def test_a_file_with_an_impossible_date_cannot_be_reached_through_a_guessed_name(admin, tmp_path):
+    directory = tmp_path / "snapshots" / "site-1"
+    directory.mkdir(parents=True)
+    guessed = directory / "snapshot-20261399-250000Z.json"
+    guessed.write_text(old_file(tmp_path, "20200101-000000Z", directory=tmp_path / "source").read_text())
+    assert admin.get(DIFF, params={"old": guessed.name}).status_code == 404
+    assert admin.get(LIST).json()["items"] == []
+
+
+def test_every_error_a_snapshot_route_can_return_is_in_the_openapi_document(app):
+    spec = app.openapi()["paths"]
+    for path, method in (("/api/v1/unifi/sites/{site}/snapshots", "get"), ("/api/v1/unifi/sites/{site}/snapshots", "post"),
+                         ("/api/v1/unifi/sites/{site}/diff", "get")):
+        assert {"404", "422", "500", "502", "504"} <= set(spec[path][method]["responses"]), (path, method)
