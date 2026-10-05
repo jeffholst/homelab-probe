@@ -404,3 +404,8 @@ def test_a_key_of_any_length_is_kept_out_of_the_messages(key):
     assert problems and (key not in shown if len(key) >= 4 else
                          "would have repeated the API key" in shown and "/x" not in shown)
     assert key not in (setup.validate_field(values, "UNIFI_SITE_ID") or "") or len(key) < 4
+
+
+def test_a_file_that_already_ends_with_a_blank_line_gets_no_second_one():
+    assert setup.render_env({"UNIFI_SITE_ID": "lab"}, "A=1\n\n") == "A=1\n\n# Added by hlp init\nUNIFI_SITE_ID=lab\n"
+    assert setup.render_env({"UNIFI_SITE_ID": "lab"}, "A=1\n   \n") == "A=1\n   \n# Added by hlp init\nUNIFI_SITE_ID=lab\n"
