@@ -25,6 +25,7 @@ Homelab Probe is a fork of [ericfitz/unifi-clients-export](https://github.com/er
 | `new-clients` | List clients that are in no client group, to spot new devices | [details](docs/inventory.md#new-clients) |
 | `audit` | Configuration audit: Wi-Fi networks that are open or WPA2-only, default device names, firmware updates, unnamed clients | [details](docs/diagnose.md#audit) |
 | `doctor` | Check the installation and the settings, and that the controller answers | [details](docs/configuration.md#checking-your-setup-doctor) |
+| `init` | Guided first-time setup: asks for the controller address and API key, writes `.env`, `hlp.toml` and `snapshots/` for you | [details](docs/configuration.md#guided-setup-init) |
 | `completion` | Print a shell completion script for bash, zsh or fish | [details](docs/configuration.md#shell-completion) |
 | `serve` | Serve the read-only web API on this machine (needs the web extra; login required; this machine only unless told otherwise) | [details](docs/web.md#running-the-server-serve) |
 | `web-user` | Manage the accounts of the web interface: users, roles and passwords | [details](docs/web.md#managing-accounts-web-user) |
@@ -119,6 +120,7 @@ uv run hlp.py events --since 7d --severity high    # recent serious events
 uv run hlp.py client desktop                       # one client: attachment, link, findings
 uv run hlp.py new-clients                          # clients in no client group
 uv run hlp.py audit                                # settings that are probably not what you want
+uv run hlp.py init                                 # first time? answer a few questions; it writes .env for you
 uv run hlp.py doctor                               # is the tool set up right? (--offline: no controller)
 uv run hlp.py completion zsh                       # a completion script for bash, zsh or fish
 uv run --extra web hlp.py serve                    # the read-only web API on 127.0.0.1:8787
