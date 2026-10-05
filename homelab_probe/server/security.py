@@ -1,16 +1,19 @@
 """What keeps the server from being reached the wrong way (the login itself is in ``auth``).
 
-* It binds only a loopback address (``require_loopback``): nobody else on the network can connect.
-* A ``Host`` header that is not the server's own address is refused (``TrustedHostMiddleware``): a page on another
-  site cannot reach it through DNS rebinding.
+* It binds a loopback address unless told otherwise (``--host``), and a bind to every address needs at least one
+  ``--allowed-host`` (``util.check_bind``).
+* A ``Host`` header that is not one of the names it is reached by is refused (``TrustedHostMiddleware``; the list is
+  never a wildcard): a page on another site cannot reach it through DNS rebinding.
 * There is no CORS middleware, so a browser never lets another origin read an answer.
 * Every response, whatever its status, carries a strict content-security policy and the headers below
   (``SecurityHeaders``); the API has no HTML, so the policy forbids everything.
 """
 
-from typing import List, Tuple
+from typing import List, Sequence, Tuple
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
+
+from ..util import bind_host_name, is_wildcard_bind, parse_allowed_host
 
 CSP = ("default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; "
        "img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'")
@@ -24,12 +27,22 @@ SECURITY_HEADERS: List[Tuple[bytes, bytes]] = [
 ]
 
 
-def allowed_hosts(host: str, port: int) -> List[str]:
-    """The ``Host`` header values the server answers to: its own bind address and the loopback names. (Starlette
-    compares the host part and ignores the port.)"""
+def _forms(host: str) -> List[str]:
+    """The ways a ``Host`` header can spell ``host`` (an IPv6 address with and without its brackets)."""
+    bare = host.strip("[]")
+    return [f"[{bare}]", bare] if ":" in bare else [host]
+
+
+def allowed_hosts(host: str, port: int, extra: Sequence[str] = ()) -> List[str]:
+    """The ``Host`` header values the server answers to: the loopback names, its own bind address (unless that is
+    "every address") and the names given with ``--allowed-host``. Never a wildcard. (Starlette compares the host part
+    and ignores the port.) Raises ``ValueError`` for a name that is a wildcard or not a host at all."""
     names = ["localhost", "127.0.0.1", "[::1]", "::1"]
-    if host not in names and host != "0.0.0.0":
-        names.append(host if ":" not in host else f"[{host}]")
+    wanted = ([] if is_wildcard_bind(host) else [bind_host_name(host)]) + [parse_allowed_host(name) for name in extra]
+    for name in wanted:                # checked here, not only by the command: a caller that skips argparse is safe too
+        for form in _forms(name):
+            if form not in names:
+                names.append(form)
     return names
 
 

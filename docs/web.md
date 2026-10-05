@@ -16,26 +16,63 @@ the command line never needs them. For a standalone installation, use
 
 Without the extra it exits with code 3 and says what to install. Options:
 
-- **`--host ADDRESS`** (default `127.0.0.1`): only a loopback address (`127.0.0.1`, `::1`, `localhost`) is accepted for now; anything else is a usage error until the options that make a network bind safe exist.
+- **`--host ADDRESS`** (default `127.0.0.1`, this machine only): another address makes the server reachable from the network, see [Reaching it from other machines](#reaching-it-from-other-machines).
+- **`--allowed-host NAME`** (repeatable): a name the server is reached by, such as `hlp.lan` or `192.168.1.5` (a port is ignored). A request whose `Host` header is none of these, the loopback names and the bind address is refused. **Required with `--host 0.0.0.0` or `::`**. Wildcards, schemes and paths are usage errors: the list is never open.
+- **`--forwarded-allow-ips IPS`**: believe `X-Forwarded-For` and `X-Forwarded-Proto` from these reverse proxies (addresses or networks, comma-separated) and from nobody else; by default from none. `*` and a network of prefix length 0 (`0.0.0.0/0`, `::/0`), which also mean "everyone", are refused.
 - **`--port PORT`** (default `8787`).
 - **`--data-dir DIR`** (default: the current directory): where the server keeps its own files; used by the stages that follow.
 - **`--config FILE`**: the `hlp.toml` with the `diagnose` thresholds and ignore rules, as for the other commands.
 
-What it answers: `/healthz` (is the process up; no data and no controller read), `/readyz` (can the controller be read: 200 or 503 and `{"ready": ...}`, the reason is in the server log), `/api/v1/meta` (version, and that login is required), then, after a login, `/api/v1/platforms` and `/api/v1/openapi.json` (the API description, built into the server; the Swagger and ReDoc pages are off because they load scripts from a CDN). The report and schema routes answer only `GET`; the only `POST`s are the login and the logout (CSRF below). The reports are under `/api/v1/unifi`.
+What it answers: `/healthz` (is the process up; no data and no controller read), `/readyz` (can the controller be read: 200 or 503 and `{"ready": ...}`, the reason is in the server log), `/api/v1/meta` (version, that login is required, and whether this request came over HTTPS or from a loopback name, which is what a login page needs to decide on a warning), then, after a login, `/api/v1/platforms` and `/api/v1/openapi.json` (the API description, built into the server; the Swagger and ReDoc pages are off because they load scripts from a CDN). The report and schema routes answer only `GET`; the only `POST`s are the login and the logout (CSRF below). The reports are under `/api/v1/unifi`.
 
-**Every route except five needs a login.** Only `/`, `/healthz`, `/readyz` (yes or no, nothing more), `/api/v1/meta` and the login itself answer without one, from `127.0.0.1` as well. A route nobody declared anything about needs a login too (the rule is the default of the whole application, and a test pins the list of public routes). The server **refuses to start without an enabled administrator** (`hlp web-user add NAME --role admin`), and for now it binds only a loopback address. What protects it:
+**Every route except five needs a login.** Only `/`, `/healthz`, `/readyz` (yes or no, nothing more), `/api/v1/meta` and the login itself answer without one, from `127.0.0.1` as well. A route nobody declared anything about needs a login too (the rule is the default of the whole application, and a test pins the list of public routes). The server **refuses to start without an enabled administrator** (`hlp web-user add NAME --role admin`), and by default it binds only a loopback address (the options below change that on purpose). What protects it:
 
 | Protection | What it does |
 | ---------- | ------------ |
 | Login | A session cookie from `POST /api/v1/auth/login` (below) for everything but the five routes |
-| Loopback bind | Nobody else on the network can connect (for now) |
-| `Host` check | A request whose `Host` header is not the server's own address (the loopback names and the bind address) is refused with 400, so a web page cannot reach it through DNS rebinding |
+| Loopback bind | By default only this machine can connect; another `--host` is your decision (below) |
+| `Host` check | A request whose `Host` header is not one of the loopback names, the bind address or an `--allowed-host` is refused with 400, so a web page cannot reach it through DNS rebinding. The list is never a wildcard: an entry such as `*` or `*.lan` is refused wherever it comes from |
 | CSRF | Every `POST`, `PUT`, `PATCH` and `DELETE` needs an `Origin` that names the server's own `Host` **and** the session's token in `X-CSRF-Token`; its body must be JSON. A script that sends neither is meant to use the command line |
 | No CORS | A browser never lets another site read an answer |
 | Headers on every response | A strict content-security policy (`default-src 'none'`), `nosniff`, no referrer, no framing, `no-store`, no server banner |
 | GET only, no passthrough | No report route accepts a path to forward to the controller, and nothing writes to it |
 | Request log | One `INFO` record per request (`server.request`, [logging](logging.md)): method, route **template** (never the path asked for, which can hold a MAC address), status and milliseconds, with a request id that is also sent back as `X-Request-ID` (an id a client sends is ignored) |
-| No proxy headers | The address of a client is the connection's own; `X-Forwarded-For` is not believed (the throttle and the audit log depend on it) |
+| Proxy headers only from named proxies | The address of a client is the connection's own unless the connection comes from a proxy named with `--forwarded-allow-ips`; `X-Forwarded-For` from anyone else is ignored (the throttle and the audit log depend on it) |
+
+### Reaching it from other machines
+
+A login sends a password, and with plain HTTP anyone on the path can read it. So there are two good ways to reach the server from another machine, and one you should not use:
+
+1. **An SSH tunnel** (nothing to configure on the server): `ssh -L 8787:127.0.0.1:8787 user@server`, then browse to `http://localhost:8787`.
+2. **A reverse proxy that terminates TLS**, on the same machine or another one. Name it with `--forwarded-allow-ips` so the client address and the HTTPS scheme come through (the cookie becomes `Secure` with the `__Host-` prefix), and name the host your users type with `--allowed-host`:
+
+   ```bash
+   uv run --extra web hlp.py serve --forwarded-allow-ips 127.0.0.1 --allowed-host hlp.example.lan
+   ```
+
+   Caddy (certificates included):
+
+   ```text
+   hlp.example.lan {
+       reverse_proxy 127.0.0.1:8787
+   }
+   ```
+
+   nginx:
+
+   ```text
+   location / {
+       proxy_pass http://127.0.0.1:8787;
+       proxy_set_header Host $host;
+       proxy_set_header X-Forwarded-For $remote_addr;
+       proxy_set_header X-Forwarded-Proto $scheme;
+   }
+   ```
+
+   The proxy must **replace** (not append to) `X-Forwarded-For`, as above, and must pass `Host` and the browser's `Origin` unchanged.
+3. **Not recommended: plain HTTP on the network** (`--host 192.168.1.5` or `--host 0.0.0.0 --allowed-host ...` with no proxy). The server says so when it starts, and `/api/v1/meta` returns `"https": false, "loopback": false` so a web app can show a banner above the login form; the password travels in clear text.
+
+Binding every address (`0.0.0.0`, `::`) is only accepted with at least one `--allowed-host`; binding one address or name adds it to the allowed hosts by itself.
 
 ### Logging in: `/api/v1/auth`
 

@@ -92,3 +92,98 @@ def test_record_for_looks_up_by_an_id_that_may_be_missing():
     assert record_for(table, "unknown") == {} and record_for(table, None) == {} and record_for(table, 5) == {}
     assert record_for(table, "empty") == {}
     assert record_for({}, "sw1") == {}
+
+
+# -- the bind, allowed-host and proxy helpers of `serve` (issue #184) -------------------------------------------
+
+@pytest.mark.parametrize("host, expected", [("0.0.0.0", True), ("::", True), ("[::]", True), ("", True), (" 0.0.0.0 ", True),
+                                            ("0", True), ("127.0.0.1", False), ("hlp.lan", False), ("::1", False)])
+def test_which_hosts_mean_every_address(host, expected):
+    from homelab_probe.util import is_wildcard_bind
+
+    assert is_wildcard_bind(host) is expected
+
+
+@pytest.mark.parametrize("host, expected", [("127.0.0.1", True), ("127.9.9.9", True), ("::1", True), ("[::1]", True),
+                                            ("localhost", True), ("LocalHost", True), ("0.0.0.0", False),
+                                            ("192.168.1.5", False), ("example.com", False), ("", False)])
+def test_which_hosts_are_loopback(host, expected):
+    from homelab_probe.util import is_loopback
+
+    assert is_loopback(host) is expected
+
+
+@pytest.mark.parametrize("text, expected", [("HLP.lan", "hlp.lan"), ("hlp.lan:8787", "hlp.lan"), ("192.168.1.5", "192.168.1.5"),
+                                            ("192.168.1.5:80", "192.168.1.5"), ("[FD00::5]", "[fd00::5]"),
+                                            ("[fd00:0:0::5]:9", "[fd00::5]"), (" a-b.c ", "a-b.c"), ("x", "x")])
+def test_allowed_hosts_are_normalized_to_a_bare_lower_case_host(text, expected):
+    from homelab_probe.util import parse_allowed_host
+
+    assert parse_allowed_host(text) == expected
+
+
+@pytest.mark.parametrize("text", ["*", "*.lan", "", "a b", "http://x", "x/y", "x?y", "x@y", "a..b", ".a", "a.", "-a", "a-",
+                                  "1.2.3.4.5:80x", "[::1", "[]", "[::1]x", "x:y", "a_b", "x" * 254])
+def test_things_that_are_not_hosts_are_refused(text):
+    from homelab_probe.util import parse_allowed_host
+
+    with pytest.raises(ValueError, match="not a host name or address"):
+        parse_allowed_host(text)
+
+
+def test_forwarded_ips_are_a_list_of_addresses_or_networks_and_never_everyone():
+    from homelab_probe.util import parse_forwarded_ips
+
+    assert parse_forwarded_ips("127.0.0.1, 10.0.0.0/8 ,::1,fd00::/8") == "127.0.0.1,10.0.0.0/8,::1,fd00::/8"
+    for bad in ("*", "0.0.0.0/0x", "", " , ", "proxy", "10.0.0.256"):
+        with pytest.raises(ValueError):
+            parse_forwarded_ips(bad)
+
+
+def test_binding_every_address_needs_an_allowed_host_and_nothing_else_does():
+    from homelab_probe.util import check_bind
+
+    assert check_bind("127.0.0.1") == "127.0.0.1" and check_bind("192.168.1.5") == "192.168.1.5"
+    assert check_bind("hlp.lan") == "hlp.lan" and check_bind("0.0.0.0", ["hlp.lan"]) == "0.0.0.0"
+    for host in ("0.0.0.0", "::", ""):
+        with pytest.raises(ValueError, match="--allowed-host"):
+            check_bind(host)
+
+
+def test_networks_that_mean_everyone_are_refused_as_proxies_whatever_their_spelling():
+    from homelab_probe.util import parse_forwarded_ips
+
+    for bad in ("0.0.0.0/0", "::/0", "1.2.3.4/0", "10.0.0.1, 0.0.0.0/0", "::/0,127.0.0.1", "0.0.0.0/00"):
+        with pytest.raises(ValueError, match="every client"):
+            parse_forwarded_ips(bad)
+    assert parse_forwarded_ips("0.0.0.0/1,128.0.0.0/1") == "0.0.0.0/1,128.0.0.0/1"       # wide, but not everyone at once
+
+
+@pytest.mark.parametrize("host, expected", [("192.168.1.5", "192.168.1.5"), ("fd00::5", "[fd00::5]"),
+                                            ("[fd00::5]", "[fd00::5]"), ("FD00:0:0::5", "[fd00::5]"),
+                                            ("HLP.lan", "hlp.lan"), ("localhost", "localhost")])
+def test_the_bind_host_is_spelled_the_way_a_host_header_spells_it(host, expected):
+    from homelab_probe.util import bind_host_name
+
+    assert bind_host_name(host) == expected
+
+
+@pytest.mark.parametrize("host", ["*", "*.lan", "a b", "x/y", "http://x", "", "under_score"])
+def test_a_bind_host_that_is_not_a_name_or_an_address_is_refused(host):
+    from homelab_probe.util import bind_host_name, check_bind
+
+    with pytest.raises(ValueError):
+        bind_host_name(host)
+    if host:                                                     # "" means every address: it needs an allowed host
+        with pytest.raises(ValueError, match="not a host name or address"):
+            check_bind(host, ["hlp.lan"])
+
+
+def test_a_wildcard_among_the_allowed_hosts_is_refused_by_the_bind_check_itself():
+    from homelab_probe.util import check_bind
+
+    for allowed in (["*"], ["*.lan"], ["hlp.lan", "*"], [" "], ["http://hlp.lan"]):
+        with pytest.raises(ValueError, match="not a host name or address"):
+            check_bind("0.0.0.0", allowed)
+        with pytest.raises(ValueError, match="not a host name or address"):
+            check_bind("127.0.0.1", allowed)

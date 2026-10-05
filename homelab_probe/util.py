@@ -20,7 +20,7 @@ copied into several modules; they live here once.
 import ipaddress
 import re
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 # Controls that are never wanted in a name: C0 (except tab, newline, CR, handled separately),
 # DEL and C1. Also removed: bidirectional overrides and isolates (they reorder text to disguise
@@ -188,6 +188,8 @@ def record_for(table: Dict[str, Dict[str, Any]], key: Any) -> Dict[str, Any]:
 
 
 LOOPBACK_NAMES = ("localhost",)
+WILDCARD_ADDRESSES = ("", "0.0.0.0", "::", "[::]", "0")          # "every address of this machine"
+_HOST_NAME = re.compile(r"^(?=.{1,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$")
 
 
 def is_loopback(host: str) -> bool:
@@ -195,15 +197,81 @@ def is_loopback(host: str) -> bool:
     if host.lower() in LOOPBACK_NAMES:
         return True
     try:
-        return ipaddress.ip_address(host).is_loopback
+        return ipaddress.ip_address(host.strip("[]")).is_loopback
     except ValueError:
         return False
 
 
-def require_loopback(host: str) -> str:
-    """``host`` unchanged, or a ``ValueError`` saying why it is refused: ``hlp serve`` binds only a loopback address
-    for now (network binds need options that are not built yet)."""
-    if not is_loopback(host):
-        raise ValueError(f"the server binds only a loopback address (127.0.0.1 or ::1) for now, "
-                         f"not {host!r}")
+def is_wildcard_bind(host: str) -> bool:
+    """True when ``host`` means "listen on every address of this machine" (``0.0.0.0``, ``::``)."""
+    return host.strip().lower() in WILDCARD_ADDRESSES
+
+
+def parse_allowed_host(text: str) -> str:
+    """A name the server may be reached by (``hlp.lan``, ``192.168.1.5``, ``[fd00::5]``, with or without a port), as the
+    bare lower-case host. Wildcards, schemes, paths and anything that is not a host name or address are refused:
+    this list is what keeps a hostile web page from reaching the server by DNS rebinding, so it is never open."""
+    value = str(text).strip().lower()
+    if value.startswith("["):                                    # an IPv6 address in brackets, maybe with a port
+        end = value.find("]")
+        host, rest = value[1:end] if end > 0 else "", value[end + 1:] if end > 0 else "x"
+        if rest and not re.fullmatch(r":\d{1,5}", rest):
+            raise ValueError(f"{text!r} is not a host name or address")
+        try:
+            return f"[{ipaddress.IPv6Address(host)}]"
+        except ValueError:
+            raise ValueError(f"{text!r} is not a host name or address") from None
+    host, _, port = value.partition(":")
+    if port and not re.fullmatch(r"\d{1,5}", port):
+        raise ValueError(f"{text!r} is not a host name or address")
+    try:
+        return str(ipaddress.IPv4Address(host))
+    except ValueError:
+        pass
+    if not _HOST_NAME.fullmatch(host):
+        raise ValueError(f"{text!r} is not a host name or address (no wildcards, schemes or paths)")
     return host
+
+
+def parse_forwarded_ips(text: str) -> str:
+    """A comma-separated list of the proxies (addresses or networks) whose ``X-Forwarded-*`` headers are believed, as
+    uvicorn wants it. ``*`` ("believe anyone") is refused: that would let any client choose the address that the
+    throttle and the audit log record."""
+    parts = [p.strip() for p in str(text).split(",") if p.strip()]
+    if not parts:
+        raise ValueError("name at least one proxy address")
+    for part in parts:
+        try:
+            network = ipaddress.ip_network(part, strict=False)
+        except ValueError:
+            raise ValueError(f"{part!r} is not an IP address or network (and * is not accepted: it would trust "
+                             "every client)") from None
+        if network.prefixlen == 0:
+            raise ValueError(f"{part!r} would trust every client, like *: name the proxies")
+    return ",".join(parts)
+
+
+def check_bind(host: str, allowed: Sequence[str] = ()) -> str:
+    """``host`` unchanged, or a ``ValueError`` saying why it cannot be bound. A loopback address is always fine; a
+    specific other address or name is (its own name is allowed as a ``Host``); "every address" needs at least one
+    allowed host, so that the server knows which names it is reached by."""
+    for name in allowed:
+        parse_allowed_host(name)                                   # a wildcard here would open the Host list
+    if is_wildcard_bind(host):
+        if not allowed:
+            raise ValueError(f"listening on every address ({host or 'all'}) needs at least one --allowed-host naming "
+                             "how the server is reached (for example the machine's name)")
+    elif not is_loopback(host):
+        bind_host_name(host)                                       # a name or an address, never "*" or a pattern
+    return host
+
+
+def bind_host_name(host: str) -> str:
+    """The ``Host`` spelling of the address or name the server is bound to (an IPv6 address in brackets). Raises
+    ``ValueError`` when ``host`` is not a host name or an address."""
+    bare = host.strip().strip("[]")
+    try:
+        address = ipaddress.ip_address(bare)
+    except ValueError:
+        return parse_allowed_host(host)
+    return f"[{address}]" if address.version == 6 else str(address)
