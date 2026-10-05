@@ -259,6 +259,15 @@ def test_bad_parameters_are_422_and_read_nothing(client, session, query):
     assert session.calls == [] and session.posts == []
 
 
+@pytest.mark.parametrize("query", ["/wifi?min_signal=5", "/firewall?search=" + "x" * 121,
+                                  "/diagnose?no_events=maybe"])
+def test_fastapi_parameter_validation_uses_the_documented_error_body(client, session, query):
+    response = client.get(SITE + query)
+    assert response.status_code == 422
+    assert response.json() == {"error": "invalid_parameter", "message": "A parameter is not valid."}
+    assert session.calls == [] and session.posts == []
+
+
 def test_a_site_name_the_cli_would_refuse_is_422(client):
     assert client.get("/api/v1/unifi/sites/a%3Fb/wan").status_code == 422
     assert client.get("/api/v1/unifi/sites/" + "s" * 121 + "/wan").status_code == 422
@@ -294,6 +303,13 @@ def test_the_openapi_document_lists_every_route_with_its_schema_and_matches_the_
     for path, item in spec["paths"].items():
         if path.startswith("/api/v1/unifi"):
             assert "application/json" in item["get"]["responses"]["200"]["content"], path
+    client_path = f"{SITE.replace('default', '{site}')}/clients/{{mac}}"
+    client_responses = spec["paths"][client_path]["get"]["responses"]
+    assert "409" in client_responses and "500" in client_responses
+    assert "500" in spec["paths"][f"{SITE.replace('default', '{site}')}/diagnose"]["get"]["responses"]
+    assert "500" not in spec["paths"]["/api/v1/unifi/sites"]["get"]["responses"]
+    candidates = client_responses["409"]["content"]["application/json"]["schema"]["properties"]["candidates"]
+    assert candidates["items"]["required"] == ["Name", "MAC Address", "IP Address", "Status"]
     golden = Path(__file__).parent / "golden" / "openapi.json"
     if os.environ.get("UPDATE_GOLDEN"):
         golden.write_text(text, encoding="utf-8")

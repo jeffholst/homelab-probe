@@ -47,6 +47,16 @@ REFRESH_MIN_INTERVAL = 5.0       # seconds between two manual refreshes; a faste
 MAX_TEXT = 120
 ERROR_SCHEMA = {"type": "object", "required": ["error", "message"],
                 "properties": {"error": {"type": "string"}, "message": {"type": "string"}}}
+CANDIDATE_SCHEMA = {
+    "type": "object", "required": ["Name", "MAC Address", "IP Address", "Status"],
+    "properties": {"Name": {"type": "string"}, "MAC Address": {"type": "string"},
+                   "IP Address": {"type": "string"}, "Status": {"type": "string"}},
+}
+AMBIGUOUS_CLIENT_SCHEMA = {
+    "type": "object", "required": ["error", "message", "candidates"],
+    "properties": {"error": {"type": "string"}, "message": {"type": "string"},
+                   "candidates": {"type": "array", "items": CANDIDATE_SCHEMA}},
+}
 INFO_SCHEMA = {
     "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "urn:homelab-probe:api:info:v1",
     "title": "info (API response)", "description": "The controller's application info and its sites.",
@@ -73,12 +83,22 @@ LimitQ = Annotated[int, Query(ge=0, le=20000, description="0 for all")]
 MacP = Annotated[str, Path(pattern=r"^[0-9A-Fa-f:.\-]{12,17}$", description="The client's MAC address")]
 
 
-def _ok(schema: Dict[str, Any]) -> Dict[int | str, Dict[str, Any]]:
-    return {200: {"description": "The document with when it was read",
-                  "content": {"application/json": {"schema": schema}}},
-            **{code: {"description": text, "content": {"application/json": {"schema": ERROR_SCHEMA}}}
-               for code, text in ((404, "No such site or client"), (422, "A parameter is not valid"),
-                                  (502, "The controller could not be read"), (504, "The controller timed out"))}}
+def _ok(schema: Dict[str, Any], *, settings: bool = False,
+        ambiguous_client: bool = False) -> Dict[int | str, Dict[str, Any]]:
+    responses: Dict[int | str, Dict[str, Any]] = {
+        200: {"description": "The document with when it was read",
+              "content": {"application/json": {"schema": schema}}},
+        **{code: {"description": text, "content": {"application/json": {"schema": ERROR_SCHEMA}}}
+           for code, text in ((404, "No such site or client"), (422, "A parameter is not valid"),
+                              (502, "The controller could not be read"), (504, "The controller timed out"))},
+    }
+    if ambiguous_client:
+        responses[409] = {"description": "More than one client matches",
+                          "content": {"application/json": {"schema": AMBIGUOUS_CLIENT_SCHEMA}}}
+    if settings:
+        responses[500] = {"description": "The settings file could not be used",
+                          "content": {"application/json": {"schema": ERROR_SCHEMA}}}
+    return responses
 
 
 def _site(site: str) -> str:
@@ -151,14 +171,15 @@ def build_router() -> APIRouter:
     router = APIRouter(prefix=UNIFI)
     at = "/sites/{site}"
 
-    def schema(name: str, extra: Optional[Dict[str, Any]] = None) -> Dict[int | str, Dict[str, Any]]:
-        return _ok(apischema.response_schema(name, extra))
+    def schema(name: str, extra: Optional[Dict[str, Any]] = None, *, settings: bool = False,
+               ambiguous_client: bool = False) -> Dict[int | str, Dict[str, Any]]:
+        return _ok(apischema.response_schema(name, extra), settings=settings, ambiguous_client=ambiguous_client)
 
     @router.get("/sites", responses=_ok(INFO_SCHEMA), summary="The controller and its sites")
     def sites(request: Request, refresh: RefreshQ = False) -> JSONResponse:
         return _respond(request, lambda client: info_document(client), refresh=refresh)
 
-    @router.get(f"{at}/diagnose", responses=schema("diagnose"), summary="Health checks (diagnose)")
+    @router.get(f"{at}/diagnose", responses=schema("diagnose", settings=True), summary="Health checks (diagnose)")
     def diagnose(request: Request, site: SiteP, only: ListQ = None, skip: ListQ = None, since: SinceQ = "24h",
                  no_events: bool = False, show_ignored: bool = False, refresh: RefreshQ = False) -> JSONResponse:
         seconds = _duration(since)
@@ -170,7 +191,7 @@ def build_router() -> APIRouter:
         return _respond(request, lambda client: diagnose_document(client, name, settings, areas, seconds,
                                                                    show_ignored, echo=False), refresh=refresh)
 
-    @router.get(f"{at}/audit", responses=schema("audit"), summary="Configuration audit")
+    @router.get(f"{at}/audit", responses=schema("audit", settings=True), summary="Configuration audit")
     def audit(request: Request, site: SiteP, show_ignored: bool = False, refresh: RefreshQ = False) -> JSONResponse:
         settings, name = _settings(request), _site(site)
         return _respond(request, lambda client: audit_document(client, name, settings, show_ignored, echo=False),
@@ -183,7 +204,7 @@ def build_router() -> APIRouter:
         return _respond(request, lambda client: firewall_document(client, name, all, search, echo=False),
                         refresh=refresh)
 
-    @router.get(f"{at}/topology", responses=schema("topology"), summary="The uplink tree")
+    @router.get(f"{at}/topology", responses=schema("topology", settings=True), summary="The uplink tree")
     def topology(request: Request, site: SiteP, clients: bool = False, refresh: RefreshQ = False) -> JSONResponse:
         settings, name = _settings(request), _site(site)
         return _respond(request, lambda client: topology_document(client, name, settings, clients, echo=False),
@@ -264,7 +285,8 @@ def build_router() -> APIRouter:
         return _respond(request, lambda api: query_document(api, name, "ports", search, switch=switch, down=down,
                                                              errors=errors, echo=False), refresh=refresh)
 
-    @router.get(f"{at}/reservations", responses=schema("query-reservations"), summary="DHCP reservations")
+    @router.get(f"{at}/reservations", responses=schema("query-reservations", settings=True),
+                summary="DHCP reservations")
     def reservations(request: Request, site: SiteP, search: TextQ = "", offline: bool = False,
                      refresh: RefreshQ = False) -> JSONResponse:
         settings, name = _settings(request), _site(site)
@@ -276,7 +298,8 @@ def build_router() -> APIRouter:
         name = _site(site)
         return _respond(request, lambda api: new_clients_document(api, name, search, echo=False), refresh=refresh)
 
-    @router.get(f"{at}/clients/{{mac}}", responses=schema("client"), summary="One client by MAC address")
+    @router.get(f"{at}/clients/{{mac}}", responses=schema("client", settings=True, ambiguous_client=True),
+                summary="One client by MAC address")
     def client_detail(request: Request, site: SiteP, mac: MacP, events: bool = True, since: SinceQ = "24h",
                       refresh: RefreshQ = False) -> JSONResponse:
         address = normalize_mac(mac)

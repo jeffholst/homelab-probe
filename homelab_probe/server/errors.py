@@ -39,3 +39,7 @@ def from_controller(error: UniFiAPIError) -> ApiError:
 
 async def api_error_handler(request: Request, error: ApiError) -> JSONResponse:
     return JSONResponse({"error": error.code, "message": error.message, **error.extra}, status_code=error.status)
+
+
+async def request_validation_error_handler(request: Request, error: Exception) -> JSONResponse:
+    return JSONResponse({"error": "invalid_parameter", "message": "A parameter is not valid."}, status_code=422)
