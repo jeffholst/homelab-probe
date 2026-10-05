@@ -381,13 +381,44 @@ def test_an_upgrade_without_an_audit_log_still_happens(store, monkeypatch):
     assert store.get("alice").password_hash.startswith("scrypt$32$")
 
 
-def test_a_password_changed_during_the_login_is_not_overwritten_by_the_upgrade(store):
+def test_a_login_is_checked_against_the_current_record_not_a_stale_one(store):
     store.add("alice", "admin", PASSWORD)
-    old = store.get("alice").password_hash
-    store.reset_password("alice", OTHER)
-    assert store.record_login("alice", upgraded_from=old, password=PASSWORD) is False
+    decoy = accounts.hash_password("decoy decoy decoy")
+    store.reset_password("alice", OTHER)                                      # changed after the caller read the user
+    assert store.authenticate_login("alice", PASSWORD, decoy) is None         # the old password no longer works
     assert accounts.verify_password(OTHER, store.get("alice").password_hash)
-    assert store.record_login("ghost") is False                              # a user deleted meanwhile is not an error
+    assert store.authenticate_login("ghost", PASSWORD, decoy) is None         # a user deleted meanwhile is not an error
+    assert store.authenticate_login("alice", OTHER, decoy).username == "alice"
+
+
+def test_an_audit_callback_that_fails_when_nothing_changed_rolls_back_nothing_and_says_so(store):
+    store.add("alice", "admin", PASSWORD)
+    before = store.path.read_bytes()
+
+    def audit_down(user):
+        raise OSError("disk full")
+
+    with pytest.raises(AccountError, match="audit log could not be written; the account change was rolled back"):
+        store.set_role("alice", "admin", on_change=audit_down)                # the role was already admin: no write
+    assert store.path.read_bytes() == before
+
+
+def test_when_the_rollback_itself_cannot_be_written_the_error_says_so(store, monkeypatch):
+    store.add("alice", "admin", PASSWORD)
+    real_write, calls = store._write, []
+
+    def write(users):
+        calls.append(1)
+        if len(calls) == 2:                                                   # the first write is the change, the second the rollback
+            raise OSError("read-only file system")
+        real_write(users)
+
+    def audit_down(user):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(store, "_write", write)
+    with pytest.raises(AccountError, match="could not be rolled back"):
+        store.add("bob", "viewer", OTHER, on_change=audit_down)
 
 
 def test_the_authenticator_interface_is_what_the_routes_will_take(local):
