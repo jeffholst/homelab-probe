@@ -223,6 +223,7 @@ These sections moved to `docs/`; links to their old README anchors still land he
 - [Examples](docs/examples.md): more commands and sample output
 - [Features](docs/features.md) and [Development and API documentation](docs/development.md)
 - [Changelog](CHANGELOG.md)
+- [Maintainer guide](MAINTAINING.md): versioning, releases, checks, and recovery steps
 
 ## Troubleshooting
 
