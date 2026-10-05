@@ -5,11 +5,14 @@ The web interface is built in stages (see the roadmap in issue #160). This page 
 ## Running the server: `serve`
 
 ```bash
-pip install 'homelab-probe[web]'        # FastAPI and uvicorn; the command line never needs them
-uv run hlp.py serve                     # http://127.0.0.1:8787, until Ctrl-C
-uv run hlp.py serve --port 9000 --config lab.toml
-uv run hlp.py --demo serve              # the synthetic network: no controller, no .env
+uv run --extra web hlp.py serve         # http://127.0.0.1:8787, until Ctrl-C
+uv run --extra web hlp.py serve --port 9000 --config lab.toml
+uv run --extra web hlp.py --demo serve   # the synthetic network: no controller, no .env
 ```
+
+From the project checkout, `uv run --extra web` installs FastAPI and uvicorn into uv's environment;
+the command line never needs them. For a standalone installation, use
+`python -m pip install 'homelab-probe[web]'`, then `hlp serve`.
 
 Without the extra it exits with code 3 and says what to install. Options:
 

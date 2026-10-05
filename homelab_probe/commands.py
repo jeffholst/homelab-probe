@@ -760,7 +760,8 @@ def _run_serve(ctx: Context) -> int:
     try:
         from .server.runner import run  # only here: the command line never needs the web extra
     except ImportError as e:
-        raise ConfigError("`hlp serve` needs the web extra: pip install 'homelab-probe[web]' "
+        raise ConfigError("`hlp serve` needs the web extra: uv run --extra web hlp.py serve "
+                          "(from the project checkout), or python -m pip install 'homelab-probe[web]' "
                           f"(missing: {e.name or 'a module'})") from e
     config = ctx.config
     host = f"[{args.host}]" if ":" in args.host else args.host
