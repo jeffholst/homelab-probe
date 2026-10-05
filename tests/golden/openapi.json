@@ -219,6 +219,27 @@
         "title": "LoginBody",
         "type": "object"
       },
+      "SaveBody": {
+        "additionalProperties": false,
+        "properties": {
+          "keep": {
+            "anyOf": [
+              {
+                "maximum": 10000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Afterwards keep only the newest N",
+            "title": "Keep"
+          }
+        },
+        "title": "SaveBody",
+        "type": "object"
+      },
       "SettingsBody": {
         "additionalProperties": false,
         "description": "``thresholds`` sets the keys given (``null`` removes one, so the default applies again) and leaves the others;\n``ignore``, when given, is the whole list of rules.",
@@ -2811,6 +2832,458 @@
         "summary": "Health checks (diagnose)"
       }
     },
+    "/api/v1/unifi/sites/{site}/diff": {
+      "get": {
+        "operationId": "snapshots_diff_api_v1_unifi_sites__site__diff_get",
+        "parameters": [
+          {
+            "description": "A site name, internal reference or UUID",
+            "in": "path",
+            "name": "site",
+            "required": true,
+            "schema": {
+              "description": "A site name, internal reference or UUID",
+              "maxLength": 120,
+              "title": "Site",
+              "type": "string"
+            }
+          },
+          {
+            "description": "A snapshot file name, as the list gives it",
+            "in": "query",
+            "name": "old",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 120,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A snapshot file name, as the list gives it",
+              "title": "Old"
+            }
+          },
+          {
+            "description": "A snapshot file name, as the list gives it",
+            "in": "query",
+            "name": "new",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 120,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A snapshot file name, as the list gives it",
+              "title": "New"
+            }
+          },
+          {
+            "description": "Read the controller again instead of using the cache (at most every 5 s)",
+            "in": "query",
+            "name": "refresh",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Read the controller again instead of using the cache (at most every 5 s)",
+              "title": "Refresh",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$defs": {
+                    "change": {
+                      "properties": {
+                        "field": {
+                          "type": "string"
+                        },
+                        "new": {},
+                        "old": {}
+                      },
+                      "required": [
+                        "field",
+                        "new",
+                        "old"
+                      ],
+                      "type": "object"
+                    },
+                    "client": {
+                      "properties": {
+                        "connection": {
+                          "type": "string"
+                        },
+                        "groups": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "ip": {
+                          "type": "string"
+                        },
+                        "mac": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "network": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "uplink": {
+                          "type": "string"
+                        },
+                        "uplink_port": {
+                          "type": "string"
+                        },
+                        "vlan": {
+                          "description": "The VLAN id, or '' for none.",
+                          "type": [
+                            "integer",
+                            "string"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "connection",
+                        "groups",
+                        "ip",
+                        "mac",
+                        "name",
+                        "network",
+                        "status",
+                        "uplink",
+                        "uplink_port",
+                        "vlan"
+                      ],
+                      "type": "object"
+                    },
+                    "device": {
+                      "properties": {
+                        "firmware": {
+                          "type": "string"
+                        },
+                        "ip": {
+                          "type": "string"
+                        },
+                        "mac": {
+                          "type": "string"
+                        },
+                        "model": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        },
+                        "uplink": {
+                          "type": "string"
+                        },
+                        "uplink_port": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "firmware",
+                        "ip",
+                        "mac",
+                        "model",
+                        "name",
+                        "state",
+                        "type",
+                        "uplink",
+                        "uplink_port"
+                      ],
+                      "type": "object"
+                    },
+                    "part": {
+                      "properties": {
+                        "added": {
+                          "items": {
+                            "$ref": "#/$defs/record"
+                          },
+                          "type": "array"
+                        },
+                        "changed": {
+                          "items": {
+                            "properties": {
+                              "changes": {
+                                "items": {
+                                  "$ref": "#/$defs/change"
+                                },
+                                "type": "array"
+                              },
+                              "mac": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "changes",
+                              "mac",
+                              "name"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "removed": {
+                          "items": {
+                            "$ref": "#/$defs/record"
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "added",
+                        "changed",
+                        "removed"
+                      ],
+                      "type": "object"
+                    },
+                    "record": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/$defs/device"
+                        },
+                        {
+                          "$ref": "#/$defs/client"
+                        },
+                        {
+                          "$ref": "#/$defs/reservation"
+                        }
+                      ]
+                    },
+                    "reservation": {
+                      "properties": {
+                        "mac": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "network": {
+                          "type": "string"
+                        },
+                        "reserved_ip": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "mac",
+                        "name",
+                        "network",
+                        "reserved_ip"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "$id": "https://raw.githubusercontent.com/jeffholst/homelab-probe/main/docs/schemas/diff.v1.schema.json",
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "description": "Output of `hlp diff --json`.",
+                  "properties": {
+                    "clients": {
+                      "$ref": "#/$defs/part"
+                    },
+                    "controller": {
+                      "items": {
+                        "$ref": "#/$defs/change"
+                      },
+                      "type": "array"
+                    },
+                    "devices": {
+                      "$ref": "#/$defs/part"
+                    },
+                    "generated_at": {
+                      "description": "When the data of this response was read from the controller (UTC). The age of the oldest answer used, so a response built from the cache says how old it is.",
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+                      "type": "string"
+                    },
+                    "new": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "old": {
+                      "type": "string"
+                    },
+                    "reservations": {
+                      "$ref": "#/$defs/part"
+                    },
+                    "same_site": {
+                      "type": "boolean"
+                    },
+                    "total": {
+                      "type": "number"
+                    },
+                    "version": {
+                      "const": 1,
+                      "description": "The format of this document; it changes only when a field is removed or renamed."
+                    },
+                    "warnings": {
+                      "description": "What was degraded or served from the cache while building this response.",
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "clients",
+                    "controller",
+                    "devices",
+                    "generated_at",
+                    "reservations",
+                    "same_site",
+                    "total",
+                    "version",
+                    "warnings"
+                  ],
+                  "title": "diff",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The comparison with when it was read"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "No such site or snapshot"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A parameter is not valid"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The snapshots cannot be used"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The controller could not be read"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The controller timed out"
+          }
+        },
+        "summary": "What changed between two saved snapshots, or one and the network now"
+      }
+    },
     "/api/v1/unifi/sites/{site}/events": {
       "get": {
         "operationId": "events_api_v1_unifi_sites__site__events_get",
@@ -4862,6 +5335,418 @@
           }
         },
         "summary": "DHCP reservations"
+      }
+    },
+    "/api/v1/unifi/sites/{site}/snapshots": {
+      "get": {
+        "operationId": "snapshots_list_api_v1_unifi_sites__site__snapshots_get",
+        "parameters": [
+          {
+            "description": "A site name, internal reference or UUID",
+            "in": "path",
+            "name": "site",
+            "required": true,
+            "schema": {
+              "description": "A site name, internal reference or UUID",
+              "maxLength": 120,
+              "title": "Site",
+              "type": "string"
+            }
+          },
+          {
+            "description": "How many of the newest to list",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "description": "How many of the newest to list",
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "properties": {
+                          "captured_at": {
+                            "type": "string"
+                          },
+                          "clients": {
+                            "type": "integer"
+                          },
+                          "devices": {
+                            "type": "integer"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "readable": {
+                            "type": "boolean"
+                          },
+                          "reservations": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "readable"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "site": {
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "site",
+                    "total",
+                    "items"
+                  ],
+                  "title": "Response Snapshots List Api V1 Unifi Sites  Site  Snapshots Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The newest snapshots"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "No such site or snapshot"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A parameter is not valid"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The snapshots cannot be used"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The controller could not be read"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The controller timed out"
+          }
+        },
+        "summary": "The saved snapshots of a site, newest first"
+      },
+      "post": {
+        "operationId": "snapshots_save_api_v1_unifi_sites__site__snapshots_post",
+        "parameters": [
+          {
+            "description": "A site name, internal reference or UUID",
+            "in": "path",
+            "name": "site",
+            "required": true,
+            "schema": {
+              "description": "A site name, internal reference or UUID",
+              "maxLength": 120,
+              "title": "Site",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "generated_at": {
+                      "description": "When the data of this response was read from the controller (UTC). The age of the oldest answer used, so a response built from the cache says how old it is.",
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+                      "type": "string"
+                    },
+                    "removed": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "snapshot": {
+                      "properties": {
+                        "captured_at": {
+                          "type": "string"
+                        },
+                        "clients": {
+                          "type": "integer"
+                        },
+                        "devices": {
+                          "type": "integer"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "readable": {
+                          "type": "boolean"
+                        },
+                        "reservations": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "readable"
+                      ],
+                      "type": "object"
+                    },
+                    "warnings": {
+                      "description": "What was degraded or served from the cache while building this response.",
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "snapshot",
+                    "removed",
+                    "generated_at",
+                    "warnings"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The snapshot that was saved"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "No such site or snapshot"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A parameter is not valid"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The snapshots cannot be used"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The controller could not be read"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The controller timed out"
+          }
+        },
+        "summary": "Save a snapshot of the network now (a local write)"
       }
     },
     "/api/v1/unifi/sites/{site}/topology": {

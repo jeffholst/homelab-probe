@@ -200,6 +200,42 @@ def site_snapshots(base: Path, site: Dict[str, Any]) -> List[Path]:
     return [p for _, p in sorted(found, key=lambda item: item[0])]
 
 
+def is_snapshot_name(name: str) -> bool:
+    """Is ``name`` a bare file name of the kind ``snapshot`` writes (no directory part, a real date and time)?"""
+    match = _FILE_RE.fullmatch(name)                   # fullmatch: ``$`` alone would let a trailing newline through
+    if not match or "/" in name or "\\" in name:
+        return False
+    try:
+        datetime.strptime(match.group(1), "%Y%m%d-%H%M%S")        # a real date and time, as `save_snapshot` writes
+    except ValueError:
+        return False
+    return True
+
+
+def find_snapshot(base: Path, site: Dict[str, Any], name: str) -> Optional[Path]:
+    """The saved snapshot called ``name`` for ``site``: in its directory, else (an older one saved straight into
+    ``base``) there if its own record names this site. None for a name that is not a snapshot name, or not found."""
+    if not is_snapshot_name(name):
+        return None
+    own = site_dir(base, site) / name
+    if own.is_file():
+        return own
+    legacy = base / name
+    return legacy if legacy.is_file() and (recorded_site_id(legacy) or "") == str(site.get("id") or "") else None
+
+
+def snapshot_summary(path: Path) -> Dict[str, Any]:
+    """What a listing says about a snapshot file: its name, when it was taken and how much it holds. A file that
+    cannot be read as a snapshot has ``readable`` false and nothing else."""
+    try:
+        record = load_snapshot(path)
+    except ConfigError:
+        return {"name": path.name, "readable": False}
+    return {"name": path.name, "readable": True, "captured_at": record["captured_at"],
+            "devices": len(record["devices"]), "clients": len(record["clients"]),
+            "reservations": len(record["reservations"])}
+
+
 def _age_key(path: Path) -> Optional[Tuple[datetime, int]]:
     """When a snapshot file name says it was taken (as a UTC instant), then its collision suffix
     as a number, or None when the name is not one this tool writes (or not a real date).

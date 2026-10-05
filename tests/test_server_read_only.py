@@ -1,6 +1,8 @@
 """``serve --read-only`` (issue #186): every route that writes a file of this machine is refused, and a test lists
 the unsafe routes so a new one cannot be forgotten."""
 
+import re
+
 import pytest
 
 pytest.importorskip("fastapi")
@@ -48,17 +50,18 @@ def unsafe_operations(app):
 
 
 def name_of(operation_id, path, method):
-    suffix = "_" + "_".join(part for part in path.strip("/").replace("{", "").replace("}", "").replace("-", "_")
-                            .split("/")) + "_" + method
-    assert operation_id.endswith(suffix.replace("-", "_")), (operation_id, suffix)
+    """The function name inside an operation id (FastAPI builds it as name + path with non-word characters as ``_``
+    + method)."""
+    suffix = re.sub(r"\W", "_", path) + "_" + method
+    assert operation_id.endswith(suffix), (operation_id, suffix)
     return operation_id[:-len(suffix)]
 
 
 def test_every_unsafe_route_is_either_marked_as_writing_or_on_the_list_of_those_that_write_nothing(tmp_path):
     operations = unsafe_operations(make_app(tmp_path))
-    names = {name_of(*op[0:1], op[2], op[1]) for op in operations}
+    names = {name_of(operation_id, path, method) for operation_id, method, path in operations}
     assert len(operations) >= 9
-    assert names - WRITES_NOTHING == LOCAL_WRITE_ENDPOINTS == {"put_settings", "setup_finish"}
+    assert names - WRITES_NOTHING == LOCAL_WRITE_ENDPOINTS == {"put_settings", "setup_finish", "snapshots_save"}
 
 
 def test_a_read_only_server_refuses_the_settings_change_and_still_serves_the_settings(tmp_path):
