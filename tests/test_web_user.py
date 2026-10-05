@@ -128,6 +128,18 @@ def test_every_change_is_in_the_audit_log_without_a_password(capsys, data, monke
     assert PASSWORD not in text and OTHER not in text
 
 
+def test_an_audit_write_failure_is_reported_and_rolls_back_the_account_change(capsys, data, monkeypatch):
+    def fail_open(self):
+        raise OSError("write failed")
+
+    monkeypatch.setattr(accounts._PrivateRotatingFileHandler, "_open", fail_open)
+    code, out, err = web_user(capsys, data, "add", "alice", "--role", "admin", "--password-stdin",
+                              stdin=PASSWORD + "\n", monkeypatch=monkeypatch)
+    assert code == 3 and out == ""
+    assert "audit log could not be written; the account change was rolled back" in err
+    assert AccountStore(data).users() == []
+
+
 def test_the_last_administrator_is_protected_from_the_command_line(capsys, data, admin):
     for argv in (("delete", "root"), ("disable", "root"), ("set-role", "root", "--role", "viewer")):
         code, _, err = web_user(capsys, data, *argv)

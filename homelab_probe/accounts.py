@@ -33,7 +33,7 @@ import threading
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Protocol, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Optional, Protocol, Tuple
 
 from . import logs
 
@@ -52,7 +52,7 @@ MIN_PASSWORD, MAX_PASSWORD = 12, 1024        # characters; there are no composit
 DEFAULT_AUDIT_MB, DEFAULT_AUDIT_FILES = 5, 10
 SALT_BYTES, HASH_BYTES = 16, 32
 
-_log = logging.getLogger(__name__)
+_audit_log = logging.getLogger("homelab_probe.audit")
 
 
 class AccountError(Exception):
@@ -245,6 +245,7 @@ class AccountStore:
     def users(self) -> List[User]:
         """The accounts, in the order they were added. The file is read again only when it changed."""
         try:
+            os.chmod(self.path, 0o600)
             info = self.path.stat()
         except FileNotFoundError:
             return []
@@ -263,6 +264,7 @@ class AccountStore:
 
     def _read(self) -> List[User]:
         try:
+            os.chmod(self.path, 0o600)
             data = json.loads(self.path.read_text(encoding="utf-8"))
         except FileNotFoundError:
             return []
@@ -295,21 +297,39 @@ class AccountStore:
                 os.unlink(temporary)
             raise
 
-    def _change(self, change: Any) -> Any:
+    def _save_change(self, before: List[User], after: List[User], result: Any,
+                     on_change: Optional[Callable[[Any], None]]) -> Any:
+        if after != before:
+            self._write(after)
+        if on_change is not None:
+            try:
+                on_change(result)
+            except Exception as error:
+                if after != before:
+                    try:
+                        self._write(before)
+                    except OSError as rollback_error:
+                        raise AccountError(
+                            "the audit log could not be written and the account change could not be rolled back"
+                        ) from rollback_error
+                raise AccountError("the audit log could not be written; the account change was rolled back") from error
+        return result
+
+    def _change(self, change: Any, on_change: Optional[Callable[[Any], None]] = None) -> Any:
         """Run ``change(users) -> (users, result)`` on the current file under the lock and write the outcome. The
-        last enabled administrator is protected here, so no operation can bypass it."""
+        last enabled administrator is protected here, so no operation can bypass it. An audit callback runs under
+        the same lock; when it fails, the account change is rolled back."""
         with _locked(self._lock_path):
             before = self._read()
             after, result = change(list(before))
             if _enabled_admins(before) >= 1 and _enabled_admins(after) == 0:
                 raise AccountError("the last administrator cannot be deleted, demoted or disabled")
-            if after != before:
-                self._write(after)
-        return result
+            return self._save_change(before, after, result, on_change)
 
     # the operations
 
-    def add(self, username: str, role: str, password: str) -> User:
+    def add(self, username: str, role: str, password: str,
+            on_change: Optional[Callable[[User], None]] = None) -> User:
         name, role = check_username(username), check_role(role)
         check_password_policy(password)
         hashed = hash_password(password)
@@ -320,9 +340,9 @@ class AccountStore:
             user = User(name, role, hashed, _now())
             return users + [user], user
 
-        return self._change(change)
+        return self._change(change, on_change)
 
-    def _update(self, username: str, edit: Any) -> User:
+    def _update(self, username: str, edit: Any, on_change: Optional[Callable[[User], None]] = None) -> User:
         name = normalize_username(username)
 
         def change(users: List[User]) -> Tuple[List[User], User]:
@@ -332,21 +352,23 @@ class AccountStore:
                     return users, users[i]
             raise AccountError(f"there is no user {name}")
 
-        return self._change(change)
+        return self._change(change, on_change)
 
-    def set_role(self, username: str, role: str) -> User:
+    def set_role(self, username: str, role: str, on_change: Optional[Callable[[User], None]] = None) -> User:
         role = check_role(role)
-        return self._update(username, lambda user: replace(user, role=role))
+        return self._update(username, lambda user: replace(user, role=role), on_change)
 
-    def set_disabled(self, username: str, disabled: bool) -> User:
-        return self._update(username, lambda user: replace(user, disabled=disabled))
+    def set_disabled(self, username: str, disabled: bool,
+                     on_change: Optional[Callable[[User], None]] = None) -> User:
+        return self._update(username, lambda user: replace(user, disabled=disabled), on_change)
 
-    def reset_password(self, username: str, password: str) -> User:
+    def reset_password(self, username: str, password: str,
+                       on_change: Optional[Callable[[User], None]] = None) -> User:
         check_password_policy(password)
         hashed = hash_password(password)
-        return self._update(username, lambda user: replace(user, password_hash=hashed))
+        return self._update(username, lambda user: replace(user, password_hash=hashed), on_change)
 
-    def remove(self, username: str) -> User:
+    def remove(self, username: str, on_change: Optional[Callable[[User], None]] = None) -> User:
         name = normalize_username(username)
 
         def change(users: List[User]) -> Tuple[List[User], User]:
@@ -355,7 +377,26 @@ class AccountStore:
                 raise AccountError(f"there is no user {name}")
             return [u for u in users if u is not found], found
 
-        return self._change(change)
+        return self._change(change, on_change)
+
+    def authenticate_login(self, username: str, password: str, decoy: str,
+                           on_upgrade: Optional[Callable[[User], None]] = None) -> Optional[User]:
+        """Verify and record a login against the current account under the file lock."""
+        name = normalize_username(username)
+        with _locked(self._lock_path):
+            before = self._read()
+            user = next((candidate for candidate in before if candidate.username == name), None)
+            if user is None or user.disabled:
+                verify_password(password, decoy)
+                return None
+            if not verify_password(password, user.password_hash):
+                return None
+            upgraded = needs_upgrade(user.password_hash)
+            current = replace(user, last_login=_now(),
+                              password_hash=hash_password(password) if upgraded else user.password_hash)
+            after = [current if candidate.username == name else candidate for candidate in before]
+            self._save_change(before, after, current, on_upgrade if upgraded else None)
+            return current
 
     def record_login(self, username: str, upgraded_from: Optional[str] = None, password: Optional[str] = None) -> bool:
         """Note a successful login. With ``password`` and the old hash ``upgraded_from``, the stored hash is replaced
@@ -388,19 +429,20 @@ class LocalAccounts:
         self.audit = audit
         self._decoy = hash_password(secrets.token_urlsafe(16))      # what an unknown user's password is compared with
 
-    def authenticate(self, username: str, password: str) -> Optional[Principal]:
+    def authenticate(self, username: object, password: str) -> Optional[Principal]:
         """The ``Principal`` of a correct password of an enabled user, else None. A wrong password, an unknown user and
         a disabled one take the same work and give the same answer. A correct password with an old hash upgrades the
         hash; every success updates ``last_login``."""
         password = password if isinstance(password, str) and len(password) <= MAX_PASSWORD else ""
-        user = self.store.get(username) if isinstance(username, str) else None
-        stored = user.password_hash if user is not None else self._decoy
-        ok = verify_password(password, stored)
-        if user is None or user.disabled or not ok:
+        if not isinstance(username, str):
+            verify_password(password, self._decoy)
             return None
-        if self.store.record_login(user.username, stored if needs_upgrade(stored) else None, password) and self.audit:
-            self.audit.write("user.password_upgraded", user.username, user=user.username)
-        return Principal(user.username, user.role, self.source)
+        def on_upgrade(user: User) -> None:
+            if self.audit:
+                self.audit.write("user.password_upgraded", user.username, user=user.username)
+
+        user = self.store.authenticate_login(username, password, self._decoy, on_upgrade)
+        return Principal(user.username, user.role, self.source) if user is not None else None
 
 
 # -- the audit log ------------------------------------------------------------------------------------------------
@@ -411,6 +453,10 @@ class _PrivateRotatingFileHandler(logging.handlers.RotatingFileHandler):
     def _open(self) -> Any:
         fd = os.open(self.baseFilename, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
         return os.fdopen(fd, self.mode, encoding=self.encoding)
+
+    def handleError(self, record: logging.LogRecord) -> None:
+        error = sys.exc_info()[1]
+        raise AccountError("could not write the audit log") from error
 
 
 class _JsonLines(logging.Formatter):
@@ -426,7 +472,7 @@ class _JsonLines(logging.Formatter):
 class AuditLog:
     """``audit.log`` of one data directory: one JSON line per change, rotated by size (``max_mb`` megabytes, ``files``
     files in all, the oldest dropped when a new one is needed, never by age). The same record is also logged at INFO on
-    the ``homelab_probe.accounts`` logger (``audit.event``). Fields pass the redaction filter, and nothing here is
+    the ``homelab_probe.audit`` logger (``audit.event``). Fields pass the redaction filter, and nothing here is
     given a password."""
 
     def __init__(self, directory: Path, max_mb: int = DEFAULT_AUDIT_MB, files: int = DEFAULT_AUDIT_FILES) -> None:
@@ -442,13 +488,13 @@ class AuditLog:
 
     def write(self, event: str, actor: str, **fields: Any) -> None:
         """Record ``event`` (``user.added``...) done by ``actor`` with its ``fields``."""
-        record = _log.makeRecord(_log.name, logging.INFO, __file__, 0, event, (), None,
-                                 extra={"audit_event": event, "actor": actor, "event": "audit.event",
-                                        "fields": fields})
+        record = _audit_log.makeRecord(_audit_log.name, logging.INFO, __file__, 0, event, (), None,
+                                       extra={"audit_event": event, "actor": actor, "event": "audit.event",
+                                              "fields": fields})
         self._handler.handle(record)
         shown = {("account" if key == "user" else key): value for key, value in fields.items()}     # ``user`` is taken
-        logs.log_event(_log, logging.INFO, "audit.event", f"Audit: {event} by {actor}.", action=event, actor=actor,
-                       **shown)
+        logs.log_event(_audit_log, logging.INFO, "audit.event", f"Audit: {event} by {actor}.",
+                       action=event, actor=actor, **shown)
 
     def close(self) -> None:
         self._handler.close()

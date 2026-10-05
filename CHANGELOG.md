@@ -36,6 +36,10 @@ always listed here.
 - New log events server.start and server.request.
 - A new log event, audit.event, and the settings `AUDIT_LOG_MAX_MB` and `AUDIT_LOG_FILES`.
 
+### Fixed
+
+- Web account reads tighten existing `users.json` permissions, authentication revalidates account status and role under the file lock, and failed audit writes are reported with the account change rolled back.
+
 ## [0.2.0] - 2026-10-04
 
 The first tagged release. Everything since the fork is listed below.

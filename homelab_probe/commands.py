@@ -689,25 +689,32 @@ def _run_web_user(args: argparse.Namespace) -> int:
         with accounts.AuditLog(args.data_dir, parse_audit_log_mb(os.environ.get("AUDIT_LOG_MAX_MB")),
                                parse_audit_log_files(os.environ.get("AUDIT_LOG_FILES"))) as audit:
             actor = _actor()
+            def record_change(event: str, include_role: bool = False) -> Callable[[accounts.User], None]:
+                def record(user: accounts.User) -> None:
+                    fields = {"user": user.username}
+                    if include_role:
+                        fields["role"] = user.role
+                    audit.write(event, actor, **fields)
+                return record
+
             if args.action == "add":
-                user = store.add(name, args.role or "viewer", _read_password(args))
-                audit.write("user.added", actor, user=user.username, role=user.role)
+                user = store.add(name, args.role or "viewer", _read_password(args),
+                                 on_change=record_change("user.added", include_role=True))
                 say(f"Added the {user.role} {user.username}.")
             elif args.action == "set-role":
-                user = store.set_role(name, args.role)
-                audit.write("user.role_changed", actor, user=user.username, role=user.role)
+                user = store.set_role(name, args.role, on_change=record_change("user.role_changed", include_role=True))
                 say(f"{user.username} is now a {user.role}.")
             elif args.action in ("disable", "enable"):
-                user = store.set_disabled(name, args.action == "disable")
-                audit.write("user.disabled" if user.disabled else "user.enabled", actor, user=user.username)
+                user = store.set_disabled(name, args.action == "disable",
+                                          on_change=record_change("user.disabled" if args.action == "disable"
+                                                                  else "user.enabled"))
                 say(f"{user.username} is {'disabled' if user.disabled else 'enabled'}.")
             elif args.action == "delete":
-                user = store.remove(name)
-                audit.write("user.deleted", actor, user=user.username, role=user.role)
+                user = store.remove(name, on_change=record_change("user.deleted", include_role=True))
                 say(f"Deleted {user.username}.")
             else:                                                       # reset-password
-                user = store.reset_password(name, _read_password(args))
-                audit.write("user.password_reset", actor, user=user.username)
+                user = store.reset_password(name, _read_password(args),
+                                            on_change=record_change("user.password_reset"))
                 say(f"The password of {user.username} was changed.")
     except accounts.AccountError as e:
         raise ConfigError(str(e)) from e

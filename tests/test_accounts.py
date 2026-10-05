@@ -136,6 +136,15 @@ def test_adding_users_writes_an_owner_only_file_in_an_owner_only_directory(store
     assert alice.created_at.endswith("Z") and alice.last_login is None and alice.disabled is False
 
 
+@posix
+def test_reading_an_existing_accounts_file_tightens_its_mode_even_on_a_cache_hit(store):
+    store.add("alice", "admin", PASSWORD)
+    store.users()
+    os.chmod(store.path, 0o644)
+    assert store.users()[0].username == "alice"
+    assert mode(store.path) == 0o600
+
+
 def test_a_username_that_exists_in_any_case_cannot_be_added_again(store):
     store.add("alice", "viewer", PASSWORD)
     with pytest.raises(AccountError, match="already exists"):
@@ -318,6 +327,28 @@ def test_a_good_password_gives_a_principal_and_a_last_login(local):
     assert local.store.get("alice").last_login.endswith("Z")
 
 
+def test_authentication_revalidates_the_enabled_state_and_role_under_the_lock(store, monkeypatch):
+    stale = store.add("alice", "admin", PASSWORD)
+    store.add("other", "admin", OTHER)
+    local = LocalAccounts(store)
+    store.set_disabled("alice", True)
+    monkeypatch.setattr(store, "get", lambda username: stale)
+    assert local.authenticate("alice", PASSWORD) is None
+
+    store.set_disabled("alice", False)
+    store.set_role("alice", "viewer")
+    assert local.authenticate("alice", PASSWORD) == Principal("alice", "viewer", "local")
+
+
+def test_a_disabled_user_is_compared_with_the_decoy_hash(local, monkeypatch):
+    seen = []
+    real_verify = accounts.verify_password
+    monkeypatch.setattr(accounts, "verify_password",
+                        lambda password, stored: seen.append(stored) or real_verify(password, stored))
+    assert local.authenticate("bob", OTHER) is None
+    assert seen == [local._decoy]
+
+
 def test_a_wrong_password_an_unknown_user_and_a_disabled_one_all_give_the_same_answer_for_the_same_work(local,
                                                                                                       monkeypatch):
     calls = []
@@ -426,7 +457,7 @@ def test_the_same_record_is_logged_at_info_on_the_module_logger(tmp_path):
     with AuditLog(tmp_path) as audit:
         audit.write("user.deleted", "cli:jeff", user="alice", role="viewer")
     record = json.loads(stream.getvalue())
-    assert record["level"] == "INFO" and record["logger"] == "homelab_probe.accounts"
+    assert record["level"] == "INFO" and record["logger"] == "homelab_probe.audit"
     assert record["event"] == "audit.event" and record["action"] == "user.deleted" and record["account"] == "alice"
     assert "password" not in stream.getvalue()
 
