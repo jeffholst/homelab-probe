@@ -102,6 +102,7 @@ def address_of(request: Request) -> str:
 
 
 PUBLIC_ENDPOINTS: Set[str] = set()       # the endpoints that answer without a session (see ``public``)
+SETUP_ENDPOINTS: Set[str] = set()        # the endpoints of the guided setup (see ``setup_ok``)
 
 
 def public(endpoint: Callable[..., Any]) -> Callable[..., Any]:
@@ -112,21 +113,36 @@ def public(endpoint: Callable[..., Any]) -> Callable[..., Any]:
     return endpoint
 
 
+def setup_ok(endpoint: Callable[..., Any]) -> Callable[..., Any]:
+    """Mark an endpoint of the guided setup. While the server is in a setup mode it has no controller and no
+    administrator, so every other endpoint answers 503; these are let through by ``guard`` and check their own access
+    (the setup token, or an administrator once the server is set up: ``wizard.setup_access``). Apply it **under** the
+    route decorator; ``tests/test_server_auth.py`` pins the list."""
+    endpoint.is_setup = True         # type: ignore[attr-defined]
+    SETUP_ENDPOINTS.add(endpoint.__name__)
+    return endpoint
+
+
 class Require:
     """A dependency: a live session of at least ``role``, and for an unsafe request its CSRF token. Without a session
     the answer is 401, with too small a role 403; the session is on ``request.state.session`` afterwards.
 
     The one instance in ``guard`` is the **default for every route** (it is the dependency of the whole app), and
     lets through the endpoints marked ``public``: a route nobody remembered to declare is a route that needs a
-    login. ``admin`` adds the stricter requirement to the routes that need it."""
+    login. ``admin`` adds the stricter requirement to the routes that need it. While the server is in a setup mode
+    (``app.state.setup.mode``) nothing but the public and the setup endpoints answers: 503, never data."""
 
     def __init__(self, role: str, *, allow_public: bool = False) -> None:
         self.role, self._rank, self._allow_public = role, ROLE_RANK[role], allow_public
 
     def __call__(self, request: Request) -> Optional[Session]:
         route = request.scope.get("route")
-        if self._allow_public and getattr(getattr(route, "endpoint", None), "is_public", False):
-            return None
+        endpoint = getattr(route, "endpoint", None)
+        if self._allow_public:
+            if getattr(endpoint, "is_public", False) or getattr(endpoint, "is_setup", False):
+                return None
+            if getattr(request.app.state.setup, "mode", None):
+                raise ApiError(503, "not_configured", "The server is not set up yet: finish the setup first.")
         auth: AuthState = request.app.state.auth
         session = auth.sessions.lookup(request.cookies.get(cookie_name(request)), auth.accounts.store)
         if session is None:
@@ -151,7 +167,7 @@ class LoginBody(BaseModel):
     password: str = Field(max_length=4096)
 
 
-def _audit(request: Request, event: str, username: str, *, must: bool = False, **fields: Any) -> None:
+def audit_event(request: Request, event: str, username: str, *, must: bool = False, **fields: Any) -> None:
     """Write an audit entry. A failure to write is fatal for a login (``must``) and only a warning otherwise, so that a
     full disk cannot be turned into a way to stop people from being refused."""
     try:
@@ -186,11 +202,11 @@ def public_router() -> APIRouter:
         if user is None:
             known = auth.accounts.store.get(body.username)
             auth.throttle.failed(address, body.username)
-            _audit(request, "auth.login_failed", known.username if known else UNKNOWN_USER)
+            audit_event(request, "auth.login_failed", known.username if known else UNKNOWN_USER)
             if auth.throttle.wait(address, body.username) > 0:
-                _audit(request, "auth.throttled", known.username if known else UNKNOWN_USER)
+                audit_event(request, "auth.throttled", known.username if known else UNKNOWN_USER)
             raise ApiError(401, "invalid_credentials", "Invalid username or password.")
-        _audit(request, "auth.login", user.username, must=True, role=user.role)
+        audit_event(request, "auth.login", user.username, must=True, role=user.role)
         auth.throttle.succeeded(address, body.username)
         previous = auth.sessions.lookup(request.cookies.get(cookie_name(request)), auth.accounts.store)
         if previous is not None:
@@ -212,7 +228,7 @@ def session_router() -> APIRouter:
         auth: AuthState = request.app.state.auth
         session: Session = request.state.session
         auth.sessions.end(session)
-        _audit(request, "auth.logout", session.username)
+        audit_event(request, "auth.logout", session.username)
         response = JSONResponse({"status": "ok"})
         response.delete_cookie(cookie_name(request), httponly=True, samesite="strict",
                                secure=request.url.scheme == "https", path="/")

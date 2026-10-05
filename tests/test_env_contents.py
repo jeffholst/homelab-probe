@@ -60,7 +60,7 @@ def test_a_key_that_is_not_a_plain_name_is_never_repeated(tmp_path):
 
 def test_hlp_env_in_the_file_is_reported_because_it_cannot_work_there(tmp_path):
     report = inspect_env_file(write(tmp_path, "HLP_ENV=other.env\nUNIFI_URL=u\n"))
-    assert report.misplaced == [1] and report.unknown == [] and not report.clean
+    assert report.misplaced == [(1, "HLP_ENV")] and report.unknown == [] and not report.clean
 
 
 def test_a_line_the_parser_cannot_read_is_reported_by_number(tmp_path):
@@ -118,6 +118,15 @@ def test_every_problem_is_worded_with_names_and_lines(tmp_path):
     assert "unset the variable in the shell" not in found.fix
 
 
+def test_the_setup_token_in_a_file_is_flagged_without_its_value(tmp_path):
+    path = write(tmp_path, f"HLP_SETUP_TOKEN={MARKER}\nUNIFI_URL=u\n")
+    report = inspect_env_file(path)
+    assert report.misplaced == [(1, "HLP_SETUP_TOKEN")] and report.unknown == [] and not report.clean
+    found = check_for(path)
+    assert "HLP_SETUP_TOKEN (line 1) does nothing in a .env file, because it is read from the environment only" in found.message
+    assert MARKER not in found.message and MARKER not in found.fix
+
+
 def test_a_shell_variable_that_wins_is_explained(tmp_path, monkeypatch):
     monkeypatch.setenv("UNIFI_SITE_ID", "other")
     found = check_for(write(tmp_path, "UNIFI_URL=u\nUNIFI_SITE_ID=lab\n"))
@@ -154,7 +163,7 @@ def test_the_known_variables_are_the_ones_documented_tested_and_read():
     example = (ROOT / "example.env").read_text(encoding="utf-8")
     documented = set(re.findall(r"^#?\s*([A-Z][A-Z_]+)=", example, re.MULTILINE))
     assert documented == set(KNOWN_VARIABLES)
-    assert set(CONFIG_VARIABLES) - {config.ENV_FILE_VAR} == set(KNOWN_VARIABLES)
+    assert set(CONFIG_VARIABLES) - set(config.NOT_FOR_THE_FILE) == set(KNOWN_VARIABLES)
     source = (ROOT / "homelab_probe" / "config.py").read_text(encoding="utf-8")
     read = set(re.findall(r'(?:getenv|get)\("((?:UNIFI|NOTIFY|LOG|ALLOW)_[A-Z_]+)"', source))
     assert read <= set(KNOWN_VARIABLES)

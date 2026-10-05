@@ -19,11 +19,12 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from .. import __version__, logs
 from ..config import Config
 from ..util import is_loopback
-from . import routes
+from . import routes, wizard
 from .auth import AuthState, OriginGuard, guard, public, public_router, session_router
 from .errors import ApiError, api_error_handler, request_validation_error_handler
 from .security import SecurityHeaders
 from .service import ControllerService
+from .wizard import SetupState
 
 API = "/api/v1"
 _log = logging.getLogger(__name__)
@@ -62,14 +63,16 @@ class RequestLog:
 
 def create_app(config: Config, settings_path: Optional[Path] = None, state_dir: Optional[Path] = None, *,
                service: Optional[ControllerService] = None, auth: Optional[AuthState] = None, demo: bool = False,
-               hosts: Optional[List[str]] = None) -> FastAPI:
+               hosts: Optional[List[str]] = None, setup: Optional[SetupState] = None) -> FastAPI:
     """The app for ``config``. ``settings_path`` is the ``hlp.toml`` to use and ``state_dir`` the data directory (the
     accounts file and the audit log are there), ``service`` the way to the controller (one is made from ``config``
     when none is given: the synthetic network for a ``demo``), ``auth`` the accounts, sessions and throttle (made from
     ``state_dir`` when none is given), ``hosts`` the ``Host`` values to answer to (see ``security.allowed_hosts``).
 
     Everything answers only to a logged-in user except ``/``, ``/healthz``, ``/readyz``, ``/api/v1/meta`` and the
-    login itself; ``tests/test_server_auth.py`` lists the routes and fails on one that is neither."""
+    login itself; ``tests/test_server_auth.py`` lists the routes and fails on one that is neither. With ``setup`` (a
+    ``SetupState`` with a mode) the server is not set up: no service is made, and only those public routes and the
+    setup routes (``wizard``) answer."""
     app = FastAPI(
         title="Homelab Probe", version=__version__, docs_url=None, redoc_url=None,    # their pages load a CDN script
         openapi_url=None,                      # served below, behind the login
@@ -79,11 +82,13 @@ def create_app(config: Config, settings_path: Optional[Path] = None, state_dir: 
                     Middleware(OriginGuard)],
     )
     app.state.config, app.state.settings_path, app.state.state_dir = config, settings_path, state_dir
-    app.state.service, app.state.demo = service or ControllerService(config, demo=demo), demo
+    app.state.setup = setup
+    app.state.service, app.state.demo = (None if setup else service or ControllerService(config, demo=demo)), demo
     app.state.auth = auth or AuthState.for_directory(state_dir or Path("."), config)
     app.add_exception_handler(ApiError, api_error_handler)   # type: ignore[arg-type]
     app.add_exception_handler(RequestValidationError, request_validation_error_handler)
     routes.install(app)
+    app.include_router(wizard.router())
     app.include_router(public_router())
     app.include_router(session_router())
 
@@ -105,6 +110,8 @@ def create_app(config: Config, settings_path: Optional[Path] = None, state_dir: 
         """Can the controller be read? One read of its application info through the cache (so a probe every few
         seconds costs the controller one read per ``ttl``). Public, so it says only yes or no; the reason is in the
         server log."""
+        if request.app.state.setup is not None and request.app.state.setup.mode:
+            return JSONResponse({"ready": False}, status_code=503)     # not set up: there is no controller to read
         ready, reason = request.app.state.service.ready()
         if not ready:
             logs.warn(f"not ready: the controller could not be read ({reason})")
@@ -114,7 +121,8 @@ def create_app(config: Config, settings_path: Optional[Path] = None, state_dir: 
     @public
     def meta(request: Request) -> Dict[str, Any]:
         """What a client may know before it logs in: the version, and whether setup and login are needed."""
-        return {"version": __version__, "needs_setup": False, "login_required": True,
+        mode = getattr(request.app.state.setup, "mode", None)
+        return {"version": __version__, "needs_setup": bool(mode), "setup_mode": mode, "login_required": True,
                 "demo": bool(request.app.state.demo), "https": request.url.scheme == "https",
                 "loopback": is_loopback(request.url.hostname or "")}
 
