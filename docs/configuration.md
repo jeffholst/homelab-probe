@@ -23,6 +23,8 @@ UNIFI_VERIFY_SSL=true
 | `UNIFI_PARALLEL_REQUESTS` | No    | `6`       | How many requests to make at once, 1 to 16; 1 means one by one (also `--parallel N` before the command) |
 | `LOG_LEVEL`      | No       | `WARNING` | `DEBUG`, `INFO`, `WARNING` or `ERROR` (any case); `--verbose` means `DEBUG` ([logging](logging.md)) |
 | `LOG_FORMAT`     | No       | (command line) | `text` or `json` for one record per line with fields; unset keeps the command-line format ([logging](logging.md)) |
+| `AUDIT_LOG_MAX_MB` | No      | `5`       | Size of one web audit log file in megabytes, 1 to 1024 ([web accounts](web.md#the-files)) |
+| `AUDIT_LOG_FILES` | No      | `10`      | How many audit log files are kept in all, 2 to 1000 |
 | `NOTIFY_NTFY_URL` | No      | -         | Full ntfy topic URL for `diagnose --notify` (a secret, `https://` only) |
 | `NOTIFY_NTFY_TOKEN` | No    | -         | ntfy access token, sent as a bearer token |
 | `NOTIFY_WEBHOOK_URL` | No   | -         | Generic webhook URL for `diagnose --notify` (a secret, `https://` only) |

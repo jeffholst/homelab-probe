@@ -7,7 +7,9 @@ handler declares what it reads with a ``Needs``), analysis and rendering in the 
 
 import argparse
 import datetime
+import getpass
 import logging
+import os
 import sys
 import time
 from collections.abc import Callable
@@ -15,12 +17,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from . import logs
+from . import accounts, logs
 from .client import UniFiAPIError, UniFiClient
 from .client_view import render_candidates, render_detail
 from .completion import SHELLS
 from .completion import script as completion_script
-from .config import Config, ConfigError
+from .config import Config, ConfigError, parse_audit_log_files, parse_audit_log_mb
 from .diagnose import (
     AREA_NAMES,
     CRITICAL,
@@ -78,7 +80,7 @@ from .notify import (
     save_state,
     send,
 )
-from .query import render_csv, render_table
+from .query import format_table, render_csv, render_table
 from .settings import DiagnoseSettings, expired_rules
 from .snapshot import EventQuery, warn
 from .topology import render_text as render_topology
@@ -607,6 +609,117 @@ def _run_completion(args: argparse.Namespace) -> int:
     return 0
 
 
+# -- web-user ---------------------------------------------------------------------------------------
+
+WEB_USER_ACTIONS = ("add", "list", "set-role", "disable", "enable", "delete", "reset-password")
+
+
+def _username(text: str) -> str:
+    try:
+        return accounts.check_username(text)
+    except accounts.AccountError as e:
+        raise argparse.ArgumentTypeError(str(e)) from e
+
+
+def _add_web_user(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("action", choices=WEB_USER_ACTIONS, help="What to do")
+    parser.add_argument("name", nargs="?", type=_username, metavar="NAME",
+                        help="The user (everything except list)")
+    parser.add_argument("--role", choices=accounts.ROLES,
+                        help="add: the role of the new user (default viewer); set-role: the new role")
+    parser.add_argument("--password-stdin", action="store_true",
+                        help="add and reset-password: read the password from one line of standard input instead of "
+                             "asking for it (a password is never an argument)")
+    parser.add_argument("--data-dir", type=Path, default=Path("."), metavar="DIR",
+                        help="Where users.json and audit.log are kept (default: the current directory)")
+
+
+def _check_web_user(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    if args.action == "list":
+        if args.name is not None:
+            parser.error("list takes no NAME")
+    elif args.name is None:
+        parser.error(f"{args.action} needs the NAME of a user")
+    if args.role is not None and args.action not in ("add", "set-role"):
+        parser.error("--role only applies to add and set-role")
+    if args.action == "set-role" and args.role is None:
+        parser.error("set-role needs --role viewer or --role admin")
+    if args.password_stdin and args.action not in ("add", "reset-password"):
+        parser.error("--password-stdin only applies to add and reset-password")
+
+
+def _read_password(args: argparse.Namespace) -> str:
+    """The password from one line of standard input, or asked for twice with nothing echoed."""
+    if args.password_stdin:
+        password = sys.stdin.readline().rstrip("\r\n")
+        if not password:
+            raise ConfigError("no password was given on standard input")
+        return password
+    first = getpass.getpass("Password: ")
+    if getpass.getpass("Repeat the password: ") != first:
+        raise ConfigError("the two passwords differ; nothing was changed")
+    return first
+
+
+def _actor() -> str:
+    try:
+        return f"cli:{getpass.getuser()}"
+    except (KeyError, OSError, ImportError):
+        return "cli"
+
+
+def _list_users(store: accounts.AccountStore) -> None:
+    users = store.users()
+    if not users:
+        say("No users yet. Add one with: hlp web-user add NAME --role admin")
+        return
+    say(format_table([{"Username": u.username, "Role": u.role, "Status": "disabled" if u.disabled else "active",
+                       "Created": u.created_at, "Last login": u.last_login or ""} for u in users],
+                     ["Username", "Role", "Status", "Created", "Last login"]))
+
+
+def _run_web_user(args: argparse.Namespace) -> int:
+    store = accounts.AccountStore(args.data_dir)
+    name = args.name
+    try:
+        if args.action == "list":
+            _list_users(store)
+            return 0
+        with accounts.AuditLog(args.data_dir, parse_audit_log_mb(os.environ.get("AUDIT_LOG_MAX_MB")),
+                               parse_audit_log_files(os.environ.get("AUDIT_LOG_FILES"))) as audit:
+            actor = _actor()
+            def record_change(event: str, include_role: bool = False) -> Callable[[accounts.User], None]:
+                def record(user: accounts.User) -> None:
+                    fields = {"user": user.username}
+                    if include_role:
+                        fields["role"] = user.role
+                    audit.write(event, actor, **fields)
+                return record
+
+            if args.action == "add":
+                user = store.add(name, args.role or "viewer", _read_password(args),
+                                 on_change=record_change("user.added", include_role=True))
+                say(f"Added the {user.role} {user.username}.")
+            elif args.action == "set-role":
+                user = store.set_role(name, args.role, on_change=record_change("user.role_changed", include_role=True))
+                say(f"{user.username} is now a {user.role}.")
+            elif args.action in ("disable", "enable"):
+                user = store.set_disabled(name, args.action == "disable",
+                                          on_change=record_change("user.disabled" if args.action == "disable"
+                                                                  else "user.enabled"))
+                say(f"{user.username} is {'disabled' if user.disabled else 'enabled'}.")
+            elif args.action == "delete":
+                user = store.remove(name, on_change=record_change("user.deleted", include_role=True))
+                say(f"Deleted {user.username}.")
+            else:                                                       # reset-password
+                user = store.reset_password(name, _read_password(args),
+                                            on_change=record_change("user.password_reset"))
+                say(f"The password of {user.username} was changed.")
+    except accounts.AccountError as e:
+        raise ConfigError(str(e)) from e
+    return 0
+
+
 # -- diagnose ---------------------------------------------------------------------------------------
 
 def _add_diagnose(parser: argparse.ArgumentParser) -> None:
@@ -863,6 +976,8 @@ COMMANDS: List[Command] = [
             run_local=_run_doctor),
     Command("completion", "Print a shell completion script (bash, zsh or fish)", _add_completion, _not_run,
             run_local=_run_completion),
+    Command("web-user", "Manage the accounts of the web interface: users, roles and passwords", _add_web_user,
+            _not_run, validate=_check_web_user, run_local=_run_web_user),
     Command("diagnose", "Run read-only health checks (offline devices, port errors, ...)", _add_diagnose,
             _run_diagnose, validate=_check_diagnose, wants_settings=_always, prepare=_prepare_diagnose),
     Command("info", "Show controller version and available sites", _add_info, _run_info),

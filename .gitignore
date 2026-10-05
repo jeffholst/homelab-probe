@@ -23,3 +23,8 @@ snapshots/
 
 # Recorded (sanitised) controller fixtures
 tools/recorded/
+
+# Web accounts and their audit log (password hashes, names and who changed what)
+users.json
+users.json.*
+audit.log*
