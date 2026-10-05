@@ -44,6 +44,10 @@ always listed here.
 - New log events server.start, server.request and server.cache.
 - A new log event, audit.event, and the settings `AUDIT_LOG_MAX_MB` and `AUDIT_LOG_FILES`.
 
+### Changed
+
+- **Snapshots and the notification state are kept per site (#140).** `snapshot` now saves into `snapshots/<site id>/` and `diagnose --notify` remembers findings in `snapshots/<site id>/notify-state.json` (the site's UUID as the controller reports it), so alternating `--site` runs no longer announce false recoveries and `diff` never picks another site's snapshot. `diff` without `--dir` picks the newest snapshot **of this site**, and `--keep` counts only this site's. `--dir` and `--notify-state` are used exactly as given. Files from earlier versions are still read and never moved: snapshots saved straight into `snapshots/` belong to the site their record names, and the shared `snapshots/notify-state.json` is read for the site `default` while it has no file of its own. A state file now records its `site` (additive; the state `version` stays 1) and a state of another site is refused with exit code 3. **Note:** finding a site's directory asks the controller which site is meant, so `diff` with no file paths and `diff --last-two` now make one request (give `--dir DIR` to work without the controller, as `diff OLD.json NEW.json` already does).
+
 ### Fixed
 
 - `docs/web.md` describes what the web server does today (login, report API, first-run setup API) instead of "a few routes without data".

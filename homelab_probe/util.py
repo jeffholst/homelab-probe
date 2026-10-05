@@ -181,6 +181,16 @@ def search_rows(rows: List[Dict[str, Any]], search: str) -> List[Dict[str, Any]]
     return [r for r in rows if any(needle in str(v).lower() for v in r.values())]
 
 
+def site_key(site_id: Any) -> str:
+    """A site id as one safe directory or file name: letters, digits, ``.``, ``_`` and ``-`` stay, anything else becomes
+    ``_``, at most 64 characters, never empty and never starting with a dot (so it cannot be ``.``, ``..`` or hidden).
+    The same id always gives the same name; a missing id gives ``unknown``."""
+    key = re.sub(r"[^A-Za-z0-9._-]", "_", str(site_id or ""))[:64]
+    if not key:
+        return "unknown"
+    return "_" + key if key.startswith(".") else key
+
+
 def record_for(table: Dict[str, Dict[str, Any]], key: Any) -> Dict[str, Any]:
     """``table[key]`` for a record keyed by device id, or ``{}`` when the key is missing or unknown.
     The id of a record may itself be missing (None), which is not a valid key, so it is checked here once."""
