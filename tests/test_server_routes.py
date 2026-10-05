@@ -299,11 +299,12 @@ def test_every_report_route_is_a_get_without_a_path_parameter_and_only_named_par
     reports = {p: item for p, item in spec["paths"].items() if p.startswith(("/api/v1/unifi", "/api/v1/schemas"))}
     assert len(reports) > 15
     for path, item in reports.items():
-        assert set(item) == {"get"}, path
+        # The one write among the reports is saving a snapshot (an administrator's, audited, refused by --read-only).
+        assert set(item) == ({"get", "post"} if path.endswith("/snapshots") else {"get"}), path
         assert all(p["name"] not in {"url", "path", "target", "host", "proxy"} for p in item["get"].get("parameters", [])
                    if p["in"] == "path"), path
         assert set(re.findall(r"\{(\w+)\}", path)) <= {"site", "mac", "name"}, path
-    for module in ("routes.py", "app.py", "auth.py"):
+    for module in ("routes.py", "app.py", "auth.py", "snapshots_api.py"):
         source = (ROOT / "homelab_probe" / "server" / module).read_text(encoding="utf-8")
         assert ":path}" not in source, module                       # a Starlette `path` convertor takes slashes
 

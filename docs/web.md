@@ -141,6 +141,20 @@ The thresholds and ignore rules of `diagnose` and `audit` are the `hlp.toml` the
 - **Safe writes.** The file is replaced in one step with its permissions kept (a new file is owner-only), the old content is kept as `hlp.toml.bak`, and a symbolic link is left alone (`409`). A `PUT` that changes nothing writes nothing: no new version, no `.bak`, no audit entry. A file the loader refuses cannot be edited here (`409 settings_file_invalid`; `GET` says `500 settings_invalid`): fix it by hand, `hlp diagnose` shows the reason.
 - **Audit.** `settings.updated` with the user, the names of the thresholds that changed and the number of ignore rules (`"2 rule(s)"` or `"unchanged"`), never a rule's text.
 
+### Snapshots: `/api/v1/unifi/sites/{site}/snapshots` and `/diff`
+
+The saved snapshots of [`snapshot` and `diff`](inventory.md#snapshots-and-diff), kept per site in `snapshots/<site id>/` of the data directory (the older ones that were saved straight into `snapshots/` are listed for the site their record names).
+
+| Method and path | What it does |
+| --------------- | ------------ |
+| `GET .../snapshots?limit=50` | Anyone logged in: the newest saved snapshots of the site (`name`, `captured_at`, how many `devices`, `clients` and `reservations`), newest first, and `total`. A file that cannot be read as a snapshot is listed with `readable: false` |
+| `POST .../snapshots` | An administrator, with the CSRF token: save a snapshot of the network **now** (the cache is refreshed first, at most every 5 seconds) with the code `snapshot` uses. Body `{"keep": N}` (optional) afterwards keeps only the newest N of this site, as `snapshot --keep` does. Answers `201` with the `snapshot` summary, the `removed` names, `generated_at` and `warnings` |
+| `GET .../diff?old=NAME&new=NAME` | Anyone logged in: what changed, in the document `diff --json` prints (plus `old`, `new`, `generated_at`, `warnings`). `old` defaults to the newest snapshot of the site, `new` to the network right now |
+
+- **Names, not paths.** A snapshot is named by its bare file name from the list. A name with a directory part, a name that is not the kind `snapshot` writes, and the snapshot of another site are a `404 snapshot_not_found`; no path a caller sends reaches the disk.
+- **The site is looked up first** (one cached request), because the directory is named by the site's id: when the controller cannot be read, these routes answer `502` or `504` like the other site routes.
+- **The write** is refused by `serve --read-only` (`403 read_only`), is audited as `snapshot.saved` (the file name and the counts) and fails with a fixed `500 snapshot_not_written` when the disk does. The file is owner-only in a `0700` directory, as the command writes it.
+
 ### How the server reads the controller
 
 Every read of the controller goes through one cache shared by all requests, so a browser that polls does not turn into dozens of reads per page:

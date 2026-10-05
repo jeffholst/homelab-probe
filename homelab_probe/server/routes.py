@@ -102,7 +102,7 @@ def _ok(schema: Dict[str, Any], *, settings: bool = False,
     return responses
 
 
-def _site(site: str) -> str:
+def checked_site(site: str) -> str:
     try:
         return validate_site(site)
     except ConfigError:
@@ -124,7 +124,7 @@ def _settings(request: Request) -> DiagnoseSettings:
         raise ApiError(500, "settings_invalid", "The settings file could not be read; see the server log.") from None
 
 
-def _respond(request: Request, make: Callable[[Any], Document], *, refresh: bool = False,
+def respond(request: Request, make: Callable[[Any], Document], *, refresh: bool = False,
              notes: Optional[Callable[[Document], Dict[str, Any]]] = None,
              check: Optional[Callable[[Document], None]] = None) -> JSONResponse:
     """Build the document through the service and wrap it with ``generated_at`` and ``warnings``. ``check`` may raise
@@ -178,7 +178,7 @@ def build_router() -> APIRouter:
 
     @router.get("/sites", responses=_ok(INFO_SCHEMA), summary="The controller and its sites")
     def sites(request: Request, refresh: RefreshQ = False) -> JSONResponse:
-        return _respond(request, lambda client: info_document(client), refresh=refresh)
+        return respond(request, lambda client: info_document(client), refresh=refresh)
 
     @router.get(f"{at}/diagnose", responses=schema("diagnose", settings=True), summary="Health checks (diagnose)")
     def diagnose(request: Request, site: SiteP, only: ListQ = None, skip: ListQ = None, since: SinceQ = "24h",
@@ -188,27 +188,27 @@ def build_router() -> APIRouter:
             areas = diagnose_areas(argparse.Namespace(only=only or [], skip=skip or [], no_events=no_events))
         except ValueError as error:
             raise ApiError(422, "invalid_parameter", str(error)) from None
-        settings, name = _settings(request), _site(site)
-        return _respond(request, lambda client: diagnose_document(client, name, settings, areas, seconds,
+        settings, name = _settings(request), checked_site(site)
+        return respond(request, lambda client: diagnose_document(client, name, settings, areas, seconds,
                                                                    show_ignored, echo=False), refresh=refresh)
 
     @router.get(f"{at}/audit", responses=schema("audit", settings=True), summary="Configuration audit")
     def audit(request: Request, site: SiteP, show_ignored: bool = False, refresh: RefreshQ = False) -> JSONResponse:
-        settings, name = _settings(request), _site(site)
-        return _respond(request, lambda client: audit_document(client, name, settings, show_ignored, echo=False),
+        settings, name = _settings(request), checked_site(site)
+        return respond(request, lambda client: audit_document(client, name, settings, show_ignored, echo=False),
                         refresh=refresh)
 
     @router.get(f"{at}/firewall", responses=schema("firewall"), summary="Firewall policies, zones and port forwards")
     def firewall(request: Request, site: SiteP, all: bool = False, search: TextQ = "",
                  refresh: RefreshQ = False) -> JSONResponse:
-        name = _site(site)
-        return _respond(request, lambda client: firewall_document(client, name, all, search, echo=False),
+        name = checked_site(site)
+        return respond(request, lambda client: firewall_document(client, name, all, search, echo=False),
                         refresh=refresh)
 
     @router.get(f"{at}/topology", responses=schema("topology", settings=True), summary="The uplink tree")
     def topology(request: Request, site: SiteP, clients: bool = False, refresh: RefreshQ = False) -> JSONResponse:
-        settings, name = _settings(request), _site(site)
-        return _respond(request, lambda client: topology_document(client, name, settings, clients, echo=False),
+        settings, name = _settings(request), checked_site(site)
+        return respond(request, lambda client: topology_document(client, name, settings, clients, echo=False),
                         refresh=refresh)
 
     @router.get(f"{at}/wifi", responses=schema("wifi"), summary="Radios and the channel plan")
@@ -218,22 +218,22 @@ def build_router() -> APIRouter:
             wanted = parse_band(band) if band else ""
         except ValueError as error:
             raise ApiError(422, "invalid_parameter", str(error)) from None
-        name = _site(site)
-        return _respond(request, lambda client: wifi_document(client, name, min_signal, wanted, ap, echo=False),
+        name = checked_site(site)
+        return respond(request, lambda client: wifi_document(client, name, min_signal, wanted, ap, echo=False),
                         refresh=refresh)
 
     @router.get(f"{at}/wan", responses=schema("wan"), summary="Internet health")
     def wan(request: Request, site: SiteP, days: DaysQ = DEFAULT_DAYS, refresh: RefreshQ = False) -> JSONResponse:
-        settings, name = _settings(request), _site(site)
-        return _respond(request, lambda client: wan_document(client, name, days, settings, echo=False),
+        settings, name = _settings(request), checked_site(site)
+        return respond(request, lambda client: wan_document(client, name, days, settings, echo=False),
                         refresh=refresh)
 
     @router.get(f"{at}/events", responses=schema("events", apischema.EVENT_NOTES), summary="Event history")
     def events(request: Request, site: SiteP, since: SinceQ = "24h", category: ListQ = None, severity: ListQ = None,
                event: TextQ = "", client: TextQ = "", device: TextQ = "", search: TextQ = "",
                limit: LimitQ = DEFAULT_LIMIT, refresh: RefreshQ = False) -> JSONResponse:
-        wanted, name = _event_query(since, category, severity, search), _site(site)
-        return _respond(
+        wanted, name = _event_query(since, category, severity, search), checked_site(site)
+        return respond(
             request, lambda api: events_document(api, name, wanted, client, device, event, limit, False, echo=False),
             refresh=refresh, notes=lambda doc: {"truncated": bool(doc.meta["more"]),
                                                 "read_cap_reached": bool(doc.meta["cap_truncated"])})
@@ -243,8 +243,8 @@ def build_router() -> APIRouter:
     def events_summary(request: Request, site: SiteP, since: SinceQ = "24h", category: ListQ = None,
                        severity: ListQ = None, event: TextQ = "", client: TextQ = "", device: TextQ = "",
                        search: TextQ = "", refresh: RefreshQ = False) -> JSONResponse:
-        wanted, name = _event_query(since, category, severity, search), _site(site)
-        return _respond(request, lambda api: events_document(api, name, wanted, client, device, event,
+        wanted, name = _event_query(since, category, severity, search), checked_site(site)
+        return respond(request, lambda api: events_document(api, name, wanted, client, device, event,
                                                               DEFAULT_LIMIT, True, echo=False), refresh=refresh)
 
     @router.get(f"{at}/clients", responses=schema("query-clients"),
@@ -255,49 +255,49 @@ def build_router() -> APIRouter:
         for what, value in (("network", network), ("ssid", ssid), ("ap", ap)):
             if value is not None:
                 _name(value, what, required=True)
-        name = _site(site)
-        return _respond(request, lambda api: query_document(
+        name = checked_site(site)
+        return respond(request, lambda api: query_document(
             api, name, "clients", search, include_offline, network=network, ssid=ssid, ap=ap, echo=False),
             refresh=refresh)
 
     @router.get(f"{at}/devices", responses=schema("query-devices"), summary="UniFi devices")
     def devices(request: Request, site: SiteP, search: TextQ = "", include_offline: bool = False,
                 refresh: RefreshQ = False) -> JSONResponse:
-        name = _site(site)
-        return _respond(request, lambda api: query_document(api, name, "devices", search, include_offline,
+        name = checked_site(site)
+        return respond(request, lambda api: query_document(api, name, "devices", search, include_offline,
                                                              echo=False), refresh=refresh)
 
     @router.get(f"{at}/networks", responses=schema("query-networks"), summary="Networks and VLANs")
     def networks(request: Request, site: SiteP, search: TextQ = "", refresh: RefreshQ = False) -> JSONResponse:
-        name = _site(site)
-        return _respond(request, lambda api: query_document(api, name, "networks", search, echo=False),
+        name = checked_site(site)
+        return respond(request, lambda api: query_document(api, name, "networks", search, echo=False),
                         refresh=refresh)
 
     @router.get(f"{at}/wlans", responses=schema("query-wlans"), summary="Wi-Fi networks")
     def wlans(request: Request, site: SiteP, search: TextQ = "", refresh: RefreshQ = False) -> JSONResponse:
-        name = _site(site)
-        return _respond(request, lambda api: query_document(api, name, "wlans", search, echo=False),
+        name = checked_site(site)
+        return respond(request, lambda api: query_document(api, name, "wlans", search, echo=False),
                         refresh=refresh)
 
     @router.get(f"{at}/ports", responses=schema("query-ports"), summary="Switch ports")
     def ports(request: Request, site: SiteP, search: TextQ = "", switch: TextQ = "", down: bool = False,
               errors: bool = False, refresh: RefreshQ = False) -> JSONResponse:
-        name = _site(site)
-        return _respond(request, lambda api: query_document(api, name, "ports", search, switch=switch, down=down,
+        name = checked_site(site)
+        return respond(request, lambda api: query_document(api, name, "ports", search, switch=switch, down=down,
                                                              errors=errors, echo=False), refresh=refresh)
 
     @router.get(f"{at}/reservations", responses=schema("query-reservations", settings=True),
                 summary="DHCP reservations")
     def reservations(request: Request, site: SiteP, search: TextQ = "", offline: bool = False,
                      refresh: RefreshQ = False) -> JSONResponse:
-        settings, name = _settings(request), _site(site)
-        return _respond(request, lambda api: query_document(api, name, "reservations", search, offline=offline,
+        settings, name = _settings(request), checked_site(site)
+        return respond(request, lambda api: query_document(api, name, "reservations", search, offline=offline,
                                                              settings=settings, echo=False), refresh=refresh)
 
     @router.get(f"{at}/new-clients", responses=schema("new-clients"), summary="Clients in no client group")
     def new_clients(request: Request, site: SiteP, search: TextQ = "", refresh: RefreshQ = False) -> JSONResponse:
-        name = _site(site)
-        return _respond(request, lambda api: new_clients_document(api, name, search, echo=False), refresh=refresh)
+        name = checked_site(site)
+        return respond(request, lambda api: new_clients_document(api, name, search, echo=False), refresh=refresh)
 
     @router.get(f"{at}/clients/{{mac}}", responses=schema("client", settings=True, ambiguous_client=True),
                 summary="One client by MAC address")
@@ -307,8 +307,8 @@ def build_router() -> APIRouter:
         if len(address.replace(":", "")) != 12:
             raise ApiError(422, "invalid_parameter", "The MAC address is not valid.")
         seconds = _duration(since)
-        settings, name = _settings(request), _site(site)
-        return _respond(request, lambda api: client_document(api, name, address, settings, seconds, events,
+        settings, name = _settings(request), checked_site(site)
+        return respond(request, lambda api: client_document(api, name, address, settings, seconds, events,
                                                               echo=False), refresh=refresh, check=_client_found)
 
     return router
