@@ -329,7 +329,9 @@ class AccountStore:
     # the operations
 
     def add(self, username: str, role: str, password: str,
-            on_change: Optional[Callable[[User], None]] = None) -> User:
+            on_change: Optional[Callable[[User], None]] = None, only_if_no_admin: bool = False) -> User:
+        """Add a user. With ``only_if_no_admin`` the account is refused, under the same lock, when an enabled
+        administrator exists (the first administrator of the guided setup must not become the second one)."""
         name, role = check_username(username), check_role(role)
         check_password_policy(password)
         hashed = hash_password(password)
@@ -337,6 +339,8 @@ class AccountStore:
         def change(users: List[User]) -> Tuple[List[User], User]:
             if any(u.username == name for u in users):
                 raise AccountError(f"the user {name} already exists")
+            if only_if_no_admin and _enabled_admins(users):
+                raise AccountError("an administrator exists already")
             user = User(name, role, hashed, _now())
             return users + [user], user
 

@@ -371,14 +371,19 @@ def _compose_snippet(values: Dict[str, str]) -> str:
 def _fallback(state: SetupState, reason: str, values: Dict[str, str], detail: str = "",
               names: Optional[List[str]] = None) -> Dict[str, Any]:
     """What to do by hand when the settings cannot be saved here: the finished ``.env`` and a compose snippet, with a
-    placeholder where the API key goes (the key is never sent back) and, for a pinned certificate, the certificate to
-    save and a path to put in its place."""
+    placeholder where each secret goes (the API key and every notification setting are never sent back; the answer
+    names them in ``placeholders``) and, for a pinned certificate, the certificate to save and a path to put in its
+    place."""
     shown = {**values, "UNIFI_API_KEY": setup_engine.PLACEHOLDER_KEY}
+    notify = [name for name in values if name in NOTIFY_NAMES]
+    for name in notify:
+        shown[name] = "your-" + name.lower().replace("_", "-") + "-here"
     pinned = state.draft.verify == "pin" and state.draft.certificate is not None
     if pinned:
         shown["UNIFI_VERIFY_SSL"] = "/path/to/controller.pem"
     return {"finished": False, "written": False, "reason": reason, "detail": detail,
-            "environment_names": names or [], "env": setup_engine.render_env(shown),
+            "environment_names": names or [], "placeholders": ["UNIFI_API_KEY", *notify],
+            "env": setup_engine.render_env(shown),
             "compose": _compose_snippet(shown),
             "certificate": state.draft.certificate.pem if pinned and state.draft.certificate else None}
 
@@ -577,8 +582,12 @@ def router() -> APIRouter:
                                      address=address_of(request))
 
                 try:
-                    auth.accounts.store.add(credentials[0], "admin", credentials[1], on_change=record)
+                    auth.accounts.store.add(credentials[0], "admin", credentials[1], on_change=record,
+                                            only_if_no_admin=True)
                 except AccountError:
+                    if administrator_exists(auth.accounts.store):       # somebody was faster: no second one is made
+                        raise ApiError(409, "admin_exists", "An administrator was created meanwhile: log in with "
+                                       "that account.") from None
                     raise ApiError(500, "admin_not_created", "The settings are saved but the administrator could not "
                                    "be created: run `hlp web-user add NAME --role admin` and restart.") from None
             try:

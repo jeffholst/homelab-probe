@@ -500,3 +500,13 @@ def test_a_closed_log_can_be_opened_again(tmp_path):
     with AuditLog(tmp_path) as second:
         second.write("user.added", "cli", user="b")
     assert [json.loads(line)["user"] for line in (tmp_path / "audit.log").read_text().splitlines()] == ["a", "b"]
+
+
+def test_only_if_no_admin_refuses_a_second_administrator_under_the_lock(tmp_path):
+    store = AccountStore(tmp_path)
+    store.add("viewer1", "viewer", PASSWORD, only_if_no_admin=True)            # a viewer is no administrator
+    store.add("alice", "admin", PASSWORD, only_if_no_admin=True)
+    with pytest.raises(AccountError, match="administrator exists already"):
+        store.add("bob", "admin", PASSWORD, only_if_no_admin=True)
+    store.add("carol", "admin", PASSWORD)                                       # without the flag nothing changes
+    assert [u.username for u in store.users()] == ["viewer1", "alice", "carol"]

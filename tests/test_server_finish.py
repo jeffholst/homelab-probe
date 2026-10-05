@@ -380,10 +380,31 @@ def test_a_volume_that_cannot_be_written_gives_the_fallback(client, state, tmp_p
 
 
 def test_the_compose_snippet_quotes_values_and_doubles_the_dollar_signs(client, monkeypatch, tmp_path):
+    compose = wizard._compose_snippet({"A": "a$b", "B": 'say "hi"', "C": "https://c.example"})
+    assert 'A: "a$$b"' in compose and 'B: "say \\"hi\\""' in compose and 'C: "https://c.example"' in compose
     monkeypatch.setenv("UNIFI_SITE_ID", "other")
-    tested(client, notify={"NOTIFY_NTFY_URL": "https://ntfy.example/a$b"})
-    compose = finish(client).json()["compose"]
-    assert 'NOTIFY_NTFY_URL: "https://ntfy.example/a$$b"' in compose and 'UNIFI_URL: "https://192.168.1.1"' in compose
+    tested(client)
+    assert 'UNIFI_URL: "https://192.168.1.1"' in finish(client).json()["compose"]
+
+
+def test_the_fallback_never_holds_a_notification_secret(client, monkeypatch, tmp_path):
+    secrets_ = {"NOTIFY_NTFY_URL": NTFY, "NOTIFY_NTFY_TOKEN": "tk-secret-token-1234", "NOTIFY_WEBHOOK_URL": "https://hook.example/h-9z8y7x",
+                "NOTIFY_WEBHOOK_TOKEN": "wh-secret-token-5678"}
+    monkeypatch.setenv("UNIFI_SITE_ID", "other")
+    tested(client, notify=secrets_)
+    response = finish(client)
+    body = response.json()
+    for value in secrets_.values():
+        assert value not in response.text
+    assert body["placeholders"] == ["UNIFI_API_KEY", *secrets_]
+    assert "NOTIFY_NTFY_TOKEN=your-notify-ntfy-token-here" in body["env"]
+    assert 'NOTIFY_WEBHOOK_URL: "your-notify-webhook-url-here"' in body["compose"]
+
+
+def test_the_fallback_without_notifications_names_only_the_key_as_a_placeholder(client, monkeypatch):
+    monkeypatch.setenv("UNIFI_SITE_ID", "other")
+    tested(client)
+    assert finish(client).json()["placeholders"] == ["UNIFI_API_KEY"]
 
 
 def test_a_pinned_certificate_is_offered_with_a_placeholder_path_when_nothing_can_be_written(
@@ -475,3 +496,18 @@ def test_a_user_name_that_is_taken_by_a_viewer_is_refused(tmp_path, state):
     response = finish(client)
     assert response.status_code == 422 and response.json()["message"] == "That user name is taken."
     assert not (tmp_path / ".env").exists()
+
+
+def test_an_administrator_created_between_the_check_and_the_add_is_not_followed_by_a_second(client, app):
+    tested(client)
+    store = app.state.auth.accounts.store
+    real = store.add
+
+    def racing(username, role, password, on_change=None, only_if_no_admin=False):
+        real("alice", "admin", PASSWORD)              # `hlp web-user add` wins the race
+        return real(username, role, password, on_change=on_change, only_if_no_admin=only_if_no_admin)
+
+    store.add = racing
+    response = finish(client)
+    assert response.status_code == 409 and response.json()["error"] == "admin_exists"
+    assert [u.username for u in store.users()] == ["alice"]
