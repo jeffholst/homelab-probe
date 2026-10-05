@@ -63,6 +63,11 @@ def test_documents_and_accounts_do_not_know_the_server_exists():
 
 @pytest.mark.parametrize("path", sorted((PACKAGE / "server").glob("*.py")), ids=lambda p: p.name)
 def test_the_server_makes_no_request_toward_the_controller_by_itself(path):
-    """The skeleton has no read of its own: a request toward the controller goes through ``ControllerService``."""
-    text = path.read_text(encoding="utf-8")
-    assert "requests" not in text and ".post(" not in text and ".put(" not in text and ".delete(" not in text
+    """A request toward the controller can only be made by a ``UniFiClient`` (GET, and the one event-log POST): the
+    server imports no HTTP library and calls no write method."""
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    modules = {alias.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import) for alias in n.names}
+    modules |= {(n.module or "").split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and not n.level}
+    assert not modules & {"requests", "urllib3", "httpx", "httpx2", "socket", "urllib"}
+    called = {n.func.attr for n in ast.walk(tree) if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)}
+    assert not called & {"post", "put", "patch", "delete", "request", "send"}

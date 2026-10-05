@@ -18,7 +18,7 @@ Without the extra it exits with code 3 and says what to install. Options:
 - **`--data-dir DIR`** (default: the current directory): where the server keeps its own files; used by the stages that follow.
 - **`--config FILE`**: the `hlp.toml` with the `diagnose` thresholds and ignore rules, as for the other commands.
 
-What it answers today: `/healthz` and `/readyz` (is it up, is it ready; no data and no controller read), `/api/v1/meta` (version and whether setup and login are needed), `/api/v1/platforms` and `/api/v1/openapi.json` (the API description, built into the server; the Swagger and ReDoc pages are off because they load scripts from a CDN). Only `GET` is answered. The routes that return the reports follow in the next stages.
+What it answers today: `/healthz` (is the process up; no data and no controller read), `/readyz` (can the controller be read: 200, or 503 with a one-word reason such as `unauthorized` or `timeout`), `/api/v1/meta` (version and whether setup and login are needed), `/api/v1/platforms` and `/api/v1/openapi.json` (the API description, built into the server; the Swagger and ReDoc pages are off because they load scripts from a CDN). Only `GET` is answered. The routes that return the reports follow in the next stages.
 
 **Until login is built in, anyone who can reach this machine can read the API.** That is why it binds loopback only. What protects it meanwhile:
 
@@ -30,6 +30,17 @@ What it answers today: `/healthz` and `/readyz` (is it up, is it ready; no data 
 | Headers on every response | A strict content-security policy (`default-src 'none'`), `nosniff`, no referrer, no framing, `no-store`, no server banner |
 | GET only, no passthrough | No route accepts a path to forward to the controller, and nothing writes to it |
 | Request log | One `INFO` record per request (`server.request`, [logging](logging.md)): method, route **template** (never the path asked for, which can hold a MAC address), status and milliseconds, with a request id that is also sent back as `X-Request-ID` (an id a client sends is ignored) |
+
+### How the server reads the controller
+
+Every read of the controller goes through one cache shared by all requests, so a browser that polls does not turn into dozens of reads per page:
+
+- An answer is kept for **30 seconds**. N requests at once for the same data cause **one** read of the controller (the others wait for it).
+- When a read fails and an older good answer is **at most 10 minutes old**, that answer is served and the response carries a warning that says when it was read (`served from the cache as of 12:03:11`). Without an older answer the error is returned.
+- A failure is remembered for **5 seconds**, so a burst of requests after an outage does not become a burst of reads.
+- At most `UNIFI_PARALLEL_REQUESTS` reads (default 6) are on the wire at once, however many requests are running.
+- Each response says when its data was read (`generated_at` is the age of the oldest answer it used, not the time it was built).
+- Only the reads the command line makes are made: GETs, and the one read-only event-log query. The window of that query is rounded to 30 seconds so that repeated requests share it. The session that talks to the controller refuses cookies, so nothing the controller sets can leak from one request into the next.
 
 ## Roles
 

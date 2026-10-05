@@ -55,6 +55,8 @@ EVENTS: Dict[str, str] = {
     "audit.event": "A change to the web accounts was made (INFO): the action, who did it and which user; "
                    "never a password.",
     "server.start": "The web server started listening (INFO): the address, the port, whether it is a demo.",
+    "server.cache": "One read of the controller by the web server (DEBUG): answered from the cache (hit), read (miss), "
+                    "served stale because the read failed, or refused because it just failed (coalesced).",
     "server.request": "One request to the web server (INFO): the method, the route template (never the path), the "
                       "status and the milliseconds.",
     "watch.pass": "One pass of `diagnose --watch` finished (INFO): how many findings, whether the read was complete.",

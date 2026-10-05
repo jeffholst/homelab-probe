@@ -23,7 +23,6 @@ from .client_view import render_candidates, render_detail
 from .completion import SHELLS
 from .completion import script as completion_script
 from .config import Config, ConfigError, parse_audit_log_files, parse_audit_log_mb
-from .demo import demo_client
 from .diagnose import (
     AREA_NAMES,
     CRITICAL,
@@ -767,8 +766,7 @@ def _run_serve(ctx: Context) -> int:
     host = f"[{args.host}]" if ":" in args.host else args.host
     say(f"Serving on http://{host}:{args.port} (Ctrl-C to stop). Anyone who can reach this machine can read "
         "the API: login is not built in yet.", file=sys.stderr)
-    run(config, args.host, args.port, args.config, args.data_dir,
-        (lambda: demo_client(config)) if args.demo else (lambda: UniFiClient.from_config(config)), demo=args.demo)
+    run(config, args.host, args.port, args.config, args.data_dir, demo=args.demo)
     return 0
 
 

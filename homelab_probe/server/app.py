@@ -7,17 +7,18 @@ stage do, through ``ControllerService``), it has no route that forwards a path, 
 import logging
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from starlette.middleware import Middleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from .. import __version__, logs
-from ..client import UniFiClient
 from ..config import Config
 from .security import SecurityHeaders
+from .service import ControllerService
 
 API = "/api/v1"
 _log = logging.getLogger(__name__)
@@ -55,11 +56,12 @@ class RequestLog:
 
 
 def create_app(config: Config, settings_path: Optional[Path] = None, state_dir: Optional[Path] = None, *,
-               client_factory: Optional[Callable[[], UniFiClient]] = None, demo: bool = False,
+               service: Optional[ControllerService] = None, demo: bool = False,
                hosts: Optional[List[str]] = None) -> FastAPI:
     """The app for ``config``. ``settings_path`` is the ``hlp.toml`` to use and ``state_dir`` the data directory (both
-    used by the stages that follow), ``client_factory`` makes a controller client, ``hosts`` the ``Host`` values to
-    answer to (see ``security.allowed_hosts``)."""
+    used by the stages that follow), ``service`` the way to the controller (one is made from ``config`` when none is
+    given: the synthetic network for a ``demo``), ``hosts`` the ``Host`` values to answer to (see
+    ``security.allowed_hosts``)."""
     app = FastAPI(
         title="Homelab Probe", version=__version__, docs_url=None, redoc_url=None,    # their pages load a CDN script
         openapi_url=f"{API}/openapi.json",
@@ -67,7 +69,7 @@ def create_app(config: Config, settings_path: Optional[Path] = None, state_dir: 
                     Middleware(TrustedHostMiddleware, allowed_hosts=hosts or ["localhost", "127.0.0.1", "[::1]"])],
     )
     app.state.config, app.state.settings_path, app.state.state_dir = config, settings_path, state_dir
-    app.state.client_factory, app.state.demo = client_factory, demo
+    app.state.service, app.state.demo = service or ControllerService(config, demo=demo), demo
 
     @app.get("/", include_in_schema=False)
     def root() -> Dict[str, str]:
@@ -80,9 +82,14 @@ def create_app(config: Config, settings_path: Optional[Path] = None, state_dir: 
         return {"status": "ok"}
 
     @app.get("/readyz", include_in_schema=False)
-    def readyz(request: Request, response: Response) -> Dict[str, Any]:
-        """Is it configured to answer? (It does not read the controller; that is what the document routes report.)"""
-        return {"ready": True, "demo": bool(request.app.state.demo)}
+    def readyz(request: Request) -> JSONResponse:
+        """Can the controller be read? One read of its application info through the cache (so a probe every few
+        seconds costs the controller one read per ``ttl``); the reason is a fixed word, never the error's text."""
+        ready, reason = request.app.state.service.ready()
+        body: Dict[str, Any] = {"ready": ready, "demo": bool(request.app.state.demo)}
+        if not ready:
+            body["reason"] = reason
+        return JSONResponse(body, status_code=200 if ready else 503)
 
     @app.get(f"{API}/meta")
     def meta(request: Request) -> Dict[str, Any]:

@@ -33,7 +33,8 @@ always listed here.
 
 - **`web-user`** (`hlp web-user add|list|set-role|disable|enable|delete|reset-password`): the accounts of the coming web interface, kept in an owner-only users file (`--data-dir`, the current directory by default) with scrypt password hashes that are upgraded at the next login, two roles (viewer and admin), protection of the last administrator, and an owner-only, size-rotated audit log file (`AUDIT_LOG_MAX_MB`, `AUDIT_LOG_FILES`). A password is read from a prompt or `--password-stdin`, never an argument. Standard library only. See [docs/web.md](docs/web.md).
 - **`serve`**: the first stage of the web server, installed with the new `web` extra (`pip install 'homelab-probe[web]'`; the command line needs no new dependency). It serves a few routes without data (`/healthz`, `/readyz`, `/api/v1/meta`, `/api/v1/platforms`, `/api/v1/openapi.json`) and binds a loopback address only, until login exists. A `Host` check, no CORS, a strict content-security policy on every response, GET only, and a request log that never holds the path asked for. See [docs/web.md](docs/web.md).
-- New log events server.start and server.request.
+- The server reads the controller through a shared cache (30 s, one read for N simultaneous requests, an answer up to 10 minutes old is served with a warning when the controller cannot be read, failures remembered for 5 s, at most `UNIFI_PARALLEL_REQUESTS` reads at once), and `/readyz` now says whether the controller can be read (503 and a one-word reason when it cannot).
+- New log events server.start, server.request and server.cache.
 - A new log event, audit.event, and the settings `AUDIT_LOG_MAX_MB` and `AUDIT_LOG_FILES`.
 
 ### Fixed

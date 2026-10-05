@@ -13,13 +13,16 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from homelab_probe import __version__, logs  # noqa: E402
 from homelab_probe.config import Config  # noqa: E402
+from homelab_probe.demo.session import DemoSession  # noqa: E402
 from homelab_probe.server.app import create_app  # noqa: E402
 from homelab_probe.server.security import CSP, SECURITY_HEADERS, allowed_hosts  # noqa: E402
+from homelab_probe.server.service import ControllerService  # noqa: E402
 
 
 @pytest.fixture
 def app():
-    return create_app(Config(controller_url="https://controller.example", api_key="key"), hosts=["testserver"])
+    config = Config(controller_url="https://controller.example", api_key="key")
+    return create_app(config, hosts=["testserver"], service=ControllerService(config, session=DemoSession()))
 
 
 @pytest.fixture
@@ -71,10 +74,11 @@ def test_only_get_is_answered(client):
 
 def test_the_app_remembers_what_it_was_made_from(tmp_path):
     config = Config(controller_url="https://controller.example", api_key="key")
-    factory = lambda: None    # noqa: E731
-    app = create_app(config, tmp_path / "hlp.toml", tmp_path, client_factory=factory)
+    service = ControllerService(config, session=DemoSession())
+    app = create_app(config, tmp_path / "hlp.toml", tmp_path, service=service)
     assert (app.state.config, app.state.settings_path, app.state.state_dir) == (config, tmp_path / "hlp.toml", tmp_path)
-    assert app.state.client_factory is factory and app.state.demo is False
+    assert app.state.service is service and app.state.demo is False
+    assert create_app(config, demo=True).state.service.demo is True            # made from the config when none is given
 
 
 # -- the Host header and CORS ----------------------------------------------------------------------------------
@@ -231,3 +235,23 @@ def test_the_middleware_lets_lifespan_and_websocket_traffic_through_untouched(ap
     with pytest.raises(Exception):                         # noqa: B017  (no websocket route exists: any failure is right)
         with TestClient(app).websocket_connect("/ws"):
             pass
+
+
+# -- readiness reads the controller (through the cache) ----------------------------------------------------------
+
+def test_readyz_is_503_with_a_fixed_reason_when_the_controller_cannot_be_read():
+    config = Config(controller_url="https://controller.example", api_key="the-api-key-0123456789")
+    session = DemoSession()
+    session.status = 401
+    client = TestClient(create_app(config, hosts=["testserver"], service=ControllerService(config, session=session)))
+    response = client.get("/readyz")
+    assert response.status_code == 503 and response.json() == {"ready": False, "demo": False, "reason": "unauthorized"}
+    assert "controller.example" not in response.text and "the-api-key" not in response.text
+    assert client.get("/healthz").status_code == 200                       # the process is up all the same
+
+
+def test_readyz_costs_the_controller_one_read_however_often_it_is_probed(app):
+    client = TestClient(app)
+    for _ in range(10):
+        assert client.get("/readyz").status_code == 200
+    assert app.state.service.session.calls == ["/proxy/network/integration/v1/info"]
