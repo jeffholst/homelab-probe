@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import urlsplit
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 from dotenv.parser import parse_stream
 
 from .logs import FORMAT_WORDS, LEVEL_WORDS
@@ -501,21 +501,33 @@ def inspect_env_file(path: Path) -> EnvFileReport:
     )
 
 
-def load_config(env_file: Optional[Path] = None, site_override: Optional[str] = None) -> Config:
-    """Load and validate configuration from the environment (and the ``.env`` file)."""
-    path = find_env_file(env_file)
-    warnings = []
-    if path is not None:
-        warning = env_file_warning(path)
-        if warning:
-            warnings.append(warning)
-        try:
-            load_dotenv(dotenv_path=path)       # does not override variables already set
-        except OSError as e:
-            raise ConfigError(f"cannot read env file {path}: {e.strerror or e}") from e
+def read_env_values(path: Path) -> Dict[str, str]:
+    """The settings in the ``.env`` file at ``path``, read **without** touching the process environment (a name
+    with no value is left out). ``ConfigError`` when the file cannot be read."""
+    if not path.is_file():
+        raise ConfigError(f"cannot read env file {path}: no such file")
+    try:
+        return {k: v for k, v in dotenv_values(path).items() if v is not None}
+    except (OSError, UnicodeError) as e:
+        raise ConfigError(f"cannot read env file {path}: {getattr(e, 'strerror', None) or e}") from e
 
-    controller_url = os.getenv("UNIFI_URL")
-    api_key = os.getenv("UNIFI_API_KEY")
+
+def layered_values(path: Optional[Path], environ: Optional[Mapping[str, str]] = None) -> Dict[str, str]:
+    """What ``load_config`` would see: the settings of the file at ``path`` (if any), with the environment on top
+    (a variable that is already set wins over the file), for the names the tool knows."""
+    values = read_env_values(path) if path is not None else {}
+    environ = os.environ if environ is None else environ
+    values.update({name: environ[name] for name in (*KNOWN_VARIABLES,) if name in environ})
+    return values
+
+
+def build_config(values: Mapping[str, Optional[str]], path: Optional[Path] = None, warnings: Tuple[str, ...] = (),
+                 site_override: Optional[str] = None) -> Config:
+    """Validate ``values`` (the names of ``.env``: ``UNIFI_URL``, ``UNIFI_API_KEY``...) and make the ``Config``. Pure:
+    it reads neither the environment nor a file, so a setup step can check what was typed before anything is saved."""
+    notes = list(warnings)
+    controller_url = values.get("UNIFI_URL")
+    api_key = values.get("UNIFI_API_KEY")
 
     if not controller_url:
         raise ConfigError(
@@ -528,31 +540,46 @@ def load_config(env_file: Optional[Path] = None, site_override: Optional[str] = 
             "Settings > Control Plane > Integrations and add it to .env."
         )
 
-    allow_http = parse_bool("ALLOW_INSECURE_HTTP", os.getenv("ALLOW_INSECURE_HTTP"), False)
+    allow_http = parse_bool("ALLOW_INSECURE_HTTP", values.get("ALLOW_INSECURE_HTTP"), False)
     url = validate_controller_url(controller_url, allow_http)
     if url.lower().startswith("http://"):
-        warnings.append("UNIFI_URL uses http://: the API key is sent in clear text "
-                        "(allowed by ALLOW_INSECURE_HTTP)")
-    smtp, smtp_warnings = validate_smtp(os.environ, allow_http)
-    warnings += smtp_warnings
+        notes.append("UNIFI_URL uses http://: the API key is sent in clear text "
+                     "(allowed by ALLOW_INSECURE_HTTP)")
+    smtp, smtp_warnings = validate_smtp(values, allow_http)
+    notes += smtp_warnings
     return Config(
         notify_smtp=smtp,
-        notify_ntfy_url=validate_notify_url("NOTIFY_NTFY_URL", os.getenv("NOTIFY_NTFY_URL"), allow_http),
-        notify_ntfy_token=validate_notify_token("NOTIFY_NTFY_TOKEN", os.getenv("NOTIFY_NTFY_TOKEN")),
-        notify_webhook_url=validate_notify_url("NOTIFY_WEBHOOK_URL", os.getenv("NOTIFY_WEBHOOK_URL"), allow_http),
-        notify_webhook_token=validate_notify_token("NOTIFY_WEBHOOK_TOKEN", os.getenv("NOTIFY_WEBHOOK_TOKEN")),
+        notify_ntfy_url=validate_notify_url("NOTIFY_NTFY_URL", values.get("NOTIFY_NTFY_URL"), allow_http),
+        notify_ntfy_token=validate_notify_token("NOTIFY_NTFY_TOKEN", values.get("NOTIFY_NTFY_TOKEN")),
+        notify_webhook_url=validate_notify_url("NOTIFY_WEBHOOK_URL", values.get("NOTIFY_WEBHOOK_URL"), allow_http),
+        notify_webhook_token=validate_notify_token("NOTIFY_WEBHOOK_TOKEN", values.get("NOTIFY_WEBHOOK_TOKEN")),
         controller_url=url,
         api_key=api_key,
-        site=site_override if site_override is not None else validate_site(os.getenv("UNIFI_SITE_ID")),
-        verify_ssl=parse_verify(os.getenv("UNIFI_VERIFY_SSL")),
-        timeout=parse_timeout(os.getenv("UNIFI_TIMEOUT")),
-        parallel=parse_parallel(os.getenv("UNIFI_PARALLEL_REQUESTS")),
-        log_level=parse_log_level(os.getenv("LOG_LEVEL")),
-        log_format=parse_log_format(os.getenv("LOG_FORMAT")),
-        audit_log_mb=parse_audit_log_mb(os.getenv("AUDIT_LOG_MAX_MB")),
-        audit_log_files=parse_audit_log_files(os.getenv("AUDIT_LOG_FILES")),
-        session_idle_minutes=parse_session_idle_minutes(os.getenv("SESSION_IDLE_MINUTES")),
-        session_max_hours=parse_session_max_hours(os.getenv("SESSION_MAX_HOURS")),
+        site=site_override if site_override is not None else validate_site(values.get("UNIFI_SITE_ID")),
+        verify_ssl=parse_verify(values.get("UNIFI_VERIFY_SSL")),
+        timeout=parse_timeout(values.get("UNIFI_TIMEOUT")),
+        parallel=parse_parallel(values.get("UNIFI_PARALLEL_REQUESTS")),
+        log_level=parse_log_level(values.get("LOG_LEVEL")),
+        log_format=parse_log_format(values.get("LOG_FORMAT")),
+        audit_log_mb=parse_audit_log_mb(values.get("AUDIT_LOG_MAX_MB")),
+        audit_log_files=parse_audit_log_files(values.get("AUDIT_LOG_FILES")),
+        session_idle_minutes=parse_session_idle_minutes(values.get("SESSION_IDLE_MINUTES")),
+        session_max_hours=parse_session_max_hours(values.get("SESSION_MAX_HOURS")),
         env_file=path,
-        warnings=tuple(warnings),
+        warnings=tuple(notes),
     )
+
+
+def load_config(env_file: Optional[Path] = None, site_override: Optional[str] = None) -> Config:
+    """Load and validate configuration from the environment (and the ``.env`` file)."""
+    path = find_env_file(env_file)
+    warnings = []
+    if path is not None:
+        warning = env_file_warning(path)
+        if warning:
+            warnings.append(warning)
+        try:
+            load_dotenv(dotenv_path=path)       # does not override variables already set
+        except OSError as e:
+            raise ConfigError(f"cannot read env file {path}: {e.strerror or e}") from e
+    return build_config(os.environ, path, tuple(warnings), site_override)

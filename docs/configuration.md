@@ -47,6 +47,26 @@ UNIFI_VERIFY_SSL=true
 - **When a read fails:** required data stops the command with exit code 3; optional data warns and the command carries on with less. The list of connected clients and devices is required everywhere. Every legacy read is optional, **including the client history (`stat/alluser`)** for `query`, `client`, `diagnose` and the other reports (they warn that offline clients and reservations are unavailable), except for the two commands whose answer would be wrong without it: `new-clients` and `snapshot`/`diff` stop with exit code 3, so they never print a misleading list or save an incomplete snapshot.
 - **`UNIFI_SITE_ID`:** a site name may contain spaces and non-ASCII letters, but not `/`, `\`, `?`, `#` or control characters, and at most 128 characters; it is also percent-encoded wherever it appears in a URL. **`--site NAME|REF|UUID`** (before the command, like `--timeout`) chooses the site for one run and beats `UNIFI_SITE_ID`: `hlp --site Lab diagnose`. It takes the same three kinds of value and is checked the same way (a bad or empty value is a usage error, exit code 64, before any request); an unknown site stops the command with exit code 3 and lists the sites there are (`hlp info` shows them). Every command that reads a site uses it. Saved snapshots and the notification state are not kept apart by site, so with several sites give each its own `--notify-state FILE` and `snapshot --dir DIRECTORY`.
 
+## Guided setup: `init`
+
+`init` is the quickest way to a working `.env`. It asks for the controller's address, the API key and the site, whether to check the controller's certificate, and writes the files **in the current directory** (or `--dir`): `.env` (readable by you only), a commented `hlp.toml` (only if you have none) and a private `snapshots/` directory. **It contacts nothing**: the address and the key are checked for shape, not tried (add `--check` to try them once).
+
+```bash
+hlp init                                              # asks, with the current values as the defaults
+cat key.txt | hlp init --url https://192.168.1.1 --api-key-stdin   # no questions
+hlp init --url https://192.168.1.1 --no-input         # keep the key that is already in .env
+hlp init --check                                      # and read the controller once afterwards
+```
+
+- **`--dir DIR`**: where to write (default: the current directory).
+- **`--url URL`**, **`--site NAME`**, **`--verify true|false|FILE`**: the answers to the questions. `--verify` is `true` (the default: check the certificate), `false` (do not; the key is then sent to whatever answers), or the path of a CA file that vouches for the controller.
+- **`--api-key-stdin`**: read the key from one line of standard input and ask nothing else (it needs `--url`). **A key is never an argument**, so it cannot end up in the process list or a shell history; when asked, it is typed without echo.
+- **`--no-input`**: ask nothing, use only the options and what the existing `.env` holds.
+- **`--force`**: do not ask before replacing the settings of an existing `.env`, or before turning certificate checking off.
+- **`--check`**: afterwards read the controller once and show the `doctor` checks of the address, the key and the site (exit code 3 if one fails; the files are written either way).
+
+An existing `.env` is **merged**, not replaced: the settings `init` manages are updated where they stand, and every comment, blank line and other setting stays. The old file is kept as `.env.bak` (also readable by you only). A `.env` or `hlp.toml` that is a symbolic link is never written through. A value is checked with the same rules every command uses before anything is written, and a refusal writes nothing; a value that a `.env` file cannot hold (a line break, or `${...}`, which would be expanded) is refused by name. The web server's setup wizard uses the same code.
+
 ## Checking your setup: `doctor`
 
 `doctor` checks the **tool**, where `diagnose` checks the network: is it installed and configured right, are the settings safe, does the controller answer, accept the API key and have the site, and which optional endpoints does it offer? Run it first when something does not work, and paste its output into an issue.

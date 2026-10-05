@@ -17,7 +17,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from . import accounts, logs
+from . import accounts, logs, setup
+from . import config as config_module
 from .client import UniFiAPIError, UniFiClient
 from .client_view import render_candidates, render_detail
 from .completion import SHELLS
@@ -36,7 +37,7 @@ from .diagnose import (
     stream_supports_emoji,
 )
 from .doctor import Options as DoctorOptions
-from .doctor import exit_failed, run_checks
+from .doctor import check_controller, exit_failed, run_checks
 from .doctor import render as render_doctor
 from .documents import (
     Document,
@@ -720,6 +721,138 @@ def _run_web_user(args: argparse.Namespace) -> int:
     return 0
 
 
+# -- init -------------------------------------------------------------------------------------------
+
+def _add_init(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--dir", type=Path, default=Path("."), metavar="DIR",
+                        help="Where to write .env, hlp.toml and snapshots/ (default: the current directory)")
+    parser.add_argument("--url", metavar="URL", help="The controller's address, such as https://192.168.1.1")
+    parser.add_argument("--site", metavar="NAME", help="The site to use (default: default)")
+    parser.add_argument("--verify", metavar="true|false|FILE",
+                        help="Check the controller's certificate (true, the default), do not (false), or against this "
+                             "CA file")
+    parser.add_argument("--api-key-stdin", action="store_true",
+                        help="Read the API key from one line of standard input and ask nothing else (needs --url); "
+                             "a key is never an argument")
+    parser.add_argument("--no-input", action="store_true",
+                        help="Ask nothing: use only the options and what the existing .env holds")
+    parser.add_argument("--force", action="store_true",
+                        help="Do not ask before replacing the settings in an existing .env")
+    parser.add_argument("--check", action="store_true",
+                        help="Afterwards read the controller once to check the address, the key and the site")
+
+
+def _check_init(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    if args.api_key_stdin and not args.url:
+        parser.error("--api-key-stdin needs --url (it asks nothing else)")
+    if args.no_input and not args.url and not args.api_key_stdin:
+        parser.error("--no-input needs --url, and the API key on standard input with --api-key-stdin")
+
+
+def _ask(prompt: str, default: str = "") -> str:
+    try:
+        answer = input(f"{prompt}" + (f" [{default}]" if default else "") + ": ").strip()
+    except EOFError:
+        raise ConfigError("the input ended before the questions were answered; use the options and "
+                          "--no-input") from None
+    return answer or default
+
+
+def _confirm(question: str, default: bool = False) -> bool:
+    answer = _ask(f"{question} [{'Y/n' if default else 'y/N'}]").lower()
+    return default if not answer else answer.startswith("y")
+
+
+def _ask_valid(name: str, prompt: str, values: Dict[str, Optional[str]], default: str = "") -> str:
+    """Ask until ``name`` is acceptable (three tries), showing why it was not."""
+    for _ in range(3):
+        values[name] = _ask(prompt, default)
+        problem = setup.validate_field(values, name)
+        if not problem:
+            return str(values[name])
+        say(f"  {problem}", file=sys.stderr)
+    raise ConfigError(f"{name} is still not acceptable; run `hlp init` again when you have it")
+
+
+def _verify_choice(args: argparse.Namespace, existing: Dict[str, str], interactive: bool) -> Optional[str]:
+    """The ``UNIFI_VERIFY_SSL`` to write: from ``--verify``, else asked, else what is there."""
+    if args.verify is not None:
+        return args.verify
+    if not interactive:
+        return existing.get("UNIFI_VERIFY_SSL")
+    answer = _ask("Check the controller's certificate? yes, no, or the path of its CA file",
+                  "yes" if existing.get("UNIFI_VERIFY_SSL", "true").lower() in ("true", "1", "yes", "on") else "no")
+    if answer.lower() in ("yes", "y", "true"):
+        return "true"
+    if answer.lower() in ("no", "n", "false"):
+        return "false"
+    return answer
+
+
+def _read_api_key(args: argparse.Namespace, existing: Dict[str, str], interactive: bool) -> str:
+    if args.api_key_stdin:
+        key = sys.stdin.readline().rstrip("\r\n")
+        if not key:
+            raise ConfigError("no API key was given on standard input")
+        return key
+    kept = existing.get("UNIFI_API_KEY", "")
+    if not interactive:
+        if not kept or kept == setup.PLACEHOLDER_KEY:
+            raise ConfigError("there is no API key to keep: give it on standard input with --api-key-stdin")
+        return kept
+    key = getpass.getpass("API key (Settings > Control Plane > Integrations; nothing is shown as you type"
+                          + ("; empty keeps the current one" if kept else "") + "): ").strip()
+    return key or kept
+
+
+def _run_init(args: argparse.Namespace) -> int:
+    directory: Path = args.dir
+    env_path = directory / setup.ENV_FILE
+    try:
+        existing = setup.existing_values(setup.read_existing_env(env_path))
+    except setup.SetupError as e:
+        raise ConfigError(str(e)) from e
+    interactive = not (args.no_input or args.api_key_stdin)
+    values: Dict[str, Optional[str]] = {}
+    if interactive:
+        values["UNIFI_URL"] = _ask_valid("UNIFI_URL", "Controller address (for example https://192.168.1.1)", values,
+                                         args.url or existing.get("UNIFI_URL", ""))
+        values["UNIFI_SITE_ID"] = _ask("Site (name, reference or UUID)", args.site or existing.get("UNIFI_SITE_ID",
+                                                                                                 "default"))
+    else:
+        values["UNIFI_URL"] = args.url or existing.get("UNIFI_URL")
+        values["UNIFI_SITE_ID"] = args.site or existing.get("UNIFI_SITE_ID") or "default"
+    values["UNIFI_API_KEY"] = _read_api_key(args, existing, interactive)
+    verify = _verify_choice(args, existing, interactive)
+    values["UNIFI_VERIFY_SSL"] = verify
+    if verify and verify.lower() in ("false", "0", "no", "off") and interactive and not args.force:
+        say("Without certificate checking the API key is sent to whatever answers at that address.", file=sys.stderr)
+        if not _confirm("Turn certificate checking off anyway?"):
+            raise ConfigError("nothing was written; run `hlp init` again (a self-signed controller certificate can be "
+                              "trusted with UNIFI_VERIFY_SSL=/path/to/its-certificate.pem instead)")
+    problems = setup.validate_values(values)
+    if problems:
+        raise ConfigError("; ".join(f"{name}: {message}" if name else message for name, message in problems))
+    if env_path.is_file() and interactive and not args.force:
+        say(f"{env_path} exists: its UNIFI_* settings will be replaced and everything else kept; the old file is saved "
+            f"as {setup.ENV_FILE}.bak.", file=sys.stderr)
+        if not _confirm("Replace them?"):
+            raise ConfigError(f"nothing was written; {env_path} is as it was")
+    try:
+        steps = setup.apply(values, directory)
+    except setup.SetupError as e:
+        raise ConfigError(str(e)) from e
+    for step in steps:
+        say(step.message)
+    if args.check:
+        checks = check_controller(config_module.build_config(values))
+        say("\n" + render_doctor(checks))
+        return EXIT_ERROR if exit_failed(checks) else 0
+    say("Next: `hlp doctor` checks the setup and `hlp diagnose` looks at your network. "
+        "Nothing was sent to the controller.")
+    return 0
+
+
 # -- serve ------------------------------------------------------------------------------------------
 
 DEFAULT_PORT = 8787
@@ -1050,6 +1183,8 @@ COMMANDS: List[Command] = [
             wants_settings=_always),
     Command("doctor", "Check the installation and the settings, and that the controller answers", _add_doctor, _not_run,
             run_local=_run_doctor),
+    Command("init", "Guided first-time setup: write .env, hlp.toml and snapshots/ for you", _add_init, _not_run,
+            validate=_check_init, run_local=_run_init),
     Command("completion", "Print a shell completion script (bash, zsh or fish)", _add_completion, _not_run,
             run_local=_run_completion),
     Command("serve", "Serve the read-only web API on this machine (needs the web extra)", _add_serve, _run_serve,

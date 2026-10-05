@@ -104,6 +104,7 @@ DEMO_REFUSED = {
     "snapshot": "it would save synthetic data among your own snapshots",
     "diff": "it compares against your own saved snapshots",
     "web-user": "it reads and writes your own accounts file",
+    "init": "it writes your own .env and settings files",
 }
 
 

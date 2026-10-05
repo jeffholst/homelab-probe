@@ -64,6 +64,7 @@ COMMAND_DOC_SECTIONS = {
     "diagnose": ("Diagnose", "Notifications"),
     "completion": ("Shell completion",),
     "doctor": ("Checking your setup: `doctor`",),
+    "init": ("Guided setup: `init`",),
     "web-user": ("Managing accounts: `web-user`",),
     "serve": ("Running the server: `serve`",),
     "info": (),

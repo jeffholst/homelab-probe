@@ -480,6 +480,14 @@ def _controller_skipped(reason: str) -> List[Check]:
     return head + _skip_rest(reason, site=True)
 
 
+def check_controller(config: Config, factory: Optional[Callable[[Config], UniFiClient]] = None, events: bool = False,
+                     now: Optional[float] = None) -> List[Check]:
+    """Only the checks of the controller and of the endpoints it offers, for a ``Config`` that was not read from the
+    environment (the guided setup tests what was just typed). The first read is not retried, as in ``doctor``."""
+    return _controller_checks(config, Options(events=events), factory or UniFiClient.from_config,
+                              time.time() if now is None else now)
+
+
 def run_checks(options: Options, factory: Optional[Callable[[Config], UniFiClient]] = None,
                now: Optional[float] = None) -> List[Check]:
     """Every check, in order. Never raises for a problem it is there to report. ``factory`` makes the client (the

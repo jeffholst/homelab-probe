@@ -8,7 +8,7 @@ from homelab_probe import cli
 from homelab_probe.commands import COMMANDS, COMMANDS_BY_NAME, Command, Context
 
 EXPECTED = ["export", "query", "new-clients", "events", "client", "topology", "snapshot", "diff", "wifi", "wan",
-            "firewall", "audit", "doctor", "completion", "serve", "web-user", "diagnose", "info"]
+            "firewall", "audit", "doctor", "init", "completion", "serve", "web-user", "diagnose", "info"]
 
 
 def run(fake_client, monkeypatch, argv):
