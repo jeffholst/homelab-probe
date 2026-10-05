@@ -37,7 +37,7 @@ homelab_probe/
   doctor.py              the doctor checks of the tool's own setup (versions, files, settings, controller, endpoints)
   notify.py              notifications: what changed since the last run, ntfy/webhook/email sending, state file
   completion.py          shell completion scripts for bash, zsh and fish, generated from the argument parser
-  server/                the web server (`serve`, the `web` extra): the app factory, security middleware, request log; never imported by the core
+  server/                the web server (`serve`, the `web` extra): the app factory, security middleware and request log (`app`, `security`), the cache and the controller service (`cache`, `service`), the report routes, errors and API schemas (`routes`, `errors`, `apischema`); never imported by the core
   accounts.py            web accounts: scrypt passwords, users.json, roles, last-admin protection, the audit log (standard library only)
   settings.py            diagnose thresholds and ignore list (TOML)
   util.py                shared helpers: output safety (printable names, CSV formulas), numbers, MACs, times, plurals

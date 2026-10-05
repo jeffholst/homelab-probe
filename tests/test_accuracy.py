@@ -68,6 +68,7 @@ def test_a_built_wheel_carries_the_same_version(tmp_path):
         if (ROOT / name).exists():
             shutil.copy(ROOT / name, source / name)
     shutil.copytree(ROOT / "homelab_probe", source / "homelab_probe", ignore=shutil.ignore_patterns("__pycache__"))
+    shutil.copytree(ROOT / "docs" / "schemas", source / "docs" / "schemas")       # shipped as homelab_probe/schemas
     result = subprocess.run(["uv", "build", "--wheel", "--out-dir", str(tmp_path / "dist"), str(source)],
                             capture_output=True, text=True, timeout=300)
     assert result.returncode == 0, result.stderr
@@ -78,6 +79,26 @@ def test_a_built_wheel_carries_the_same_version(tmp_path):
     assert "Name: homelab-probe" in metadata
     names = zipfile.ZipFile(wheel).namelist()
     assert "homelab_probe/demo/controller.json" in names and "homelab_probe/demo/session.py" in names   # --demo
+    assert "homelab_probe/server/app.py" in names and "homelab_probe/diagnose/output.py" in names     # subpackages
+    packaged = {n.rsplit("/", 1)[1] for n in names if n.startswith("homelab_probe/schemas/")}
+    assert packaged == {p.name for p in (ROOT / "docs" / "schemas").glob("*.json")}                  # the server's /schemas
+    assert "Provides-Extra: web" in metadata
+
+
+def test_every_package_directory_is_listed_for_the_wheel_and_the_schemas_are_mapped():
+    """pyproject lists the packages by hand (docs/schemas is mapped in as ``homelab_probe.schemas``), so a new
+    subpackage that is not added there would work from a checkout and be missing from the wheel."""
+    import sys
+
+    if sys.version_info >= (3, 11):
+        import tomllib
+    else:  # pragma: no cover  (Python 3.10 only)
+        import tomli as tomllib
+    config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["setuptools"]
+    on_disk = {"homelab_probe"} | {"homelab_probe." + str(p.parent.relative_to(ROOT / "homelab_probe")).replace("/", ".")
+                                   for p in (ROOT / "homelab_probe").rglob("__init__.py") if p.parent.name != "homelab_probe"}
+    assert set(config["packages"]) - {"homelab_probe.schemas"} == on_disk
+    assert config["package-dir"] == {"homelab_probe.schemas": "docs/schemas"}
 
 
 # -- wifi: channel 14 and U-NII-4 ---------------------------------------------------------------------------------

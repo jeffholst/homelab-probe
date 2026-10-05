@@ -18,7 +18,7 @@ Without the extra it exits with code 3 and says what to install. Options:
 - **`--data-dir DIR`** (default: the current directory): where the server keeps its own files; used by the stages that follow.
 - **`--config FILE`**: the `hlp.toml` with the `diagnose` thresholds and ignore rules, as for the other commands.
 
-What it answers today: `/healthz` (is the process up; no data and no controller read), `/readyz` (can the controller be read: 200, or 503 with a one-word reason such as `unauthorized` or `timeout`), `/api/v1/meta` (version and whether setup and login are needed), `/api/v1/platforms` and `/api/v1/openapi.json` (the API description, built into the server; the Swagger and ReDoc pages are off because they load scripts from a CDN). Only `GET` is answered. The routes that return the reports follow in the next stages.
+What it answers: `/healthz` (is the process up; no data and no controller read), `/readyz` (can the controller be read: 200, or 503 with a one-word reason such as `unauthorized` or `timeout`), `/api/v1/meta` (version and whether setup and login are needed), `/api/v1/platforms` and `/api/v1/openapi.json` (the API description, built into the server; the Swagger and ReDoc pages are off because they load scripts from a CDN). Only `GET` is answered. The reports are under `/api/v1/unifi` (next section).
 
 **Until login is built in, anyone who can reach this machine can read the API.** That is why it binds loopback only. What protects it meanwhile:
 
@@ -30,6 +30,47 @@ What it answers today: `/healthz` (is the process up; no data and no controller 
 | Headers on every response | A strict content-security policy (`default-src 'none'`), `nosniff`, no referrer, no framing, `no-store`, no server banner |
 | GET only, no passthrough | No route accepts a path to forward to the controller, and nothing writes to it |
 | Request log | One `INFO` record per request (`server.request`, [logging](logging.md)): method, route **template** (never the path asked for, which can hold a MAC address), status and milliseconds, with a request id that is also sent back as `X-Request-ID` (an id a client sends is ignored) |
+
+### The API: `/api/v1/unifi`
+
+Every report is a `GET` that returns the same document as the command's `--json`, with two more keys, and takes the command's options as query parameters (`?only=wan&only=wifi`, `?days=90`, `?include_offline=true`). `{site}` is a site name, internal reference or UUID (`default` on most controllers).
+
+| Route | Same as | Query parameters |
+| ----- | ------- | ---------------- |
+| `/api/v1/unifi/sites` | `info` | |
+| `/api/v1/unifi/sites/{site}/diagnose` | `diagnose` | `only`, `skip` (repeatable), `since`, `no_events`, `show_ignored` |
+| `.../audit` | `audit` | `show_ignored` |
+| `.../firewall` | `firewall` | `all`, `search` |
+| `.../topology` | `topology` | `clients` |
+| `.../wifi` | `wifi` | `band`, `ap`, `min_signal` |
+| `.../wan` | `wan` | `days` |
+| `.../events` | `events` | `since`, `category`, `severity` (repeatable), `event`, `client`, `device`, `search`, `limit` |
+| `.../events/summary` | `events --summary` | the same, without `limit` |
+| `.../clients` | `query clients` | `search`, `include_offline`, `network`, `ssid`, `ap` |
+| `.../devices` | `query devices` | `search`, `include_offline` |
+| `.../networks`, `.../wlans` | `query networks`, `query wlans` | `search` |
+| `.../ports` | `query ports` | `search`, `switch`, `down`, `errors` |
+| `.../reservations` | `query reservations` | `search`, `offline` |
+| `.../new-clients` | `new-clients` | `search` |
+| `.../clients/{mac}` | `client` | `events`, `since` (the MAC in any spelling) |
+| `/api/v1/schemas`, `/api/v1/schemas/{name}` | | the [JSON Schemas](schemas.md) |
+
+Every route also takes `refresh=true`, which reads the controller again instead of using the cache (honoured at most every 5 seconds; a faster one is ignored and the response says so in `warnings`).
+
+**The response** is the command's `--json` document plus `generated_at` (when the data was read from the controller, UTC) and `warnings` (what was degraded or served from the cache). The three commands whose `--json` is a bare array (`events`, `query`, `new-clients`) return `{"items": [...], "generated_at", "warnings"}` instead; `events` also has `truncated` (the limit cut the list) and `read_cap_reached`. Each response validates against the schema of its document (the API's own schemas are in `/api/v1/openapi.json`).
+
+**Errors** are `{"error": CODE, "message": SENTENCE}` and the sentence is fixed text, never the text of an exception (that could hold the controller's address):
+
+| Status | Code | When |
+| ------ | ---- | ---- |
+| 404 | `site_not_found`, `client_not_found`, `schema_not_found` | the site, the client or the schema does not exist |
+| 409 | `client_ambiguous` | more than one client matches (the body has the `candidates`) |
+| 422 | `invalid_parameter` | a parameter the command line would refuse, or one that is out of range |
+| 500 | `settings_invalid` | the settings file cannot be used (the server log has the reason) |
+| 502 | `controller_unauthorized`, `controller_forbidden`, `controller_tls`, `controller_unreachable`, `controller_error` | the controller could not be read, by kind |
+| 504 | `controller_timeout` | the controller did not answer in time |
+
+No route takes a path to forward to the controller, and none writes anything: every request that leaves is a `GET`, plus the one read-only event-log query.
 
 ### How the server reads the controller
 

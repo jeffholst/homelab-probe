@@ -63,11 +63,18 @@ hlp = "homelab_probe.cli:main"
 [tool.setuptools.dynamic]
 version = {attr = "homelab_probe.__version__"}   # the one place the version is written
 
-[tool.setuptools.packages.find]
-include = ["homelab_probe*"]
+[tool.setuptools]
+# `homelab_probe.schemas` is not a directory of the package: it is docs/schemas, the one place the JSON Schemas live
+# (their $id URLs point there), shipped inside the wheel so that the server can serve them.
+packages = ["homelab_probe", "homelab_probe.demo", "homelab_probe.diagnose", "homelab_probe.server",
+            "homelab_probe.schemas"]
+
+[tool.setuptools.package-dir]
+"homelab_probe.schemas" = "docs/schemas"
 
 [tool.setuptools.package-data]
 "homelab_probe.demo" = ["controller.json"]     # the synthetic controller that --demo serves
+"homelab_probe.schemas" = ["*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
