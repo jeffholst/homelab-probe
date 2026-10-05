@@ -76,22 +76,23 @@ def audit_lines(tmp_path):
 
 # -- reading ----------------------------------------------------------------------------------------------------
 
-def test_without_a_file_the_defaults_are_shown_with_the_version_absent(viewer):
-    body = viewer.get(URL).json()
+def test_without_a_file_the_defaults_are_shown_with_the_version_absent(admin):
+    body = admin.get(URL).json()
     defaults = DiagnoseSettings()
     assert body["version"] == "absent" and body["exists"] is False and body["file"] == "hlp.toml"
     assert body["thresholds"]["resource_warn_pct"] == defaults.resource_warn_pct == body["defaults"]["resource_warn_pct"]
-    assert body["set_in_file"] == [] and body["ignore"] == [] and body["read_only"] is False
+    assert set(body["provenance"].values()) == {"default"} and body["ignore"] == [] and body["read_only"] is False
     assert "device.offline" in body["codes"] and "audit.wifi_open" in body["codes"]
     assert body["notifications"] == {"ntfy": False, "webhook": False, "email": False}
     assert "ignore" not in body["thresholds"]
 
 
-def test_the_file_is_shown_with_what_it_sets_and_which_rules_have_expired(tmp_path, viewer):
+def test_the_file_is_shown_with_what_it_sets_and_which_rules_have_expired(tmp_path, admin):
     settings_path(tmp_path).write_text(COMMENTED.replace("2999-01-01", "2001-01-01"))
-    body = viewer.get(URL).json()
+    body = admin.get(URL).json()
     assert body["thresholds"]["resource_warn_pct"] == 85 and body["thresholds"]["wifi_weak_signal_dbm"] == -70
-    assert body["set_in_file"] == ["resource_warn_pct", "wifi_weak_signal_dbm"] and body["exists"] is True
+    assert {k for k, v in body["provenance"].items() if v == "file"} == {"resource_warn_pct", "wifi_weak_signal_dbm"}
+    assert body["exists"] is True
     assert [(r["subject"], r["until"], r["expired"]) for r in body["ignore"]] == [
         ("Spare *", "2001-01-01", True), ("Old AP", None, False)]
     assert body["version"] != "absent" and len(body["version"]) == 64
@@ -103,25 +104,43 @@ def test_notification_destinations_are_only_reported_as_configured(tmp_path):
     config = replace(CONFIG, notify_ntfy_url="https://ntfy.example/secret-topic-1234")
     app = create_app(config, state_dir=tmp_path, hosts=["testserver"], auth=auth_for(tmp_path),
                      service=ControllerService(config, session=DemoSession()))
-    response = logged_in(app, "bob").get(URL)
+    response = logged_in(app, "alice").get(URL)
     assert response.json()["notifications"] == {"ntfy": True, "webhook": False, "email": False}
     assert "secret-topic" not in response.text
 
 
-def test_reading_needs_a_login(app):
+def test_reading_is_for_administrators_only(app, viewer):
     assert TestClient(app).get(URL).status_code == 401
-
-
-def test_a_file_that_cannot_be_used_is_a_500_that_points_at_the_commands(tmp_path, viewer):
-    settings_path(tmp_path).write_text("[thresholds]\nresource_warn_pct = 500\n")
     response = viewer.get(URL)
+    assert response.status_code == 403 and response.json()["error"] == "forbidden"
+
+
+def test_a_threshold_managed_by_the_environment_is_shown_as_such_and_a_write_to_it_is_refused(
+        tmp_path, admin, monkeypatch):
+    monkeypatch.setattr(settings_api, "ENVIRONMENT_MANAGED", {"slow_link_mbps": "HLP_SLOW_LINK_MBPS"})
+    monkeypatch.setenv("HLP_SLOW_LINK_MBPS", "1000")
+    body = admin.get(URL).json()
+    assert body["provenance"]["slow_link_mbps"] == "environment" and body["provenance"]["resource_warn_pct"] == "default"
+    response = put(admin, body["version"], thresholds={"slow_link_mbps": 10, "resource_warn_pct": 80})
+    assert response.status_code == 409 and response.json()["error"] == "environment_managed"
+    assert "HLP_SLOW_LINK_MBPS" in response.json()["message"] and "1000" not in response.json()["message"]
+    assert not settings_path(tmp_path).exists()                                    # nothing of the request was applied
+    assert put(admin, body["version"], thresholds={"resource_warn_pct": 80}).status_code == 200
+    monkeypatch.delenv("HLP_SLOW_LINK_MBPS")                                     # not set: the file is in charge again
+    assert admin.get(URL).json()["provenance"]["slow_link_mbps"] == "default"
+    assert put(admin, admin.get(URL).json()["version"], thresholds={"slow_link_mbps": 10}).status_code == 200
+
+
+def test_a_file_that_cannot_be_used_is_a_500_that_points_at_the_commands(tmp_path, admin):
+    settings_path(tmp_path).write_text("[thresholds]\nresource_warn_pct = 500\n")
+    response = admin.get(URL)
     assert response.status_code == 500 and response.json()["error"] == "settings_invalid"
     assert "500" not in response.json()["message"] and str(tmp_path) not in response.text
 
 
-def test_a_file_that_cannot_be_read_is_a_500(tmp_path, viewer):
+def test_a_file_that_cannot_be_read_is_a_500(tmp_path, admin):
     settings_path(tmp_path).mkdir()                                   # a directory where the file should be
-    assert viewer.get(URL).json()["error"] == "settings_unreadable"
+    assert admin.get(URL).json()["error"] == "settings_unreadable"
 
 
 def test_the_data_directory_not_the_working_directory_holds_the_default_file(tmp_path, monkeypatch):
@@ -131,9 +150,9 @@ def test_the_data_directory_not_the_working_directory_holds_the_default_file(tmp
     monkeypatch.chdir(elsewhere)
     data = tmp_path / "data"
     app = make_app(data)
-    assert logged_in(app, "bob").get(URL).json()["exists"] is False
+    assert logged_in(app, "alice").get(URL).json()["exists"] is False
     (data / "hlp.toml").write_text("[thresholds]\nresource_warn_pct = 12\n")
-    assert logged_in(app, "bob").get(URL).json()["thresholds"]["resource_warn_pct"] == 12
+    assert logged_in(app, "alice").get(URL).json()["thresholds"]["resource_warn_pct"] == 12
 
 
 def test_a_named_config_file_is_the_one_edited(tmp_path):
@@ -190,7 +209,8 @@ def test_a_change_keeps_comments_order_and_the_old_file_as_a_backup(tmp_path, ad
     assert stat.S_IMODE(os.stat(path).st_mode) == 0o644 and stat.S_IMODE(os.stat(tmp_path / "hlp.toml.bak").st_mode) == 0o644
     assert load_settings(path).slow_link_mbps == 1000                                       # the CLI reads it
     assert response.json()["version"] != version
-    assert response.json()["set_in_file"] == ["resource_warn_pct", "slow_link_mbps", "wifi_weak_signal_dbm"]
+    assert {k for k, v in response.json()["provenance"].items() if v == "file"} == {
+        "resource_warn_pct", "slow_link_mbps", "wifi_weak_signal_dbm"}
 
 
 def test_a_new_file_starts_from_the_commented_stub_and_is_owner_only(tmp_path, admin):

@@ -132,13 +132,14 @@ The thresholds and ignore rules of `diagnose` and `audit` are the `hlp.toml` the
 
 | Method and path | What it does |
 | --------------- | ------------ |
-| `GET /api/v1/settings` | Anyone logged in: the effective `thresholds` with their `defaults` and `set_in_file` (which of them the file sets), the `ignore` rules (`code`, `subject`, `message`, `reason`, `until`, `expired`), the valid finding `codes`, whether the file `exists`, a `version` and `read_only`. Notification destinations appear only as `notifications: {ntfy, webhook, email}` flags: never a URL, token or address |
+| `GET /api/v1/settings` | An administrator: the effective `thresholds` with their `defaults` and a `provenance` for each (`default`, `file` or `environment`), the `ignore` rules (`code`, `subject`, `message`, `reason`, `until`, `expired`), the valid finding `codes`, whether the file `exists`, a `version` and `read_only`. Notification destinations appear only as `notifications: {ntfy, webhook, email}` flags: never a URL, token or address |
 | `PUT /api/v1/settings` | An administrator, with the CSRF token. Body: `version` (from the `GET`), `thresholds` (a map: a number sets that key, `null` removes it so the default applies again; keys not named stay) and/or `ignore` (the **whole** list of rules). Answers with the new document |
 
 - **One loader.** The new text is written to a temporary file and loaded with the function every command uses, so a value it refuses is a `422 invalid_settings` with **its own message** (`[thresholds] resource_warn_pct must be between 0 and 100`, `[[ignore]] #1: unknown code 'device.offlin' (did you mean 'device.offline'?)`) and nothing is written. A value of the wrong JSON type (`true`, a string) is a `422` too.
 - **Comments stay.** The file is edited in place (`tomlkit`, in the `web` extra): comments, blank lines and the order of keys are kept, and an ignore rule that did not change keeps its table and the comments around it. A new file starts from the commented stub `hlp init` writes. The comments of a rule you remove go with it.
 - **Nobody is overwritten.** `version` is a hash of the file (`absent` for no file). If the file is different when the `PUT` arrives, or becomes different while it works, the answer is `409 settings_changed` and nothing is written: load it again. Two changes with the same version cannot both win.
 - **Safe writes.** The file is replaced in one step with its permissions kept (a new file is owner-only), the old content is kept as `hlp.toml.bak`, and a symbolic link is left alone (`409`). A `PUT` that changes nothing writes nothing: no new version, no `.bak`, no audit entry. A file the loader refuses cannot be edited here (`409 settings_file_invalid`; `GET` says `500 settings_invalid`): fix it by hand, `hlp diagnose` shows the reason.
+- **Environment wins, and the API says so.** A threshold that an environment variable manages would show `provenance: "environment"` and a write to it is a `409 environment_managed` naming the variable, instead of claiming a change that would be ignored. No threshold is managed that way today (the thresholds live only in `hlp.toml`), so every value is `default` or `file`.
 - **Audit.** `settings.updated` with the user, the names of the thresholds that changed and the number of ignore rules (`"2 rule(s)"` or `"unchanged"`), never a rule's text.
 
 ### Snapshots: `/api/v1/unifi/sites/{site}/snapshots` and `/diff`
@@ -155,6 +156,22 @@ The saved snapshots of [`snapshot` and `diff`](inventory.md#snapshots-and-diff),
 - **The site is looked up first** (one cached request), because the directory is named by the site's id: when the controller cannot be read, these routes answer `502` or `504` like the other site routes.
 - **Links and permissions.** A `snapshots/` directory or a site directory that is a symbolic link is never followed (`500 snapshots_unsafe`), and a snapshot file that is a link is neither listed nor reachable. A save makes the directories owner-only (`0700`, tightening ones that were not), like the setup does. A name must be a real date and time, as `snapshot` writes it.
 - **The write** is refused by `serve --read-only` (`403 read_only`), is audited as `snapshot.saved` (the file name and the counts) and fails with a fixed `500 snapshot_not_written` when the disk does. The file is owner-only in a `0700` directory, as the command writes it.
+
+### Users: `/api/v1/users`
+
+The accounts of [`web-user`](#managing-accounts-web-user), the same `users.json`, the same rules (a user name of 3 to 64 characters, a password of at least 12, the roles `viewer` and `admin`). **Everything here is for administrators**, with the CSRF token, and `serve --read-only` refuses every change.
+
+| Method and path | What it does |
+| --------------- | ------------ |
+| `GET /api/v1/users` | Every user (`username`, `role`, `disabled`, `created_at`, `last_login`) and the `total`. Never a password or a hash |
+| `POST /api/v1/users` | Add a user: `username`, `password`, `role` (default `viewer`). `201`; `409 user_exists`; `422 invalid_user` with the rule that was broken |
+| `PATCH /api/v1/users/{username}` | Change the `role` and/or `disabled` in one step. `404 user_not_found`; nothing is changed if the result would break the rule below |
+| `POST /api/v1/users/{username}/password` | Reset the password (`password` in the body) |
+
+- **The last enabled administrator can never be demoted or disabled** (`409 last_administrator`), on any path and for a combined change as a whole, because the account file enforces it under its lock.
+- **A change takes effect at once.** A session re-checks its account on every request, so a user who is disabled, or whose role or password changed, is out on their next request and logs in again (a role change ends the sessions too, so nobody keeps an administrator's session after a demotion). An administrator who resets their own password logs themselves out.
+- **Audit.** The events of the command line (`user.added`, `user.role_changed`, `user.disabled`, `user.enabled`, `user.password_reset`) with the administrator as the actor and the address of the request. If an entry cannot be written the change is rolled back (`500 audit_unavailable`). A password is never in an answer, an audit entry or a log.
+- **No deleting** in the API: `hlp web-user delete`. A disabled user cannot log in.
 
 ### How the server reads the controller
 
@@ -268,4 +285,4 @@ Both live in the data directory, readable by the owner only (`0600`, and `0700` 
 
 ## What is not here yet
 
-User management and the scheduler over the API, and the web app (the screens of the setup wizard among them), come with later stages of the roadmap. The login uses the interface the accounts module was built for: an `Authenticator` that turns a username and password into a `Principal(username, role, source)`, with `LocalAccounts` (this page's accounts) as the first implementation. A wrong password, an unknown user and a disabled one all take the same work and give the same answer, so the answer does not reveal which usernames exist. Authentication checks the current account record and records the login under the same file lock, so a concurrent disable, role change or deletion cannot return a stale principal.
+The scheduler, application backup and restore, finding triage and notes ([#186](https://github.com/jeffholst/homelab-probe/issues/186)), and the web app (the screens of the setup wizard among them), come with later stages of the roadmap. The login uses the interface the accounts module was built for: an `Authenticator` that turns a username and password into a `Principal(username, role, source)`, with `LocalAccounts` (this page's accounts) as the first implementation. A wrong password, an unknown user and a disabled one all take the same work and give the same answer, so the answer does not reveal which usernames exist. Authentication checks the current account record and records the login under the same file lock, so a concurrent disable, role change or deletion cannot return a stale principal.

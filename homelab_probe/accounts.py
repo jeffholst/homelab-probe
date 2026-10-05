@@ -57,7 +57,31 @@ _audit_log = logging.getLogger("homelab_probe.audit")
 
 class AccountError(Exception):
     """An account operation was refused or the accounts file cannot be used; the message says why and never holds a
-    password."""
+    password. The subclasses say which kind of refusal it was, so a caller (the web API) never has to read the text."""
+
+
+class PolicyError(AccountError):
+    """A user name, password or role that does not meet the rules."""
+
+
+class UserExistsError(AccountError):
+    """The user name is taken."""
+
+
+class NoSuchUserError(AccountError):
+    """There is no user of that name."""
+
+
+class LastAdministratorError(AccountError):
+    """The change would leave no enabled administrator."""
+
+
+class AdministratorExistsError(AccountError):
+    """The first administrator was asked for, and an enabled administrator exists."""
+
+
+class AuditWriteError(AccountError):
+    """The audit log could not be written, so the account change was not made."""
 
 
 # -- passwords ----------------------------------------------------------------------------------------------------
@@ -131,9 +155,9 @@ def needs_upgrade(stored: str) -> bool:
 
 def check_password_policy(password: str) -> None:
     if not isinstance(password, str) or len(password) < MIN_PASSWORD:
-        raise AccountError(f"the password must have at least {MIN_PASSWORD} characters")
+        raise PolicyError(f"the password must have at least {MIN_PASSWORD} characters")
     if len(password) > MAX_PASSWORD:
-        raise AccountError(f"the password must have at most {MAX_PASSWORD} characters")
+        raise PolicyError(f"the password must have at most {MAX_PASSWORD} characters")
 
 
 # -- the accounts -------------------------------------------------------------------------------------------------
@@ -147,14 +171,14 @@ def check_username(text: str) -> str:
     """The normalized username, or an ``AccountError`` when it is not 3 to 64 letters, digits or ``. _ @ -``."""
     name = normalize_username(text)
     if not _USERNAME.fullmatch(name):
-        raise AccountError("a username has 3 to 64 characters: letters, digits and . _ @ - (it starts with a letter "
-                           "or digit), and capitals do not matter")
+        raise PolicyError("a username has 3 to 64 characters: letters, digits and . _ @ - (it starts with a letter "
+                          "or digit), and capitals do not matter")
     return name
 
 
 def check_role(role: str) -> str:
     if role not in ROLES:
-        raise AccountError(f"the role must be one of {', '.join(ROLES)}")
+        raise PolicyError(f"the role must be one of {', '.join(ROLES)}")
     return role
 
 
@@ -309,10 +333,11 @@ class AccountStore:
                     try:
                         self._write(before)
                     except OSError as rollback_error:
-                        raise AccountError(
+                        raise AuditWriteError(
                             "the audit log could not be written and the account change could not be rolled back"
                         ) from rollback_error
-                raise AccountError("the audit log could not be written; the account change was rolled back") from error
+                raise AuditWriteError(
+                    "the audit log could not be written; the account change was rolled back") from error
         return result
 
     def _change(self, change: Any, on_change: Optional[Callable[[Any], None]] = None) -> Any:
@@ -323,7 +348,7 @@ class AccountStore:
             before = self._read()
             after, result = change(list(before))
             if _enabled_admins(before) >= 1 and _enabled_admins(after) == 0:
-                raise AccountError("the last administrator cannot be deleted, demoted or disabled")
+                raise LastAdministratorError("the last administrator cannot be deleted, demoted or disabled")
             return self._save_change(before, after, result, on_change)
 
     # the operations
@@ -338,9 +363,9 @@ class AccountStore:
 
         def change(users: List[User]) -> Tuple[List[User], User]:
             if any(u.username == name for u in users):
-                raise AccountError(f"the user {name} already exists")
+                raise UserExistsError(f"the user {name} already exists")
             if only_if_no_admin and _enabled_admins(users):
-                raise AccountError("an administrator exists already")
+                raise AdministratorExistsError("an administrator exists already")
             user = User(name, role, hashed, _now())
             return users + [user], user
 
@@ -354,7 +379,7 @@ class AccountStore:
                 if user.username == name:
                     users[i] = edit(user)
                     return users, users[i]
-            raise AccountError(f"there is no user {name}")
+            raise NoSuchUserError(f"there is no user {name}")
 
         return self._change(change, on_change)
 
@@ -365,6 +390,25 @@ class AccountStore:
     def set_disabled(self, username: str, disabled: bool,
                      on_change: Optional[Callable[[User], None]] = None) -> User:
         return self._update(username, lambda user: replace(user, disabled=disabled), on_change)
+
+    def update(self, username: str, role: Optional[str] = None, disabled: Optional[bool] = None,
+               on_change: Optional[Callable[[User, User], None]] = None) -> User:
+        """Change the role and/or the disabled flag of a user in one step (under the lock, with the last-administrator
+        rule applied to the result). ``on_change(old, new)`` is the audit callback; it runs only when something
+        changed, and when it fails the change is rolled back."""
+        role = None if role is None else check_role(role)
+        seen: List[User] = []
+
+        def edit(user: User) -> User:
+            seen.append(user)
+            return replace(user, role=user.role if role is None else role,
+                           disabled=user.disabled if disabled is None else disabled)
+
+        def record(user: User) -> None:
+            if on_change is not None and seen[0] != user:
+                on_change(seen[0], user)
+
+        return self._update(username, edit, record)
 
     def reset_password(self, username: str, password: str,
                        on_change: Optional[Callable[[User], None]] = None) -> User:
@@ -378,7 +422,7 @@ class AccountStore:
         def change(users: List[User]) -> Tuple[List[User], User]:
             found = next((u for u in users if u.username == name), None)
             if found is None:
-                raise AccountError(f"there is no user {name}")
+                raise NoSuchUserError(f"there is no user {name}")
             return [u for u in users if u is not found], found
 
         return self._change(change, on_change)
@@ -445,7 +489,7 @@ class _PrivateRotatingFileHandler(logging.handlers.RotatingFileHandler):
 
     def handleError(self, record: logging.LogRecord) -> None:
         error = sys.exc_info()[1]
-        raise AccountError("could not write the audit log") from error
+        raise AuditWriteError("could not write the audit log") from error
 
 
 class _JsonLines(logging.Formatter):

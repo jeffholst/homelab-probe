@@ -23,6 +23,20 @@ CONTROLLER_ERRORS: Dict[Optional[str], Tuple[int, str, str]] = {
 OTHER_CONTROLLER_ERROR = (502, "controller_error", "The controller's answer could not be used.")
 
 
+ERROR_SCHEMA = {"type": "object", "required": ["error", "message"],
+                "properties": {"error": {"type": "string"}, "message": {"type": "string"}}}
+_STATUS_TEXT = {401: "Not logged in", 403: "Not allowed", 404: "No such site, snapshot or user",
+                409: "The request conflicts with the current state", 422: "A parameter is not valid",
+                500: "The local files cannot be used", 502: "The controller could not be read",
+                504: "The controller timed out"}
+
+
+def error_responses(*codes: int) -> Dict[int | str, Dict[str, Any]]:
+    """The error responses of a route, for the OpenAPI document."""
+    return {code: {"description": _STATUS_TEXT[code], "content": {"application/json": {"schema": ERROR_SCHEMA}}}
+            for code in codes}
+
+
 class ApiError(Exception):
     """An error with its status, code and (fixed or caller-checked) message, and optional extra fields."""
 

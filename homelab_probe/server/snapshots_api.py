@@ -32,8 +32,8 @@ from ..history import (
 from ..setup import SetupError, ensure_private_dir
 from . import apischema
 from .auth import admin, audit_event, local_write
-from .errors import ApiError, from_controller
-from .routes import ERROR_SCHEMA, MAX_TEXT, REFRESH_MIN_INTERVAL, RefreshQ, SiteP, checked_site, respond
+from .errors import ApiError, error_responses, from_controller
+from .routes import MAX_TEXT, REFRESH_MIN_INTERVAL, RefreshQ, SiteP, checked_site, respond
 
 UNIFI = "/api/v1/unifi"
 MAX_KEEP = 10_000
@@ -92,14 +92,6 @@ def plain(files: List[Path]) -> List[Path]:
     return [path for path in files if not path.is_symlink()]
 
 
-def errors(*codes: int) -> Dict[int | str, Dict[str, Any]]:
-    """The error responses of a route, for the OpenAPI document."""
-    text = {404: "No such site or snapshot", 422: "A parameter is not valid", 500: "The snapshots cannot be used",
-            502: "The controller could not be read", 504: "The controller timed out"}
-    return {code: {"description": text[code], "content": {"application/json": {"schema": ERROR_SCHEMA}}}
-            for code in codes}
-
-
 class SaveBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     keep: Optional[int] = Field(default=None, ge=1, le=MAX_KEEP, description="Afterwards keep only the newest N")
@@ -119,7 +111,7 @@ def router() -> APIRouter:
 
     @api.get("/snapshots", summary="The saved snapshots of a site, newest first",
              responses={200: {"description": "The newest snapshots", "content": {"application/json": {
-                 "schema": LIST_SCHEMA}}}, **errors(404, 422, 500, 502, 504)})
+                 "schema": LIST_SCHEMA}}}, **error_responses(404, 422, 500, 502, 504)})
     def snapshots_list(request: Request, site: SiteP, limit: LimitQ = 50) -> Dict[str, Any]:
         record, files = listed(request, site)
         return {"site": {"id": str(record.get("id") or ""), "name": str(record.get("name") or "")},
@@ -128,7 +120,7 @@ def router() -> APIRouter:
     @api.post("/snapshots", dependencies=[Depends(admin)], status_code=201,
               summary="Save a snapshot of the network now (a local write)",
               responses={201: {"description": "The snapshot that was saved", "content": {"application/json": {
-                  "schema": SAVED_SCHEMA}}}, **errors(404, 422, 500, 502, 504)})
+                  "schema": SAVED_SCHEMA}}}, **error_responses(404, 422, 500, 502, 504)})
     @local_write
     def snapshots_save(request: Request, site: SiteP, body: SaveBody) -> JSONResponse:
         name = checked_site(site)
@@ -162,7 +154,7 @@ def router() -> APIRouter:
              responses={200: {"description": "The comparison with when it was read", "content": {
                  "application/json": {"schema": apischema.response_schema("diff", {
                      "old": {"type": "string"}, "new": {"type": ["string", "null"]}})}}},
-                 **errors(404, 422, 500, 502, 504)})
+                 **error_responses(404, 422, 500, 502, 504)})
     def snapshots_diff(request: Request, site: SiteP, old: NameQ = None, new: NameQ = None,
                        refresh: RefreshQ = False) -> JSONResponse:
         record, files = listed(request, site)
