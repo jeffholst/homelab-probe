@@ -80,14 +80,14 @@ def test_the_demo_serves_the_synthetic_controller_and_needs_no_settings(served, 
     assert cli.main(["--demo", "serve"]) == 0
     ((app, _),) = served
     assert app.state.demo is True
-    client = app.state.client_factory()
+    client = app.state.service.client()
     assert client.info()["applicationVersion"] and client.base_url.endswith(".invalid")
-    assert app.state.client_factory() is not client                      # a new client each time
+    assert app.state.service.client() is not client and app.state.service.client().session is client.session
 
 
 def test_a_real_run_builds_a_real_client_from_the_configuration(configured, served):
     cli.main(["serve"])
-    client = served[0][0].state.client_factory()
+    client = served[0][0].state.service.client()
     assert client.base_url == "https://controller.example" and client.session.headers["X-API-KEY"].startswith("the-api")
 
 

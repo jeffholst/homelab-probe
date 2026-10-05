@@ -54,6 +54,7 @@ The `logger` field is the module's name under `homelab_probe` (for example `home
 | `notify.delivery` | INFO or WARNING | `destination`, `delivered`, `reason`, `duration_ms` | The outcome of one notification destination (INFO delivered, WARNING failed): the kind, a fixed reason, milliseconds; never the message, the URL or a recipient. |
 | `audit.event` | INFO | `action`, `actor`, `account`, `role` | A change to the web accounts was made (INFO): the action, who did it and which user; never a password. |
 | `server.start` | INFO | `host`, `port`, `demo` | The web server started listening (INFO): the address, the port, whether it is a demo. |
+| `server.cache` | DEBUG | `outcome`, `label` | One read of the controller by the web server (DEBUG): answered from the cache (hit), read (miss), served stale because the read failed, or refused because it just failed (coalesced). |
 | `server.request` | INFO | `method`, `route`, `status`, `duration_ms` | One request to the web server (INFO): the method, the route template (never the path), the status and the milliseconds. |
 | `watch.pass` | INFO | `findings`, `complete`, `retry_s` | One pass of `diagnose --watch` finished (INFO): how many findings, whether the read was complete. |
 | `watch.unavailable` | WARNING | `reason`, `findings`, `complete`, `retry_s` | A pass of `diagnose --watch` could not read the controller or got only part of its data (WARNING). |
