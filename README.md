@@ -1,9 +1,7 @@
 # Homelab Probe
-
 ![Homelab Probe](docs/images/homelab-probe.png)
 
 A command-line tool for probing a homelab. Today it queries, troubleshoots and inventories a UniFi Network controller (more platforms may follow). It is **read-only**: it never changes anything on the controller. Every request is a GET, with one exception: the event log can only be queried with a POST, so `events`, and `diagnose` and `client` by default (`--no-events` skips it), send a read-only query to that one endpoint (see [Event history](#event-history)). Nothing else is ever sent anywhere, with one opt-in exception: `diagnose --notify` can send a short message to a notification service or mail server you configure (see [Notifications](docs/notifications.md#notifications)).
-
 > **Status: early development.** Tested against one live controller (Network 10.6.106); other versions and hardware may differ. See [open issues](https://github.com/jeffholst/homelab-probe/issues) for the roadmap.
 
 ## Credits
@@ -124,7 +122,9 @@ uv run hlp.py new-clients                          # clients in no client group
 uv run hlp.py audit                                # settings that are probably not what you want
 uv run hlp.py init                                 # first time? answer a few questions; it writes .env for you
 uv run hlp.py doctor                               # is the tool set up right? (--offline: no controller)
+uv run hlp.py completion zsh                       # a completion script for bash, zsh or fish
 uv run --extra web hlp.py serve                    # the read-only web API on 127.0.0.1:8787
+uv run hlp.py web-user list                        # the web interface's accounts (add, set-role, disable, ...)
 uv run hlp.py diagnose                             # health checks (--json for scripts, --notify for alerts)
 ```
 
