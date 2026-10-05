@@ -10,7 +10,7 @@ from typing import Callable, Optional
 import uvicorn
 
 from .. import logs
-from ..accounts import AccountStore
+from ..accounts import AccountError, AccountStore
 from ..config import Config, ConfigError
 from ..util import require_loopback
 from .app import create_app
@@ -23,7 +23,11 @@ DEMO_USER = "demo"
 
 def require_administrator(store: AccountStore, directory: Path) -> None:
     """Refuse to start without an enabled administrator: nobody could log in, and the server would be a locked door."""
-    if not any(u.role == "admin" and not u.disabled for u in store.users()):
+    try:
+        users = store.users()
+    except AccountError as error:                  # a damaged accounts file is a start-up error, not a traceback
+        raise ConfigError(str(error)) from error
+    if not any(u.role == "admin" and not u.disabled for u in users):
         raise ConfigError(f"there is no administrator to log in as: create one with "
                           f"`hlp web-user add NAME --role admin --data-dir {directory}`")
 

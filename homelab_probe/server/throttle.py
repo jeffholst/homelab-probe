@@ -13,6 +13,8 @@ import time
 from collections import OrderedDict
 from typing import Callable, Tuple
 
+from ..accounts import normalize_username
+
 FREE_FAILURES = 3          # failures before the first wait
 BASE_WAIT = 2.0            # seconds after the first failure that counts; doubles each time
 ADDRESS_CAP = 300.0
@@ -31,19 +33,20 @@ class LoginThrottle:
         """Seconds the caller must wait before this attempt may be looked at (0: go ahead)."""
         now = self._clock()
         with self._lock:
-            until = max((self._until(("address", address), now), self._until(("user", username.lower()), now)))
+            user = ("user", normalize_username(username))
+            until = max(self._until(("address", address), now), self._until(user, now))
         return max(0.0, until - now)
 
     def failed(self, address: str, username: str) -> None:
         now = self._clock()
         with self._lock:
             self._add(("address", address), now, ADDRESS_CAP)
-            self._add(("user", username.lower()), now, USER_CAP)
+            self._add(("user", normalize_username(username)), now, USER_CAP)
 
     def succeeded(self, address: str, username: str) -> None:
         with self._lock:
             self._failures.pop(("address", address), None)
-            self._failures.pop(("user", username.lower()), None)
+            self._failures.pop(("user", normalize_username(username)), None)
 
     def _until(self, key: Tuple[str, str], now: float) -> float:
         entry = self._failures.get(key)

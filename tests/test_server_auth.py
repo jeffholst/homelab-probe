@@ -527,3 +527,82 @@ def test_the_address_is_the_connection_not_a_header_a_client_can_set(app, tmp_pa
 
 def test_a_client_with_no_address_is_still_throttled_under_one_name(app):
     assert auth_module.address_of(type("R", (), {"client": None})()) == "unknown"
+
+
+# -- fixes from the review of this change --------------------------------------------------------------------------
+
+def test_whitespace_and_capitals_in_a_username_cannot_be_used_to_get_a_fresh_throttle_bucket(app, state, clock):
+    client = TestClient(app, client=("10.3.0.1", 1))
+    for number, variant in enumerate(("bob", " bob", "bob ", "  BOB  ", "Bob", "\tbob\n")):    # all are the account bob
+        attempt(TestClient(app, client=(f"10.3.1.{number}", 1)), variant, "wrong password!")
+    assert state.throttle.wait("10.9.9.9", "bob") > 0 and state.throttle.wait("10.9.9.9", " BOB ") > 0
+    refused = attempt(TestClient(app, client=("10.3.2.2", 1)), "  bob", PASSWORD)             # a new address, the right password
+    assert refused.status_code == 429
+    state.throttle.succeeded("10.3.2.2", " Bob ")                                           # a success clears every spelling
+    assert state.throttle.wait("10.9.9.9", "bob") == 0 and client
+
+
+def test_the_throttle_uses_the_same_normalization_as_the_accounts():
+    from homelab_probe.accounts import normalize_username
+
+    clock = Clock()
+    throttle = LoginThrottle(clock=clock)
+    for name in ("bob", " bob ", "BOB", "\u00c9ric", "\u00e9ric"):
+        for _ in range(5):
+            throttle.failed("1.1.1.1", name)
+        assert throttle.wait("2.2.2.2", name) > 0 and throttle.wait("2.2.2.2", normalize_username(name)) > 0
+
+
+def test_a_session_ended_while_its_account_was_being_read_is_not_returned(tmp_path):
+    clock = Clock()
+    store = AccountStore(tmp_path)
+    store.add("bob", "viewer", PASSWORD)
+    sessions = SessionStore(clock=clock)
+    value, session = sessions.create(store.get("bob"), "1.1.1.1")
+
+    class Accounts:
+        def get(self, username):
+            sessions.end(session)                                     # a logout arrives in the middle of the lookup
+            return store.get(username)
+
+    assert sessions.lookup(value, Accounts()) is None and sessions.count() == 0
+
+
+def test_a_slower_request_never_moves_the_idle_timer_back(tmp_path):
+    clock = Clock()
+    store = AccountStore(tmp_path)
+    store.add("bob", "viewer", PASSWORD)
+    sessions = SessionStore(clock=clock)
+    value, session = sessions.create(store.get("bob"), "1.1.1.1")
+    clock.advance(100)
+    assert sessions.lookup(value, store) is session and session.last_seen == clock.now
+    newest = session.last_seen
+    sessions._clock = lambda: newest - 50                             # a request that read the clock earlier, finishing last
+    assert sessions.lookup(value, store) is session and session.last_seen == newest
+
+
+def test_concurrent_lookups_and_logouts_never_resurrect_or_corrupt_a_session(tmp_path):
+    import threading
+
+    store = AccountStore(tmp_path)
+    store.add("bob", "viewer", PASSWORD)
+    sessions = SessionStore()
+    value, session = sessions.create(store.get("bob"), "1.1.1.1")
+    seen, stop = [], threading.Event()
+
+    def reader():
+        while not stop.is_set():
+            seen.append(sessions.lookup(value, store))
+
+    threads = [threading.Thread(target=reader) for _ in range(4)]
+    for t in threads:
+        t.start()
+    sessions.end(session)
+    stop.set()
+    for t in threads:
+        t.join(5)
+    assert sessions.lookup(value, store) is None and sessions.count() == 0
+    ended = False
+    for result in seen:                                               # once a lookup says None it never says more
+        ended = ended or result is None
+        assert not (ended and result is not None)

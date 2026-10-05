@@ -158,3 +158,14 @@ def test_a_real_run_builds_a_real_client_from_the_configuration(configured, serv
 
 def test_a_missing_settings_file_that_was_named_fails_before_the_server_starts(configured, served, tmp_path, capsys):
     assert cli.main(["serve", "--config", str(tmp_path / "missing.toml")]) == 3 and served == []
+
+
+@pytest.mark.parametrize("content", ["not json", '{"version": 9, "users": []}', '{"version": 1, "users": [5]}'])
+def test_a_damaged_accounts_file_is_a_start_up_error_not_a_traceback(content, configured, served, tmp_path, capsys):
+    directory = tmp_path / "data"
+    directory.mkdir()
+    (directory / "users.json").write_text(content)
+    assert cli.main(["serve", "--data-dir", str(directory)]) == 3 and served == []
+    err = capsys.readouterr().err
+    assert err.startswith("Serving on") or "ERROR:" in err
+    assert "Traceback" not in err and "ERROR:" in err

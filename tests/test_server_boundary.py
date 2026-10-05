@@ -61,15 +61,45 @@ def test_documents_and_accounts_do_not_know_the_server_exists():
         assert not [n for n in imports(PACKAGE / name, top_level_only=False) if "server" in n.split(".")], name
 
 
+FORBIDDEN_MODULES = ("requests", "urllib3", "httpx", "httpx2", "socket", "urllib.request", "http.client", "ssl")
+
+
+def network_imports(source):
+    """The imports in ``source`` that could open a connection. ``urllib.parse`` is fine; ``urllib``, ``urllib.request``,
+    ``from urllib import request`` and ``from urllib import *`` are not."""
+    tree = ast.parse(source)
+    names = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            names |= {alias.name for alias in node.names}
+        elif isinstance(node, ast.ImportFrom) and not node.level:
+            if node.module != "urllib":                  # `from urllib import parse` does not import `urllib` itself
+                names.add(node.module or "")
+            names |= {f"{node.module}.{alias.name}" for alias in node.names}
+    return sorted(n for n in names if n == "urllib" or n.endswith(".*") and n.startswith("urllib")
+                  or any(n == f or n.startswith(f + ".") for f in FORBIDDEN_MODULES))
+
+
+@pytest.mark.parametrize("source, expected", [
+    ("import urllib", ["urllib"]), ("import urllib.request", ["urllib.request"]),
+    ("from urllib import request", ["urllib.request"]), ("from urllib import *", ["urllib.*"]),
+    ("from urllib.request import urlopen", ["urllib.request", "urllib.request.urlopen"]),
+    ("import urllib.parse", []), ("from urllib.parse import urlsplit", []), ("from urllib import parse", []),
+    ("import requests", ["requests"]), ("from requests import Session", ["requests", "requests.Session"]),
+    ("import http.client", ["http.client"]), ("import http.cookiejar", []), ("import socket", ["socket"]),
+    ("from http import client", ["http.client"]), ("import json, logging", []),
+])
+def test_the_import_check_catches_every_way_to_reach_the_network_and_allows_parsing(source, expected):
+    assert network_imports(source) == expected
+
+
 @pytest.mark.parametrize("path", sorted((PACKAGE / "server").glob("*.py")), ids=lambda p: p.name)
 def test_the_server_makes_no_request_toward_the_controller_by_itself(path):
     """A request toward the controller can only be made by a ``UniFiClient`` (GET, and the one event-log POST): the
     server imports no HTTP library and calls no write method."""
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    names = {alias.name for n in ast.walk(tree) if isinstance(n, ast.Import) for alias in n.names}
-    names |= {n.module or "" for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and not n.level}
-    forbidden = ("requests", "urllib3", "httpx", "httpx2", "socket", "urllib.request", "http.client")
-    assert not [n for n in names if any(n == f or n.startswith(f + ".") for f in forbidden)]
+    source = path.read_text(encoding="utf-8")
+    assert network_imports(source) == []
+    tree = ast.parse(source)
     decorators = {id(d) for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
                   for d in n.decorator_list}                             # `@router.post("/login")` declares a route
     called = {n.func.attr for n in ast.walk(tree) if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)

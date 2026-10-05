@@ -74,14 +74,18 @@ class SessionStore:
             session = self._sessions.get(key)
         if session is None:
             return None
-        now = self._clock()
-        user = accounts.get(session.username)
-        if (now - session.last_seen > self.idle or now - session.created > self.absolute or user is None
-                or user.disabled or user.role != session.role or _hash(user.password_hash) != session.fingerprint):
-            self._drop(key)
-            return None
-        session.last_seen = now
-        return session
+        user = accounts.get(session.username)         # the file may be read: not under the lock
+        with self._lock:
+            if self._sessions.get(key) is not session:        # ended (a logout, a limit) while the account was read
+                return None
+            now = self._clock()
+            if (now - session.last_seen > self.idle or now - session.created > self.absolute or user is None
+                    or user.disabled or user.role != session.role
+                    or _hash(user.password_hash) != session.fingerprint):
+                del self._sessions[key]
+                return None
+            session.last_seen = max(session.last_seen, now)     # a slower request never moves the idle timer back
+            return session
 
     def end(self, session: Session) -> None:
         self._drop(session.key)
