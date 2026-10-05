@@ -46,6 +46,7 @@ always listed here.
 
 ### Fixed
 
+- `docs/web.md` describes what the web server does today (login, report API, first-run setup API) instead of "a few routes without data".
 - Web account reads tighten existing `users.json` permissions, authentication revalidates account status and role under the file lock, and failed audit writes are reported with the account change rolled back.
 
 ## [0.2.0] - 2026-10-04
