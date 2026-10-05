@@ -135,10 +135,10 @@ def test_the_env_file_of_the_data_directory_is_read(served, tmp_path):
     assert "UNIFI_URL" not in os.environ                                           # read without touching the environment
 
 
-def test_configured_settings_without_an_administrator_still_refuse_to_start(served, tmp_path, capsys):
+def test_configured_settings_without_an_administrator_start_the_admin_mode(served, tmp_path, capsys):
     (tmp_path / ".env").write_text(GOOD)
-    assert serve("--data-dir", str(tmp_path)) == 3 and served == []
-    assert "no administrator to log in as" in capsys.readouterr().err
+    assert serve("--data-dir", str(tmp_path)) == 0 and served[0][0].state.setup.mode == "admin"
+    assert "No administrator yet" in capsys.readouterr().err
 
 
 def test_the_current_directory_is_not_read_when_another_data_directory_is_named(served, tmp_path, monkeypatch):
@@ -221,3 +221,64 @@ def test_the_demo_ignores_an_implicit_settings_file_but_honors_a_named_one(serve
     (tmp_path / "hlp.toml").write_text("this is [not toml")
     assert cli.main(["--demo", "serve"]) == 0 and len(served) == 1
     assert cli.main(["--demo", "serve", "--config", str(tmp_path / "hlp.toml")]) == 3 and len(served) == 1
+
+
+# -- finishing through the server the command started ------------------------------------------------------------
+
+def finish_flow(app, *, token=None):
+    """Type the settings into the setup of ``app`` (its controller is the synthetic one) and finish it."""
+    from homelab_probe.demo import demo_client
+    from homelab_probe.demo.session import DemoSession
+    from homelab_probe.server.service import ControllerService
+
+    state = app.state.setup
+    state.client_factory = demo_client
+    state.service_factory = lambda config: ControllerService(config, session=DemoSession())
+    state.resolver = lambda host, port: ["192.168.1.1"]
+    client = TestClient(app, base_url="http://localhost")
+    headers = {"Origin": "http://localhost", "X-Setup-Token": token or state.token}
+
+    def post(path, body):
+        return client.post(f"/api/v1/setup/{path}", json=body, headers=headers)
+
+    post("draft", {"url": "https://192.168.1.1", "api_key": "the-typed-key-0123456789"})
+    assert post("connection", {}).json()["ok"] is True
+    return client, post
+
+
+def test_finishing_in_a_served_setup_reloads_the_configuration_the_way_the_server_read_it(served, tmp_path):
+    cli.main(["--timeout", "7", "--parallel", "2", "serve", "--data-dir", str(tmp_path)])
+    app = served[0][0]
+    client, post = finish_flow(app)
+    assert post("finish", {"username": "ada", "password": "a long enough password"}).json()["finished"] is True
+    assert (tmp_path / ".env").exists()
+    config = app.state.config
+    assert (config.controller_url, config.timeout, config.parallel) == ("https://192.168.1.1", 7, 2)
+
+
+def test_a_finish_that_leaves_the_settings_missing_is_a_reload_error(served, tmp_path, monkeypatch):
+    from homelab_probe.server import wizard
+
+    cli.main(["serve", "--data-dir", str(tmp_path)])
+    app = served[0][0]
+    monkeypatch.setattr(wizard, "_write_settings", lambda state, directory, written: None)     # nothing is written
+    _, post = finish_flow(app)
+    response = post("finish", {"username": "ada", "password": "a long enough password"})
+    assert response.status_code == 500 and response.json()["error"] == "reload_failed"
+    assert app.state.setup.mode == "setup"
+
+
+def test_the_admin_mode_of_a_served_configuration_finishes_with_the_command_line_overrides(served, tmp_path, monkeypatch):
+    (tmp_path / ".env").write_text(GOOD)
+    cli.main(["--timeout", "9", "serve", "--data-dir", str(tmp_path)])
+    app = served[0][0]
+    state = app.state.setup
+    client = TestClient(app, base_url="http://localhost")
+    body = {"username": "ada", "password": "a long enough password"}
+    headers = {"Origin": "http://localhost", "X-Setup-Token": state.token}
+    from homelab_probe.demo.session import DemoSession
+    from homelab_probe.server.service import ControllerService
+
+    state.service_factory = lambda config: ControllerService(config, session=DemoSession())
+    assert client.post("/api/v1/setup/finish", json=body, headers=headers).json()["admin_created"] is True
+    assert app.state.config.timeout == 9 and app.state.service is not None

@@ -490,6 +490,12 @@ def check_controller(config: Config, factory: Optional[Callable[[Config], UniFiC
                               time.time() if now is None else now)
 
 
+def check_notifications(config: Config) -> List[Check]:
+    """Only the checks of the notification destinations of ``config``: what is configured and a dry run (the text that
+    would be sent, titled, and nothing sent). The guided setup shows them before it saves a destination."""
+    return _notify_checks(config)
+
+
 def run_checks(options: Options, factory: Optional[Callable[[Config], UniFiClient]] = None,
                now: Optional[float] = None) -> List[Check]:
     """Every check, in order. Never raises for a problem it is there to report. ``factory`` makes the client (the
