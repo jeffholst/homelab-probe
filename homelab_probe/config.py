@@ -42,6 +42,8 @@ MAX_SITE_LENGTH = 128
 DEFAULT_TIMEOUT = 15.0     # seconds per request
 MIN_TIMEOUT, MAX_TIMEOUT = 1.0, 600.0
 DEFAULT_PARALLEL, MAX_PARALLEL = 6, 16     # requests in flight at once
+DEFAULT_SESSION_IDLE_MINUTES, MAX_SESSION_IDLE_MINUTES = 30, 24 * 60      # a web session ends after this idle time
+DEFAULT_SESSION_MAX_HOURS, MAX_SESSION_MAX_HOURS = 12, 24 * 30     # ... and in any case after this long
 DEFAULT_AUDIT_MB, MAX_AUDIT_MB = 5, 1024           # size of one audit log file
 DEFAULT_AUDIT_FILES, MAX_AUDIT_FILES = 10, 1000    # audit log files kept in all (the current one and the rotated ones)
 _CA_BUNDLE_SUFFIXES = (".pem", ".crt", ".cer")
@@ -55,6 +57,7 @@ SECRET_FILE_GROUP_OTHER_BITS = 0o077   # any of these set means someone besides 
 KNOWN_VARIABLES = (
     "UNIFI_URL", "UNIFI_API_KEY", "UNIFI_SITE_ID", "UNIFI_VERIFY_SSL", "UNIFI_TIMEOUT", "UNIFI_PARALLEL_REQUESTS",
     "ALLOW_INSECURE_HTTP", "LOG_LEVEL", "LOG_FORMAT", "AUDIT_LOG_MAX_MB", "AUDIT_LOG_FILES",
+    "SESSION_IDLE_MINUTES", "SESSION_MAX_HOURS",
     "NOTIFY_NTFY_URL", "NOTIFY_NTFY_TOKEN", "NOTIFY_WEBHOOK_URL", "NOTIFY_WEBHOOK_TOKEN",
     "NOTIFY_SMTP_HOST", "NOTIFY_SMTP_PORT", "NOTIFY_SMTP_SECURITY", "NOTIFY_SMTP_USER", "NOTIFY_SMTP_PASSWORD",
     "NOTIFY_EMAIL_FROM", "NOTIFY_EMAIL_TO",
@@ -120,6 +123,8 @@ class Config:
     log_format: str = ""                    # LOG_FORMAT: text or json; blank means the command line's own format
     audit_log_mb: int = DEFAULT_AUDIT_MB    # AUDIT_LOG_MAX_MB: size of one web audit log file
     audit_log_files: int = DEFAULT_AUDIT_FILES    # AUDIT_LOG_FILES: how many are kept in all
+    session_idle_minutes: int = DEFAULT_SESSION_IDLE_MINUTES    # SESSION_IDLE_MINUTES: web login idle timeout
+    session_max_hours: int = DEFAULT_SESSION_MAX_HOURS          # SESSION_MAX_HOURS: web login absolute lifetime
     env_file: Optional[Path] = field(default=None, compare=False)    # the .env that was read, if any (for --verbose)
     warnings: Tuple[str, ...] = field(default=(), compare=False)   # for cli.main to print
 
@@ -324,6 +329,16 @@ def parse_audit_log_files(text: Optional[str]) -> int:
     """How many audit log files are kept in all (``AUDIT_LOG_FILES``, at least 2: the current one and one rotated);
     blank means the default."""
     return _whole_number("AUDIT_LOG_FILES", text, DEFAULT_AUDIT_FILES, 2, MAX_AUDIT_FILES)
+
+
+def parse_session_idle_minutes(text: Optional[str]) -> int:
+    """How long a web login may sit unused before it ends, in minutes (``SESSION_IDLE_MINUTES``); blank: 30."""
+    return _whole_number("SESSION_IDLE_MINUTES", text, DEFAULT_SESSION_IDLE_MINUTES, 1, MAX_SESSION_IDLE_MINUTES)
+
+
+def parse_session_max_hours(text: Optional[str]) -> int:
+    """How long a web login lasts at most, in hours (``SESSION_MAX_HOURS``); blank: 12."""
+    return _whole_number("SESSION_MAX_HOURS", text, DEFAULT_SESSION_MAX_HOURS, 1, MAX_SESSION_MAX_HOURS)
 
 
 def parse_log_level(text: Optional[str]) -> str:
@@ -536,6 +551,8 @@ def load_config(env_file: Optional[Path] = None, site_override: Optional[str] = 
         log_format=parse_log_format(os.getenv("LOG_FORMAT")),
         audit_log_mb=parse_audit_log_mb(os.getenv("AUDIT_LOG_MAX_MB")),
         audit_log_files=parse_audit_log_files(os.getenv("AUDIT_LOG_FILES")),
+        session_idle_minutes=parse_session_idle_minutes(os.getenv("SESSION_IDLE_MINUTES")),
+        session_max_hours=parse_session_max_hours(os.getenv("SESSION_MAX_HOURS")),
         env_file=path,
         warnings=tuple(warnings),
     )

@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.middleware import Middleware
@@ -19,6 +19,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from .. import __version__, logs
 from ..config import Config
 from . import routes
+from .auth import AuthState, OriginGuard, guard, public, public_router, session_router
 from .errors import ApiError, api_error_handler, request_validation_error_handler
 from .security import SecurityHeaders
 from .service import ControllerService
@@ -59,53 +60,70 @@ class RequestLog:
 
 
 def create_app(config: Config, settings_path: Optional[Path] = None, state_dir: Optional[Path] = None, *,
-               service: Optional[ControllerService] = None, demo: bool = False,
+               service: Optional[ControllerService] = None, auth: Optional[AuthState] = None, demo: bool = False,
                hosts: Optional[List[str]] = None) -> FastAPI:
-    """The app for ``config``. ``settings_path`` is the ``hlp.toml`` to use and ``state_dir`` the data directory (both
-    used by the stages that follow), ``service`` the way to the controller (one is made from ``config`` when none is
-    given: the synthetic network for a ``demo``), ``hosts`` the ``Host`` values to answer to (see
-    ``security.allowed_hosts``)."""
+    """The app for ``config``. ``settings_path`` is the ``hlp.toml`` to use and ``state_dir`` the data directory (the
+    accounts file and the audit log are there), ``service`` the way to the controller (one is made from ``config``
+    when none is given: the synthetic network for a ``demo``), ``auth`` the accounts, sessions and throttle (made from
+    ``state_dir`` when none is given), ``hosts`` the ``Host`` values to answer to (see ``security.allowed_hosts``).
+
+    Everything answers only to a logged-in user except ``/``, ``/healthz``, ``/readyz``, ``/api/v1/meta`` and the
+    login itself; ``tests/test_server_auth.py`` lists the routes and fails on one that is neither."""
     app = FastAPI(
         title="Homelab Probe", version=__version__, docs_url=None, redoc_url=None,    # their pages load a CDN script
-        openapi_url=f"{API}/openapi.json",
+        openapi_url=None,                      # served below, behind the login
+        dependencies=[Depends(guard)],         # every route needs a login unless it is marked public
         middleware=[Middleware(SecurityHeaders), Middleware(RequestLog),
-                    Middleware(TrustedHostMiddleware, allowed_hosts=hosts or ["localhost", "127.0.0.1", "[::1]"])],
+                    Middleware(TrustedHostMiddleware, allowed_hosts=hosts or ["localhost", "127.0.0.1", "[::1]"]),
+                    Middleware(OriginGuard)],
     )
     app.state.config, app.state.settings_path, app.state.state_dir = config, settings_path, state_dir
     app.state.service, app.state.demo = service or ControllerService(config, demo=demo), demo
+    app.state.auth = auth or AuthState.for_directory(state_dir or Path("."), config)
     app.add_exception_handler(ApiError, api_error_handler)   # type: ignore[arg-type]
     app.add_exception_handler(RequestValidationError, request_validation_error_handler)
     routes.install(app)
+    app.include_router(public_router())
+    app.include_router(session_router())
 
     @app.get("/", include_in_schema=False)
+    @public
     def root() -> Dict[str, str]:
         return {"name": "Homelab Probe", "version": __version__, "api": API,
                 "note": "API only: no web app is built in yet"}
 
     @app.get("/healthz", include_in_schema=False)
+    @public
     def healthz() -> Dict[str, str]:
         """Is the process up? No data and no controller read."""
         return {"status": "ok"}
 
     @app.get("/readyz", include_in_schema=False)
+    @public
     def readyz(request: Request) -> JSONResponse:
         """Can the controller be read? One read of its application info through the cache (so a probe every few
-        seconds costs the controller one read per ``ttl``); the reason is a fixed word, never the error's text."""
+        seconds costs the controller one read per ``ttl``). Public, so it says only yes or no; the reason is in the
+        server log."""
         ready, reason = request.app.state.service.ready()
-        body: Dict[str, Any] = {"ready": ready, "demo": bool(request.app.state.demo)}
         if not ready:
-            body["reason"] = reason
-        return JSONResponse(body, status_code=200 if ready else 503)
+            logs.warn(f"not ready: the controller could not be read ({reason})")
+        return JSONResponse({"ready": ready}, status_code=200 if ready else 503)
 
     @app.get(f"{API}/meta")
+    @public
     def meta(request: Request) -> Dict[str, Any]:
         """What a client may know before it logs in: the version, and whether setup and login are needed."""
-        return {"version": __version__, "needs_setup": False, "login_required": False,
+        return {"version": __version__, "needs_setup": False, "login_required": True,
                 "demo": bool(request.app.state.demo)}
 
     @app.get(f"{API}/platforms")
     def platforms() -> List[Dict[str, Any]]:
         """The platforms this server can show; UniFi is the only one."""
         return [{"id": "unifi", "name": "UniFi", "configured": True}]
+
+    @app.get(f"{API}/openapi.json", include_in_schema=False)
+    def openapi(request: Request) -> JSONResponse:
+        """The API description (FastAPI's own route is off: it would be public)."""
+        return JSONResponse(request.app.openapi())
 
     return app

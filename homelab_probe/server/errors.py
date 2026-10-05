@@ -26,9 +26,11 @@ OTHER_CONTROLLER_ERROR = (502, "controller_error", "The controller's answer coul
 class ApiError(Exception):
     """An error with its status, code and (fixed or caller-checked) message, and optional extra fields."""
 
-    def __init__(self, status: int, code: str, message: str, **extra: Any) -> None:
+    def __init__(self, status: int, code: str, message: str, headers: Optional[Dict[str, str]] = None,
+                 **extra: Any) -> None:
         super().__init__(code)
         self.status, self.code, self.message, self.extra = status, code, message, extra
+        self.headers = headers or {}
 
 
 def from_controller(error: UniFiAPIError) -> ApiError:
@@ -38,7 +40,8 @@ def from_controller(error: UniFiAPIError) -> ApiError:
 
 
 async def api_error_handler(request: Request, error: ApiError) -> JSONResponse:
-    return JSONResponse({"error": error.code, "message": error.message, **error.extra}, status_code=error.status)
+    return JSONResponse({"error": error.code, "message": error.message, **error.extra}, status_code=error.status,
+                        headers=error.headers)
 
 
 async def request_validation_error_handler(request: Request, error: Exception) -> JSONResponse:

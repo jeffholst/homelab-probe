@@ -305,3 +305,25 @@ def test_the_audit_log_limits_default_parse_and_reject_what_is_not_a_whole_numbe
     monkeypatch.setenv("AUDIT_LOG_FILES", "one")
     with pytest.raises(ConfigError, match="AUDIT_LOG_FILES"):
         load_config()
+
+
+def test_the_session_limits_default_parse_and_reject_what_is_not_a_whole_number_in_range(monkeypatch):
+    from homelab_probe.config import ConfigError, load_config, parse_session_idle_minutes, parse_session_max_hours
+
+    assert (parse_session_idle_minutes(None), parse_session_idle_minutes("1"), parse_session_idle_minutes("1440")) == (
+        30, 1, 1440)
+    assert (parse_session_max_hours(""), parse_session_max_hours("1"), parse_session_max_hours("720")) == (12, 1, 720)
+    for parse, name, bad in ((parse_session_idle_minutes, "SESSION_IDLE_MINUTES", ["0", "1441", "soon", "1.5"]),
+                             (parse_session_max_hours, "SESSION_MAX_HOURS", ["0", "721", "all day", "-3"])):
+        for text in bad:
+            with pytest.raises(ConfigError, match=name):
+                parse(text)
+    monkeypatch.setenv("UNIFI_URL", "https://controller.example")
+    monkeypatch.setenv("UNIFI_API_KEY", "key")
+    assert (load_config().session_idle_minutes, load_config().session_max_hours) == (30, 12)
+    monkeypatch.setenv("SESSION_IDLE_MINUTES", "5")
+    monkeypatch.setenv("SESSION_MAX_HOURS", "2")
+    assert (load_config().session_idle_minutes, load_config().session_max_hours) == (5, 2)
+    monkeypatch.setenv("SESSION_MAX_HOURS", "never")
+    with pytest.raises(ConfigError, match="SESSION_MAX_HOURS"):
+        load_config()

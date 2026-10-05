@@ -25,6 +25,8 @@ UNIFI_VERIFY_SSL=true
 | `LOG_FORMAT`     | No       | (command line) | `text` or `json` for one record per line with fields; unset keeps the command-line format ([logging](logging.md)) |
 | `AUDIT_LOG_MAX_MB` | No      | `5`       | Size of one web audit log file in megabytes, 1 to 1024 ([web accounts](web.md#the-files)) |
 | `AUDIT_LOG_FILES` | No      | `10`      | How many audit log files are kept in all, 2 to 1000 |
+| `SESSION_IDLE_MINUTES` | No | `30`     | A web login ends after this many minutes without a request, 1 to 1440 ([web interface](web.md#logging-in-apiv1auth)) |
+| `SESSION_MAX_HOURS` | No    | `12`      | A web login ends this many hours after it began, 1 to 720 |
 | `NOTIFY_NTFY_URL` | No      | -         | Full ntfy topic URL for `diagnose --notify` (a secret, `https://` only) |
 | `NOTIFY_NTFY_TOKEN` | No    | -         | ntfy access token, sent as a bearer token |
 | `NOTIFY_WEBHOOK_URL` | No   | -         | Generic webhook URL for `diagnose --notify` (a secret, `https://` only) |

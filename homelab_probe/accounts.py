@@ -409,19 +409,24 @@ class LocalAccounts:
         self.audit = audit
         self._decoy = hash_password(secrets.token_urlsafe(16))      # what an unknown user's password is compared with
 
-    def authenticate(self, username: object, password: str) -> Optional[Principal]:
-        """The ``Principal`` of a correct password of an enabled user, else None. A wrong password, an unknown user and
-        a disabled one take the same work and give the same answer. A correct password with an old hash upgrades the
-        hash; every success updates ``last_login``."""
+    def authenticate_user(self, username: object, password: str) -> Optional[User]:
+        """The account of a correct password of an enabled user, as it is at that moment, else None. A wrong
+        password, an unknown user and a disabled one take the same work and give the same answer. A correct password
+        with an old hash upgrades the hash; every success updates ``last_login``."""
         password = password if isinstance(password, str) and len(password) <= MAX_PASSWORD else ""
         if not isinstance(username, str):
             verify_password(password, self._decoy)
             return None
+
         def on_upgrade(user: User) -> None:
             if self.audit:
                 self.audit.write("user.password_upgraded", user.username, user=user.username)
 
-        user = self.store.authenticate_login(username, password, self._decoy, on_upgrade)
+        return self.store.authenticate_login(username, password, self._decoy, on_upgrade)
+
+    def authenticate(self, username: object, password: str) -> Optional[Principal]:
+        """The ``Principal`` of a correct password of an enabled user, else None (see ``authenticate_user``)."""
+        user = self.authenticate_user(username, password)
         return Principal(user.username, user.role, self.source) if user is not None else None
 
 

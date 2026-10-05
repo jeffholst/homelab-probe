@@ -10,6 +10,7 @@ pytest.importorskip("fastapi")
 pytest.importorskip("httpx2")
 
 from fastapi.testclient import TestClient  # noqa: E402
+from server_support import CONFIG, auth_for, logged_in  # noqa: E402
 
 from homelab_probe import __version__, logs  # noqa: E402
 from homelab_probe.config import Config  # noqa: E402
@@ -20,9 +21,9 @@ from homelab_probe.server.service import ControllerService  # noqa: E402
 
 
 @pytest.fixture
-def app():
-    config = Config(controller_url="https://controller.example", api_key="key")
-    return create_app(config, hosts=["testserver"], service=ControllerService(config, session=DemoSession()))
+def app(tmp_path):
+    return create_app(CONFIG, state_dir=tmp_path, hosts=["testserver"], auth=auth_for(tmp_path),
+                      service=ControllerService(CONFIG, session=DemoSession()))
 
 
 @pytest.fixture
@@ -38,18 +39,18 @@ def test_healthz_says_ok_and_nothing_else(client):
 
 
 def test_readyz_and_meta_say_what_a_client_may_know_before_login(client):
-    assert client.get("/readyz").json() == {"ready": True, "demo": False}
+    assert client.get("/readyz").json() == {"ready": True}
     assert client.get("/api/v1/meta").json() == {"version": __version__, "needs_setup": False,
-                                                  "login_required": False, "demo": False}
+                                                  "login_required": True, "demo": False}
 
 
-def test_a_demo_app_says_so(app):
-    demo = create_app(app.state.config, demo=True, hosts=["testserver"])
+def test_a_demo_app_says_so(app, tmp_path):
+    demo = create_app(app.state.config, state_dir=tmp_path / "demo", demo=True, hosts=["testserver"])
     assert TestClient(demo).get("/api/v1/meta").json()["demo"] is True
 
 
-def test_the_only_platform_is_unifi(client):
-    assert client.get("/api/v1/platforms").json() == [{"id": "unifi", "name": "UniFi", "configured": True}]
+def test_the_only_platform_is_unifi(app):
+    assert logged_in(app).get("/api/v1/platforms").json() == [{"id": "unifi", "name": "UniFi", "configured": True}]
 
 
 def test_the_root_points_at_the_api(client):
@@ -57,7 +58,8 @@ def test_the_root_points_at_the_api(client):
     assert body["api"] == "/api/v1" and body["version"] == __version__
 
 
-def test_the_openapi_document_is_served_but_the_pages_that_load_a_cdn_script_are_not(client):
+def test_the_openapi_document_is_served_but_the_pages_that_load_a_cdn_script_are_not(app):
+    client = logged_in(app)
     spec = client.get("/api/v1/openapi.json").json()
     assert spec["info"]["title"] == "Homelab Probe" and "/api/v1/meta" in spec["paths"]
     assert "/healthz" not in spec["paths"]                                  # probes are not part of the API
@@ -65,7 +67,8 @@ def test_the_openapi_document_is_served_but_the_pages_that_load_a_cdn_script_are
         assert client.get(path).status_code == 404
 
 
-def test_only_get_is_answered(client):
+def test_only_get_is_answered(app):
+    client = logged_in(app)
     for path in ("/healthz", "/api/v1/meta", "/api/v1/platforms", "/"):
         for method in ("post", "put", "patch", "delete"):
             assert getattr(client, method)(path).status_code == 405, (method, path)
@@ -111,7 +114,7 @@ def test_there_is_no_cors(client):
 # -- the headers -----------------------------------------------------------------------------------------------
 
 @pytest.mark.parametrize("path, status", [("/healthz", 200), ("/api/v1/meta", 200), ("/missing", 404),
-                                          ("/api/v1/openapi.json", 200)])
+                                          ("/api/v1/openapi.json", 401)])
 def test_every_response_carries_the_security_headers(client, path, status):
     response = client.get(path)
     assert response.status_code == status
@@ -123,7 +126,7 @@ def test_every_response_carries_the_security_headers(client, path, status):
 
 def test_a_refused_host_and_a_wrong_method_carry_them_too(app):
     refused = TestClient(app, base_url="http://evil.example").get("/healthz")
-    wrong = TestClient(app).post("/healthz")
+    wrong = logged_in(app).post("/healthz")
     for response in (refused, wrong):
         assert response.headers["content-security-policy"] == CSP and response.headers["x-content-type-options"] == "nosniff"
 
@@ -192,7 +195,10 @@ def test_a_handler_that_raises_is_logged_as_a_500_without_its_message(app):
 
     stream = io.StringIO()
     logs.configure("json", "INFO", stream=stream)
-    response = TestClient(app, raise_server_exceptions=False).get("/boom")
+    client = logged_in(app, raise_server_exceptions=False)
+    stream.seek(0)
+    stream.truncate()                                                       # the login's own request record is not the point
+    response = client.get("/boom")
     assert response.status_code == 500 and "secret text" not in response.text
     for name, value in SECURITY_HEADERS:
         assert response.headers[name.decode()] == value.decode()
@@ -211,7 +217,7 @@ def test_a_streaming_handler_failure_keeps_the_headers_on_its_started_response(a
 
         return StreamingResponse(body())
 
-    response = TestClient(app, raise_server_exceptions=False).get("/stream-boom")
+    response = logged_in(app, raise_server_exceptions=False).get("/stream-boom")
     assert response.status_code == 200
     for name, value in SECURITY_HEADERS:
         assert response.headers[name.decode()] == value.decode()
@@ -224,7 +230,7 @@ def test_the_server_never_calls_the_controller_on_its_own(app, monkeypatch):
         raise AssertionError("the skeleton must not make a request")
 
     monkeypatch.setattr(requests.Session, "request", forbidden)
-    client = TestClient(app)
+    client = logged_in(app)
     for path in ("/", "/healthz", "/readyz", "/api/v1/meta", "/api/v1/platforms", "/api/v1/openapi.json"):
         assert client.get(path).status_code == 200
 
@@ -239,13 +245,14 @@ def test_the_middleware_lets_lifespan_and_websocket_traffic_through_untouched(ap
 
 # -- readiness reads the controller (through the cache) ----------------------------------------------------------
 
-def test_readyz_is_503_with_a_fixed_reason_when_the_controller_cannot_be_read():
-    config = Config(controller_url="https://controller.example", api_key="the-api-key-0123456789")
+def test_readyz_is_503_and_says_nothing_more_when_the_controller_cannot_be_read(tmp_path):
     session = DemoSession()
     session.status = 401
-    client = TestClient(create_app(config, hosts=["testserver"], service=ControllerService(config, session=session)))
+    app = create_app(CONFIG, state_dir=tmp_path, hosts=["testserver"], auth=auth_for(tmp_path),
+                     service=ControllerService(CONFIG, session=session))
+    client = TestClient(app)
     response = client.get("/readyz")
-    assert response.status_code == 503 and response.json() == {"ready": False, "demo": False, "reason": "unauthorized"}
+    assert response.status_code == 503 and response.json() == {"ready": False}      # public: the reason is in the log
     assert "controller.example" not in response.text and "the-api-key" not in response.text
     assert client.get("/healthz").status_code == 200                       # the process is up all the same
 

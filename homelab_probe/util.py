@@ -202,8 +202,8 @@ def is_loopback(host: str) -> bool:
 
 def require_loopback(host: str) -> str:
     """``host`` unchanged, or a ``ValueError`` saying why it is refused: ``hlp serve`` binds only a loopback address
-    until login exists."""
+    for now (network binds need options that are not built yet)."""
     if not is_loopback(host):
-        raise ValueError(f"the server binds only a loopback address (127.0.0.1 or ::1) until login exists, "
+        raise ValueError(f"the server binds only a loopback address (127.0.0.1 or ::1) for now, "
                          f"not {host!r}")
     return host

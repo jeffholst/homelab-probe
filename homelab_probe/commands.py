@@ -738,7 +738,7 @@ def _port(text: str) -> int:
 def _add_serve(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--host", default="127.0.0.1", metavar="ADDRESS",
                         help="The address to listen on (default 127.0.0.1). Only a loopback address is accepted "
-                             "until login exists")
+                             "for now")
     parser.add_argument("--port", type=_port, default=DEFAULT_PORT, metavar="PORT",
                         help=f"The port to listen on (default {DEFAULT_PORT})")
     parser.add_argument("--data-dir", type=Path, default=Path("."), metavar="DIR",
@@ -765,9 +765,10 @@ def _run_serve(ctx: Context) -> int:
                           f"(missing: {e.name or 'a module'})") from e
     config = ctx.config
     host = f"[{args.host}]" if ":" in args.host else args.host
-    say(f"Serving on http://{host}:{args.port} (Ctrl-C to stop). Anyone who can reach this machine can read "
-        "the API: login is not built in yet.", file=sys.stderr)
-    run(config, args.host, args.port, args.config, args.data_dir, demo=args.demo)
+    say(f"Serving on http://{host}:{args.port} (Ctrl-C to stop). Log in with an account made by `hlp web-user`.",
+        file=sys.stderr)
+    run(config, args.host, args.port, args.config, args.data_dir, demo=args.demo,
+        announce=lambda message: say(message, file=sys.stderr))
     return 0
 
 

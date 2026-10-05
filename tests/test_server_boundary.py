@@ -66,8 +66,12 @@ def test_the_server_makes_no_request_toward_the_controller_by_itself(path):
     """A request toward the controller can only be made by a ``UniFiClient`` (GET, and the one event-log POST): the
     server imports no HTTP library and calls no write method."""
     tree = ast.parse(path.read_text(encoding="utf-8"))
-    modules = {alias.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import) for alias in n.names}
-    modules |= {(n.module or "").split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and not n.level}
-    assert not modules & {"requests", "urllib3", "httpx", "httpx2", "socket", "urllib"}
-    called = {n.func.attr for n in ast.walk(tree) if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)}
+    names = {alias.name for n in ast.walk(tree) if isinstance(n, ast.Import) for alias in n.names}
+    names |= {n.module or "" for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and not n.level}
+    forbidden = ("requests", "urllib3", "httpx", "httpx2", "socket", "urllib.request", "http.client")
+    assert not [n for n in names if any(n == f or n.startswith(f + ".") for f in forbidden)]
+    decorators = {id(d) for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+                  for d in n.decorator_list}                             # `@router.post("/login")` declares a route
+    called = {n.func.attr for n in ast.walk(tree) if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+              and id(n) not in decorators}
     assert not called & {"post", "put", "patch", "delete", "request", "send"}
