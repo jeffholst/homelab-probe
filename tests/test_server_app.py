@@ -73,7 +73,7 @@ def test_only_get_is_answered(app):
     for path in ("/healthz", "/api/v1/meta", "/api/v1/platforms", "/"):
         for method in ("post", "put", "patch", "delete"):
             assert getattr(client, method)(path).status_code == 405, (method, path)
-        assert client.head(path).status_code == 405                       # GET only
+        assert client.head(path).status_code == (200 if path == "/" else 405)   # GET only; the page also answers HEAD
 
 
 def test_the_app_remembers_what_it_was_made_from(tmp_path):

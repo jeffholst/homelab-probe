@@ -106,7 +106,6 @@ def _findings_section(snap: Snapshot, settings: DiagnoseSettings, entries: Optio
                       for r in ranked if r.triage["state"] == "open"][:ATTENTION],
     }
 
-
 def _devices_section(snap: Snapshot) -> Dict[str, Any]:
     states = [d.get("state") for d in snap.devices]
     online, offline = states.count("ONLINE"), states.count("OFFLINE")
@@ -186,4 +185,3 @@ def build_dashboard(snap: Snapshot, settings: Optional[DiagnoseSettings] = None,
         "findings": findings, "devices": _devices_section(snap), "clients": _clients_section(snap),
         "wan": _wan_section(snap, settings, now_ms), "wifi": _wifi_section(snap), "events": _events_section(snap),
     }
-

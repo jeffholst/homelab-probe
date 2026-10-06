@@ -41,7 +41,7 @@ homelab_probe/
   notify.py              notifications: what changed since the last run, ntfy/webhook/email sending, state file
   completion.py          shell completion scripts for bash, zsh and fish, generated from the argument parser
   present.py             terminal presentation policy (`--color`, `--plain`, `--no-progress`, `NO_COLOR`); the only module that imports the optional Rich
-  server/                the web server (`serve`, the `web` extra): the app factory, security middleware and request log (`app`, `security`), the cache and the controller service (`cache`, `service`), the report routes, errors and API schemas (`routes`, `errors`, `apischema`), the guided setup of a server with no settings (`wizard`); never imported by the core
+  server/                the web server (`serve`, the `web` extra): the app factory, security middleware and request log (`app`, `security`), the cache and the controller service (`cache`, `service`), the report routes, errors and API schemas (`routes`, `errors`, `apischema`), the guided setup of a server with no settings (`wizard`), the built web app's files with their SPA fallback (`static`; the bundle is `homelab_probe/web/`, git-ignored, shipped in the wheel); never imported by the core
   tlsprobe.py            the guided setup's TLS steps: fetch the certificate a controller shows, test a pinned one, refuse addresses no controller has (standard library and urllib3)
   accounts.py            web accounts: scrypt passwords, users.json, roles, last-admin protection, the audit log (standard library only)
   settings.py            diagnose thresholds and ignore list (TOML)
@@ -49,6 +49,7 @@ homelab_probe/
   cli.py                 argument parser and main: loads the configuration, builds the client, runs a command
   commands.py            the commands: each one's arguments, checks and handler, and the registry
 tests/
+  fixtures/web/         a placeholder bundle (not a built interface) that the static-file tests serve
   conftest.py            the isolation fixture; FakeSession is demo.DemoSession
   (the synthetic controller data is homelab_probe/demo/controller.json)
   contract.py            the fields the code reads from each endpoint (the table behind the shape and live checks)

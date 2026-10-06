@@ -1,6 +1,6 @@
 # Web interface
 
-The web interface is built in stages (see the roadmap in issue #160). What exists so far is the **backend**, plus the first screens of the web app (login, the navigation shell, a home page and a profile page, built in `web/` and not yet served by the server): the **server** (`serve`, which needs the `web` extra) with its login, roles and CSRF protection, the read-only report API under `/api/v1/unifi` and a guided first-run setup API; and the **accounts** that may log in, managed with `web-user` (base install only; it does not contact the controller or read your `.env`). The web app that uses these is being built in `web/` (its foundation, with login, the shell and the themes, is in the repository; the server does not serve it yet, see [The web app](#the-web-app-web)).
+The web interface is built in stages (see the roadmap in issue #160). What exists so far is the **backend**, plus the first screens of the web app (login, the navigation shell, a home page and a profile page, built in `web/`). When a built bundle is installed, the server serves it as described in [The web app files](#the-web-app-files). The **server** (`serve`, which needs the `web` extra) provides login, roles and CSRF protection, the read-only report API under `/api/v1/unifi` and a guided first-run setup API; **accounts** are managed with `web-user` (base install only; it does not contact the controller or read your `.env`).
 
 ## Running the server: `serve`
 
@@ -28,11 +28,11 @@ Without the extra it exits with code 3 and says what to install. Options:
 
 What it answers: `/healthz` (is the process up; no data and no controller read), `/readyz` (can the controller be read: 200 or 503 and `{"ready": ...}`, the reason is in the server log), `/api/v1/meta` (version, that login is required, and whether this request came over HTTPS or from a loopback name, which is what a login page needs to decide on a warning), then, after a login, `/api/v1/platforms` and `/api/v1/openapi.json` (the API description, built into the server; the Swagger and ReDoc pages are off because they load scripts from a CDN). The report and schema routes answer only `GET`; the only `POST`s are the login and the logout (CSRF below). The reports are under `/api/v1/unifi`.
 
-**Every route except five needs a login.** Only `/`, `/healthz`, `/readyz` (yes or no, nothing more), `/api/v1/meta` and the login itself answer without one, from `127.0.0.1` as well. A route nobody declared anything about needs a login too (the rule is the default of the whole application, and a test pins the list of public routes). A configured server **without an enabled administrator** starts in the limited [admin mode](#first-run-setup-a-server-with-no-settings) (or create one first: `hlp web-user add NAME --role admin`), and one with no settings at all starts the guided setup, and by default it binds only a loopback address (the options below change that on purpose). What protects it:
+**Every route except five, and the files of the web app, needs a login.** Only `/`, `/healthz`, `/readyz` (yes or no, nothing more), `/api/v1/meta`, the login itself and the [files of the built web app](#the-web-app-files) (the page and its scripts and styles, nothing else) answer without one, from `127.0.0.1` as well. A route nobody declared anything about needs a login too (the rule is the default of the whole application, and a test pins the list of public routes). A configured server **without an enabled administrator** starts in the limited [admin mode](#first-run-setup-a-server-with-no-settings) (or create one first: `hlp web-user add NAME --role admin`), and one with no settings at all starts the guided setup, and by default it binds only a loopback address (the options below change that on purpose). What protects it:
 
 | Protection | What it does |
 | ---------- | ------------ |
-| Login | A session cookie from `POST /api/v1/auth/login` (below) for everything but the five routes |
+| Login | A session cookie from `POST /api/v1/auth/login` (below) for everything but the five routes and the web app's files |
 | Loopback bind | By default only this machine can connect; another `--host` is your decision (below) |
 | `Host` check | A request whose `Host` header is not one of the loopback names, the bind address or an `--allowed-host` is refused with 400, so a web page cannot reach it through DNS rebinding. The list is never a wildcard: an entry such as `*` or `*.lan` is refused wherever it comes from |
 | CSRF | Every `POST`, `PUT`, `PATCH` and `DELETE` needs an `Origin` that names the server's own `Host` **and** the session's token in `X-CSRF-Token`; its body must be JSON. A script that sends neither is meant to use the command line |
@@ -76,6 +76,25 @@ A login sends a password, and with plain HTTP anyone on the path can read it. So
 3. **Not recommended: plain HTTP on the network** (`--host 192.168.1.5` or `--host 0.0.0.0 --allowed-host ...` with no proxy). The server says so when it starts, and `/api/v1/meta` returns `"https": false, "loopback": false` so a web app can show a banner above the login form; the password travels in clear text.
 
 Binding every address (`0.0.0.0`, `::`) is only accepted with at least one `--allowed-host`; binding one address or name adds it to the allowed hosts by itself.
+
+### The web app files
+
+A server whose package holds a built web app (`homelab_probe/web/`, the output of the web app's build: an `index.html` and hashed files under `assets/`) serves it. A server without one (a checkout that has not built it) is API only, and `/` shows a JSON notice that says so. Nothing is mounted then, so every other path is the JSON 404 it always was.
+
+| Path | Answer |
+| ---- | ------ |
+| `/` | `index.html`, `Cache-Control: no-cache` |
+| `/assets/*` | the file, `Cache-Control: public, max-age=31536000, immutable` (the names carry a hash of their content); a missing one is a `404`, never the page |
+| another file of the bundle (`/favicon.svg`) | the file, `no-cache` |
+| any other `GET` or `HEAD` path (`/findings/abc`, `/login`) | `index.html`, so that a link into the app works after a reload |
+| `/api/...`, `/healthz`, `/readyz` | never the web app: a real route answers, an unknown path is the JSON `404`, as without a bundle |
+| any method but `GET` and `HEAD` | not matched, so the answer is the one the server gave before (`404` for an unknown path, `405` for a real one) |
+
+**Only the bundle can be read.** A path with a `..` or `.` segment, a backslash, a NUL or a leading `/` (also after decoding `%2e%2e`, `%2f`, `%5c`) is a `404`; a hidden file (`.env`) is never served; a directory is never listed; and the file is opened one step at a time without following links (`O_NOFOLLOW`, relative to the directory before it) and read from the descriptor that was opened, so a symbolic link anywhere inside the bundle (to a file outside it or inside it) is refused, and a file or directory swapped for a link while a request is being answered is not followed either. The bundle directory itself is resolved once at start; this needs a POSIX system (elsewhere the server is API only). The routes are public because the login page has to load, and they hold nothing but the bundle: every other route still needs a session, and `tests/test_server_auth.py` pins the list of public endpoints. The files are not part of the OpenAPI document.
+
+**The Content-Security-Policy.** Every response carries one. The API's forbids everything (`default-src 'none'`, `form-action 'none'`, and only `'self'` for scripts, styles, images and `connect`). The web app's files and page get the policy of a page that loads its own scripts, styles, images and fonts: `default-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'`. There is no `'unsafe-inline'` and no `'unsafe-eval'`: the build must not inline a script or a `<style>` block, and an HTML `style=""` attribute is blocked (setting `element.style` from a script, as React does, is not). The other headers (`nosniff`, `no-referrer`, `X-Frame-Options`, `Cross-Origin-Resource-Policy`) are on every answer, and only the web app's files change `Cache-Control` from `no-store`.
+
+**Building and packaging.** The bundle is not in git (`homelab_probe/web/` is git-ignored). Copy a build there and the checkout serves it; the wheel ships whatever is in that directory as package data (`web/**/*`), so build the web app first, then `uv build`; a release wheel that includes the app needs no step at install time. Check with `curl -i http://127.0.0.1:8787/`: the page, or the JSON notice of an API-only install. The tests use a tiny placeholder bundle (`tests/fixtures/web/`) and never the real one.
 
 ### Logging in: `/api/v1/auth`
 
@@ -441,7 +460,7 @@ Both live in the data directory, readable by the owner only (`0600`, and `0700` 
 
 ## What is not here yet
 
-The web app (the screens of the setup wizard among them), come with later stages of the roadmap. The login uses the interface the accounts module was built for: an `Authenticator` that turns a username and password into a `Principal(username, role, source)`, with `LocalAccounts` (this page's accounts) as the first implementation. A wrong password, an unknown user and a disabled one all take the same work and give the same answer, so the answer does not reveal which usernames exist. Authentication checks the current account record and records the login under the same file lock, so a concurrent disable, role change or deletion cannot return a stale principal.
+The remaining app screens (including the setup wizard) come in later roadmap stages; the server serves the built app when one is installed (see [The web app files](#the-web-app-files)). The login uses the interface the accounts module was built for: an `Authenticator` that turns a username and password into a `Principal(username, role, source)`, with `LocalAccounts` (this page's accounts) as the first implementation. A wrong password, an unknown user and a disabled one all take the same work and give the same answer, so the answer does not reveal which usernames exist. Authentication checks the current account record and records the login under the same file lock, so a concurrent disable, role change or deletion cannot return a stale principal.
 
 ## The web app (`web/`)
 

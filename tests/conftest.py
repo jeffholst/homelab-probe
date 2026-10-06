@@ -1,5 +1,7 @@
 """The fake controller is the demo controller: ``homelab_probe/demo`` (synthetic, sanitized, no real network data)."""
 
+import importlib
+import importlib.util
 import os
 
 import pytest
@@ -49,6 +51,9 @@ def _isolated_environment(request, tmp_path, monkeypatch):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr("homelab_probe.client.RETRY_BACKOFF_S", 0)    # retries must not make the suite wait
     monkeypatch.setattr("homelab_probe.accounts.PARAMS", ScryptParams(n=16, r=8, p=1))    # scrypt at its real cost is slow
+    if importlib.util.find_spec("fastapi"):     # a web interface built into the checkout must not change what the tests see
+        # by import, not by dotted name: test_serve_without_extra leaves a second `homelab_probe.server` package behind
+        monkeypatch.setattr(importlib.import_module("homelab_probe.server.static"), "DEFAULT_ROOT", tmp_path / "no-web-bundle")
     logs.reset()                   # the logger, its secrets and its context are process-wide
     yield
     logs.reset()

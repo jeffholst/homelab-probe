@@ -12,7 +12,7 @@ from typing import Any, AsyncIterator, Callable, Dict, List, Optional
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from starlette.middleware import Middleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
@@ -31,6 +31,7 @@ from . import (
     search_api,
     settings_api,
     snapshots_api,
+    static,
     status_api,
     users_api,
     wizard,
@@ -82,14 +83,17 @@ def create_app(config: Config, settings_path: Optional[Path] = None, state_dir: 
                service: Optional[ControllerService] = None, auth: Optional[AuthState] = None, demo: bool = False,
                hosts: Optional[List[str]] = None, setup: Optional[SetupState] = None,
                read_only: bool = False, scheduler: bool = False, env_named: bool = False,
-               reload: Optional[Callable[[], Config]] = None) -> FastAPI:
+               reload: Optional[Callable[[], Config]] = None, web_root: Optional[Path] = None) -> FastAPI:
     """The app for ``config``. ``settings_path`` is the ``hlp.toml`` to use and ``state_dir`` the data directory (the
     accounts file and the audit log are there), ``service`` the way to the controller (one is made from ``config``
     when none is given: the synthetic network for a ``demo``), ``auth`` the accounts, sessions and throttle (made from
-    ``state_dir`` when none is given), ``hosts`` the ``Host`` values to answer to (see ``security.allowed_hosts``).
+    ``state_dir`` when none is given), ``hosts`` the ``Host`` values to answer to (see ``security.allowed_hosts``),
+    ``web_root`` the directory of the built web interface (the package's ``web`` directory when none is given; with no
+    ``index.html`` in it the server is API only and ``/`` shows a notice: see ``static``).
 
-    Everything answers only to a logged-in user except ``/``, ``/healthz``, ``/readyz``, ``/api/v1/meta`` and the
-    login itself; ``tests/test_server_auth.py`` lists the routes and fails on one that is neither. With ``setup`` (a
+    Everything answers only to a logged-in user except ``/``, ``/healthz``, ``/readyz``, ``/api/v1/meta``, the
+    login itself and the files of the web interface (``static``); ``tests/test_server_auth.py`` lists the routes and
+    fails on one that is neither. With ``setup`` (a
     ``SetupState`` with a mode) the server is not set up: no service is made, and only those public routes and the
     setup routes (``wizard``) answer."""
     if scheduler and read_only:
@@ -126,6 +130,7 @@ def create_app(config: Config, settings_path: Optional[Path] = None, state_dir: 
     unconfigured = setup is not None and bool(setup.mode)         # a server in a setup mode reads no controller yet
     app.state.service = None if unconfigured else service or ControllerService(config, demo=demo)
     app.state.demo = demo
+    app.state.web = static.find_bundle(web_root)     # None: an API-only checkout
     app.state.auth = auth or AuthState.for_directory(state_dir or Path("."), config)
     app.add_exception_handler(ApiError, api_error_handler)   # type: ignore[arg-type]
     app.add_exception_handler(RequestValidationError, request_validation_error_handler)
@@ -145,11 +150,15 @@ def create_app(config: Config, settings_path: Optional[Path] = None, state_dir: 
     app.include_router(session_router())
     app.include_router(profile_api.router())
 
-    @app.get("/", include_in_schema=False)
+    @app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False, response_model=None)
     @public
-    def root() -> Dict[str, str]:
+    def root(request: Request) -> Response | Dict[str, str]:
+        """The web interface when one is built in, else a notice."""
+        if request.app.state.web is not None:
+            return static.serve(request, "")
         return {"name": "Homelab Probe", "version": __version__, "api": API,
-                "note": "API only: no web app is built in yet"}
+                "note": "API only: this install has no web interface (build it into homelab_probe/web, see "
+                        "docs/development.md, or install a release that includes it)"}
 
     @app.get("/healthz", include_in_schema=False)
     @public
@@ -190,4 +199,6 @@ def create_app(config: Config, settings_path: Optional[Path] = None, state_dir: 
         """The API description (FastAPI's own route is off: it would be public)."""
         return JSONResponse(request.app.openapi())
 
+    if app.state.web is not None:
+        app.include_router(static.router())          # last: it matches every GET path that nothing above answered
     return app

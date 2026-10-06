@@ -6,7 +6,11 @@
   never a wildcard): a page on another site cannot reach it through DNS rebinding.
 * There is no CORS middleware, so a browser never lets another origin read an answer.
 * Every response, whatever its status, carries a strict content-security policy and the headers below
-  (``SecurityHeaders``); the API has no HTML, so the policy forbids everything.
+  (``SecurityHeaders``); the API has no HTML, so the policy forbids everything. The one exception is the web
+  interface itself (``static``): its answers carry ``WEB_CSP``, the policy of a page that loads its own scripts,
+  styles, images and fonts and talks only to this server, and the cache header they set (hashed files are cached, the
+  page is not). Nothing else can ask for that: a handler marks its answer through the request scope, which only
+  ``static.serve`` does.
 """
 
 from typing import List, Sequence, Tuple
@@ -17,6 +21,14 @@ from ..util import bind_host_name, is_wildcard_bind, parse_allowed_host
 
 CSP = ("default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; "
        "img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'")
+# The policy of the web interface (a Vite build: external scripts and styles, no inline code, no eval, no third-party
+# host). `style-src 'self'` has no 'unsafe-inline': a style attribute in the HTML would be blocked, but a script that
+# sets `element.style` (as React does) is not. Forms may only post to this server; nothing may frame it, embed an
+# object or change the base URL.
+WEB_CSP = ("default-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; "
+           "script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; "
+           "manifest-src 'self'")
+WEB_FLAG = "homelab_probe.web"      # set on the request scope by an answer of the web interface (``static.serve``)
 SECURITY_HEADERS: List[Tuple[bytes, bytes]] = [
     (b"content-security-policy", CSP.encode("ascii")),
     (b"x-content-type-options", b"nosniff"),
@@ -63,9 +75,12 @@ class SecurityHeaders:
             nonlocal response_started
             if message["type"] == "http.response.start":
                 response_started = True
-                names = {name for name, _ in SECURITY_HEADERS} | {b"server"}
+                web = bool(scope.get(WEB_FLAG))       # the page of the web interface: its own policy and cache header
+                defaults = [(name, WEB_CSP.encode("ascii") if web and name == b"content-security-policy" else value)
+                            for name, value in SECURITY_HEADERS if not (web and name == b"cache-control")]
+                names = {name for name, _ in defaults} | {b"server"}
                 kept = [(k, v) for k, v in message.get("headers", []) if k.lower() not in names]
-                message = {**message, "headers": kept + SECURITY_HEADERS}
+                message = {**message, "headers": kept + defaults}
             await send(message)
 
         try:
