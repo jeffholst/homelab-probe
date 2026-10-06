@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=62.3"]       # 62.3: `**` in package-data patterns
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -75,6 +75,7 @@ packages = ["homelab_probe", "homelab_probe.demo", "homelab_probe.diagnose", "ho
 "homelab_probe.schemas" = "docs/schemas"
 
 [tool.setuptools.package-data]
+"homelab_probe" = ["web/**/*"]                 # the built web interface (a Vite build in homelab_probe/web, git-ignored)
 "homelab_probe.demo" = ["controller.json"]     # the synthetic controller that --demo serves
 "homelab_probe.schemas" = ["*.json"]
 

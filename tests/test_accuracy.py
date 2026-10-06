@@ -69,6 +69,8 @@ def test_a_built_wheel_carries_the_same_version(tmp_path):
             shutil.copy(ROOT / name, source / name)
     shutil.copytree(ROOT / "homelab_probe", source / "homelab_probe", ignore=shutil.ignore_patterns("__pycache__"))
     shutil.copytree(ROOT / "docs" / "schemas", source / "docs" / "schemas")       # shipped as homelab_probe/schemas
+    if not (ROOT / "homelab_probe" / "web").is_dir():          # no bundle built here (git-ignored): the placeholder stands in
+        shutil.copytree(ROOT / "tests" / "fixtures" / "web", source / "homelab_probe" / "web")
     result = subprocess.run(["uv", "build", "--wheel", "--out-dir", str(tmp_path / "dist"), str(source)],
                             capture_output=True, text=True, timeout=300)
     assert result.returncode == 0, result.stderr
@@ -83,6 +85,12 @@ def test_a_built_wheel_carries_the_same_version(tmp_path):
     packaged = {n.rsplit("/", 1)[1] for n in names if n.startswith("homelab_probe/schemas/")}
     assert packaged == {p.name for p in (ROOT / "docs" / "schemas").glob("*.json")}                  # the server's /schemas
     assert "Provides-Extra: web" in metadata
+    # the built web interface (package data, not a Python package): every file of the bundle, nothing else under web/
+    bundle = {p.relative_to(source / "homelab_probe").as_posix() for p in (source / "homelab_probe" / "web").rglob("*")
+              if p.is_file()}
+    assert "homelab_probe/web/index.html" in names
+    assert {n for n in names if n.startswith("homelab_probe/web/")} == {f"homelab_probe/{b}" for b in bundle}
+    assert any(n.startswith("homelab_probe/web/assets/") for n in names)
 
 
 def test_every_package_directory_is_listed_for_the_wheel_and_the_schemas_are_mapped():
@@ -99,6 +107,19 @@ def test_every_package_directory_is_listed_for_the_wheel_and_the_schemas_are_map
                                    for p in (ROOT / "homelab_probe").rglob("__init__.py") if p.parent.name != "homelab_probe"}
     assert set(config["packages"]) - {"homelab_probe.schemas"} == on_disk
     assert config["package-dir"] == {"homelab_probe.schemas": "docs/schemas"}
+
+
+def test_the_built_web_interface_is_package_data_and_git_ignores_it():
+    """The bundle is `homelab_probe/web/` (a Vite build copied in, never committed): the wheel must carry it
+    (a `**` pattern, which needs setuptools 62.3) and git must not."""
+    config = pyproject()
+    assert config["tool"]["setuptools"]["package-data"]["homelab_probe"] == ["web/**/*"]
+    assert "homelab_probe.web" not in config["tool"]["setuptools"]["packages"]          # data, not a package
+    minimum = [r for r in config["build-system"]["requires"] if r.startswith("setuptools")]
+    assert minimum and tuple(int(x) for x in re.search(r">=(\d+)\.(\d+)", minimum[0]).groups()) >= (62, 3)
+    ignored = (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+    assert "homelab_probe/web/" in ignored
+    assert not (ROOT / "homelab_probe" / "web" / "__init__.py").exists()
 
 
 # -- wifi: channel 14 and U-NII-4 ---------------------------------------------------------------------------------

@@ -28,3 +28,6 @@ tools/recorded/
 users.json
 users.json.*
 audit.log*
+
+# The built web interface (a Vite build copied here; the wheel ships it, git does not)
+homelab_probe/web/

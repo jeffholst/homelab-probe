@@ -1,0 +1,141 @@
+"""Serving the built web interface: a directory of files (``homelab_probe/web/``, a Vite build) at ``/``.
+
+* ``/`` and every path that is not a file of the bundle, an API route or a probe answer ``index.html`` (the app does
+  its own routing, so a deep link such as ``/findings/abc`` must load it), never cached.
+* ``/assets/*`` are the hashed files of the build: cached for a year, ``immutable``. A missing asset is a 404, never
+  ``index.html`` (a script that answers HTML is a worse error than a missing one).
+* ``/api/...``, ``/healthz`` and ``/readyz`` are never answered here (``WebRoute`` does not even match them), so an
+  unknown API path stays the JSON 404 it is without a bundle, and so does every method but GET and HEAD.
+* Only files of the bundle can be read. The path is checked as text (no ``..`` segment, no backslash, no NUL, not
+  absolute, no hidden file), and then the file the path names must be what the path says: ``os.path.realpath`` of
+  it equals the bundle's real path plus the segments, so a link anywhere along the way (to a file inside or outside
+  the bundle) is refused, and nothing but a regular file is read (no directory listing).
+* These endpoints are public (the login page has to load), and they hold nothing but the bundle. Everything else
+  stays behind ``guard``.
+
+With no bundle (an API-only checkout) none of this is mounted and ``/`` shows the notice of ``app.root``.
+``security.SecurityHeaders`` gives these answers the policy of a page (``WEB_CSP``) and keeps their cache headers.
+"""
+
+import os
+from pathlib import Path
+from typing import Dict, Optional, Tuple
+
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import FileResponse, Response
+from fastapi.routing import APIRoute
+from starlette.routing import Match
+from starlette.types import Scope
+
+from .auth import public
+from .security import WEB_FLAG
+
+DEFAULT_ROOT = Path(__file__).resolve().parent.parent / "web"     # in the wheel: package data of ``homelab_probe``
+INDEX = "index.html"
+ASSETS = "assets"
+
+IMMUTABLE = "public, max-age=31536000, immutable"
+REVALIDATE = "no-cache"
+RESERVED = ("/api", "/healthz", "/readyz")      # the API and the probes: never answered by the bundle
+
+# Fixed here, not taken from the operating system's table (``mimetypes`` differs between machines, and a script served
+# as text/plain is not run by a browser). A file of another type is an opaque download.
+CONTENT_TYPES: Dict[str, str] = {
+    ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
+    ".mjs": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
+    ".json": "application/json", ".map": "application/json", ".webmanifest": "application/manifest+json",
+    ".txt": "text/plain; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".avif": "image/avif",
+    ".ico": "image/x-icon", ".woff": "font/woff", ".woff2": "font/woff2", ".ttf": "font/ttf", ".otf": "font/otf",
+}
+DEFAULT_TYPE = "application/octet-stream"
+
+
+def reserved(path: str) -> bool:
+    """Is ``path`` the API or a probe (``/api``, ``/api/...``, ``/healthz``, ``/readyz`` and what is under them)?"""
+    return any(path == name or path.startswith(name + "/") for name in RESERVED)
+
+
+def find_bundle(root: Optional[Path] = None) -> Optional[Path]:
+    """The real path of the bundle directory, or None when there is none (no directory, or no ``index.html`` that is
+    a plain file in it: a half-built or empty directory is not a web interface)."""
+    real = Path(os.path.realpath(DEFAULT_ROOT if root is None else root))
+    return real if real.is_dir() and resolve(real, INDEX) is not None else None
+
+
+def well_formed(relative: str) -> bool:
+    """Is ``relative`` the path of the app rather than an attempt to leave the bundle (a backslash, NUL, a leading
+    slash, a ``.`` or ``..`` segment)? Such a path is a 404, never the page: the page is for people who followed a
+    link."""
+    return not ("\\" in relative or "\0" in relative or relative.startswith("/")
+                or any(segment in (".", "..") for segment in relative.split("/")))
+
+
+def resolve(root: Path, relative: str) -> Optional[Path]:
+    """The file of the bundle ``root`` (a real path) that ``relative`` names, or None. None for anything that is not
+    a regular file inside the bundle reached without a link: a path that is not ``well_formed``, an empty or hidden
+    segment, a directory, a missing file, a symbolic link at any step."""
+    if not relative or not well_formed(relative):
+        return None
+    segments = relative.split("/")
+    if any(not segment or segment.startswith(".") for segment in segments):
+        return None
+    candidate = root.joinpath(*segments)
+    try:
+        if os.path.realpath(candidate) != os.path.join(root, *segments) or not candidate.is_file():
+            return None
+    except OSError:                     # a name the file system refuses (too long), which no file of the bundle has
+        return None
+    return candidate
+
+
+def file_answer(root: Path, relative: str) -> Optional[Response]:
+    """The answer for one file of the bundle (type from its suffix, cache header by where it is), or None."""
+    path = resolve(root, relative)
+    if path is None:
+        return None
+    immutable = relative.startswith(ASSETS + "/")
+    return FileResponse(path, media_type=CONTENT_TYPES.get(path.suffix.lower(), DEFAULT_TYPE),
+                        headers={"cache-control": IMMUTABLE if immutable else REVALIDATE})
+
+
+def serve(request: Request, relative: str) -> Response:
+    """``index.html`` for ``relative`` empty, the file when it is one, 404 under ``assets`` and for a path that is not
+    ``well_formed``, ``index.html`` for the rest (a deep link of the app)."""
+    root: Path = request.app.state.web
+    answer = file_answer(root, relative or INDEX)
+    if answer is None and well_formed(relative) and not _in_assets(relative):
+        answer = file_answer(root, INDEX)
+    if answer is None:
+        raise HTTPException(status_code=404)       # the same body as a path that no route has
+    request.scope[WEB_FLAG] = True
+    return answer
+
+
+def _in_assets(relative: str) -> bool:
+    return relative == ASSETS or relative.startswith(ASSETS + "/")
+
+
+class WebRoute(APIRoute):
+    """A route that answers only GET and HEAD for a path that is not the API or a probe: for anything else it does
+    not match, so the router behaves as if the route did not exist (404 for an unknown path, 405 only where a real
+    route is)."""
+
+    def matches(self, scope: Scope) -> Tuple[Match, Scope]:
+        if scope["type"] == "http" and (scope["method"] not in ("GET", "HEAD") or reserved(scope["path"])):
+            return Match.NONE, {}
+        return super().matches(scope)
+
+
+@public
+def web_file(request: Request, relative: str) -> Response:
+    """Any GET or HEAD that no other route answered: a file of the bundle, or the page of the app."""
+    return serve(request, relative)
+
+
+def router() -> APIRouter:
+    """The route that serves the bundle: add it **after** every other route, since it matches any path."""
+    routes = APIRouter(route_class=WebRoute)
+    routes.add_api_route("/{relative:path}", web_file, methods=["GET", "HEAD"], include_in_schema=False,
+                         response_model=None)
+    return routes

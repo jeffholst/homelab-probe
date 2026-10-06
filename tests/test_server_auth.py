@@ -76,8 +76,9 @@ def audit_lines(tmp_path):
 
 # -- what answers without a session --------------------------------------------------------------------------------
 
-def test_the_public_endpoints_are_exactly_these_five(app):
-    assert sorted(PUBLIC_ENDPOINTS) == ["healthz", "login", "meta", "readyz", "root"]
+def test_the_public_endpoints_are_exactly_these_six(app):
+    # `web_file` is the files of the built web interface (static.py): the bundle only, and only where one is mounted
+    assert sorted(PUBLIC_ENDPOINTS) == ["healthz", "login", "meta", "readyz", "root", "web_file"]
 
 
 @pytest.mark.parametrize("path", ["/", "/healthz", "/readyz", "/api/v1/meta"])
