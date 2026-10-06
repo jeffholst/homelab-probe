@@ -430,7 +430,8 @@ def test_the_offline_reservations_use_the_threshold_of_the_settings(fake_client)
                              echo=False)
     long = query_document(fake_client, "default", "reservations", offline=True,
                           settings=DiagnoseSettings(reserved_offline_warn_days=100_000), echo=False)
-    assert default.meta == {"kind": "reservations", "offline": True} and len(long.data) <= len(default.data)
+    assert default.meta == {"kind": "reservations", "offline": True, "site": documents.site_identity(
+        fake_client.session.fx["sites"][0])} and len(long.data) <= len(default.data)
     none = query_document(fake_client, "default", "reservations", offline=True, echo=False)
     assert len(none.data) == len(query_document(fake_client, "default", "reservations", echo=False).data)
 

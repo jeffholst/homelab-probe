@@ -146,7 +146,7 @@ def audit_document(client: UniFiClient, site: str, settings: Optional[DiagnoseSe
         snap = collect_snapshot(client, site, AUDIT_NEEDS)
         findings, ignored = apply_ignores(audit(snap), settings.ignore, today)
     return Document("audit", findings_document(findings, ignored, show_ignored, AUDIT_AREAS),
-                    [logs.scrub(w) for w in warnings])
+                    [logs.scrub(w) for w in warnings], {"site": site_identity(snap.site)})
 
 
 # -- events -----------------------------------------------------------------------------------------
@@ -216,7 +216,7 @@ def query_document(client: UniFiClient, site: str, kind: str = "all", search: st
         rows = query_rows(snap, kind, search, include_offline, switch, down, errors, offline_days,
                           network or "", ssid or "", ap or "")
     return Document("query", query_data(rows, kind, offline), [logs.scrub(w) for w in warnings],
-                    {"kind": kind, "offline": offline})
+                    {"kind": kind, "offline": offline, "site": site_identity(snap.site)})
 
 
 NEW_CLIENTS_NEEDS = Needs(groups=True, users_required=True)
@@ -227,7 +227,8 @@ def new_clients_document(client: UniFiClient, site: str, search: str = "", echo:
     with logs.collect_warnings(quiet=not echo) as warnings:
         snap = collect_snapshot(client, site, NEW_CLIENTS_NEEDS)
         rows = new_clients_report(snap, search)
-    return Document("new-clients", new_clients_data(rows), [logs.scrub(w) for w in warnings])
+    return Document("new-clients", new_clients_data(rows), [logs.scrub(w) for w in warnings],
+                    {"site": site_identity(snap.site)})
 
 
 # -- diagnose ---------------------------------------------------------------------------------------

@@ -309,6 +309,7 @@ def _run_query(ctx: Context) -> int:
     elif args.csv:
         say(render_csv(document.data, args.kind, args.offline))
     elif ctx.present.decorations(sys.stdout):
+        pretty.print_heading(ctx.present, "Query", document.meta["site"])
         pretty.print_table(ctx.present, document.data, table_columns(args.kind, args.offline),
                            table_footer(document.data))
     else:
@@ -327,6 +328,7 @@ def _add_new_clients(parser: argparse.ArgumentParser) -> None:
 def _run_new_clients(ctx: Context) -> int:
     document = new_clients_document(ctx.client, ctx.config.site, ctx.args.search)
     if not ctx.args.json and ctx.present.decorations(sys.stdout):
+        pretty.print_heading(ctx.present, "New Clients", document.meta["site"])
         pretty.print_table(ctx.present, document.data, NEW_CLIENT_COLUMNS, new_clients_footer(document.data))
     else:
         say(document.to_json() if ctx.args.json else render_new_clients(document.data))
@@ -627,6 +629,7 @@ def _run_audit(ctx: Context) -> int:
     if args.json:
         say(document.to_json())
     elif not args.no_emoji and ctx.present.decorations(sys.stdout):
+        pretty.print_heading(ctx.present, "Audit", document.meta["site"])
         pretty.print_findings(ctx.present, document.data, elapsed=time.monotonic() - started,
                               complete=not document.warnings, show_ignored=args.show_ignored)
     else:
@@ -1234,6 +1237,7 @@ def _run_diagnose(ctx: Context) -> int:
     if args.json:
         say(document.to_json())
     elif args.watch is None and not args.no_emoji and ctx.present.decorations(sys.stdout):
+        pretty.print_heading(ctx.present, "Diagnose", document.meta["site"])
         pretty.print_findings(ctx.present, document.data, elapsed=time.monotonic() - started, complete=complete,
                               show_ignored=args.show_ignored, show_checked=checked_note)
     else:

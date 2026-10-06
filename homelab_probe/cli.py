@@ -75,38 +75,43 @@ def build_parser() -> argparse.ArgumentParser:
     parser = _Parser(
         prog="hlp",
         description="Query, troubleshoot and inventory a UniFi Network controller.",
+        add_help=False,
     )
-    parser.add_argument("--version", action="version", version=__version__)
-    parser.add_argument("--verbose", "--debug", action="store_true", dest="verbose",
+    general = parser.add_argument_group("general")
+    connection = parser.add_argument_group("connection")
+    presentation = parser.add_argument_group("presentation")
+    general.add_argument("-h", "--help", action="help", help="show this help message and exit")
+    general.add_argument("--version", action="version", version=__version__)
+    general.add_argument("--verbose", "--debug", action="store_true", dest="verbose",
                         help="Log each request to stderr (method, path, status, milliseconds, retries) and what "
                              "was read, never the API key (before the command)")
-    parser.add_argument("--demo", action="store_true",
+    general.add_argument("--demo", action="store_true",
                         help="Run the command on synthetic data: no .env or implicit settings file is read and no "
                              "controller is contacted (before the command; not with doctor, snapshot, diff or "
                              "--notify)")
-    parser.add_argument("--timeout", type=_timeout, metavar="SECONDS",
+    connection.add_argument("--timeout", type=_timeout, metavar="SECONDS",
                         help="Seconds to wait for each request to the controller (before the command; "
                              "default: UNIFI_TIMEOUT from .env, else 15)")
-    parser.add_argument("--parallel", type=_parallel, metavar="N",
+    connection.add_argument("--parallel", type=_parallel, metavar="N",
                         help="How many requests to make at once (before the command; 1 means one by one; "
                              "default: UNIFI_PARALLEL_REQUESTS from .env, else 6)")
-    parser.add_argument("--site", type=_site, metavar="NAME|REF|UUID",
+    connection.add_argument("--site", type=_site, metavar="NAME|REF|UUID",
                         help="Which site to read: its name, internal reference (such as default) or UUID "
                              "(before the command; default: UNIFI_SITE_ID from .env, else default)")
-    parser.add_argument("--env-file", type=Path, metavar="FILE",
+    connection.add_argument("--env-file", type=Path, metavar="FILE",
                         help="Read settings from this .env file (before the command). Default: "
                              "$HLP_ENV, else ./.env in the current directory")
-    parser.add_argument("--color", choices=COLOR_CHOICES, default="auto", metavar="WHEN",
+    presentation.add_argument("--color", choices=COLOR_CHOICES, default="auto", metavar="WHEN",
                         help="Terminal colors: auto (a terminal that supports them, unless NO_COLOR is set), always "
                              "(also when piped, but never in --json/--csv/export/completion output) or never "
                              "(before the command; needs the pretty extra; default: auto)")
-    parser.add_argument("--no-progress", action="store_true", dest="no_progress",
+    presentation.add_argument("--no-progress", action="store_true", dest="no_progress",
                         help="Never show transient progress on stderr (before the command; progress is also off "
                              "when stderr is not a terminal, with --plain, --verbose or machine-readable output)")
-    parser.add_argument("--plain", action="store_true",
+    presentation.add_argument("--plain", action="store_true",
                         help="Plain text only: no color, animation, decorative headings or symbols, whatever --color "
                              "says (before the command)")
-    sub = parser.add_subparsers(dest="command", required=True)
+    sub = parser.add_subparsers(dest="command", required=True, title="commands", metavar="COMMAND")
     for command in sorted(COMMANDS, key=lambda command: command.name):
         command.add_arguments(sub.add_parser(command.name, help=command.help))
     return parser

@@ -1,0 +1,83 @@
+usage: hlp [-h] [--version] [--verbose] [--demo] [--timeout SECONDS]
+           [--parallel N] [--site NAME|REF|UUID] [--env-file FILE]
+           [--color WHEN] [--no-progress] [--plain]
+           COMMAND ...
+
+Query, troubleshoot and inventory a UniFi Network controller.
+
+general:
+  -h, --help            show this help message and exit
+  --version             show program's version number and exit
+  --verbose, --debug    Log each request to stderr (method, path, status,
+                        milliseconds, retries) and what was read, never the
+                        API key (before the command)
+  --demo                Run the command on synthetic data: no .env or implicit
+                        settings file is read and no controller is contacted
+                        (before the command; not with doctor, snapshot, diff
+                        or --notify)
+
+connection:
+  --timeout SECONDS     Seconds to wait for each request to the controller
+                        (before the command; default: UNIFI_TIMEOUT from .env,
+                        else 15)
+  --parallel N          How many requests to make at once (before the command;
+                        1 means one by one; default: UNIFI_PARALLEL_REQUESTS
+                        from .env, else 6)
+  --site NAME|REF|UUID  Which site to read: its name, internal reference (such
+                        as default) or UUID (before the command; default:
+                        UNIFI_SITE_ID from .env, else default)
+  --env-file FILE       Read settings from this .env file (before the
+                        command). Default: $HLP_ENV, else ./.env in the
+                        current directory
+
+presentation:
+  --color WHEN          Terminal colors: auto (a terminal that supports them,
+                        unless NO_COLOR is set), always (also when piped, but
+                        never in --json/--csv/export/completion output) or
+                        never (before the command; needs the pretty extra;
+                        default: auto)
+  --no-progress         Never show transient progress on stderr (before the
+                        command; progress is also off when stderr is not a
+                        terminal, with --plain, --verbose or machine-readable
+                        output)
+  --plain               Plain text only: no color, animation, decorative
+                        headings or symbols, whatever --color says (before the
+                        command)
+
+commands:
+  COMMAND
+    audit               Configuration audit: settings that are probably not
+                        what you want
+    client              Troubleshoot one client: where it attaches, link
+                        quality and related findings
+    completion          Print a shell completion script (bash, zsh or fish)
+    diagnose            Run read-only health checks (offline devices, port
+                        errors, ...)
+    diff                What changed: compare saved snapshots, or a snapshot
+                        against the live network
+    doctor              Check the installation and the settings, and that the
+                        controller answers
+    events              Event history from the controller log: disconnects,
+                        roams, IP conflicts...
+    export              Export clients, devices and switch ports to CSV
+    firewall            Firewall policies, port forwards and the zone matrix,
+                        with what looks wrong
+    info                Show controller version and available sites
+    init                Guided first-time setup: write .env, hlp.toml and
+                        snapshots/ for you
+    new-clients         List clients that are in no client group (all known
+                        clients)
+    query               List and filter devices, clients, reservations, switch
+                        ports, networks and Wi-Fi networks
+    serve               Serve the read-only web API on this machine (needs the
+                        web extra)
+    snapshot            Save the current inventory to a local JSON file, for
+                        `diff` later
+    topology            Draw the uplink tree: gateway, switches and APs with
+                        ports, speeds and problems
+    wan                 Internet health: current state, 24-hour monitoring and
+                        speedtest history
+    web-user            Manage the accounts of the web interface: users, roles
+                        and passwords
+    wifi                Wireless report: each AP's radios and a channel plan
+                        from the neighboring networks

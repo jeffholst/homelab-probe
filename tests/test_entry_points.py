@@ -53,9 +53,9 @@ def test_help_lists_every_command_in_alphabetical_order(entry, tmp_path, help_fl
     result = start(entry, [help_flag], tmp_path)
     assert result.returncode == 0 and result.stdout.startswith("usage: hlp")
     expected = sorted(cli.COMMANDS_BY_NAME)
-    choices = re.search(r"\{([^}]+)\}", result.stdout)
-    assert choices is not None
-    assert re.sub(r"\s+", "", choices.group(1)).split(",") == expected
+    assert "COMMAND ..." in result.stdout
+    assert "\nconnection:\n" in result.stdout and "\npresentation:\n" in result.stdout
+    assert "\ncommands:\n" in result.stdout
     descriptions = re.findall(r"^    ([a-z][a-z-]*)\s", result.stdout, re.MULTILINE)
     assert descriptions == expected
 
