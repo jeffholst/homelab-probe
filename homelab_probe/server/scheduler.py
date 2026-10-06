@@ -199,12 +199,16 @@ class Scheduler:
             return "skipped", "partial_data"                        # a partial read cannot say that anything cleared
         if any(path.is_symlink() for path in (self._base(), site_dir(self._base(), document.meta["site"]))):
             raise SnapshotStoreError("snapshots_unsafe")            # the state is never written through a link
+        def delivered(results: List[Tuple[str, bool, str]]) -> None:
+            """Called the moment a message went out, so a state that then cannot be saved does not hide it."""
+            self.app.state.deliveries.record(results)
+            counts["destinations"] = ",".join(f"{kind}:{'sent' if ok else 'failed'}" for kind, ok, _ in results)
+
         outcome = process(findings, config=config, settings=settings, site=document.meta["site"], base=self._base(),
-                          minimum=WARNING, baseline_if_new=True, warn=logs.warn, cancelled=self._stop.is_set)
+                          minimum=WARNING, baseline_if_new=True, warn=logs.warn, cancelled=self._stop.is_set,
+                          on_delivery=delivered)
         if outcome.kind == "cancelled":
             return "skipped", "stopping"
-        self.app.state.deliveries.record(outcome.results)
-        counts["destinations"] = ",".join(f"{kind}:{'sent' if ok else 'failed'}" for kind, ok, _ in outcome.results)
         return ("failed", "undelivered") if outcome.undelivered else ("ok", outcome.kind)
 
     def _snapshot(self, counts: Dict[str, Any]) -> Tuple[str, str]:

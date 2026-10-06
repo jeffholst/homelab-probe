@@ -178,7 +178,8 @@ def router() -> APIRouter:
     @api.post("/notifications/test", dependencies=[Depends(admin)], summary="Send a test notification now",
               responses={200: {"description": "How each destination answered", "content": {
                   "application/json": {"schema": TEST_SCHEMA}}}, **error_responses(
-                      401, 403, 409, 500, text={409: "No notification destination is configured"})})
+                      401, 403, 409, 429, 500, text={409: "No notification destination is configured",
+                                                    429: "A test was sent a moment ago: try again after Retry-After"})})
     def notifications_test(request: Request) -> Dict[str, Any]:
         config = request.app.state.config
         destinations = destinations_from_config(config)

@@ -374,3 +374,29 @@ def test_the_openapi_document_describes_both_routes(app):
     spec = app.openapi()["paths"]
     assert "401" in spec[STATUS]["get"]["responses"] and "409" in spec[TEST]["post"]["responses"]
     assert spec[TEST]["post"]["responses"]["409"]["description"] == "No notification destination is configured"
+
+
+def test_a_delivery_is_in_the_status_even_when_the_state_cannot_be_saved_afterwards(tmp_path, monkeypatch):
+    monkeypatch.setattr(notify_module.requests, "post", FakePost(200))
+    app = make_app(tmp_path, scheduler=True)
+    admin = logged_in(app, "alice")
+    app.state.scheduler.tick()                                                  # the baseline
+    saved = json.loads((tmp_path / "snapshots/site-1/notify-state.json").read_text())
+    del saved["active"][next(k for k in saved["active"] if k.startswith("device.offline|"))]
+    (tmp_path / "snapshots/site-1/notify-state.json").write_text(json.dumps(saved))
+
+    def refuse(path, state):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(notify_module, "save_state", refuse)
+    app.state.scheduler._due.clear()
+    result = next(r for r in app.state.scheduler.tick() if r.job == "diagnose")
+    assert (result.result, result.reason, result.destinations) == ("failed", "config", "ntfy:sent,webhook:sent")
+    body = admin.get(STATUS).json()
+    assert body["notifications"]["last_delivery"]["ntfy"]["delivered"] is True       # it did go out
+    assert "scheduler.diagnose:failed" in body["problems"]                           # and the state is not saved
+
+
+def test_the_rate_limit_is_in_the_openapi_document_with_its_wording(app):
+    responses = app.openapi()["paths"][TEST]["post"]["responses"]
+    assert "429" in responses and "Retry-After" in responses["429"]["description"]
