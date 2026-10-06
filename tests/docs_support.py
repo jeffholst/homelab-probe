@@ -4,6 +4,8 @@ import re
 from pathlib import Path
 from typing import Dict, List, Set, Tuple
 
+from build_docs import anchors_of, heading_texts, plain_heading, slugify  # tools/, which pytest puts on the path
+
 ROOT = Path(__file__).resolve().parent.parent
 README = ROOT / "README.md"
 DOCS = ROOT / "docs"
@@ -21,33 +23,17 @@ def all_docs_text() -> str:
 
 def headings(text: str) -> List[str]:
     """The heading texts of a Markdown file, in order, ignoring lines inside fenced code blocks."""
-    found, fenced = [], False
-    for line in text.splitlines():
-        if line.startswith("```"):
-            fenced = not fenced
-        elif not fenced and (match := re.match(r"^#{1,6} +(.+?)\s*#*\s*$", line)):
-            found.append(match.group(1))
-    return found
+    return heading_texts(text)
 
 
 def slug(heading: str) -> str:
     """The anchor GitHub gives a heading: lower case, punctuation dropped, spaces turned into hyphens."""
-    text = re.sub(r"[`*_~]", "", heading).strip().lower()
-    text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text)
-    return re.sub(r"\s", "-", re.sub(r"[^\w\s-]", "", text))
+    return slugify(plain_heading(heading))
 
 
 def anchors(text: str) -> Set[str]:
     """Every heading or explicit HTML anchor in a file; GitHub numbers duplicate headings with ``-1``."""
-    seen: Dict[str, int] = {}
-    found: Set[str] = set()
-    for heading in headings(text):
-        base = slug(heading)
-        count = seen.get(base, 0)
-        seen[base] = count + 1
-        found.add(base if count == 0 else f"{base}-{count}")
-    found.update(re.findall(r'<a\s+id="([^"]+)"\s*></a>', text))
-    return found
+    return anchors_of(text)
 
 
 def duplicate_headings(text: str) -> List[str]:

@@ -84,7 +84,7 @@ source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install .
 ```
 
-This installs `hlp`. `hlp serve` also needs the web extra: `pip install '.[web]'` (or `uv run --extra web hlp.py serve`). A tagged release can be installed without a clone; check the [releases page](https://github.com/jeffholst/homelab-probe/releases) and [changelog](CHANGELOG.md), then replace `vX.Y.Z`:
+This installs `hlp`. `hlp serve` also needs the web extra: `pip install '.[web]'` (or `uv run --extra web hlp.py serve`). The optional `pretty` extra (`pip install '.[pretty]'`) enables terminal styling; `--color`, `--no-progress` and `--plain` control it ([details](docs/configuration.md#terminal-styling---color---plain-and---no-progress)). A tagged release can be installed without a clone; check the [releases page](https://github.com/jeffholst/homelab-probe/releases) and [changelog](CHANGELOG.md), then replace `vX.Y.Z`:
 
 ```bash
 uv tool install git+https://github.com/jeffholst/homelab-probe@vX.Y.Z

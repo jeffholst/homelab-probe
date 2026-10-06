@@ -21,20 +21,39 @@ const markup = [
     message: "dangerouslySetInnerHTML is forbidden: render controller strings as text (<Text>, safeText()).",
   },
   {
-    selector: "AssignmentExpression[left.property.name=/^(innerHTML|outerHTML)$/], AssignmentExpression[left.property.value=/^(innerHTML|outerHTML)$/]",
+    // `el.innerHTML = v`, `el["innerHTML"] = v` and the template-literal spelling.
+    selector:
+      "AssignmentExpression[left.property.name=/^(innerHTML|outerHTML)$/], AssignmentExpression[left.property.value=/^(innerHTML|outerHTML)$/], AssignmentExpression[left.property.quasis.0.value.raw=/^(innerHTML|outerHTML)$/]",
     message: "Do not assign markup: render text (<Text>) or build elements with React.",
   },
   {
-    selector:
-      "CallExpression[callee.property.name='insertAdjacentHTML'], CallExpression[callee.property.value='insertAdjacentHTML'], CallExpression[callee.object.name='document'][callee.property.name=/^(write|writeln)$/], CallExpression[callee.object.name='document'][callee.property.value=/^(write|writeln)$/]",
+    // `el.insertAdjacentHTML(...)`, `el["insertAdjacentHTML"](...)`, `document.write(...)`, `document["write"](...)` and
+    // `window.document.write(...)`; the stream `process.stderr.write` is not the document's.
+    selector: [
+      "CallExpression[callee.property.name='insertAdjacentHTML']",
+      "CallExpression[callee.property.value='insertAdjacentHTML']",
+      "CallExpression[callee.property.quasis.0.value.raw='insertAdjacentHTML']",
+      "CallExpression[callee.object.name='document'][callee.property.name=/^(write|writeln)$/]",
+      "CallExpression[callee.object.name='document'][callee.property.value=/^(write|writeln)$/]",
+      "CallExpression[callee.object.property.name='document'][callee.property.name=/^(write|writeln)$/]",
+      "CallExpression[callee.object.property.name='document'][callee.property.value=/^(write|writeln)$/]",
+      "CallExpression[callee.object.property.value='document'][callee.property.name=/^(write|writeln)$/]",
+      "CallExpression[callee.object.property.value='document'][callee.property.value=/^(write|writeln)$/]",
+    ].join(", "),
     message: "Do not write markup into the document: render text (<Text>) or build elements with React.",
   },
 ];
 
 const storage = [
   {
-    selector:
-      "MemberExpression[property.name=/^(localStorage|sessionStorage|indexedDB)$/], MemberExpression[property.value=/^(localStorage|sessionStorage|indexedDB)$/]",
+    // `window.localStorage`, `window["localStorage"]`, `globalThis["sessionStorage"]` and `const { localStorage } = window`.
+    selector: [
+      "MemberExpression[property.name=/^(localStorage|sessionStorage|indexedDB)$/]",
+      "MemberExpression[property.value=/^(localStorage|sessionStorage|indexedDB)$/]",
+      "MemberExpression[property.quasis.0.value.raw=/^(localStorage|sessionStorage|indexedDB)$/]",
+      "ObjectPattern > Property[key.name=/^(localStorage|sessionStorage|indexedDB)$/]",
+      "ObjectPattern > Property[key.value=/^(localStorage|sessionStorage|indexedDB)$/]",
+    ].join(", "),
     message: "Browser storage is for the theme preference only (src/theme/storage.ts). Never store a token or any secret.",
   },
 ];
