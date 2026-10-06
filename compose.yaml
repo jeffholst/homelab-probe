@@ -1,0 +1,58 @@
+# homelab-probe: the web server and its scheduler in one container (docs/docker.md).
+#
+#   docker compose up -d --build
+#   docker compose logs hlp          # the one-time setup token is in the first lines
+#
+# There is no setup token, API key or password in this file: the token is printed in the log, and the controller's
+# address and key are typed into the guided setup, which saves them in the /data volume.
+services:
+  hlp:
+    build: .
+    image: homelab-probe:local
+    # Not published yet: build it from this checkout. Once an image is published, replace `build` and `image`
+    # with its name.
+    restart: unless-stopped
+
+    # `command` replaces the image's default, so it is complete. A server that listens on every address needs the names
+    # it is reached by: `localhost` (the browser of this machine) is always accepted, and a name or address that other
+    # machines use is one more `--allowed-host` (never a wildcard), for example `--allowed-host hlp.example.lan`.
+    # Behind a reverse proxy on the same machine add `--forwarded-allow-ips 172.16.0.0/12` (the Docker networks) or
+    # the proxy's address: see "Reverse proxy" in docs/docker.md.
+    command:
+      - serve
+      - --host
+      - 0.0.0.0
+      - --allowed-host
+      - localhost
+      - --scheduler
+
+    # Published on this machine only. To reach it from the network, put a reverse proxy with TLS in front of it
+    # instead of changing 127.0.0.1 (a login sent over plain HTTP can be read on the way).
+    ports:
+      - "127.0.0.1:8787:8787"
+
+    # The settings, accounts, audit log and snapshots: everything the server writes except /tmp.
+    volumes:
+      - hlp-data:/data
+
+    # The container can change nothing but /data and /tmp.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+    environment:
+      LOG_FORMAT: json           # one JSON object per line, as in the image
+      LOG_LEVEL: INFO
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+volumes:
+  hlp-data:

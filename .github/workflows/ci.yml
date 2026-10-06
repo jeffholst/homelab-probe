@@ -133,3 +133,15 @@ jobs:
           name: playwright-test-results
           path: web/test-results/
           retention-days: 7
+
+  docker:
+    name: Docker image (build and smoke test, nothing is published)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build the image
+        run: docker build --tag homelab-probe:ci .
+      - name: The image works (version, non-root, setup mode, demo server, read-only file system, no secrets)
+        run: tools/docker_smoke.sh homelab-probe:ci
+      - name: The compose file is valid
+        run: docker compose config --quiet
