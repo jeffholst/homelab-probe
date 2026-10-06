@@ -44,10 +44,16 @@ Python 3.10 or newer and uv are required. Install the locked dependencies, inclu
 extra, then run the checks:
 
 ```bash
+# Install exactly what uv.lock pins (it fails instead of updating the lockfile): the dev tools, plus the web and
+# pretty extras, which the server, styling and type-check tests need
 uv sync --locked --group dev --extra web --extra pretty
+# Run the whole test suite in that environment
 uv run --extra web --extra pretty python -m pytest
+# Lint: style problems, unused imports and import order (add --fix to repair the simple ones)
 uv run --extra web --extra pretty ruff check .
+# Type-check the package; it must be clean because CI blocks on it
 uv run --extra web --extra pretty python -m mypy
+# Fail if pyproject.toml and uv.lock disagree (after changing a dependency, run `uv lock` and commit the result)
 uv lock --check
 ```
 
