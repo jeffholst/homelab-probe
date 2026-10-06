@@ -40,6 +40,7 @@ web = [
     "fastapi>=0.115",
     "uvicorn>=0.30",
     "tomlkit>=0.13",          # edits hlp.toml from the settings page and keeps the user's comments
+    "cryptography>=44",       # the encrypted application backup (scrypt and AES-256-GCM); no custom cryptography
 ]
 
 [dependency-groups]
