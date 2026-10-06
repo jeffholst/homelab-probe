@@ -25,6 +25,7 @@ from .commands import (
 )
 from .config import ConfigError, load_config, parse_parallel, parse_timeout, validate_site
 from .demo import demo_client, demo_config
+from .present import COLOR_CHOICES, Presentation
 from .settings import DiagnoseSettings, load_settings
 from .snapshot import warn
 
@@ -94,6 +95,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--env-file", type=Path, metavar="FILE",
                         help="Read settings from this .env file (before the command). Default: "
                              "$HLP_ENV, else ./.env in the current directory")
+    parser.add_argument("--color", choices=COLOR_CHOICES, default="auto", metavar="WHEN",
+                        help="Terminal colors: auto (a terminal that supports them, unless NO_COLOR is set), always "
+                             "(also when piped, but never in --json/--csv/export/completion output) or never "
+                             "(before the command; needs the pretty extra; default: auto)")
+    parser.add_argument("--no-progress", action="store_true", dest="no_progress",
+                        help="Never show transient progress on stderr (before the command; progress is also off "
+                             "when stderr is not a terminal, with --plain, --verbose or machine-readable output)")
+    parser.add_argument("--plain", action="store_true",
+                        help="Plain text only: no color, animation, decorative headings or symbols, whatever --color "
+                             "says (before the command)")
     sub = parser.add_subparsers(dest="command", required=True)
     for command in sorted(COMMANDS, key=lambda command: command.name):
         command.add_arguments(sub.add_parser(command.name, help=command.help))
@@ -162,7 +173,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             command.prepare(args, config)
             client = demo_client(config) if args.demo else UniFiClient.from_config(config)
             try:
-                return command.run(Context(args, config, settings, client))
+                return command.run(Context(args, config, settings, client, Presentation.from_args(args)))
             finally:
                 if client is not None and client.attempts_made:
                     verbose(client.summary(), "run.summary")

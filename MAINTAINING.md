@@ -44,10 +44,10 @@ Python 3.10 or newer and uv are required. Install the locked dependencies, inclu
 extra, then run the checks:
 
 ```bash
-uv sync --locked --group dev --extra web
-uv run --extra web python -m pytest
-uv run --extra web ruff check .
-uv run --extra web python -m mypy
+uv sync --locked --group dev --extra web --extra pretty
+uv run --extra web --extra pretty python -m pytest
+uv run --extra web --extra pretty ruff check .
+uv run --extra web --extra pretty python -m mypy
 uv lock --check
 ```
 

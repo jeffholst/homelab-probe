@@ -185,6 +185,29 @@ A demo run does not use your controller configuration or send data:
 
 `--site` is accepted (the demo has one site, `default`), as are `--timeout`, `--parallel` and `--verbose`. The data is the same on every run, apart from the ages, so it is also what the sample output in this documentation is made from.
 
+## Terminal styling: `--color`, `--plain` and `--no-progress`
+
+The optional **`pretty` extra** (Rich) lets commands style their output on a terminal. Install it with `pip install '.[pretty]'` (or `uv run --extra pretty hlp.py diagnose`); without it every command runs exactly as before, in plain text, and nothing fails. Three global options, given before the command, control the presentation:
+
+| Option | Effect |
+| ------ | ------ |
+| `--color auto` (default) | Color a stream only when it is a terminal that supports it and `NO_COLOR` is not set |
+| `--color always` | Color also when output is piped or redirected (it beats `NO_COLOR` and a dumb terminal) |
+| `--color never` | No color |
+| `--no-progress` | Never show transient progress on stderr |
+| `--plain` | Plain text only: no color, animation, decorative headings or symbols, whatever the other options say |
+
+**Color precedence**, first match wins: `--plain`; machine-readable output (below); the extra is not installed; `--color never`; `--color always`; a non-empty `NO_COLOR` (see [no-color.org](https://no-color.org/)); a stream that is not a terminal; `TERM=dumb`; otherwise color. So `--plain --color always` is plain, and `NO_COLOR=1 hlp --color always ...` is colored because the option you typed is more specific than the environment. Without the extra, `--color always` has nothing to color with and the output stays plain.
+
+- **stdout and stderr are decided separately.** `hlp diagnose > findings.txt` leaves stdout uncolored and a terminal's stderr (progress, warnings) can still be styled.
+- **Machine-readable output is never styled**, even with `--color always`: `--json`, `--csv`, `topology --format mermaid|dot`, `export` and `completion` (and `--version`) print the same bytes as without the extra. No heading, escape sequence, wrapping or animation is mixed into data.
+- **Progress** (transient status on stderr) additionally needs stderr to be a terminal that is not `TERM=dumb`, at least 40 columns, no `CI` environment variable, and neither `--verbose` (the log lines would interleave) nor `--no-progress`.
+- **Narrow, dumb and non-UTF-8 terminals** fall back safely: decorative headings, symbols and progress are skipped below 40 columns (`COLUMNS` is honored, else the terminal's size is used, else 80) and with `TERM=dumb`; symbols are ASCII (`ok`, `!`, `x`) unless the stream's encoding is UTF-8.
+- **Names stay literal.** A device or SSID called `[red]x[/red]` is printed as exactly that, never parsed as markup, and control characters in names are removed before anything is styled.
+- Only the presentation changes: exit codes, JSON schemas, CSV, the `--verbose` log format and the redaction of secrets are the same either way.
+
+This is the shared foundation (issue #233): the policy and its tests are in place and no command styles anything by default yet; colored findings, progress and headings arrive as the commands adopt it. For developers, `homelab_probe/present.py` is the one module that decides (see [development](development.md)).
+
 ## Shell completion
 
 `hlp completion bash`, `completion zsh` and `completion fish` print a completion script for the installed `hlp` command: it completes the commands, every option (with its short form), the fixed values (`--fail-on info warning critical`, the query kinds, the Wi-Fi bands, the `diagnose --only` and `--skip` areas one at a time, even in a comma list), and file names for the options that take a file. The command needs no `.env` and never contacts the controller. The scripts are generated from the program's own options, not written by hand, so a new option is completed as soon as it exists; a test checks that every command and option is in every script.
