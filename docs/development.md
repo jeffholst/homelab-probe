@@ -32,6 +32,7 @@ homelab_probe/
     ports.py  wireless.py  switch ports and uplinks; Wi-Fi quality
     event_checks.py        the event log (conflicts, disconnects, roaming, unreachable devices)
     output.py              ignoring findings, exit codes, text and JSON
+  dashboard.py           the dashboard summary of the web API (status, completeness and headline counts from one diagnose-sized snapshot)
   documents.py           documents: the JSON value a data-reporting command prints, plus warnings from its read (every data-reporting command)
   demo/                  the synthetic controller: controller.json and DemoSession (the tests' fake controller and what --demo serves)
   logs.py                the logger tree: command-line, text and JSON formats, the redaction filter, ids, the events list, the warnings sink
