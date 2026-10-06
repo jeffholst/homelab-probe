@@ -87,7 +87,7 @@ def run(config: Config, host: str, port: int, settings_path: Optional[Path], sta
         demo: bool = False, announce: Callable[[str], None] = lambda message: None,
         allowed: Sequence[str] = (), forwarded_allow_ips: Optional[str] = None,
         setup: Optional[SetupState] = None, reload: Optional[Callable[[], Config]] = None,
-        read_only: bool = False, scheduler: bool = False) -> None:
+        read_only: bool = False, scheduler: bool = False, env_named: bool = False) -> None:
     """Serve until interrupted. Raises ``ValueError`` for a ``host`` that cannot be bound (every address, with no
     ``allowed`` host) and ``ConfigError`` when no administrator exists. ``allowed`` are the extra ``Host`` names the
     server answers to; ``forwarded_allow_ips`` the proxies whose ``X-Forwarded-*`` headers are believed (none by
@@ -124,7 +124,7 @@ def run(config: Config, host: str, port: int, settings_path: Optional[Path], sta
                          f"{SETUP_TOKEN_VAR}.")
         app = create_app(config, settings_path, directory, auth=auth, demo=demo,
                          hosts=allowed_hosts(host, port, allowed), setup=setup, read_only=read_only,
-                         scheduler=scheduler)
+                         scheduler=scheduler, env_named=env_named)
         if not is_loopback(host):
             announce("This server can be reached from other machines: a login travels in clear text over plain HTTP"
                      + (", and so do the setup token and the API key you type into the setup" if setup and setup.mode

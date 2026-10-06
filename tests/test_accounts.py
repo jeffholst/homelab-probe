@@ -560,3 +560,9 @@ def test_every_refusal_has_its_own_kind(tmp_path):
     assert all(issubclass(kind, AccountError) for kind in (accounts.PolicyError, accounts.UserExistsError,
                                                           accounts.NoSuchUserError, accounts.LastAdministratorError,
                                                           accounts.AdministratorExistsError, accounts.AuditWriteError))
+
+
+def test_an_accounts_file_that_is_not_text_is_a_clear_error_not_a_traceback(tmp_path):
+    (tmp_path / "users.json").write_bytes(b"\xff\xfe\x00")
+    with pytest.raises(AccountError, match="not valid JSON"):
+        AccountStore(tmp_path).users()

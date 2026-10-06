@@ -13,7 +13,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, Iterator, Mapping
+from typing import Any, Dict, Iterator, Mapping, Optional, Tuple
 
 from .util import LockTimeout, file_lock
 
@@ -62,6 +62,23 @@ class SiteFile:
         except OSError as error:
             raise StoreError("unreadable", f"The {self.label} file cannot be used.") from error
 
+    def parse(self, text: str) -> Tuple[Optional[str], Dict[str, Dict[str, Any]]]:
+        """(the site the document names, or ``None``, its entries) of the file ``text``; ``StoreError("unreadable")``
+        for a document that is damaged. The one reader of the format: ``load`` and the backup check use it."""
+        damaged = StoreError("unreadable", f"The {self.label} file is damaged.")
+        try:
+            document = json.loads(text)
+            entries = document["entries"]
+            ok = document["version"] == FORMAT_VERSION and isinstance(entries, dict) and all(
+                self.valid_entry(key, value) for key, value in entries.items())
+            site = document.get("site")
+        except (ValueError, KeyError, TypeError, AttributeError) as error:
+            raise damaged from error
+        if not ok or not isinstance(site, (str, type(None))):
+            raise damaged
+        loaded: Dict[str, Dict[str, Any]] = entries
+        return site, loaded
+
     def load(self) -> Dict[str, Dict[str, Any]]:
         """The entries by key (empty when there is no file). ``StoreError`` for a file that is damaged or is another
         site's."""
@@ -72,21 +89,10 @@ class SiteFile:
             return {}
         except (OSError, UnicodeError) as error:
             raise StoreError("unreadable", f"The {self.label} file cannot be read.") from error
-        damaged = StoreError("unreadable", f"The {self.label} file is damaged.")
-        try:
-            document = json.loads(text)
-            entries = document["entries"]
-            ok = document["version"] == FORMAT_VERSION and isinstance(entries, dict) and all(
-                self.valid_entry(key, value) for key, value in entries.items())
-            site = document.get("site")
-        except (ValueError, KeyError, TypeError, AttributeError) as error:
-            raise damaged from error
-        if not ok:
-            raise damaged
+        site, entries = self.parse(text)
         if site != self.site_id:          # a note or a state does not name the site: a file that does not is not ours
             raise StoreError("another_site", f"The {self.label} file does not belong to this site.")
-        loaded: Dict[str, Dict[str, Any]] = entries
-        return loaded
+        return entries
 
     def save(self, entries: Mapping[str, Mapping[str, Any]]) -> None:
         """Replace the file with ``entries`` in one step (the caller holds the lock)."""

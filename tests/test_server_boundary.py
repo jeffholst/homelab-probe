@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 PACKAGE = Path(__file__).resolve().parent.parent / "homelab_probe"
-WEB = {"fastapi", "starlette", "uvicorn", "pydantic", "anyio", "h11", "httpx", "httpx2"}
+WEB = {"fastapi", "starlette", "uvicorn", "pydantic", "anyio", "h11", "httpx", "httpx2", "cryptography"}
 
 
 def imports(path, *, top_level_only):

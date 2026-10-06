@@ -237,6 +237,26 @@ def _enabled_admins(users: List[User]) -> int:
     return sum(u.role == "admin" and not u.disabled for u in users)
 
 
+def _not_json(source: Any, error: Exception) -> AccountError:
+    return AccountError(f"{source} is not valid JSON ({type(error).__name__}); restore it from a backup or remove it")
+
+
+def parse_users(text: str, source: str) -> List[User]:
+    """The accounts of the text of an accounts file (``source`` names it in a message); ``AccountError`` when it is not
+    one. The one reader of the format: the store and the backup check use it."""
+    try:
+        data = json.loads(text)
+    except ValueError as e:
+        raise _not_json(source, e) from e
+    entries = data.get("users") if isinstance(data, dict) and data.get("version") == FORMAT_VERSION else None
+    if not isinstance(entries, list):
+        raise AccountError(f"{source} is not an accounts file of format {FORMAT_VERSION}")
+    users = [User.from_dict(entry) for entry in entries]
+    if len({u.username for u in users}) != len(users):
+        raise AccountError(f"{source} lists a username twice")
+    return users
+
+
 class AccountStore:
     """The accounts file of one data directory. Every method that changes it reads the current file under the lock
     first, so a concurrent change by the server or another ``hlp web-user`` is never overwritten."""
@@ -273,19 +293,12 @@ class AccountStore:
     def _read(self) -> List[User]:
         try:
             os.chmod(self.path, 0o600)
-            data = json.loads(self.path.read_text(encoding="utf-8"))
+            text = self.path.read_text(encoding="utf-8")
         except FileNotFoundError:
             return []
-        except (ValueError, UnicodeError) as e:
-            raise AccountError(f"{self.path} is not valid JSON ({type(e).__name__}); restore it from a backup or "
-                               "remove it") from e
-        entries = data.get("users") if isinstance(data, dict) and data.get("version") == FORMAT_VERSION else None
-        if not isinstance(entries, list):
-            raise AccountError(f"{self.path} is not an accounts file of format {FORMAT_VERSION}")
-        users = [User.from_dict(entry) for entry in entries]
-        if len({u.username for u in users}) != len(users):
-            raise AccountError(f"{self.path} lists a username twice")
-        return users
+        except UnicodeError as e:
+            raise _not_json(self.path, e) from e
+        return parse_users(text, str(self.path))
 
     # writing
 

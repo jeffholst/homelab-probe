@@ -1004,7 +1004,8 @@ def _run_serve(args: argparse.Namespace) -> int:
     run(config, args.host, args.port, args.config, args.data_dir, demo=args.demo,
         announce=lambda message: say(message, file=sys.stderr), allowed=args.allowed_host,
         forwarded_allow_ips=args.forwarded_allow_ips, setup=setup_state, reload=reload,
-        read_only=args.read_only, scheduler=args.scheduler)
+        read_only=args.read_only, scheduler=args.scheduler,
+        env_named=args.env_file is not None or bool(os.environ.get(config_module.ENV_FILE_VAR, "").strip()))
     return 0
 
 
