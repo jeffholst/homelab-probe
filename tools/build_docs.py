@@ -135,8 +135,16 @@ def plain_heading(markup: str) -> str:
 
 def heading_texts(text: str) -> List[str]:
     """The raw heading texts of Markdown, in order, ignoring lines inside fenced code (no checks are made)."""
+    return headings_and_anchors(text)[0]
+
+
+def headings_and_anchors(text: str) -> Tuple[List[str], List[str]]:
+    """``(raw heading texts, explicit <a id> names)`` of the text left after comments and anchor tags are taken out,
+    the one cleaning path for both (so a heading inside a comment makes no anchor)."""
+    parser = PageParser("<text>", Problems())
+    cleaned = parser.clean(text.replace("\r\n", "\n").split("\n"))
     found, fence = [], 0
-    for line in text.splitlines():
+    for line in cleaned:
         if fence:
             closing = re.match(r"^\s*(`{3,})[ \t]*$", line)
             if closing and len(closing.group(1)) >= fence:
@@ -145,16 +153,15 @@ def heading_texts(text: str) -> List[str]:
             fence = len(opening.group(1))
         elif match := HEADING.match(line):
             found.append(strip_closing_hashes(match.group(2) or ""))
-    return found
+    return found, parser.explicit_anchors
 
 
 def anchors_of(text: str) -> set:
     """Every anchor of a Markdown file: its headings (numbered like GitHub) and its explicit ``<a id>`` anchors."""
     slugger = Slugger()
-    found = {slugger.anchor(plain_heading(heading)) for heading in heading_texts(text)}
-    parser = PageParser("<text>", Problems())
-    parser.clean(text.split("\n"))                  # the explicit anchors, leaving out those in code
-    found.update(parser.explicit_anchors)
+    headings, explicit = headings_and_anchors(text)
+    found = {slugger.anchor(plain_heading(heading)) for heading in headings}
+    found.update(explicit)
     return found
 
 
@@ -697,8 +704,12 @@ class Bundle:
 
 
 def read_version(root: Path) -> str:
+    path = root / "homelab_probe" / "__init__.py"
+    real = contained(root.resolve(), path)
+    if real is None:
+        raise BuildError(["homelab_probe/__init__.py: points outside the repository"])
     try:
-        text = (root / "homelab_probe" / "__init__.py").read_text(encoding="utf-8")
+        text = real.read_text(encoding="utf-8")
     except OSError:
         raise BuildError([f"{root}: no homelab_probe/__init__.py to read the version from"]) from None
     match = re.search(r'^__version__ = "([^"]+)"', text, re.M)
@@ -798,12 +809,28 @@ class Resolver:
         self.problems = problems
         self.by_path = {page.path.resolve(): page for page in pages}
         self.files: Dict[str, Path] = {}
-        self.schemas = self.schema_paths()
+        self.schemas = self.schema_paths()      # every one is inside the repository, or a problem was reported
         self.markdown_anchors: Dict[Path, set] = {}
 
     def schema_paths(self) -> List[Path]:
+        """The schema files, resolved; a folder or file that leads outside the repository fails the build."""
         folder = self.root / "docs" / "schemas"
-        return sorted(path.resolve() for path in folder.glob("*.json") if path.is_file()) if folder.is_dir() else []
+        if not folder.is_dir():
+            return []
+        if contained(self.root, folder) is None:
+            self.problems.add("docs/schemas", 0, "the folder is a link to a place outside the repository")
+            return []
+        found = []
+        for path in sorted(folder.glob("*.json")):
+            if not path.is_file():
+                continue
+            real = contained(self.root, path)
+            if real is None:
+                self.problems.add(f"docs/schemas/{path.name}", 0, "the schema is a link to a file outside the "
+                                                                   "repository")
+            else:
+                found.append(real)
+        return sorted(found)
 
     def local_target(self, page: Page, line: int, destination: str) -> Optional[Tuple[Path, str]]:
         """``(real path inside the repository, anchor)`` of a relative destination, or None after a problem."""
@@ -942,8 +969,10 @@ def build_bundle(root: Path, tag: str, repository: str = REPOSITORY) -> Bundle:
     return Bundle(data, dict(sorted(resolver.files.items())))
 
 
-def prepare_output(out_dir: Path, root: Path) -> Path:
-    """The output directory, created, and cleared of the previous build's files; nothing else is ever removed."""
+def prepare_output(out_dir: Path, root: Path, paths: Sequence[str] = ()) -> Path:
+    """The output directory, created, and cleared of the previous build's files; nothing else is ever removed.
+
+    Everything is checked first, ``paths`` (what will be written) included, so a refusal leaves the old build alone."""
     out = out_dir.resolve()
     if out == root or out in root.parents:
         raise BuildError([f"{out_dir}: the output directory may not be the repository or contain it"])
@@ -956,23 +985,39 @@ def prepare_output(out_dir: Path, root: Path) -> Path:
                                   "or empty directory"])
             if (out / "docs").is_symlink():
                 raise BuildError([f"{out_dir}/docs: a symbolic link; remove it or use a new directory"])
-            (out / "docs.json").unlink()
-            shutil.rmtree(out / "docs", ignore_errors=True)
+    for path in paths:
+        if Path(path).parts[0] != "docs":              # what is under docs/ is removed below, links included
+            unlinked_destination(out, path)
+    if out.exists() and any(out.iterdir()):
+        (out / "docs.json").unlink()
+        shutil.rmtree(out / "docs", ignore_errors=True)
     out.mkdir(parents=True, exist_ok=True)
     return out
 
 
+def unlinked_destination(out: Path, path: str) -> Path:
+    """``out/path`` after checking that neither the file nor any folder on the way to it is a symbolic link, which a
+    copy would follow out of the output directory (files an earlier run or someone else left there are not trusted)."""
+    current = out
+    for part in Path(path).parts:
+        current = current / part
+        if current.is_symlink():
+            raise BuildError([f"{current.relative_to(out).as_posix()}: a symbolic link in the output directory; "
+                              "remove it or use a new directory"])
+    return current
+
+
 def write_bundle(bundle: Bundle, out_dir: Path, root: Path) -> Path:
-    out = prepare_output(out_dir, root.resolve())
+    out = prepare_output(out_dir, root.resolve(), [*bundle.files, "docs.json"])
     for path, source in bundle.files.items():
-        target = out / path
+        target = unlinked_destination(out, path)
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, target)
     text = json.dumps(bundle.data, indent=2, ensure_ascii=False) + "\n"
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=out, prefix=".docs-", suffix=".tmp",
                                      delete=False) as handle:
         handle.write(text)
-    destination = out / "docs.json"
+    destination = unlinked_destination(out, "docs.json")
     Path(handle.name).replace(destination)
     return destination
 

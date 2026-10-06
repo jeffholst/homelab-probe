@@ -3,6 +3,7 @@
 import filecmp
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -548,6 +549,78 @@ def test_small_inline_and_table_forms(tmp_path):
     page = page_of(bundle_of(make_repo(tmp_path, text, pages={"a.md": "# Top\n"})), "readme")
     assert [link["kind"] for link in page["links"]] == ["page"] * 5
     assert "a and `x` a]b [unclosed and ok t" in page["search"] and "c | d" in page["search"]
+
+
+def test_headings_inside_a_comment_make_no_anchor(tmp_path):
+    root = make_repo(tmp_path, "# Home\n\n[a](MORE.md#shown) [b](MORE.md#hidden) [c](MORE.md#ghost)\n",
+                     files={"MORE.md": "# More\n## Shown\n<!--\n## Hidden\n-->\n<!-- ## Inline -->\n"
+                                       "`<!-- x -->` ## not a heading\n## Shown\n<!-- <a id=\"ghost\"></a> -->\n"})
+    assert problems_of(root) == ["README.md:3: 'MORE.md#ghost': no heading makes the anchor #ghost",
+                                 "README.md:3: 'MORE.md#hidden': no heading makes the anchor #hidden"]
+    assert build_docs.anchors_of("# A\n<!--\n# B\n-->\n## C\n") == {"a", "c"}
+    assert build_docs.heading_texts("# A\n<!-- # B -->\n## C\n") == ["A", "C"]
+
+
+def test_a_package_file_that_is_a_link_out_of_the_repository_is_not_read(tmp_path):
+    outside = tmp_path / "outside.py"
+    outside.write_text('__version__ = "1.2.3"\n')
+    root = make_repo(tmp_path)
+    (root / "homelab_probe" / "__init__.py").unlink()
+    (root / "homelab_probe" / "__init__.py").symlink_to(outside)
+    assert problems_of(root) == ["homelab_probe/__init__.py: points outside the repository"]
+
+
+def test_a_schema_or_schema_folder_that_leaves_the_repository_fails_the_build(tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "x.v1.schema.json").write_text('{"title": "secret"}')
+    root = make_repo(tmp_path, files={"docs/schemas/ok.v1.schema.json": '{"title": "ok"}',
+                                      "docs/schemas/folder.json/keep": "a folder named like a schema is no schema"})
+    (root / "docs" / "schemas" / "evil.v1.schema.json").symlink_to(outside / "x.v1.schema.json")
+    assert problems_of(root) == [
+        "docs/schemas/evil.v1.schema.json: the schema is a link to a file outside the repository"]
+    (root / "docs" / "schemas" / "evil.v1.schema.json").unlink()
+    assert [s["id"] for s in bundle_of(root)["schemas"]] == ["ok.v1"]
+    shutil.rmtree(root / "docs" / "schemas")
+    (root / "docs" / "schemas").symlink_to(outside)
+    assert problems_of(root) == ["docs/schemas: the folder is a link to a place outside the repository"]
+
+
+def test_a_rebuild_never_writes_through_a_link_left_in_the_output_directory(tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "target.txt").write_text("keep")
+    (outside / "dir").mkdir()
+    root = make_repo(tmp_path, "# Home\n\n![a](a.png) ![b](sub/b.png)\n", files={"a.png": PNG, "sub/b.png": PNG})
+    out = tmp_path / "out"
+    write_bundle(build_bundle(root, TAG), out, root)
+    (out / "a.png").unlink()
+    (out / "a.png").symlink_to(outside / "target.txt")
+    with pytest.raises(BuildError, match="a.png: a symbolic link in the output directory"):
+        write_bundle(build_bundle(root, TAG), out, root)
+    assert (out / "docs.json").read_text().startswith("{")          # a refusal removed nothing
+    (out / "a.png").unlink()
+    (out / "sub").rename(tmp_path / "moved")
+    (out / "sub").symlink_to(outside / "dir")
+    with pytest.raises(BuildError, match="sub: a symbolic link in the output directory"):
+        write_bundle(build_bundle(root, TAG), out, root)
+    assert (outside / "target.txt").read_text() == "keep" and not list((outside / "dir").iterdir())
+    (out / "sub").unlink()
+    (out / "docs.json").unlink()
+    (out / "docs.json").symlink_to(outside / "target.txt")
+    with pytest.raises(BuildError, match="docs.json: a symbolic link in the output directory"):
+        write_bundle(build_bundle(root, TAG), out, root)
+    assert (outside / "target.txt").read_text() == "keep" and (out / "docs.json").is_symlink()
+
+
+def test_the_destination_check_looks_at_every_component_of_the_path(tmp_path):
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "real").mkdir()
+    (out / "link").symlink_to(out / "real")
+    assert build_docs.unlinked_destination(out, "real/x.png") == out / "real" / "x.png"
+    with pytest.raises(BuildError, match="link: a symbolic link"):
+        build_docs.unlinked_destination(out, "link/x.png")
 
 
 def test_anchors_in_a_file_outside_the_bundle_are_checked_once_per_file(tmp_path):
