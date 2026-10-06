@@ -44,7 +44,7 @@ export function HomePage() {
             </ul>
           )}
         </DataView>
-        <p className="muted">
+        <p className="card-actions">
           <button type="button" className="button button--secondary" onClick={() => void platforms.refetch()}>
             Refresh
           </button>

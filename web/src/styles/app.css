@@ -294,6 +294,10 @@ kbd {
   margin-bottom: 0;
 }
 
+.card-actions {
+  margin-top: var(--space-3);
+}
+
 .facts {
   display: grid;
   grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
