@@ -80,11 +80,21 @@ Binding every address (`0.0.0.0`, `::`) is only accepted with at least one `--al
 ### Logging in: `/api/v1/auth`
 
 - **`POST /api/v1/auth/login`** with `{"username": ..., "password": ...}` (JSON, and an `Origin` header, which a browser sends) returns `{username, role, csrf_token, idle_seconds_left, session_seconds_left}` and sets the session cookie. The only error for a wrong password, an unknown user or a disabled one is `401 invalid_credentials` ("Invalid username or password."), and they cost the same work. The CSRF token goes into `X-CSRF-Token` on every unsafe request.
-- **`GET /api/v1/auth/me`** says who is logged in and how long the session has left; **`POST /api/v1/auth/logout`** ends it.
+- **`GET /api/v1/auth/me`** says who is logged in, how long the session has left and `can_change_password` (true for the local accounts, whose passwords are kept here; an authenticator that keeps them elsewhere would say false); **`POST /api/v1/auth/logout`** ends the session. The login answers with the same document.
 - **The cookie** is `HttpOnly`, `SameSite=Strict`, `Path=/`, with no `Domain` and no expiry. Over HTTPS it is also `Secure` and named `__Host-hlp_session` (a browser then refuses to let a subdomain or a plain-HTTP page replace it); over HTTP it is `hlp_session`, and each name is accepted only on its own scheme. Its value is 32 random bytes; the server keeps only a hash of it, in memory, so a restart logs everybody out. There is no "remember me".
 - **A session ends** after `SESSION_IDLE_MINUTES` without a request (default 30) or `SESSION_MAX_HOURS` after the login (default 12), and **on the next request after its user's password was changed or reset, the user was disabled or deleted, or the role changed**, whether that was done by the `web-user` command or anything else. A new login ends the session it replaces, and each user keeps at most 10 sessions.
 - **Guessing is slowed down**, not blocked for good. Failures are counted per address and per username; the first three cost nothing, then the wait doubles (2, 4, 8 ... seconds) up to 5 minutes for an address and **30 seconds for a username**, so nobody can lock a real user out for long. While a wait lasts every attempt, right password or wrong, gets `429 too_many_attempts` with `Retry-After`. A success clears the counts.
-- **The audit log** gets `auth.login` (with the role), `auth.login_failed`, `auth.throttled` (once, when a wait begins) and `auth.logout`, each with the user and the address. A username that does not exist is written as `(unknown user)`, never as typed (it may be a password typed in the wrong box). A login that cannot be written to the audit log does not happen (500); a failure is still refused if its entry cannot be written. Passwords and session ids never reach the log or the audit trail.
+- **The audit log** gets `auth.login` (with the role), `auth.login_failed`, `auth.throttled` (once, when a wait begins) and `auth.logout` (and `auth.password_failed` with `user.password_changed`, see [changing your own password](#changing-your-own-password-post-apiv1authpassword)), each with the user and the address. A username that does not exist is written as `(unknown user)`, never as typed (it may be a password typed in the wrong box). A login that cannot be written to the audit log does not happen (500); a failure is still refused if its entry cannot be written. Passwords and session ids never reach the log or the audit trail.
+
+### Changing your own password: `POST /api/v1/auth/password`
+
+Any logged-in user, a viewer included, may change their own password; no administrator is needed (an administrator resetting **someone else's** password uses [`/api/v1/users/{username}/password`](#users-apiv1users)). The body is `{"current_password": ..., "new_password": ...}` (JSON, the CSRF token and the `Origin` like every unsafe request).
+
+- **The current password is checked**, and every wrong one counts in the **same throttle as a failed login** (per address and per user name, the same waits), so a session left open cannot be used to guess it: while a wait lasts the answer is `429 too_many_attempts` with `Retry-After`, whatever the passwords are. A wrong one is `422 invalid_current_password` ("The current password is wrong.").
+- **The new password follows the rule of every other path** (at least 12 and at most 1024 characters): `422 invalid_password` with the sentence of the rule that was broken. The rule is checked **before** the current password, so such a request says nothing about whether the current one was right and does not count as a failed guess. A body with anything but the two passwords is `422 invalid_parameter`; a password is never part of an answer.
+- **The other sessions of the user end and yours goes on.** The answer is the document of `GET /api/v1/auth/me` for a **new session**: the cookie value and the CSRF token change (`csrf_token` in the answer is the one to send from now on, and the old one is refused with `403 csrf_token`), while the start of the login stays, so changing the password does not lengthen it. Sessions of other users are not touched.
+- **Refusals.** `serve --read-only` answers `403 read_only` (the accounts are a file on this machine); an account whose `can_change_password` is false answers `403 password_not_changeable`; `500 audit_unavailable` means the change was not made because its audit entry could not be written.
+- **Audit.** `user.password_changed` (the user as the actor and as `user`, with the address), written in the same step as the change; `auth.password_failed` for a wrong current password and `auth.throttled` when a wait begins, as for a login. No password or hash is in the log, the audit trail or an answer. The `last_login` of the account is not changed: this is not a login.
 
 ### The API: `/api/v1/unifi`
 
@@ -385,6 +395,7 @@ Both live in the data directory, readable by the owner only (`0600`, and `0700` 
   | `user.role_changed` | `set-role` |
   | `user.disabled`, `user.enabled` | `disable`, `enable` |
   | `user.password_reset` | `reset-password` |
+  | `user.password_changed` | a user changed their own password over the API |
   | `user.password_upgraded` | a login replaced an old hash with one made with the current parameters |
   | `user.deleted` | `delete` |
 

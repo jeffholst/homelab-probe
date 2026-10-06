@@ -203,10 +203,26 @@ def audit_event(request: Request, event: str, username: str, *, must: bool = Fal
         logs.warn(f"the audit log could not be written ({event})")
 
 
-def _me(auth: AuthState, session: Session) -> Dict[str, Any]:
+def refuse_if_throttled(auth: AuthState, address: str, username: str) -> None:
+    """429 ``too_many_attempts`` while the address or the username is waiting, whatever password comes with it."""
+    wait = auth.throttle.wait(address, username)
+    if wait > 0:
+        seconds = math.ceil(wait)
+        raise ApiError(429, "too_many_attempts", f"Too many attempts. Try again in {seconds} seconds.",
+                       headers={"Retry-After": str(seconds)}, retry_after=seconds)
+
+
+def session_cookie(request: Request, response: JSONResponse, value: str) -> None:
+    """Set the session cookie of ``value`` on ``response`` (the attributes the login sets)."""
+    response.set_cookie(cookie_name(request), value, httponly=True, samesite="strict",
+                        secure=request.url.scheme == "https", path="/")
+
+
+def session_document(auth: AuthState, session: Session) -> Dict[str, Any]:
     idle, absolute = auth.sessions.remaining(session)
     return {"username": session.username, "role": session.role, "csrf_token": session.csrf,
-            "idle_seconds_left": idle, "session_seconds_left": absolute}
+            "idle_seconds_left": idle, "session_seconds_left": absolute,
+            "can_change_password": auth.accounts.can_change_password}
 
 
 def public_router() -> APIRouter:
@@ -217,11 +233,7 @@ def public_router() -> APIRouter:
     def login(request: Request, body: LoginBody) -> JSONResponse:
         auth: AuthState = request.app.state.auth
         address = address_of(request)
-        wait = auth.throttle.wait(address, body.username)
-        if wait > 0:
-            seconds = math.ceil(wait)
-            raise ApiError(429, "too_many_attempts", f"Too many attempts. Try again in {seconds} seconds.",
-                           headers={"Retry-After": str(seconds)}, retry_after=seconds)
+        refuse_if_throttled(auth, address, body.username)
         user = auth.accounts.authenticate_user(body.username, body.password)
         if user is None:
             known = auth.accounts.store.get(body.username)
@@ -236,9 +248,8 @@ def public_router() -> APIRouter:
         if previous is not None:
             auth.sessions.end(previous)
         value, session = auth.sessions.create(user, address)
-        response = JSONResponse(_me(auth, session))
-        secure = request.url.scheme == "https"
-        response.set_cookie(cookie_name(request), value, httponly=True, samesite="strict", secure=secure, path="/")
+        response = JSONResponse(session_document(auth, session))
+        session_cookie(request, response, value)
         return response
 
     return router
@@ -260,6 +271,6 @@ def session_router() -> APIRouter:
 
     @router.get("/me", summary="Who is logged in")
     def me(request: Request) -> Dict[str, Any]:
-        return _me(request.app.state.auth, request.state.session)
+        return session_document(request.app.state.auth, request.state.session)
 
     return router
