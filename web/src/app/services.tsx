@@ -32,6 +32,7 @@ export function createServices(options: { fetch?: typeof fetch } = {}): Services
   const client = createApiClient({
     ...(options.fetch ? { fetch: options.fetch } : {}),
     onUnauthorized: () => {
+      queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== SESSION_KEY[0] });
       queryClient.setQueryData(SESSION_KEY, null);
     },
   });
