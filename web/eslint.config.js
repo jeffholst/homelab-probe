@@ -21,12 +21,12 @@ const markup = [
     message: "dangerouslySetInnerHTML is forbidden: render controller strings as text (<Text>, safeText()).",
   },
   {
-    selector: "AssignmentExpression[left.property.name=/^(innerHTML|outerHTML)$/]",
+    selector: "AssignmentExpression[left.property.name=/^(innerHTML|outerHTML)$/], AssignmentExpression[left.property.value=/^(innerHTML|outerHTML)$/]",
     message: "Do not assign markup: render text (<Text>) or build elements with React.",
   },
   {
     selector:
-      "CallExpression[callee.property.name='insertAdjacentHTML'], CallExpression[callee.object.name='document'][callee.property.name=/^(write|writeln)$/]",
+      "CallExpression[callee.property.name='insertAdjacentHTML'], CallExpression[callee.property.value='insertAdjacentHTML'], CallExpression[callee.object.name='document'][callee.property.name=/^(write|writeln)$/], CallExpression[callee.object.name='document'][callee.property.value=/^(write|writeln)$/]",
     message: "Do not write markup into the document: render text (<Text>) or build elements with React.",
   },
 ];
