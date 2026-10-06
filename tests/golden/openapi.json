@@ -375,6 +375,44 @@
         "title": "SettingsBody",
         "type": "object"
       },
+      "TriageBody": {
+        "additionalProperties": false,
+        "properties": {
+          "note": {
+            "default": "",
+            "maxLength": 400,
+            "title": "Note",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "open",
+              "acknowledged",
+              "snoozed"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "until": {
+            "anyOf": [
+              {
+                "maxLength": 10,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "With snoozed: the last day, 2026-10-10",
+            "title": "Until"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "title": "TriageBody",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -4280,6 +4318,626 @@
           }
         },
         "summary": "Event counts over the whole window"
+      }
+    },
+    "/api/v1/unifi/sites/{site}/findings": {
+      "get": {
+        "operationId": "findings_list_api_v1_unifi_sites__site__findings_get",
+        "parameters": [
+          {
+            "description": "A site name, internal reference or UUID",
+            "in": "path",
+            "name": "site",
+            "required": true,
+            "schema": {
+              "description": "A site name, internal reference or UUID",
+              "maxLength": 120,
+              "title": "Site",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "no_events",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "No Events",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Read the controller again instead of using the cache (at most every 5 s)",
+            "in": "query",
+            "name": "refresh",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Read the controller again instead of using the cache (at most every 5 s)",
+              "title": "Refresh",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "properties": {
+                    "complete": {
+                      "type": "boolean"
+                    },
+                    "generated_at": {
+                      "type": "string"
+                    },
+                    "items": {
+                      "items": {
+                        "properties": {
+                          "code": {
+                            "type": "string"
+                          },
+                          "docs": {
+                            "type": "string"
+                          },
+                          "first_seen_at": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "limitations": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "mac": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "next_checks": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "priority": {
+                            "required": [
+                              "score",
+                              "scope",
+                              "reasons"
+                            ],
+                            "type": "object"
+                          },
+                          "rank": {
+                            "type": "integer"
+                          },
+                          "severity": {
+                            "type": "string"
+                          },
+                          "subject": {
+                            "type": "string"
+                          },
+                          "triage": {
+                            "required": [
+                              "state"
+                            ],
+                            "type": "object"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "rank",
+                          "severity",
+                          "code",
+                          "subject",
+                          "message",
+                          "mac",
+                          "priority",
+                          "triage"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "limitations": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "summary": {
+                      "type": "object"
+                    },
+                    "triage_available": {
+                      "type": "boolean"
+                    },
+                    "warnings": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "summary",
+                    "complete",
+                    "triage_available",
+                    "generated_at",
+                    "warnings"
+                  ],
+                  "title": "Response Findings List Api V1 Unifi Sites  Site  Findings Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The findings"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "No such site, or no such finding now"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A parameter is not valid"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The local files cannot be used"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The controller could not be read"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The controller timed out"
+          }
+        },
+        "summary": "The findings of a site, in the order to look at them, with their triage"
+      }
+    },
+    "/api/v1/unifi/sites/{site}/findings/{finding}/triage": {
+      "put": {
+        "operationId": "findings_triage_api_v1_unifi_sites__site__findings__finding__triage_put",
+        "parameters": [
+          {
+            "description": "A site name, internal reference or UUID",
+            "in": "path",
+            "name": "site",
+            "required": true,
+            "schema": {
+              "description": "A site name, internal reference or UUID",
+              "maxLength": 120,
+              "title": "Site",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The id of a finding, from the list",
+            "in": "path",
+            "name": "finding",
+            "required": true,
+            "schema": {
+              "description": "The id of a finding, from the list",
+              "pattern": "^[0-9a-f]{16}$",
+              "title": "Finding",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TriageBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "docs": {
+                      "type": "string"
+                    },
+                    "first_seen_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "limitations": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "mac": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "next_checks": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "priority": {
+                      "required": [
+                        "score",
+                        "scope",
+                        "reasons"
+                      ],
+                      "type": "object"
+                    },
+                    "rank": {
+                      "type": "integer"
+                    },
+                    "severity": {
+                      "type": "string"
+                    },
+                    "subject": {
+                      "type": "string"
+                    },
+                    "triage": {
+                      "required": [
+                        "state"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "rank",
+                    "severity",
+                    "code",
+                    "subject",
+                    "message",
+                    "mac",
+                    "priority",
+                    "triage"
+                  ],
+                  "title": "Response Findings Triage Api V1 Unifi Sites  Site  Findings  Finding  Triage Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The finding with its new state"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "No such site, or no such finding now"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Too many findings are tracked"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A parameter is not valid"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The local files cannot be used"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The controller could not be read"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Busy: try again in a moment"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The controller timed out"
+          }
+        },
+        "summary": "Acknowledge, snooze or reopen a finding"
       }
     },
     "/api/v1/unifi/sites/{site}/firewall": {
