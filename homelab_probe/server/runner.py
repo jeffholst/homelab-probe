@@ -124,7 +124,7 @@ def run(config: Config, host: str, port: int, settings_path: Optional[Path], sta
                          f"{SETUP_TOKEN_VAR}.")
         app = create_app(config, settings_path, directory, auth=auth, demo=demo,
                          hosts=allowed_hosts(host, port, allowed), setup=setup, read_only=read_only,
-                         scheduler=scheduler)
+                         scheduler=scheduler, reload=reload)
         if not is_loopback(host):
             announce("This server can be reached from other machines: a login travels in clear text over plain HTTP"
                      + (", and so do the setup token and the API key you type into the setup" if setup and setup.mode

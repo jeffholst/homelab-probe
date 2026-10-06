@@ -100,9 +100,11 @@ class Scheduler:
     # -- one pass ------------------------------------------------------------------------------------------------
 
     def ready(self) -> bool:
-        """Is there a controller to read? Not before the guided setup has finished."""
+        """Is there a controller to read? Not before the guided setup has finished, and not while a restore replaces
+        the files the jobs write."""
         setup = self.app.state.setup
-        return self.app.state.service is not None and (setup is None or not setup.mode)
+        return (self.app.state.service is not None and (setup is None or not setup.mode)
+                and not self.app.state.maintenance.active)
 
     def tick(self) -> List[JobResult]:
         """Run the jobs that are due, once. Never raises: a job that fails is a ``failed`` result."""

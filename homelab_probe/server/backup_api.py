@@ -29,20 +29,28 @@ from typing import Any, Dict, List, Literal
 from fastapi import APIRouter, Depends, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
-from .. import backup
+from .. import backup, restore
 from ..backup import BackupError
-from .auth import admin, audit_event
+from .auth import admin, audit_event, setup_ok
 from .backup_crypto import MAX_PASSPHRASE, MIN_PASSPHRASE, open_sealed, seal
 from .errors import ApiError, error_responses
 from .settings_api import settings_path_of
+from .wizard import SETUP_ACTOR, setup_access
 
 API = "/api/v1/backup"
 SLOTS = 2
 MAX_ARCHIVE = 64 * 1024 * 1024                       # a sealed backup, in bytes
 _SLOTS = threading.BoundedSemaphore(SLOTS)
 CLOCK = time.time
-STATUSES = {"busy": 503, "unsafe": 500}
+STATUSES = {"busy": 503, "unsafe": 500, "restore_failed": 500, "restore_pending": 500, "recovery_failed": 500,
+            "journal_damaged": 500, "restore_in_progress": 503}
 WORDING = {422: "The passphrase or the backup is not acceptable", 503: "Too many backups at once, or a file is busy"}
+
+
+def actor_of(request: Request) -> str:
+    """Who is acting: the administrator of the session, or the setup token while there is no administrator."""
+    session = getattr(request.state, "session", None)
+    return str(session.username) if session is not None else SETUP_ACTOR
 
 
 def failure(error: BackupError) -> ApiError:
@@ -75,10 +83,21 @@ class Slot:
         _SLOTS.release()
 
 
-def router() -> APIRouter:
-    api = APIRouter(prefix=API, tags=["backup"], dependencies=[Depends(admin)])
+def decode_archive(text: str) -> bytes:
+    """The bytes of a backup sent as base64; ``not_a_backup`` for anything else, ``too_large`` over ``MAX_ARCHIVE``."""
+    try:
+        blob = base64.b64decode(text, validate=True)
+    except (binascii.Error, ValueError):
+        raise failure(BackupError("not_a_backup")) from None
+    if len(blob) > MAX_ARCHIVE:
+        raise failure(BackupError("too_large"))
+    return blob
 
-    @api.post("", summary="Export an encrypted backup of the application's own state",
+
+def router() -> APIRouter:
+    api = APIRouter(prefix=API, tags=["backup"])
+
+    @api.post("", dependencies=[Depends(admin)], summary="Export an encrypted backup of the application's own state",
               responses={200: {"description": "The encrypted backup (a file download)",
                                "content": {"application/octet-stream": {"schema": {"type": "string",
                                                                                   "format": "binary"}}}},
@@ -104,25 +123,24 @@ def router() -> APIRouter:
             "Content-Disposition": f'attachment; filename="homelab-probe-backup-{stamp}.hlpbackup"',
             "Cache-Control": "no-store"})
 
-    @api.post("/preview", summary="What restoring a backup would do (changes nothing)",
+    @api.post("/preview", dependencies=[Depends(setup_access)],
+              summary="What restoring a backup would do (changes nothing)",
               responses={200: {"description": "The preview, without secrets", "content": {
                   "application/json": {"schema": {"type": "object"}}}},
                   **error_responses(401, 403, 422, 500, 503, text=WORDING)})
+    @setup_ok
     def backup_preview(request: Request, body: PreviewBody) -> Dict[str, Any]:
-        try:
-            blob = base64.b64decode(body.archive, validate=True)
-        except (binascii.Error, ValueError):
-            raise failure(BackupError("not_a_backup")) from None
-        if len(blob) > MAX_ARCHIVE:
-            raise failure(BackupError("too_large"))
+        blob = decode_archive(body.archive)
         directory = Path(request.app.state.state_dir or ".")
         with Slot():
             try:
                 package = backup.unpack(open_sealed(blob, body.passphrase))
                 shown = backup.preview(package, directory, settings_path_of(request.app), os.environ)
+                shown["recovery"] = {"required": bool(backup.live_files(directory, settings_path_of(request.app), ())),
+                                     "keep": restore.RECOVERY_KEEP, "folder": restore.RECOVERY_DIR}
             except BackupError as error:
                 raise failure(error) from error
-        audit_event(request, "backup.previewed", request.state.session.username, created=shown["created_at"],
+        audit_event(request, "backup.previewed", actor_of(request), created=shown["created_at"],
                     version=shown["app_version"])
         return shown
 

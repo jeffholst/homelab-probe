@@ -125,10 +125,15 @@ def local_write(endpoint: Callable[..., Any]) -> Callable[..., Any]:
 
 
 def refuse_if_read_only(request: Request) -> None:
-    """403 ``read_only`` for a ``local_write`` endpoint when the server was started with ``--read-only``."""
+    """403 ``read_only`` for a ``local_write`` endpoint when the server was started with ``--read-only``, and 503
+    ``restore_in_progress`` while a restore runs (``maintenance``)."""
     endpoint = getattr(request.scope.get("route"), "endpoint", None)
-    if getattr(endpoint, "is_local_write", False) and request.app.state.read_only:
+    if not getattr(endpoint, "is_local_write", False):
+        return
+    if request.app.state.read_only:
         raise ApiError(403, "read_only", "This server was started with --read-only: it writes no files.")
+    if request.app.state.maintenance.active:
+        raise ApiError(503, "restore_in_progress", "A restore is in progress; try again when it has finished.")
 
 
 def setup_ok(endpoint: Callable[..., Any]) -> Callable[..., Any]:

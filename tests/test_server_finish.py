@@ -263,9 +263,9 @@ def test_when_an_administrator_exists_the_session_finishes_the_setup_and_no_seco
 
 def test_the_default_reload_reads_the_data_directory(tmp_path, state):
     with pytest.raises(ConfigError):
-        wizard._reload_default(tmp_path)                           # nothing there yet
+        wizard.reload_default(tmp_path)                           # nothing there yet
     (tmp_path / ".env").write_text("UNIFI_URL=https://c.example\nUNIFI_API_KEY=k-k-k-k-k\n")
-    assert wizard._reload_default(tmp_path).controller_url == "https://c.example"
+    assert wizard.reload_default(tmp_path).controller_url == "https://c.example"
 
 
 def test_the_runner_supplied_reload_is_used(client, state, tmp_path):

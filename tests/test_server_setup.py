@@ -117,7 +117,8 @@ def test_in_setup_mode_every_other_endpoint_answers_503_and_the_setup_ones_want_
     spec = app.openapi()
     routes = [(method.upper(), path) for path, item in spec["paths"].items() for method in item]
     setup = {(m, p) for m, p in routes if p.startswith(PREFIX)}
-    assert len(routes) > 20 and len(setup) == 7 and (PREFIX + "/status") in {p for _, p in setup}
+    setup |= {("POST", "/api/v1/backup/preview"), ("POST", "/api/v1/backup/restore")}      # a fresh install's restore
+    assert len(routes) > 20 and len(setup) == 9 and (PREFIX + "/status") in {p for _, p in setup}
     fill = {"{site}": "default", "{mac}": "BB:00:00:00:00:01", "{name}": "wan"}
     for method, template in routes + [("GET", "/api/v1/openapi.json"), ("GET", "/api/v1/unifi/sites")]:
         if (method, template) in PUBLIC:
@@ -142,9 +143,10 @@ def test_even_a_valid_looking_session_does_not_open_anything_in_setup_mode(tmp_p
     assert client.get("/api/v1/unifi/sites").json()["error"] == "not_configured"
 
 
-def test_the_setup_endpoints_are_exactly_these_seven():
-    assert sorted(SETUP_ENDPOINTS) == ["setup_certificate", "setup_connection", "setup_draft", "setup_finish",
-                                       "setup_notifications", "setup_preview", "setup_status"]
+def test_the_setup_endpoints_are_exactly_these_nine():
+    assert sorted(SETUP_ENDPOINTS) == ["backup_preview", "backup_restore", "setup_certificate", "setup_connection",
+                                       "setup_draft", "setup_finish", "setup_notifications", "setup_preview",
+                                       "setup_status"]
 
 
 # -- the token --------------------------------------------------------------------------------------------------
