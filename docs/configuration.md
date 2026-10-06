@@ -207,7 +207,7 @@ The optional **`pretty` extra** (Rich) lets commands style their output on a ter
 - **Names stay literal.** A device or SSID called `[red]x[/red]` is printed as exactly that, never parsed as markup, and control characters in names are removed before anything is styled.
 - Only the presentation changes: exit codes, JSON schemas, CSV, the `--verbose` log format and the redaction of secrets are the same either way.
 
-This is the shared foundation (issue #233) and the progress line (issue #234); colored findings and headings arrive as the commands adopt it. For developers, `homelab_probe/present.py` is the one module that decides (see [development](development.md)).
+This is the shared foundation (issue #233), the progress line (issue #234) and the findings and tables on a terminal (issue #235); headings arrive with issue #236. For developers, `homelab_probe/present.py` is the one module that decides (see [development](development.md)).
 
 ### What the progress line shows
 
@@ -217,6 +217,32 @@ A command that takes more than about 0.2 seconds draws **one line on stderr**, r
 - **One stable line.** It never reaches the last column (the label is shortened, the spinner and the time stay), uses ASCII spinner frames (`| / - \`) where the terminal is not UTF-8, and never wraps.
 - **Never in the way.** A warning is written on a clean line (the spinner is erased first and comes back after it), and the first line of the command's own output ends the progress for good. The line is erased and the cursor shown again when the command ends, fails or is interrupted with Ctrl+C. stdout is never touched, and a redirected stderr gets no escape sequences at all.
 - **Off** with `--no-progress` or `--plain`, with `--verbose` (the log lines would interleave), in `--json`/`--csv`/graph and other machine-readable modes, when `CI` is set, on `TERM=dumb`, on a terminal narrower than 40 columns and when stderr is not a terminal.
+
+### Findings and tables on a terminal
+
+With the `pretty` extra on a terminal of at least 40 columns, `diagnose` and `audit` group their findings by severity and finish with an honest summary, and `query` and `new-clients` print tables that fit. For example (`hlp --demo diagnose --only devices`, the synthetic network, colors left out):
+
+```text
+Critical (1)
+  ✗ CRITICAL  Gateway  device.overheating
+    │ reports that it is overheating
+
+Warnings (3)
+  ⚠ WARNING  Garage AP  device.offline
+    │ device is offline
+  ⚠ WARNING  Gateway Backup  device.storage
+    │ storage 97.5% used
+  ⚠ WARNING  Office Switch  device.cpu_high
+    │ CPU utilization 95%
+
+1 critical, 3 warnings, 1 info · 0.4s
+Checked: devices  not checked: health, wan, clients, reservations, ports, wifi, events
+```
+
+- **Color never carries meaning alone.** Red is critical, yellow a warning, green a healthy result, cyan a heading, dim only for secondary text (the code, the time); every finding keeps its written label. The 16 standard colors are used, which a terminal theme maps for its own light or dark background.
+- **Nothing is dropped or cut.** Every finding is shown with its subject, code and message; a long message wraps under its finding behind a bar (`│`, or `|` on a terminal that is not UTF-8), so a wrapped line can never look like a finding of its own. A table too wide for the terminal turns into stacked `Column  value` rows instead of cutting a name or an address.
+- **An honest summary.** The last line counts what was found, the ignored findings and the time the command took. "No issues found" is green only when every check could read what it needed; after a partial read it says *no issues found in what could be read, but the read was incomplete*, and findings from a partial read are followed by a note that there may be more. `Checked:` lists the areas only when `--only`/`--skip` chose them (from the document, never guessed).
+- **The same everywhere else.** Exit codes, `--json`, `--csv`, exports and the output with `--plain`, without the extra, or when stdout is not a terminal are exactly what they were.
 
 ## Shell completion
 

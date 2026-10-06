@@ -169,6 +169,20 @@ def test_text_output_is_clean_with_hostile_names(fake_client, monkeypatch, capsy
         assert shown in captured.out, f"{shown!r} missing from {argv}"
 
 
+@pytest.mark.parametrize("argv", [["diagnose"], ["diagnose", "--show-ignored"], ["audit"], ["query", "devices"],
+                                  ["query", "clients", "--include-offline"], ["new-clients"]],
+                         ids=lambda a: "enhanced " + " ".join(a))
+def test_the_enhanced_terminal_output_is_clean_with_hostile_names(fake_client, monkeypatch, capsys, argv):
+    from homelab_probe.present import Presentation
+    monkeypatch.setattr(Presentation, "decorations", lambda self, stream=None: not self.plain and not self.machine)
+    fake_client.session.fx = poison(fake_client.session.fx)
+    fake_client.session.events = poison(fake_client.session.events)
+    run(fake_client, monkeypatch, argv)
+    captured = capsys.readouterr()
+    assert_clean(captured.out + captured.err, argv)
+    assert captured.out.strip(), f"{argv} printed nothing"
+
+
 def test_names_are_still_shown_without_the_dangerous_parts(fake_client, monkeypatch, capsys):
     fake_client.session.fx = poison(fake_client.session.fx)
     run(fake_client, monkeypatch, ["query", "clients"])

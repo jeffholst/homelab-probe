@@ -327,9 +327,9 @@ def query_data(rows: List[Dict[str, Any]], kind: str = "all", offline: bool = Fa
     return [{c: r.get(c, "") for c in columns} for r in rows]
 
 
-def render_table(rows: List[Dict[str, Any]], kind: str = "all", offline: bool = False) -> str:
-    """The table of ``query`` from its rows (the table shows some of the columns of ``query_data``)."""
-    columns = {
+def table_columns(kind: str = "all", offline: bool = False) -> List[str]:
+    """The columns the table of ``query`` shows for ``kind`` (some of the columns of ``query_data``)."""
+    return {
         "reservations": OFFLINE_RESERVATION_COLUMNS if offline else RESERVATION_COLUMNS,
         "ports": PORT_TABLE_COLUMNS,
         "networks": NETWORK_COLUMNS,
@@ -337,7 +337,15 @@ def render_table(rows: List[Dict[str, Any]], kind: str = "all", offline: bool = 
         "devices": TABLE_COLUMNS + DEVICE_EXTRA_COLUMNS[:3],
         "clients": TABLE_COLUMNS + CLIENT_EXTRA_COLUMNS,
     }.get(kind, TABLE_COLUMNS)
-    return format_table(rows, columns) + f"\n\n{len(rows)} row(s)"
+
+
+def table_footer(rows: List[Dict[str, Any]]) -> str:
+    return f"{len(rows)} row(s)"
+
+
+def render_table(rows: List[Dict[str, Any]], kind: str = "all", offline: bool = False) -> str:
+    """The table of ``query`` from its rows (the table shows some of the columns of ``query_data``)."""
+    return format_table(rows, table_columns(kind, offline)) + "\n\n" + table_footer(rows)
 
 
 def render(rows: List[Dict[str, Any]], as_json: bool, kind: str = "all", offline: bool = False) -> str:
