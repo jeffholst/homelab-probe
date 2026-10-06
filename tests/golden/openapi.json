@@ -9065,6 +9065,402 @@
         "summary": "DHCP reservations"
       }
     },
+    "/api/v1/unifi/sites/{site}/search": {
+      "get": {
+        "operationId": "search_api_v1_unifi_sites__site__search_get",
+        "parameters": [
+          {
+            "description": "A site name, internal reference or UUID",
+            "in": "path",
+            "name": "site",
+            "required": true,
+            "schema": {
+              "description": "A site name, internal reference or UUID",
+              "maxLength": 120,
+              "title": "Site",
+              "type": "string"
+            }
+          },
+          {
+            "description": "What to look for: 2 to 64 characters once trimmed of white space (at most 256 before trimming), a name, a MAC address or an IP address (any spelling), a finding code or message",
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "description": "What to look for: 2 to 64 characters once trimmed of white space (at most 256 before trimming), a name, a MAC address or an IP address (any spelling), a finding code or message",
+              "maxLength": 256,
+              "minLength": 2,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The most hits of each kind",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "description": "The most hits of each kind",
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "properties": {
+                    "complete": {
+                      "type": "boolean"
+                    },
+                    "generated_at": {
+                      "type": "string"
+                    },
+                    "items": {
+                      "items": {
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "enum": [
+                              "client",
+                              "device",
+                              "ssid",
+                              "network",
+                              "finding",
+                              "note"
+                            ],
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "matched": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "key",
+                          "label",
+                          "matched"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "kinds": {
+                      "properties": {
+                        "client": {
+                          "properties": {
+                            "shown": {
+                              "type": "integer"
+                            },
+                            "total": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "total",
+                            "shown"
+                          ],
+                          "type": "object"
+                        },
+                        "device": {
+                          "properties": {
+                            "shown": {
+                              "type": "integer"
+                            },
+                            "total": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "total",
+                            "shown"
+                          ],
+                          "type": "object"
+                        },
+                        "finding": {
+                          "properties": {
+                            "shown": {
+                              "type": "integer"
+                            },
+                            "total": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "total",
+                            "shown"
+                          ],
+                          "type": "object"
+                        },
+                        "network": {
+                          "properties": {
+                            "shown": {
+                              "type": "integer"
+                            },
+                            "total": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "total",
+                            "shown"
+                          ],
+                          "type": "object"
+                        },
+                        "note": {
+                          "properties": {
+                            "shown": {
+                              "type": "integer"
+                            },
+                            "total": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "total",
+                            "shown"
+                          ],
+                          "type": "object"
+                        },
+                        "ssid": {
+                          "properties": {
+                            "shown": {
+                              "type": "integer"
+                            },
+                            "total": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "total",
+                            "shown"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "limit": {
+                      "type": "integer"
+                    },
+                    "limitations": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "query": {
+                      "type": "string"
+                    },
+                    "site": {
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name"
+                      ],
+                      "type": "object"
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    },
+                    "unavailable": {
+                      "items": {
+                        "enum": [
+                          "client",
+                          "device",
+                          "ssid",
+                          "network",
+                          "finding",
+                          "note"
+                        ],
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "warnings": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "site",
+                    "query",
+                    "limit",
+                    "items",
+                    "kinds",
+                    "truncated",
+                    "complete",
+                    "unavailable",
+                    "limitations",
+                    "generated_at",
+                    "warnings"
+                  ],
+                  "title": "Response Search Api V1 Unifi Sites  Site  Search Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The hits, at most `limit` of each kind"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "No such site"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The search text or the limit is not valid"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The settings file cannot be used"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The controller could not be read"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The controller timed out"
+          }
+        },
+        "summary": "Search the clients, devices, networks, findings and notes of a site"
+      }
+    },
     "/api/v1/unifi/sites/{site}/snapshots": {
       "get": {
         "operationId": "snapshots_list_api_v1_unifi_sites__site__snapshots_get",

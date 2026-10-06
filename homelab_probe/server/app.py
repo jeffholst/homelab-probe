@@ -28,6 +28,7 @@ from . import (
     profile_api,
     restore_api,
     routes,
+    search_api,
     settings_api,
     snapshots_api,
     status_api,
@@ -137,6 +138,7 @@ def create_app(config: Config, settings_path: Optional[Path] = None, state_dir: 
     app.include_router(findings_api.router())
     app.include_router(dashboard_api.router())
     app.include_router(notes_api.router())
+    app.include_router(search_api.router())
     app.include_router(backup_api.router())
     app.include_router(restore_api.router())
     app.include_router(public_router())
