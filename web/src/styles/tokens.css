@@ -1,0 +1,113 @@
+/*
+ * Design tokens: every colour, size and radius the app uses is a custom property defined here, and components refer to
+ * these names only. Three themes:
+ *
+ *   - system (no data-theme attribute): follows `prefers-color-scheme`;
+ *   - light  (data-theme="light");
+ *   - dark   (data-theme="dark").
+ *
+ * The attribute is set by public/theme-init.js before the first paint and by src/theme afterwards. The colour values
+ * are kept in three places that must agree (the light set, the dark set under the media query, the dark set under the
+ * attribute); src/styles/tokens.test.ts checks that they do and that the pairs below keep WCAG AA contrast (4.5:1 for
+ * text, 3:1 for the borders of controls and the focus ring).
+ */
+
+:root {
+  color-scheme: light dark;
+
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --radius: 0.5rem;
+  --radius-small: 0.3rem;
+  --target-size: 2.75rem;
+  --topbar-height: 3.5rem;
+  --nav-width: 15rem;
+  --content-width: 72rem;
+  --duration: 160ms;
+
+  /* light */
+  --color-bg: #f5f6f8;
+  --color-surface: #ffffff;
+  --color-surface-sunken: #eceef2;
+  --color-border: #d0d5de;
+  --color-border-strong: #6d7587;
+  --color-text: #161a22;
+  --color-text-muted: #4b5365;
+  --color-accent: #1f4fd8;
+  --color-accent-hover: #173fb0;
+  --color-on-accent: #ffffff;
+  --color-link: #1f4fd8;
+  --color-focus: #1f4fd8;
+  --color-scrim: rgb(10 14 22 / 55%);
+  --color-danger-text: #a8200d;
+  --color-danger-bg: #fdecea;
+  --color-warning-text: #6b4500;
+  --color-warning-bg: #fff3d1;
+  --color-success-text: #0a5c33;
+  --color-success-bg: #e1f5e9;
+  --color-info-text: #0b4a8a;
+  --color-info-bg: #e3f0fd;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-bg: #0e1117;
+    --color-surface: #171b23;
+    --color-surface-sunken: #0a0c11;
+    --color-border: #2b3240;
+    --color-border-strong: #8b94a8;
+    --color-text: #e7eaf0;
+    --color-text-muted: #a9b1c1;
+    --color-accent: #8ab4ff;
+    --color-accent-hover: #b3cdff;
+    --color-on-accent: #0b1220;
+    --color-link: #8ab4ff;
+    --color-focus: #8ab4ff;
+    --color-scrim: rgb(0 0 0 / 65%);
+    --color-danger-text: #ffb4ab;
+    --color-danger-bg: #3b1511;
+    --color-warning-text: #f5cf7a;
+    --color-warning-bg: #3a2b08;
+    --color-success-text: #8ee0ae;
+    --color-success-bg: #0f2e1d;
+    --color-info-text: #9ccaff;
+    --color-info-bg: #11284a;
+  }
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --color-bg: #0e1117;
+  --color-surface: #171b23;
+  --color-surface-sunken: #0a0c11;
+  --color-border: #2b3240;
+  --color-border-strong: #8b94a8;
+  --color-text: #e7eaf0;
+  --color-text-muted: #a9b1c1;
+  --color-accent: #8ab4ff;
+  --color-accent-hover: #b3cdff;
+  --color-on-accent: #0b1220;
+  --color-link: #8ab4ff;
+  --color-focus: #8ab4ff;
+  --color-scrim: rgb(0 0 0 / 65%);
+  --color-danger-text: #ffb4ab;
+  --color-danger-bg: #3b1511;
+  --color-warning-text: #f5cf7a;
+  --color-warning-bg: #3a2b08;
+  --color-success-text: #8ee0ae;
+  --color-success-bg: #0f2e1d;
+  --color-info-text: #9ccaff;
+  --color-info-bg: #11284a;
+}

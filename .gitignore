@@ -28,3 +28,9 @@ tools/recorded/
 users.json
 users.json.*
 audit.log*
+
+# Web interface (web/): installed packages, the production build and Playwright output
+web/node_modules/
+web/dist/
+web/test-results/
+web/playwright-report/
