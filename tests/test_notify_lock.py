@@ -166,3 +166,8 @@ def test_a_lock_that_cannot_be_taken_for_another_reason_is_the_error_itself(tmp_
     with pytest.raises(OSError, match="No locks available"):
         with file_lock(tmp_path / "x.lock"):
             pass
+
+
+def test_a_step_that_is_cancelled_before_it_starts_reads_sends_and_writes_nothing(tmp_path, post):
+    outcome = run(tmp_path, [finding(CRITICAL, "Gateway", "device is offline")], cancelled=lambda: True)
+    assert outcome.kind == "cancelled" and post.calls == [] and not (tmp_path / "site-1" / "notify-state.json").exists()

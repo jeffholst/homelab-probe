@@ -38,7 +38,7 @@ import requests
 from .config import Config, ConfigError, SmtpSettings
 from .diagnose import CODES, CRITICAL, INFO, SEVERITY_ORDER, WARNING, Finding, area_of
 from .logs import log_event
-from .util import LockTimeout, file_lock, printable, site_key
+from .util import LockCancelled, LockTimeout, file_lock, printable, site_key
 
 _log = logging.getLogger(__name__)
 
@@ -423,9 +423,9 @@ LOCK_WAIT_SECONDS = 120.0       # how long a run waits for another run's turn wi
 @dataclass
 class Outcome:
     """What one notification step did. ``kind`` is ``baseline`` (the current findings were recorded as already
-    reported), ``nothing`` (nothing new, worse or fixed), ``dry_run`` or ``sent``; ``results`` is one (destination kind,
-    delivered, reason) per destination that was tried; ``undelivered`` is true when a message had to be sent and every
-    destination failed."""
+    reported), ``nothing`` (nothing new, worse or fixed), ``dry_run``, ``sent`` or ``cancelled`` (asked to stop first);
+    ``results`` is one (destination kind, delivered, reason) per destination that was tried; ``undelivered`` is true
+    when a message had to be sent and every destination failed."""
 
     kind: str
     results: List[Tuple[str, bool, str]] = field(default_factory=list)
@@ -457,31 +457,38 @@ def process(findings: List[Finding], *, config: Config, settings: Any, site: Dic
             areas: Optional[List[str]] = None,
             redact: bool = False, dry_run: bool = False, baseline_only: bool = False, baseline_if_new: bool = False,
             report: Callable[[str], None] = lambda message: None,
-            warn: Callable[[str], None] = lambda message: None) -> Outcome:
+            warn: Callable[[str], None] = lambda message: None,
+            cancelled: Callable[[], bool] = lambda: False) -> Outcome:
     """The notification step: what is new, worse or fixed since the last run is sent to every destination and
     remembered. Everything from reading the state to saving it happens under one lock on the state, so a scheduler
     and a cron job (or two of either) never both announce the same finding. ``baseline_only`` records the current
     findings as already reported; ``baseline_if_new`` does so when there was no state yet (a first run would otherwise
     announce everything). ``report`` receives the lines a person is told, ``warn`` a damaged-state warning. Raises
-    ``ConfigError`` for a state that cannot be saved, or one that stays locked by another run."""
+    ``ConfigError`` for a state that cannot be saved, or one that stays locked by another run. ``cancelled`` is asked
+    while waiting for the lock and again before anything is sent or written: when it says yes the step ends as
+    ``cancelled`` with nothing sent and the state untouched (the scheduler uses it to stop)."""
     path = state_file or state_path_for(site, base)
     with contextlib.ExitStack() as stack:
         try:
-            stack.enter_context(file_lock(path.with_name(path.name + ".lock"), LOCK_WAIT_SECONDS))
+            stack.enter_context(file_lock(path.with_name(path.name + ".lock"), LOCK_WAIT_SECONDS, cancelled))
+        except LockCancelled:
+            return Outcome("cancelled")
         except LockTimeout:
             raise ConfigError(f"the notification state {path} is in use by another run that did not finish in "
                               f"{LOCK_WAIT_SECONDS:g} seconds; nothing was sent") from None
         except OSError as e:
             raise ConfigError(f"the notification state in {path.parent} cannot be locked: {e.strerror or e}") from e
         return _locked_step(findings, config, settings, site, state_file, base, minimum, areas, redact, dry_run,
-                            baseline_only, baseline_if_new, report, warn)
+                            baseline_only, baseline_if_new, report, warn, cancelled)
 
 
 def _locked_step(findings: List[Finding], config: Config, settings: Any, site: Dict[str, str],
                  state_file: Optional[Path], base: Path, minimum: str, areas: Optional[List[str]], redact: bool,
                  dry_run: bool,
                  baseline_only: bool, baseline_if_new: bool, report: Callable[[str], None],
-                 warn: Callable[[str], None]) -> Outcome:
+                 warn: Callable[[str], None], cancelled: Callable[[], bool]) -> Outcome:
+    if cancelled():
+        return Outcome("cancelled")
     state_path, state, problem, existed = load_site_state(state_file, site, base)
     if problem:
         warn(problem)
@@ -510,6 +517,8 @@ def _locked_step(findings: List[Finding], config: Config, settings: Any, site: D
         title, body = render_text(events, redact)
         report(f"Notification dry run (nothing sent, state unchanged): {title}\n{body}")
         return Outcome("dry_run", events=len(events))
+    if cancelled():
+        return Outcome("cancelled")                                 # asked to stop while planning: send nothing
     results = send(destinations_from_config(config), events, redact, config.timeout)
     for kind, delivered, reason in results:
         report(f"Notification to {kind}: " + ("sent" if delivered else f"FAILED ({reason})"))

@@ -301,3 +301,31 @@ def test_the_diagnose_document_says_which_site_was_read():
     document = diagnose_document(client, "branch", echo=False)
     assert document.meta["site"] == {"id": "site-b", "name": "Branch", "ref": "branch"}
     assert "site-b" not in document.to_json()                              # the JSON output itself is unchanged
+
+
+def test_a_dangling_symbolic_link_at_the_snapshot_name_is_never_opened(tmp_path):
+    from homelab_probe.history import save_snapshot
+
+    record = {"captured_at": "2026-10-05T12:00:00+00:00"}
+    directory = tmp_path / "snapshots"
+    directory.mkdir()
+    target = tmp_path / "outside" / "stolen.json"
+    (directory / "snapshot-20261005-120000Z.json").symlink_to(target)           # points at nothing yet
+    path = save_snapshot(record, None, directory)                              # type: ignore[arg-type]
+    assert path.name == "snapshot-20261005-120000Z-1.json" and not target.exists() and not target.parent.exists()
+    assert json.loads(path.read_text()) == record
+    assert oct(os.stat(path).st_mode & 0o777) == "0o600"
+    assert save_snapshot(record, None, directory).name == "snapshot-20261005-120000Z-2.json"   # type: ignore[arg-type]
+
+
+def test_an_explicit_name_still_refuses_to_replace_a_file_without_force(tmp_path):
+    from homelab_probe.config import ConfigError
+    from homelab_probe.history import save_snapshot
+
+    record = {"captured_at": "2026-10-05T12:00:00+00:00"}
+    first = tmp_path / "mine.json"
+    save_snapshot(record, first)                                               # type: ignore[arg-type]
+    with pytest.raises(ConfigError, match="already exists"):
+        save_snapshot(record, first)                                           # type: ignore[arg-type]
+    save_snapshot({**record, "x": 1}, first, force=True)                       # type: ignore[arg-type]
+    assert json.loads(first.read_text())["x"] == 1

@@ -25,7 +25,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Sequence
+from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence
 
 if sys.platform == "win32":     # pragma: no cover (the other platforms never take this branch)
     import msvcrt
@@ -205,11 +205,17 @@ class LockTimeout(Exception):
     """A lock was not free within the time that was allowed."""
 
 
+class LockCancelled(Exception):
+    """Waiting for a lock was given up because the caller asked to stop (``cancelled`` returned true)."""
+
+
 @contextlib.contextmanager
-def file_lock(path: Path, timeout: Optional[float] = None) -> Iterator[None]:
+def file_lock(path: Path, timeout: Optional[float] = None,
+              cancelled: Optional[Callable[[], bool]] = None) -> Iterator[None]:
     """An exclusive lock on ``path`` across processes (and threads), released when the block ends. Without ``timeout``
     it waits for as long as it takes; with one it raises ``LockTimeout`` when the lock is not free in that many
-    seconds. The lock file is created owner-only (and its directory)."""
+    seconds. ``cancelled`` is asked while it waits: when it says yes the wait ends with ``LockCancelled``. The lock
+    file is created owner-only (and its directory)."""
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
     try:
@@ -224,9 +230,11 @@ def file_lock(path: Path, timeout: Optional[float] = None) -> Iterator[None]:
                     fcntl.flock(fd, fcntl.LOCK_EX | (0 if deadline is None else fcntl.LOCK_NB))
                 break
             except OSError:
-                if deadline is None or time.monotonic() >= deadline:
-                    if deadline is None:
-                        raise
+                if deadline is None:
+                    raise
+                if cancelled is not None and cancelled():
+                    raise LockCancelled(str(path)) from None
+                if time.monotonic() >= deadline:
                     raise LockTimeout(str(path)) from None
                 time.sleep(0.05)
         yield

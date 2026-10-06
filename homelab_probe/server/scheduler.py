@@ -13,8 +13,10 @@ Two jobs run one after the other on one background thread (never overlapping eac
   snapshot is as old as the interval, so restarting the server does not fill the directory.
 
 Every run has a run id and ends in one ``scheduler.run`` record: the job, the id, the result, a fixed reason, the
-milliseconds and counts, never a finding, a name, an address or a message. Nothing runs until the server is set up. The
-scheduler writes files, so ``--read-only`` and a demo refuse it.
+milliseconds and counts, never a finding, a name, an address or a message. Nothing runs until the server is set up. When
+the server stops, a waiting job gives up and a running one sends and writes nothing more. The scheduler writes files, so
+``--read-only`` and a demo refuse it; it never writes its state or a snapshot through a symbolic link at ``snapshots/``
+or in the site's directory.
 """
 
 import dataclasses
@@ -39,6 +41,7 @@ from .snapshots_api import SnapshotStoreError, store_snapshot
 _log = logging.getLogger(__name__)
 JOBS = ("diagnose", "snapshot")
 TICK_SECONDS = 30.0
+STOP_WAIT_SECONDS = 60.0         # how long a stopping server waits for the job that is running
 
 
 @dataclasses.dataclass
@@ -77,9 +80,14 @@ class Scheduler:
         self._thread.start()
 
     def stop(self) -> None:
+        """Ask the thread to stop and wait for the job that is running. A job in a read of the controller cannot be
+        interrupted, but once the stop is asked nothing is sent, saved or written any more: it ends as ``skipped``."""
         self._stop.set()
         if self._thread is not None:
-            self._thread.join(10)
+            self._thread.join(STOP_WAIT_SECONDS)
+            if self._thread.is_alive():
+                logs.warn("the scheduler's running job did not finish when the server stopped; it will send and "
+                          "write nothing")
 
     def _loop(self) -> None:
         while True:
@@ -169,6 +177,8 @@ class Scheduler:
         document = built.document
         findings = findings_from_document(document.data)
         counts["findings"] = len(findings)
+        if self._stop.is_set():
+            return "skipped", "stopping"
         if not destinations_from_config(config):
             return "ok", "no_destination"
         if not document.meta["complete"]:
@@ -176,7 +186,9 @@ class Scheduler:
         if any(path.is_symlink() for path in (self._base(), site_dir(self._base(), document.meta["site"]))):
             raise SnapshotStoreError("snapshots_unsafe")            # the state is never written through a link
         outcome = process(findings, config=config, settings=settings, site=document.meta["site"], base=self._base(),
-                          minimum=WARNING, baseline_if_new=True, warn=logs.warn)
+                          minimum=WARNING, baseline_if_new=True, warn=logs.warn, cancelled=self._stop.is_set)
+        if outcome.kind == "cancelled":
+            return "skipped", "stopping"
         counts["destinations"] = ",".join(f"{kind}:{'sent' if ok else 'failed'}" for kind, ok, _ in outcome.results)
         return ("failed", "undelivered") if outcome.undelivered else ("ok", outcome.kind)
 
@@ -184,6 +196,8 @@ class Scheduler:
         state, config = self.app.state, self.app.state.config
         state.service.refresh(0.0)
         built = state.service.build(lambda client: snapshot_document(client, config.site, echo=False))
+        if self._stop.is_set():
+            return "skipped", "stopping"
         _, gone = store_snapshot(self._base(), built.document.data, config.scheduler_snapshot_keep)
         counts["removed"] = len(gone)
         return "ok", "saved"

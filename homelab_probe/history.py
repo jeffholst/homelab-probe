@@ -277,15 +277,21 @@ def save_snapshot(record: SnapshotRecord, path: Optional[Path] = None, directory
         # UTC, so the order of the names never depends on the time zone or on daylight saving;
         # the record itself keeps the local time with its offset.
         stamp = datetime.fromisoformat(record["captured_at"]).astimezone(timezone.utc).strftime("%Y%m%d-%H%M%SZ")
-        path, n = directory / f"{FILE_PREFIX}{stamp}.json", 0
-        while path.exists():
-            n += 1
-            path = directory / f"{FILE_PREFIX}{stamp}-{n}.json"
-    elif path.exists() and not force:
-        raise ConfigError(f"{path} already exists; choose another name or use --force")
-
-    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+        n = 0
+        while True:
+            path = directory / (f"{FILE_PREFIX}{stamp}.json" if n == 0 else f"{FILE_PREFIX}{stamp}-{n}.json")
+            try:
+                # Created exclusively: a name that is taken, even by a dangling symbolic link, is never opened.
+                fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                break
+            except FileExistsError:
+                n += 1
+    else:
+        if path.exists() and not force:
+            raise ConfigError(f"{path} already exists; choose another name or use --force")
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         os.fchmod(f.fileno(), 0o600)
         json.dump(record, f, indent=2)

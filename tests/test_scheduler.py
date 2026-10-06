@@ -406,3 +406,99 @@ def test_the_settings_of_the_scheduler_are_validated_like_every_other_setting(na
         assert validate_field({name: value}, name)                             # the setup checks it too
     built = config_module.build_config({"UNIFI_URL": "https://c.example", "UNIFI_API_KEY": "k" * 20, name: good[1]})
     assert getattr(built, name.lower()) == int(good[1])
+
+
+# -- stopping, and what the stop guarantees ------------------------------------------------------------------------
+
+def test_a_job_that_is_running_when_the_server_stops_sends_and_writes_nothing_after_it(tmp_path, clock, post, monkeypatch):
+    import threading
+
+    app = make_app(tmp_path, clock)
+    started, release = threading.Event(), threading.Event()
+    real = scheduler.diagnose_document
+
+    def slow(*args, **kwargs):
+        started.set()
+        assert release.wait(10)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(scheduler, "diagnose_document", slow)
+    monkeypatch.setattr(scheduler, "STOP_WAIT_SECONDS", 0.2)
+    app.state.scheduler.tick_seconds = 0.05
+    read = capture()
+    app.state.scheduler.start()
+    assert started.wait(10)
+    app.state.scheduler.stop()                                      # gives up waiting after 0.2 s, and says so
+    assert app.state.scheduler._thread.is_alive()
+    release.set()
+    app.state.scheduler._thread.join(10)
+    assert not app.state.scheduler._thread.is_alive()
+    assert post.calls == [] and not (tmp_path / STATE).exists()     # nothing was baselined, sent or saved
+    assert app.state.scheduler.last["diagnose"].reason == "stopping"
+    assert [r for r in read() if r["event"] == "warning" and "did not finish" in r["msg"]]
+
+
+def test_the_snapshot_job_saves_nothing_once_the_stop_is_asked(tmp_path, clock, post, monkeypatch):
+    app = make_app(tmp_path, clock)
+    real = scheduler.snapshot_document
+
+    def stopping(*args, **kwargs):
+        app.state.scheduler._stop.set()
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(scheduler, "snapshot_document", stopping)
+    result = job(app.state.scheduler.tick(), "snapshot")
+    assert (result.result, result.reason) == ("skipped", "stopping") and snapshots(tmp_path) == []
+
+
+def test_a_stop_asked_while_the_job_waits_for_the_state_ends_the_wait(tmp_path, clock, post, monkeypatch):
+    import threading
+
+    from homelab_probe.util import file_lock
+
+    app = make_app(tmp_path, clock)
+    lock = tmp_path / "snapshots" / "site-1" / "notify-state.json.lock"
+    result = []
+    holder_ready, release = threading.Event(), threading.Event()
+
+    def hold():
+        with file_lock(lock):
+            holder_ready.set()
+            release.wait(10)
+
+    holder = threading.Thread(target=hold)
+    holder.start()
+    assert holder_ready.wait(10)
+    worker = threading.Thread(target=lambda: result.append(job(app.state.scheduler.tick(), "diagnose")))
+    worker.start()
+    time.sleep(0.3)
+    app.state.scheduler._stop.set()                                   # the wait for the lock ends at once
+    worker.join(5)
+    release.set()
+    holder.join()
+    assert not worker.is_alive() and (result[0].result, result[0].reason) == ("skipped", "stopping")
+    assert post.calls == [] and not (tmp_path / STATE).exists()
+
+
+def test_a_planned_message_is_not_sent_when_the_stop_comes_before_the_send(tmp_path, monkeypatch):
+    from test_notify import finding
+    from test_notify_lock import CONFIG, SITE
+
+    from homelab_probe.diagnose import CRITICAL
+    from homelab_probe.notify import process
+    from homelab_probe.settings import DiagnoseSettings
+
+    sent = FakePost(200)
+    monkeypatch.setattr(notify_module.requests, "post", sent)
+    asked = iter([False, True])                                        # not at the start, then yes before the send
+    outcome = process([finding(CRITICAL, "Gateway", "device is offline")], config=CONFIG, settings=DiagnoseSettings(),
+                      site=SITE, base=tmp_path, cancelled=lambda: next(asked))
+    assert outcome.kind == "cancelled" and sent.calls == [] and not (tmp_path / "site-1" / "notify-state.json").exists()
+
+
+def test_a_scheduler_stopped_before_it_runs_anything_runs_nothing(tmp_path, clock, post):
+    app = make_app(tmp_path, clock)
+    app.state.scheduler._stop.set()
+    results = app.state.scheduler.tick()
+    assert [(r.job, r.result) for r in results] == [("diagnose", "skipped"), ("snapshot", "skipped")]
+    assert post.calls == [] and not (tmp_path / STATE).exists() and snapshots(tmp_path) == []
