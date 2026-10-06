@@ -66,7 +66,7 @@ class RequestLog:
 def create_app(config: Config, settings_path: Optional[Path] = None, state_dir: Optional[Path] = None, *,
                service: Optional[ControllerService] = None, auth: Optional[AuthState] = None, demo: bool = False,
                hosts: Optional[List[str]] = None, setup: Optional[SetupState] = None,
-               read_only: bool = False, scheduler: bool = False) -> FastAPI:
+               read_only: bool = False, scheduler: bool = False, env_named: bool = False) -> FastAPI:
     """The app for ``config``. ``settings_path`` is the ``hlp.toml`` to use and ``state_dir`` the data directory (the
     accounts file and the audit log are there), ``service`` the way to the controller (one is made from ``config``
     when none is given: the synthetic network for a ``demo``), ``auth`` the accounts, sessions and throttle (made from
@@ -101,6 +101,7 @@ def create_app(config: Config, settings_path: Optional[Path] = None, state_dir: 
     )
     app.state.config, app.state.settings_path, app.state.state_dir = config, settings_path, state_dir
     app.state.read_only = read_only
+    app.state.env_named = env_named                  # the settings come from a file named with --env-file or HLP_ENV
     app.state.scheduler = Scheduler(app) if scheduler else None
     app.state.deliveries = status_api.Deliveries()
     app.state.setup = setup

@@ -278,3 +278,15 @@ def test_the_runner_refuses_a_wildcard_allowed_host_for_a_caller_that_skips_the_
         with pytest.raises(ValueError, match="not a host name or address"):
             runner.run(config, "127.0.0.1", 1, None, data, allowed=allowed)
     assert served == []
+
+
+def test_the_server_knows_whether_its_settings_come_from_a_named_file(configured, served, data, tmp_path, monkeypatch):
+    assert cli.main(["serve", "--data-dir", str(data)]) == 0
+    assert served[-1][0].state.env_named is False
+    named = tmp_path / "named.env"
+    named.write_text("UNIFI_URL=https://controller.example\nUNIFI_API_KEY=the-api-key-0123456789\n")
+    assert cli.main(["--env-file", str(named), "serve", "--data-dir", str(data)]) == 0
+    assert served[-1][0].state.env_named is True
+    monkeypatch.setenv("HLP_ENV", str(named))
+    assert cli.main(["serve", "--data-dir", str(data)]) == 0
+    assert served[-1][0].state.env_named is True

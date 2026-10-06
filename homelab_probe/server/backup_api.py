@@ -119,7 +119,8 @@ def router() -> APIRouter:
         with Slot():
             try:
                 package = backup.unpack(open_sealed(blob, body.passphrase))
-                shown = backup.preview(package, directory, settings_path_of(request.app), os.environ)
+                shown = backup.preview(package, directory, settings_path_of(request.app), os.environ,
+                                      bool(request.app.state.env_named))
             except BackupError as error:
                 raise failure(error) from error
         audit_event(request, "backup.previewed", request.state.session.username, created=shown["created_at"],

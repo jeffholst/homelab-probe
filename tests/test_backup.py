@@ -16,6 +16,8 @@ from homelab_probe.notes import NotesStore
 from homelab_probe.triage import TriageStore
 
 NOW = 1_900_000_000.0
+SNAPSHOT = ('{"schema_version": 1, "site": {"name": "Default", "id": "site-1"}, '
+            '"controller": {"application_version": "10.0"}, "devices": [], "clients": [], "reservations": []}')
 KEY = "the-api-key-0123456789"
 NOTE = "the secret reason for the note"
 CERT = "-----BEGIN CERTIFICATE-----\nMIIBszCCAVmgAwIBAgIUAAAA\n-----END CERTIFICATE-----\n"
@@ -37,9 +39,9 @@ def make_data(base, *, admin=True):
     NotesStore(site, "site-1").add("device:AA:BB:CC:00:00:01", NOTE, "alice", NOW)
     NotesStore(site, "site-1").add("finding:" + "a" * 16, "another", "alice", NOW)
     TriageStore(site, "site-1").set_state("b" * 16, "wan.availability", "acknowledged", "alice", NOW)
-    (site / "snapshot-20260101-000000Z.json").write_text('{"schema_version": 1}')
+    (site / "snapshot-20260101-000000Z.json").write_text(SNAPSHOT)
     (site / "notify-state.json").write_text("{}")
-    (base / "snapshots" / "snapshot-20250101-000000Z.json").write_text('{"schema_version": 1}')
+    (base / "snapshots" / "snapshot-20250101-000000Z.json").write_text(SNAPSHOT)
     (base / "audit.log").write_text('{"event": "x"}\n')
     (base / "audit.log.1").write_text('{"event": "old"}\n')
     return base
@@ -525,3 +527,112 @@ def test_a_file_that_cannot_be_examined_or_opened_refuses_the_backup(data, monke
 def test_a_file_that_vanishes_between_the_listing_and_the_read_refuses_the_backup(data):
     assert code(lambda: backup._listed(data / "vanished.json")) == "unsafe"
     assert backup._listed(data / "users.json") == data / "users.json"
+
+
+# -- review: strict versions, the snapshot reader, the audit read, a named settings file -----------------------------
+
+@pytest.mark.parametrize("change, error", [
+    ({"format": True}, "unsupported_format"), ({"format": 1.0}, "unsupported_format"),
+    ({"format": "1"}, "unsupported_format"), ({"data_format": True}, "unsupported_data_format"),
+    ({"data_format": 1.0}, "unsupported_data_format"), ({"data_format": [1]}, "unsupported_data_format")])
+def test_a_version_is_exactly_an_integer_not_something_that_equals_one(change, error):
+    assert code(partial(backup.unpack, zip_of({}, manifest=valid_manifest(**change)))) == error
+    assert backup.unpack(zip_of({}, manifest=valid_manifest())).manifest["format"] == 1
+
+
+@pytest.mark.parametrize("content", ["{}", "[]", "not json", '{"schema_version": 2}', '{"schema_version": true}',
+                                     '{"schema_version": 1}',
+                                     '{"schema_version": 1, "site": {"name": 1, "id": "x"}, "controller": {}, '
+                                     '"devices": [], "clients": [], "reservations": []}'])
+def test_a_snapshot_must_be_one_the_snapshot_reader_accepts(data, content):
+    files = backup.collect(data, data / "hlp.toml", ("snapshots",))
+    files["snapshots/site-1/snapshot-20260101-000000Z.json"] = content.encode()
+    with pytest.raises(BackupError) as caught:
+        backup.inspect(Package({}, files))
+    assert caught.value.code == "invalid_content" and caught.value.category == "snapshots"
+    assert backup.inspect(package_of(data))["counts"]["snapshots"] == 2          # the good ones pass
+
+
+def test_the_audit_files_are_read_until_they_are_seen_unchanged(data, monkeypatch):
+    real = backup._read
+    appended = []
+
+    def writer_in_the_way(path, limit):
+        if path.name == "audit.log" and not appended:
+            appended.append(True)
+            with open(path, "a") as handle:
+                handle.write('{"event": "written during the read"}\n')
+        return real(path, limit)
+
+    monkeypatch.setattr(backup, "_read", writer_in_the_way)
+    files = backup.collect(data, data / "hlp.toml", ("audit",))
+    assert b"written during the read" in files["audit.log"] and files["audit.log"] == (data / "audit.log").read_bytes()
+
+
+def test_a_rotation_during_the_read_is_seen_and_read_again(data, monkeypatch):
+    real = backup._read
+    done = []
+
+    def rotate(path, limit):
+        if path.name == "audit.log" and not done:
+            done.append(True)
+            os.replace(data / "audit.log.1", data / "audit.log.2")
+            os.replace(data / "audit.log", data / "audit.log.1")
+            (data / "audit.log").write_text('{"event": "new"}\n')
+        return real(path, limit)
+
+    monkeypatch.setattr(backup, "_read", rotate)
+    files = backup.collect(data, data / "hlp.toml", ("audit",))
+    audit = {n: d for n, d in files.items() if n.startswith("audit")}
+    assert set(audit) == {"audit.log", "audit.log.1", "audit.log.2"} and audit["audit.log"] == b'{"event": "new"}\n'
+
+
+def test_an_audit_log_that_never_stops_changing_is_busy_not_a_mixture(data, monkeypatch):
+    real = backup._read
+
+    def always_writing(path, limit):
+        with open(data / "audit.log", "a") as handle:
+            handle.write("x\n")
+        return real(path, limit)
+
+    monkeypatch.setattr(backup, "_read", always_writing)
+    assert code(lambda: backup.collect(data, data / "hlp.toml", ("audit",))) == "busy"
+
+
+def test_the_audit_files_count_towards_the_total_and_a_link_among_them_refuses(data, monkeypatch, tmp_path):
+    others = sum(len(d) for d in backup.collect(data, data / "hlp.toml").values())
+    monkeypatch.setattr(backup, "MAX_TOTAL", others + 5)
+    assert code(lambda: backup.collect(data, data / "hlp.toml", ("audit",))) == "too_large"
+    monkeypatch.undo()
+    (data / "audit.log.1").unlink()
+    (data / "audit.log.1").symlink_to(tmp_path)
+    assert code(lambda: backup.collect(data, data / "hlp.toml", ("audit",))) == "unsafe"
+    assert backup.collect(data, data / "hlp.toml") and backup._audit_paths(tmp_path / "nowhere") == {}
+
+
+def test_a_server_that_reads_a_named_settings_file_keeps_every_restored_setting_overridden(data):
+    package = backup.unpack(pack_all(data))
+    shown = backup.preview(package, data, data / "hlp.toml", {}, env_named=True)
+    assert shown["environment_overrides"] == ["NOTIFY_NTFY_URL", "UNIFI_API_KEY", "UNIFI_URL"]
+    [warning] = shown["warnings"]
+    assert warning["code"] == "env_file_named" and "--env-file" in warning["message"]
+    assert KEY not in json.dumps(shown)
+    package.files.pop(".env")
+    assert backup.preview(package, data, data / "hlp.toml", {}, env_named=True)["warnings"] == []
+
+
+def test_a_file_that_vanishes_during_the_read_is_read_again_for_the_audit_and_refuses_for_the_rest(data, monkeypatch):
+    real = backup._read
+    gone = []
+
+    def vanish(path, limit):
+        if path.name == "audit.log.1" and not gone:
+            gone.append(True)
+            os.unlink(path)
+        return real(path, limit)
+
+    monkeypatch.setattr(backup, "_read", vanish)
+    files = backup.collect(data, data / "hlp.toml", ("audit",))
+    assert "audit.log" in files and "audit.log.1" not in files
+    monkeypatch.setattr(backup, "_read", lambda path, limit: (_ for _ in ()).throw(FileNotFoundError()))
+    assert code(lambda: backup.collect(data, data / "hlp.toml")) == "unsafe"

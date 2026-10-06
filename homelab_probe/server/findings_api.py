@@ -16,7 +16,7 @@ import datetime
 import re
 import time
 from pathlib import Path
-from typing import Annotated, Any, Dict, List, Literal, Optional
+from typing import Annotated, Any, Dict, List, Literal, Optional, Tuple
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi import Path as PathParam
@@ -30,7 +30,7 @@ from ..documents import diagnose_document
 from ..history import DEFAULT_DIR, site_dir
 from ..notes import NotesStore
 from ..sitefile import StoreError
-from ..triage import STATES, TriageError, TriageStore, finding_id, guidance, iso, rank_findings
+from ..triage import MAX_NOTE, STATES, Ranked, TriageError, TriageStore, finding_id, guidance, iso, rank_findings
 from .auth import admin, audit_event, local_write
 from .errors import ApiError, error_responses, from_controller
 from .routes import RefreshQ, SiteP, checked_site
@@ -57,6 +57,7 @@ LIST_SCHEMA: Dict[str, Any] = {
     "type": "object", "required": ["items", "summary", "complete", "triage_available", "generated_at", "warnings"],
     "properties": {"items": {"type": "array", "items": FINDING_SCHEMA}, "summary": {"type": "object"},
                    "complete": {"type": "boolean"}, "triage_available": {"type": "boolean"},
+                   "notes_available": {"type": "boolean"},
                    "limitations": {"type": "array", "items": {"type": "string"}},
                    "generated_at": {"type": "string"}, "warnings": {"type": "array", "items": {"type": "string"}}},
 }
@@ -66,7 +67,7 @@ class TriageBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     state: Literal["open", "acknowledged", "snoozed"]
     until: Optional[str] = Field(default=None, max_length=10, description="With snoozed: the last day, 2026-10-10")
-    note: str = Field(default="", max_length=400)
+    note: str = Field(default="", max_length=MAX_NOTE, description=f"Plain text, at most {MAX_NOTE} characters")
 
 
 def end_of(day: str) -> float:
@@ -84,6 +85,25 @@ def end_of(day: str) -> float:
 def store_for(request: Request, site: Dict[str, Any]) -> TriageStore:
     base = Path(request.app.state.state_dir or ".") / DEFAULT_DIR
     return TriageStore(site_dir(base, site), str(site.get("id") or ""))
+
+
+def note_counts(request: Request, record: Dict[str, Any]) -> Tuple[Dict[str, int], bool]:
+    """(how many notes each subject has, whether the notes file could be read). An unreadable file is **not** zero
+    notes: the caller says so (``notes_available``)."""
+    store = store_for(request, record)
+    try:
+        return NotesStore(store.directory, store.site_id).counts(), True
+    except StoreError:
+        return {}, False
+
+
+def item_of(r: Ranked) -> Dict[str, Any]:
+    """A finding as the list and the change show it: the same complete representation in both."""
+    checks, docs = guidance(r.finding["code"])
+    return {"id": r.id, "rank": r.rank, **r.finding, "priority": {"score": r.score, "scope": r.scope,
+                                                                    "reasons": r.reasons},
+            "triage": r.triage, "first_seen_at": iso(r.first_seen_at), "limitations": r.limitations,
+            "next_checks": checks, "next_checks_are": "general guidance for this kind of check", "docs": docs}
 
 
 def failure(error: TriageError) -> ApiError:
@@ -134,22 +154,15 @@ def router() -> APIRouter:
             limitations.append("This read was partial or left some checks out: findings may be missing, and "
                                "nothing can be said to have cleared.")
         ranked = rank_findings(document.data["findings"], entries, now, read["complete"])
-        try:
-            notes = NotesStore(store_for(request, record).directory, store_for(request, record).site_id).counts()
-        except StoreError:
-            notes = {}                                                  # without the notes file there are no counts
-        items = []
-        for r in ranked:
-            checks, docs = guidance(r.finding["code"])
-            items.append({"id": r.id, "rank": r.rank, **r.finding,
-                          "priority": {"score": r.score, "scope": r.scope, "reasons": r.reasons},
-                          "triage": r.triage, "first_seen_at": iso(r.first_seen_at), "limitations": r.limitations,
-                          "next_checks": checks, "next_checks_are": "general guidance for this kind of check",
-                          "docs": docs, "note_count": notes.get(f"finding:{r.id}", 0)})
+        notes, notes_available = note_counts(request, record)
+        if not notes_available:
+            limitations.append("Note counts are not shown: the notes file cannot be used (see the notes API).")
+        items = [{**item_of(r), "note_count": notes.get(f"finding:{r.id}", 0)} for r in ranked]
         states = {state: sum(1 for r in ranked if r.triage["state"] == state) for state in STATES}
         return {"site": {"id": str(record.get("id") or ""), "name": str(record.get("name") or "")},
                 "items": items, "summary": {**document.data["summary"], **states, "total": len(items)},
-                "complete": read["complete"], "triage_available": available, "limitations": limitations,
+                "complete": read["complete"], "triage_available": available, "notes_available": notes_available,
+                "limitations": limitations,
                 "generated_at": built.generated_at, "warnings": built.warnings}
 
     @api.put("/{finding}/triage", dependencies=[Depends(admin)], summary="Acknowledge, snooze or reopen a finding",
@@ -175,7 +188,9 @@ def router() -> APIRouter:
         audit_event(request, "triage.changed", user, finding=finding, code=code, state=body.state,
                     until=body.until or "")
         entries = store_for(request, read["site"]).load()
-        ranked = rank_findings([ours[finding]], entries, CLOCK(), read["complete"])[0]
-        return {"id": ranked.id, **ranked.finding, "triage": ranked.triage}
+        ranked = rank_findings(document.data["findings"], entries, CLOCK(), read["complete"])
+        notes, _ = note_counts(request, read["site"])
+        found = next(r for r in ranked if r.id == finding)
+        return {**item_of(found), "note_count": notes.get(f"finding:{finding}", 0)}
 
     return api
