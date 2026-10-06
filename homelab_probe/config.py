@@ -58,8 +58,10 @@ SECRET_FILE_GROUP_OTHER_BITS = 0o077   # any of these set means someone besides 
 
 # Every variable the code reads (``example.env`` documents them; ``tests/test_env_contents.py`` pins the list). Not
 # ``HLP_ENV`` (it names the file, so it is read before the file and does nothing inside it) and ``HLP_SETUP_TOKEN``
-# (a secret that is read from the environment only).
-NOT_FOR_THE_FILE = (ENV_FILE_VAR, SETUP_TOKEN_VAR)
+# (a secret that is read from the environment only) and the terminal variables ``present.py`` reads from the
+# environment of the shell (``NO_COLOR``, ``TERM``, ``COLUMNS``, ``CI``).
+TERMINAL_VARS = ("NO_COLOR", "TERM", "COLUMNS", "CI")
+NOT_FOR_THE_FILE = (ENV_FILE_VAR, SETUP_TOKEN_VAR, *TERMINAL_VARS)
 KNOWN_VARIABLES = (
     "UNIFI_URL", "UNIFI_API_KEY", "UNIFI_SITE_ID", "UNIFI_VERIFY_SSL", "UNIFI_TIMEOUT", "UNIFI_PARALLEL_REQUESTS",
     "ALLOW_INSECURE_HTTP", "LOG_LEVEL", "LOG_FORMAT", "AUDIT_LOG_MAX_MB", "AUDIT_LOG_FILES",

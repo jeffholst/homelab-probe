@@ -13,7 +13,7 @@ import os
 import sys
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -76,6 +76,7 @@ from .history import (
 )
 from .new_clients import render_table as render_new_clients
 from .notify import STATE_DIR, destinations_from_config, process
+from .present import Presentation
 from .query import format_table, render_csv, render_table
 from .restore import recover as recover_restore
 from .settings import DiagnoseSettings, expired_rules, load_settings, server_settings_path
@@ -101,12 +102,15 @@ EXIT_USAGE = 64
 @dataclass(frozen=True)
 class Context:
     """What a handler gets: the parsed arguments, the configuration, the diagnose settings (loaded only
-    for commands that want them) and the controller client."""
+    for commands that want them), the controller client and the presentation policy (``present``: whether and how
+    this run may style its output, see ``present.py``; an explicitly plain policy, never styled whatever is installed,
+    when a caller builds a context without one)."""
 
     args: argparse.Namespace
     config: Config
     settings: Optional[DiagnoseSettings]
     client: UniFiClient
+    present: Presentation = field(default_factory=lambda: Presentation(plain=True))
 
 
 def _no_check(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
