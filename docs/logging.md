@@ -56,6 +56,8 @@ The `logger` field is the module's name under `homelab_probe` (for example `home
 | `server.start` | INFO | `host`, `port`, `demo` | The web server started listening (INFO): the address, the port, whether it is a demo. |
 | `server.cache` | DEBUG | `outcome`, `label` | One read of the controller by the web server (DEBUG): answered from the cache (hit), read (miss), served stale because the read failed, or refused because it just failed (coalesced). |
 | `server.request` | INFO | `method`, `route`, `status`, `duration_ms` | One request to the web server (INFO): the method, the route template (never the path), the status and the milliseconds. |
+| `scheduler.start` | INFO | `diagnose_minutes`, `snapshot_hours`, `keep` | The scheduler of the web server started (INFO): how often it runs `diagnose`, takes a snapshot and how many snapshots it keeps. |
+| `scheduler.run` | INFO or WARNING | `job`, `run_id`, `result`, `reason`, `duration_ms`, `findings`, `removed`, `destinations` | One run of a scheduled job ended (INFO ok or skipped, WARNING failed): the job, its run id, the result, a fixed reason, the milliseconds and counts; never a finding, a name or a message. |
 | `watch.pass` | INFO | `findings`, `complete`, `retry_s` | One pass of `diagnose --watch` finished (INFO): how many findings, whether the read was complete. |
 | `watch.unavailable` | WARNING | `reason`, `findings`, `complete`, `retry_s` | A pass of `diagnose --watch` could not read the controller or got only part of its data (WARNING). |
 

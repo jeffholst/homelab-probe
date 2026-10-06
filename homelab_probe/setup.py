@@ -37,6 +37,9 @@ from .config import (
     parse_log_format,
     parse_log_level,
     parse_parallel,
+    parse_scheduler_diagnose_minutes,
+    parse_scheduler_snapshot_hours,
+    parse_scheduler_snapshot_keep,
     parse_session_idle_minutes,
     parse_session_max_hours,
     parse_timeout,
@@ -246,6 +249,9 @@ CHECKS: List[Tuple[str, Callable[[Mapping[str, Optional[str]]], None]]] = [
     ("AUDIT_LOG_FILES", _need("AUDIT_LOG_FILES", parse_audit_log_files)),
     ("SESSION_IDLE_MINUTES", _need("SESSION_IDLE_MINUTES", parse_session_idle_minutes)),
     ("SESSION_MAX_HOURS", _need("SESSION_MAX_HOURS", parse_session_max_hours)),
+    ("SCHEDULER_DIAGNOSE_MINUTES", _need("SCHEDULER_DIAGNOSE_MINUTES", parse_scheduler_diagnose_minutes)),
+    ("SCHEDULER_SNAPSHOT_HOURS", _need("SCHEDULER_SNAPSHOT_HOURS", parse_scheduler_snapshot_hours)),
+    ("SCHEDULER_SNAPSHOT_KEEP", _need("SCHEDULER_SNAPSHOT_KEEP", parse_scheduler_snapshot_keep)),
     ("NOTIFY_*", _notify),
 ]
 

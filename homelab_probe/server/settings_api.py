@@ -48,9 +48,13 @@ _LOCK = threading.Lock()          # one change at a time: the version check and 
 ENVIRONMENT_MANAGED: Dict[str, str] = {}
 
 
-def settings_file(request: Request) -> Path:
+def settings_path_of(app: Any) -> Path:
     """The ``hlp.toml`` of this server: the one named with ``--config``, else the one in the data directory."""
-    return server_settings_path(request.app.state.settings_path, Path(request.app.state.state_dir or "."))
+    return server_settings_path(app.state.settings_path, Path(app.state.state_dir or "."))
+
+
+def settings_file(request: Request) -> Path:
+    return settings_path_of(request.app)
 
 
 def load_effective(path: Path) -> DiagnoseSettings:

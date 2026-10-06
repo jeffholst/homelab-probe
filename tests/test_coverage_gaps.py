@@ -10,7 +10,8 @@ import sys
 
 import pytest
 
-from homelab_probe import cli, commands
+from homelab_probe import cli
+from homelab_probe import notify as notify_module
 from homelab_probe import wan as wan_module
 from homelab_probe.client import UniFiAPIError
 from homelab_probe.client_view import _link_text, build_client_detail, find_clients, known_clients, render_detail
@@ -61,6 +62,18 @@ def test_a_baseline_that_cannot_be_saved_is_a_config_error(fake_client, monkeypa
     monkeypatch.setenv("NOTIFY_NTFY_URL", "https://ntfy.example/topic")
     argv = ["diagnose", "--no-events", "--notify", "--notify-baseline", "--notify-state", str(blocker / "s.json")]
     assert run(fake_client, monkeypatch, argv) == cli.EXIT_ERROR
+    assert "cannot be locked" in capsys.readouterr().err                  # the lock is taken first, in the same place
+
+
+def test_a_baseline_that_cannot_be_written_is_a_config_error(fake_client, monkeypatch, capsys, tmp_path):
+    monkeypatch.setenv("NOTIFY_NTFY_URL", "https://ntfy.example/topic")
+
+    def refuse(path, state):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(notify_module, "save_state", refuse)
+    argv = ["diagnose", "--no-events", "--notify", "--notify-baseline", "--notify-state", str(tmp_path / "s.json")]
+    assert run(fake_client, monkeypatch, argv) == cli.EXIT_ERROR
     assert "the notification baseline could not be saved" in capsys.readouterr().err
 
 
@@ -78,7 +91,7 @@ def test_a_quiet_run_whose_state_cannot_be_updated_is_a_config_error(fake_client
     def refuse(path, new_state):
         raise PermissionError(13, "Permission denied")
 
-    monkeypatch.setattr(commands, "save_state", refuse)
+    monkeypatch.setattr(notify_module, "save_state", refuse)
     capsys.readouterr()
     assert run(fake_client, monkeypatch, base) == cli.EXIT_ERROR
     assert "the notification state could not be saved" in capsys.readouterr().err
