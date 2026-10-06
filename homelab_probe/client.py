@@ -69,6 +69,10 @@ class UniFiAPIError(Exception):
         self.tls_reason = tls_reason
 
 
+def _ignore(text: str) -> None:
+    """The default ``UniFiClient.stage`` and ``note``: nobody is showing progress."""
+
+
 class UniFiClient:
     def __init__(
         self,
@@ -87,6 +91,10 @@ class UniFiClient:
         # --verbose: called with one line per request attempt (never with the API key, a response
         # body or a query's values); the counters feed the summary line at the end of a run.
         self.trace: Optional[Callable[[str], None]] = None
+        # progress (see progress.py): what the work is waiting for now, and a word about it; no-ops unless a run shows
+        # progress. They take fixed phrases only, never text from the network.
+        self.stage: Callable[[str], None] = _ignore
+        self.note: Callable[[str], None] = _ignore
         self.attempts_made = 0
         self.attempts_retried = 0
         self.seconds_waiting = 0.0
@@ -217,6 +225,7 @@ class UniFiClient:
                 method, _, path = label.partition(" ")
                 self.debug(f"{label} -> retrying in {pause:g} s (attempt {attempt + 1} of {attempts})", "http.retry",
                            method=method, path=path, pause_s=pause, attempt=attempt + 1, attempts=attempts)
+        self.note(f"retrying, attempt {attempt + 1} of {attempts}")
         self._sleep(pause)
 
     def tracing(self) -> bool:

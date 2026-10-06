@@ -26,6 +26,7 @@ from .commands import (
 from .config import ConfigError, load_config, parse_parallel, parse_timeout, validate_site
 from .demo import demo_client, demo_config
 from .present import COLOR_CHOICES, Presentation
+from .progress import Progress, eligible
 from .settings import DiagnoseSettings, load_settings
 from .snapshot import warn
 
@@ -172,8 +173,11 @@ def main(argv: Optional[List[str]] = None) -> int:
                 settings = load_settings(getattr(args, "config", None)) if wants else None
             command.prepare(args, config)
             client = demo_client(config) if args.demo else UniFiClient.from_config(config)
+            present = Presentation.from_args(args)
             try:
-                return command.run(Context(args, config, settings, client, Presentation.from_args(args)))
+                with Progress(present, enabled=eligible(args)) as progress:     # a transient line, only where welcome
+                    client.stage, client.note = progress.stage, progress.note
+                    return command.run(Context(args, config, settings, client, present))
             finally:
                 if client is not None and client.attempts_made:
                     verbose(client.summary(), "run.summary")

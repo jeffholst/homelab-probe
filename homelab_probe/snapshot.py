@@ -438,6 +438,7 @@ def collect_snapshot(
     The reads do not depend on each other (except a device's detail and statistics on the device list), so
     when the client has more than one worker they run side by side; the result and the order of the warnings
     are the same either way."""
+    client.stage("Connecting to the controller")
     site_info = client.resolve_site(site)
     site_ref = site_info.get("internalReference") or site
     site_id = site_info["id"]
@@ -455,17 +456,21 @@ def collect_snapshot(
                 reads.submit("legacy_clients", lambda notes: _legacy_clients_or_empty(client, site_ref, notes))
             _submit_extras(reads, needs, client, site_ref, now_ms, users=True)
             if needs.devices is not False:
+                client.stage("Reading devices")
                 snap.devices = reads.result("devices")
             if needs.device_extras is not False:
                 _submit_device_extras(reads, snap, client, needs.device_stats is not False)
             if needs.clients is not False:
+                client.stage("Reading clients")
                 snap.clients = reads.result("clients")
             if needs.legacy_devices is not False:
                 snap.legacy_devices, snap.legacy_devices_available = reads.result("legacy_devices")
             if needs.legacy_clients is not False:
                 snap.legacy_clients, snap.legacy_clients_available = reads.result("legacy_clients")
+            client.stage("Reading network details")
             _apply_extras(snap, reads, needs, users=True)
             if needs.device_extras is not False:
+                client.stage("Reading device details")
                 _apply_device_extras(snap, reads, needs.device_stats is not False)
         finally:
             reads.show_warnings(_WARNING_ORDER)
@@ -508,9 +513,11 @@ def collect_event_snapshot(
     now_ms: Optional[int] = None,
 ) -> Snapshot:
     """Only the event log (no devices or clients), for the `events` command."""
+    client.stage("Connecting to the controller")
     site_info = client.resolve_site(site)
     site_ref = site_info.get("internalReference") or site
     notes: List[str] = []
+    client.stage("Reading the event log")
     events, truncated, available = _events_or_empty(client, site_ref, wanted, notes, now_ms)
     for message in notes:
         warn(message)

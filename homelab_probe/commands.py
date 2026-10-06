@@ -17,7 +17,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from . import accounts, logs, setup
+from . import accounts, logs, progress, setup
 from . import config as config_module
 from .backup import BackupError
 from .client import UniFiAPIError, UniFiClient
@@ -149,7 +149,9 @@ def _not_run(ctx: "Context") -> int:
 
 def say(text: Any = "", file: Any = None) -> None:
     """Print ``text`` with control characters removed (names come from devices on the network,
-    and an escape sequence in one must not reach the terminal). Line breaks are kept."""
+    and an escape sequence in one must not reach the terminal). Line breaks are kept. The first output of a command
+    ends its transient progress line (``progress.finish``), so a result never shares the screen with a spinner."""
+    progress.finish()
     print(safe_output(str(text)), file=file)
 
 

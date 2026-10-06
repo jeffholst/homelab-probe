@@ -203,10 +203,20 @@ The optional **`pretty` extra** (Rich) lets commands style their output on a ter
 - **Machine-readable output is never styled**, even with `--color always`: `--json`, `--csv`, `topology --format mermaid|dot`, `export` and `completion` (and `--version`) print the same bytes as without the extra. No heading, escape sequence, wrapping or animation is mixed into data.
 - **Progress** (transient status on stderr) additionally needs stderr to be a terminal that is not `TERM=dumb`, at least 40 columns, no `CI` environment variable, and neither `--verbose` (the log lines would interleave) nor `--no-progress`.
 - **Narrow, dumb and non-UTF-8 terminals** fall back safely: decorative headings, symbols and progress are skipped below 40 columns (`COLUMNS` is honored, else the terminal's size is used, else 80) and with `TERM=dumb`; symbols are ASCII (`ok`, `!`, `x`) unless the stream's encoding is UTF-8.
+- **Progress is on for these commands only:** `audit`, `client`, `diagnose`, `diff`, `events`, `firewall`, `info`, `new-clients`, `query`, `snapshot`, `topology`, `wan` and `wifi` (never `diagnose --watch` or `--notify`, `serve`, `doctor`, `export`, `completion`, `init` or `web-user`). It needs the `pretty` extra, like every other enhancement.
 - **Names stay literal.** A device or SSID called `[red]x[/red]` is printed as exactly that, never parsed as markup, and control characters in names are removed before anything is styled.
 - Only the presentation changes: exit codes, JSON schemas, CSV, the `--verbose` log format and the redaction of secrets are the same either way.
 
-This is the shared foundation (issue #233): the policy and its tests are in place and no command styles anything by default yet; colored findings, progress and headings arrive as the commands adopt it. For developers, `homelab_probe/present.py` is the one module that decides (see [development](development.md)).
+This is the shared foundation (issue #233) and the progress line (issue #234); colored findings and headings arrive as the commands adopt it. For developers, `homelab_probe/present.py` is the one module that decides (see [development](development.md)).
+
+### What the progress line shows
+
+A command that takes more than about 0.2 seconds draws **one line on stderr**, redrawn in place: a spinner, what it is really waiting for, and the elapsed time, for example `⠹ Reading devices 3.2s`. A quicker command draws nothing at all, and no artificial delay is ever added.
+
+- **Real stages**, wired to the work: `Connecting to the controller`, `Reading devices`, `Reading clients`, `Reading network details`, `Reading device details`, `Reading the event log`, `Running the checks`, `Checking Wi-Fi` and `Preparing the snapshot`. While a request waits to be retried the stage says `(retrying, attempt 2 of 3)`. There is no percentage, no bar and no estimate: the total is not known.
+- **One stable line.** It never reaches the last column (the label is shortened, the spinner and the time stay), uses ASCII spinner frames (`| / - \`) where the terminal is not UTF-8, and never wraps.
+- **Never in the way.** A warning is written on a clean line (the spinner is erased first and comes back after it), and the first line of the command's own output ends the progress for good. The line is erased and the cursor shown again when the command ends, fails or is interrupted with Ctrl+C. stdout is never touched, and a redirected stderr gets no escape sequences at all.
+- **Off** with `--no-progress` or `--plain`, with `--verbose` (the log lines would interleave), in `--json`/`--csv`/graph and other machine-readable modes, when `CI` is set, on `TERM=dumb`, on a terminal narrower than 40 columns and when stderr is not a terminal.
 
 ## Shell completion
 

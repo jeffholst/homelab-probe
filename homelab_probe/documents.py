@@ -98,6 +98,7 @@ def wifi_document(client: UniFiClient, site: str, min_signal: float = DEFAULT_MI
     """Radios, neighboring networks and the channel plan."""
     with logs.collect_warnings(quiet=not echo) as warnings:
         snap = collect_snapshot(client, site, WIFI_NEEDS)
+        client.stage("Checking Wi-Fi")
         report = build_wifi(snap, min_signal, band, ap)
     return Document("wifi", {"version": WIFI_JSON_VERSION, **report}, [logs.scrub(w) for w in warnings])
 
@@ -250,6 +251,7 @@ def diagnose_document(client: UniFiClient, site: str, settings: Optional[Diagnos
     settings = settings or DiagnoseSettings()
     with logs.collect_warnings(quiet=not echo) as warnings:
         snap = collect_snapshot(client, site, needs_for(areas, since))
+        client.stage("Running the checks")
         findings, ignored = apply_ignores(diagnose(snap, settings, areas=areas), settings.ignore, today)
     return Document("diagnose", findings_document(findings, ignored, show_ignored, areas),
                     [logs.scrub(w) for w in warnings],
@@ -309,7 +311,9 @@ def snapshot_document(client: UniFiClient, site: str, echo: bool = True) -> Docu
             version = str(client.info().get("applicationVersion") or "")
         except UniFiAPIError:
             version = ""
-        record = capture(collect_snapshot(client, site, INVENTORY_NEEDS), version)
+        snap = collect_snapshot(client, site, INVENTORY_NEEDS)
+        client.stage("Preparing the snapshot")
+        record = capture(snap, version)
     return Document("snapshot", record, [logs.scrub(w) for w in warnings])
 
 

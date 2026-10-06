@@ -40,6 +40,7 @@ homelab_probe/
   doctor.py              the doctor checks of the tool's own setup (versions, files, settings, controller, endpoints)
   notify.py              notifications: what changed since the last run, ntfy/webhook/email sending, state file
   completion.py          shell completion scripts for bash, zsh and fish, generated from the argument parser
+  progress.py            the transient progress line on stderr (`Progress`, the stages the work reports through `client.stage`)
   present.py             terminal presentation policy (`--color`, `--plain`, `--no-progress`, `NO_COLOR`); the only module that imports the optional Rich
   server/                the web server (`serve`, the `web` extra): the app factory, security middleware and request log (`app`, `security`), the cache and the controller service (`cache`, `service`), the report routes, errors and API schemas (`routes`, `errors`, `apischema`), the guided setup of a server with no settings (`wizard`), the built web app's files with their SPA fallback (`static`; the bundle is `homelab_probe/web/`, git-ignored, shipped in the wheel); never imported by the core
   tlsprobe.py            the guided setup's TLS steps: fetch the certificate a controller shows, test a pinned one, refuse addresses no controller has (standard library and urllib3)
