@@ -31,8 +31,10 @@ from .routes import SiteP, checked_site
 from .settings_api import load_effective, settings_path_of
 
 UNIFI = "/api/v1/unifi"
-QueryQ = Annotated[str, Query(min_length=MIN_QUERY, max_length=MAX_QUERY,
-                              description=f"What to look for: {MIN_QUERY} to {MAX_QUERY} characters, a name, a MAC "
+MAX_RAW_QUERY = 256         # the text as sent, before trimming; the 2 to 64 rule is parse_query's, on the trimmed text
+QueryQ = Annotated[str, Query(min_length=MIN_QUERY, max_length=MAX_RAW_QUERY,
+                              description=f"What to look for: {MIN_QUERY} to {MAX_QUERY} characters once trimmed of "
+                                          f"white space (at most {MAX_RAW_QUERY} before trimming), a name, a MAC "
                                           "address or an IP address (any spelling), a finding code or message")]
 LimitQ = Annotated[int, Query(ge=1, le=MAX_LIMIT, description="The most hits of each kind")]
 WORDING = {404: "No such site", 422: "The search text or the limit is not valid",

@@ -8488,13 +8488,13 @@
             }
           },
           {
-            "description": "What to look for: 2 to 64 characters, a name, a MAC address or an IP address (any spelling), a finding code or message",
+            "description": "What to look for: 2 to 64 characters once trimmed of white space (at most 256 before trimming), a name, a MAC address or an IP address (any spelling), a finding code or message",
             "in": "query",
             "name": "q",
             "required": true,
             "schema": {
-              "description": "What to look for: 2 to 64 characters, a name, a MAC address or an IP address (any spelling), a finding code or message",
-              "maxLength": 64,
+              "description": "What to look for: 2 to 64 characters once trimmed of white space (at most 256 before trimming), a name, a MAC address or an IP address (any spelling), a finding code or message",
+              "maxLength": 256,
               "minLength": 2,
               "title": "Q",
               "type": "string"

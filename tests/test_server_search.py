@@ -166,13 +166,22 @@ def test_a_notes_file_that_cannot_be_used_does_not_fail_the_search(tmp_path, vie
 
 # -- validation -------------------------------------------------------------------------------------------------------
 
-@pytest.mark.parametrize("params", [{}, {"q": ""}, {"q": "a"}, {"q": "x" * 65}, {"q": "  "}, {"q": " a "},
-                                    {"q": "ok", "limit": 0}, {"q": "ok", "limit": 51}, {"q": "ok", "limit": "many"}])
+@pytest.mark.parametrize("params", [
+    {}, {"q": ""}, {"q": "a"}, {"q": "x" * 65}, {"q": "  "}, {"q": " a "}, {"q": " " + "x" * 65}, {"q": "x" * 65 + " "},
+    {"q": " " * 70}, {"q": " " * 70 + "a"}, {"q": "x" * 257}, {"q": " " * 100 + "x" * 65 + " " * 100},
+    {"q": "ok", "limit": 0}, {"q": "ok", "limit": 51}, {"q": "ok", "limit": "many"}])
 def test_a_search_text_or_limit_out_of_range_is_422_and_reads_nothing(app, viewer, params):
     before = len(app.state.fake.calls)
     response = viewer.get(SEARCH, params=params)
     assert response.status_code == 422 and response.json()["error"] == "invalid_parameter"
-    assert len(app.state.fake.calls) == before or params == {"q": "  "}
+    assert len(app.state.fake.calls) == before
+
+
+@pytest.mark.parametrize("text", [" " + "x" * 64, "x" * 64 + " ", "  " + "x" * 64 + "  ", "\t" + "x" * 64 + "\t",
+                                  " " * 90 + "x" * 64 + " " * 90, " ab ", "  ab"])
+def test_the_length_rule_is_about_the_trimmed_text_so_white_space_around_a_valid_query_is_fine(viewer, text):
+    response = find(viewer, text)
+    assert response.status_code == 200 and response.json()["query"] == text.strip()
 
 
 def test_the_bounds_are_inclusive_and_blank_space_does_not_count(viewer):
@@ -311,5 +320,6 @@ def test_the_route_is_in_the_openapi_document_as_a_get_with_its_parameters(viewe
     parameters = {p["name"]: p for p in operation["parameters"]}
     assert set(spec["paths"]["/api/v1/unifi/sites/{site}/search"]) == {"get"}
     assert parameters["q"]["required"] is True and parameters["q"]["schema"]["minLength"] == 2
-    assert parameters["q"]["schema"]["maxLength"] == 64 and parameters["limit"]["schema"]["maximum"] == 50
+    assert parameters["q"]["schema"]["maxLength"] == 256 and parameters["limit"]["schema"]["maximum"] == 50
+    assert "once trimmed" in parameters["q"]["description"] and "256 before trimming" in parameters["q"]["description"]
     assert {"200", "401", "404", "422", "500", "502", "504"} <= set(operation["responses"])
