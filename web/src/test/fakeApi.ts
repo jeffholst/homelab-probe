@@ -294,6 +294,7 @@ export class FakeApi {
       csrf_token: session.csrf,
       idle_seconds_left: Math.floor((this.idleMs - (now - session.lastSeen)) / 1000),
       session_seconds_left: Math.floor((this.maxMs - (now - session.createdAt)) / 1000),
+      can_change_password: true,
     };
   }
 

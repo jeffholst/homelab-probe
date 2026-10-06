@@ -1,0 +1,24 @@
+# What the build may read: everything is excluded, then the few files the Dockerfile copies are let back in. A new
+# file never reaches the daemon or the image by accident, in particular none of the git-ignored ones that hold secrets
+# or real data (.env, hlp.toml, users.json, audit.log, snapshots/).
+*
+!pyproject.toml
+!README.md
+!homelab_probe
+!docs/schemas
+
+# Even inside what was let in: no secret, no state, no cache, wherever it is.
+**/.env
+**/.env.*
+**/*.env
+**/hlp.toml
+**/users.json*
+**/audit.log*
+**/snapshots
+**/certs
+**/__pycache__
+**/*.py[cod]
+**/*.egg-info
+**/.venv
+**/node_modules
+**/.git

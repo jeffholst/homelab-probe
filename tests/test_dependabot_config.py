@@ -26,7 +26,8 @@ def updates():
 
 def test_the_ecosystems_are_configured_weekly_from_their_manifests_directory_and_grouped():
     blocks = updates()
-    assert set(blocks) == {"github-actions", "uv", "npm"}
+    assert set(blocks) == {"github-actions", "uv", "npm", "docker"}
+    assert (ROOT / "Dockerfile").is_file()                          # the directory of the docker ecosystem is "/"
     for name, lines in blocks.items():
         text = "\n".join(lines)
         assert f'directory: "{"/web" if name == "npm" else "/"}"' in text, name

@@ -78,7 +78,7 @@ The warnings of a degraded read are also available as a list: `logs.collect_warn
 
 ## Docker and compose
 
-The official image will set `LOG_FORMAT=json` and write to stderr, so `docker logs` and the log driver see one JSON object per line. Until then, for the container in [Running on a schedule](scheduling.md#docker):
+The [Docker image](docker.md#logs) sets `LOG_FORMAT=json` and writes to stderr, so `docker logs` and the log driver see one JSON object per line. To raise the level and cap the size of the logs in compose:
 
 ```yaml
 services:
