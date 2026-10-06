@@ -147,14 +147,35 @@
       "EditedNote": {
         "additionalProperties": false,
         "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What the subject is called now",
+            "title": "Name"
+          },
+          "revision": {
+            "description": "The revision of the note that was read",
+            "pattern": "^[0-9a-f]{16}$",
+            "title": "Revision",
+            "type": "string"
+          },
           "text": {
+            "description": "Plain text, at most 4000 characters",
             "maxLength": 4000,
             "title": "Text",
             "type": "string"
           }
         },
         "required": [
-          "text"
+          "text",
+          "revision"
         ],
         "title": "EditedNote",
         "type": "object"
@@ -271,12 +292,26 @@
       "NewNote": {
         "additionalProperties": false,
         "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What the subject is called now",
+            "title": "Name"
+          },
           "subject": {
             "maxLength": 64,
             "title": "Subject",
             "type": "string"
           },
           "text": {
+            "description": "Plain text, at most 4000 characters",
             "maxLength": 4000,
             "title": "Text",
             "type": "string"
@@ -416,7 +451,8 @@
         "properties": {
           "note": {
             "default": "",
-            "maxLength": 400,
+            "description": "Plain text, at most 200 characters",
+            "maxLength": 200,
             "title": "Note",
             "type": "string"
           },
@@ -4489,6 +4525,9 @@
                       },
                       "type": "array"
                     },
+                    "notes_available": {
+                      "type": "boolean"
+                    },
                     "summary": {
                       "type": "object"
                     },
@@ -5868,6 +5907,12 @@
                           "author": {
                             "type": "string"
                           },
+                          "context": {
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
                           "created_at": {
                             "type": "string"
                           },
@@ -5878,6 +5923,9 @@
                             "type": "string"
                           },
                           "modified_by": {
+                            "type": "string"
+                          },
+                          "revision": {
                             "type": "string"
                           },
                           "subject": {
@@ -5894,7 +5942,8 @@
                           "author",
                           "created_at",
                           "modified_at",
-                          "modified_by"
+                          "modified_by",
+                          "revision"
                         ],
                         "type": "object"
                       },
@@ -6085,6 +6134,12 @@
                     "author": {
                       "type": "string"
                     },
+                    "context": {
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
                     "created_at": {
                       "type": "string"
                     },
@@ -6095,6 +6150,9 @@
                       "type": "string"
                     },
                     "modified_by": {
+                      "type": "string"
+                    },
+                    "revision": {
                       "type": "string"
                     },
                     "subject": {
@@ -6111,7 +6169,8 @@
                     "author",
                     "created_at",
                     "modified_at",
-                    "modified_by"
+                    "modified_by",
+                    "revision"
                   ],
                   "type": "object"
                 }
@@ -6205,7 +6264,7 @@
                 }
               }
             },
-            "description": "Too many notes"
+            "description": "Too many notes, or the note was changed since it was read"
           },
           "422": {
             "content": {
@@ -6321,6 +6380,227 @@
         "summary": "Add a note"
       }
     },
+    "/api/v1/unifi/sites/{site}/notes/subjects": {
+      "get": {
+        "operationId": "notes_subjects_api_v1_unifi_sites__site__notes_subjects_get",
+        "parameters": [
+          {
+            "description": "A site name, internal reference or UUID",
+            "in": "path",
+            "name": "site",
+            "required": true,
+            "schema": {
+              "description": "A site name, internal reference or UUID",
+              "maxLength": 120,
+              "title": "Site",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Part of a reference or a name",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "description": "Part of a reference or a name",
+              "maxLength": 64,
+              "title": "Q",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "properties": {
+                          "kind": {
+                            "type": "string"
+                          },
+                          "last_known": {
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
+                          "last_note_at": {
+                            "type": "string"
+                          },
+                          "note_count": {
+                            "type": "integer"
+                          },
+                          "subject": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "subject",
+                          "kind",
+                          "note_count",
+                          "last_note_at",
+                          "last_known"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "total"
+                  ],
+                  "title": "Response Notes Subjects Api V1 Unifi Sites  Site  Notes Subjects Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The subjects, newest note first"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "No such site or note"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A parameter is not valid"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The local files cannot be used"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The controller could not be read"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The controller timed out"
+          }
+        },
+        "summary": "Every subject that has notes, present or not, with its last-known name"
+      }
+    },
     "/api/v1/unifi/sites/{site}/notes/{note}": {
       "delete": {
         "operationId": "notes_delete_api_v1_unifi_sites__site__notes__note__delete",
@@ -6360,6 +6640,12 @@
                     "author": {
                       "type": "string"
                     },
+                    "context": {
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
                     "created_at": {
                       "type": "string"
                     },
@@ -6370,6 +6656,9 @@
                       "type": "string"
                     },
                     "modified_by": {
+                      "type": "string"
+                    },
+                    "revision": {
                       "type": "string"
                     },
                     "subject": {
@@ -6386,7 +6675,8 @@
                     "author",
                     "created_at",
                     "modified_at",
-                    "modified_by"
+                    "modified_by",
+                    "revision"
                   ],
                   "title": "Response Notes Delete Api V1 Unifi Sites  Site  Notes  Note  Delete",
                   "type": "object"
@@ -6610,6 +6900,12 @@
                     "author": {
                       "type": "string"
                     },
+                    "context": {
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
                     "created_at": {
                       "type": "string"
                     },
@@ -6620,6 +6916,9 @@
                       "type": "string"
                     },
                     "modified_by": {
+                      "type": "string"
+                    },
+                    "revision": {
                       "type": "string"
                     },
                     "subject": {
@@ -6636,7 +6935,8 @@
                     "author",
                     "created_at",
                     "modified_at",
-                    "modified_by"
+                    "modified_by",
+                    "revision"
                   ],
                   "title": "Response Notes Edit Api V1 Unifi Sites  Site  Notes  Note  Patch",
                   "type": "object"

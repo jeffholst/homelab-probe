@@ -2,9 +2,10 @@
 
 The triage of findings (``triage.py``) and the notes (``notes.py``) are files of this kind, so they have the same
 guarantees: **owner-only, written atomically, changed under a lock** (``<name>.json.lock``, which also waits for another
-run for a while and then says it is busy), **never read or written through a symbolic link** (the file, its directory
-or the directory above), **refused when the file names another site**, and a damaged file is a fixed error, never a
-traceback and never a path. Pure standard library.
+run for a while and then says it is busy), **never read or written through a symbolic link** (the file, its lock, the
+site's directory or the ``snapshots`` directory above it; the data directory itself is the operator's choice and may
+be a link, such as a mounted volume), **refused when the file does not name this site**, and a damaged file is a fixed
+error, never a traceback and never a path. Pure standard library.
 """
 
 import contextlib
@@ -45,9 +46,10 @@ class SiteFile:
         return isinstance(key, str) and isinstance(entry, dict)
 
     def _refuse_links(self) -> None:
-        if any(path.is_symlink() for path in (self.directory.parent, self.directory, self.path)):
-            raise StoreError("unsafe", f"The {self.label} file or a directory above it is a symbolic link, which is "
-                                       "left alone.")
+        lock = self.directory / (self.file_name + ".lock")
+        if any(path.is_symlink() for path in (self.directory.parent, self.directory, self.path, lock)):
+            raise StoreError("unsafe", f"The {self.label} file, its lock or the directory it is in is a symbolic link, "
+                                       "which is left alone.")
 
     @contextlib.contextmanager
     def locked(self) -> Iterator[None]:
@@ -81,15 +83,19 @@ class SiteFile:
             raise damaged from error
         if not ok:
             raise damaged
-        if site not in (None, self.site_id):
-            raise StoreError("another_site", f"The {self.label} file belongs to another site.")
+        if site != self.site_id:          # a note or a state does not name the site: a file that does not is not ours
+            raise StoreError("another_site", f"The {self.label} file does not belong to this site.")
         loaded: Dict[str, Dict[str, Any]] = entries
         return loaded
 
     def save(self, entries: Mapping[str, Mapping[str, Any]]) -> None:
         """Replace the file with ``entries`` in one step (the caller holds the lock)."""
         document = {"version": FORMAT_VERSION, "site": self.site_id, "entries": entries}
-        self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+        try:
+            self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+            os.chmod(self.directory, 0o700)           # a directory made earlier, with looser rights, is closed too
+        except OSError as error:
+            raise StoreError("unreadable", f"The {self.label} file cannot be written.") from error
         descriptor, temporary = tempfile.mkstemp(dir=self.directory, prefix=self.file_name + ".", suffix=".tmp")
         try:
             with os.fdopen(descriptor, "w", encoding="utf-8") as handle:

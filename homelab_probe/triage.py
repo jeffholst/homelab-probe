@@ -22,6 +22,8 @@ same order.
 """
 
 import hashlib
+import math
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Mapping, Optional, Tuple
@@ -33,6 +35,7 @@ from .util import normalize_mac, printable
 
 FILE_NAME = "triage.json"
 STATES = ("open", "acknowledged", "snoozed")
+_ID = re.compile(r"[0-9a-f]{16}")
 MAX_ENTRIES = 5000                       # findings tracked per site: a bound on the file, not one to meet
 MAX_NOTE = 200
 MAX_SNOOZE_DAYS = 365
@@ -85,6 +88,20 @@ def iso(moment: Optional[float]) -> Optional[str]:
 TriageError = StoreError
 
 
+def _number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def _valid_entry(key: Any, value: Any) -> bool:
+    """Is ``value`` an entry as ``set_state`` and ``reconcile`` write it? (Everything the readers do arithmetic on is a
+    number, so a file edited by hand cannot make a read raise.)"""
+    return (isinstance(key, str) and _ID.fullmatch(key) is not None and isinstance(value, dict)
+            and isinstance(value.get("code"), str) and value.get("state") in STATES
+            and isinstance(value.get("by"), str) and isinstance(value.get("note"), str)
+            and _number(value.get("at")) and _number(value.get("first_seen_at")) and _number(value.get("last_seen_at"))
+            and (value.get("until") is None or _number(value.get("until"))))
+
+
 class TriageStore(SiteFile):
     """The triage file of one site. ``directory`` is the site's directory (``snapshots/<site id>``)."""
 
@@ -92,7 +109,7 @@ class TriageStore(SiteFile):
     label = "triage"
 
     def valid_entry(self, key: str, entry: Any) -> bool:
-        return isinstance(key, str) and isinstance(entry, dict) and entry.get("state") in STATES
+        return _valid_entry(key, entry)
 
     # -- changes ---------------------------------------------------------------------------------------------
 
