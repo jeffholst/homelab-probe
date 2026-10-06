@@ -174,6 +174,22 @@ The accounts of [`web-user`](#managing-accounts-web-user), the same `users.json`
 - **Audit.** The events of the command line (`user.added`, `user.role_changed`, `user.disabled`, `user.enabled`, `user.password_reset`) with the administrator as the actor and the address of the request, and `user.updated` (with `role` and `disabled`) when one request changes both. A change is always **one** entry, so if it cannot be written the change is rolled back (`500 audit_unavailable`) and no record claims half of it. A password is never in an answer, an audit entry or a log.
 - **No deleting** in the API: `hlp web-user delete`. A disabled user cannot log in.
 
+### Status and the test notification: `/api/v1/status`
+
+`GET /api/v1/status` says what **this server has seen**, and when. It makes no request of its own to the controller (a page that polls it would otherwise read the controller): it reports the outcome of the reads the server made for its other routes and its scheduler. A server that has read nothing yet says `unknown`, never `ok`.
+
+| Part | What it says |
+| ---- | ------------ |
+| `controller` | `state`: `ok`, `unreachable` (no answer: connection or timeout), `certificate` (TLS), `key_rejected` (401 or 403) or `unknown`, from the most recent reads, and `last_read_ok_at`. An error status from one endpoint is still an answer, so it does not make the controller `unreachable` |
+| `data` | `stale`: the last answer served was an older one, because a read failed, and no read has succeeded since; `warnings`: how many warnings the last response carried (an optional read failed); `last_response_at` |
+| `scheduler` | `enabled` and, for each job, `last_run_at`, `result`, `last_success_at` and `next_run_at` |
+| `read_only` | whether the server was started with `--read-only` |
+
+- **Who sees what.** Any logged-in user gets the table above. An **administrator** also gets: `controller.last_failure` and `last_failure_at`; each job's fixed `reason` and `duration_ms`; `notifications` (the destinations by **kind** only, and the outcome of the last delivery to each: when, whether, and a fixed reason such as `HTTP 403`); `storage` (the data directory, `audit_log`, `snapshots/` and the free disk space, each `ok`, `absent`, `missing`, `not_writable`, `unsafe` for a symbolic link, `low` for under 100 MB, or `unknown`); and `problems`, what is wrong in fixed words (`controller:unreachable`, `data:stale`, `scheduler.diagnose:failed`, `notifications.ntfy:failed`, `storage.disk:low`...). Never an address, a path, a URL, a token or a message.
+- **Deliveries are those this server made** (the scheduler's and the test's). A cron job is another process: its failures are in its own output, not here.
+
+`POST /api/v1/notifications/test` (an administrator, with the CSRF token) sends **one fixed test message** to every configured destination, through the delivery code of `diagnose --notify`, and answers `{"delivered": true, "results": [{"destination": "ntfy", "delivered": true, "reason": "HTTP 200"}]}`: a kind and a fixed reason for each, never a URL or a token. It is **never sent by itself**, at most once every 10 seconds (`429 too_soon`), and `409 no_destination` when none is configured. A webhook receives the usual payload with `events` empty and `"test": true`. It writes no file, so `--read-only` does not stop it; it is audited as `notification.tested` (the kinds and how many were delivered).
+
 ### How the server reads the controller
 
 Every read of the controller goes through one cache shared by all requests, so a browser that polls does not turn into dozens of reads per page:

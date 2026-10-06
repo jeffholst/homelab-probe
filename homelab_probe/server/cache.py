@@ -48,6 +48,36 @@ def track_ages() -> Iterator[List[float]]:
         _ages.reset(token)
 
 
+CONNECTION_KINDS = frozenset({"connection", "timeout", "tls"})       # the controller did not answer at all
+KEY_KINDS = frozenset({"unauthorized", "forbidden"})                  # it answered, and refused the API key
+
+
+@dataclass
+class WireStatus:
+    """What the last reads of the controller said, as wall-clock times. ``answered_at`` is when the controller last
+    gave any HTTP answer (an error status counts: it was reachable), ``failed_at`` and ``failed_kind`` the last read
+    that got no answer or a refusal of the key, ``stale_at`` the last time an old answer was served because a read
+    failed."""
+
+    answered_at: Optional[float] = None
+    ok_at: Optional[float] = None
+    failed_at: Optional[float] = None
+    failed_kind: str = ""
+    stale_at: Optional[float] = None
+
+    @property
+    def state(self) -> str:
+        """``ok``, ``unreachable``, ``certificate`` (TLS), ``key_rejected`` or ``unknown`` (nothing read yet): the
+        outcome of the most recent read that says something about the connection."""
+        newest = max(filter(None, [self.answered_at, self.failed_at]), default=None)
+        if newest is None:
+            return "unknown"
+        if self.failed_at is not None and self.failed_at >= (self.answered_at or 0):
+            return ("certificate" if self.failed_kind == "tls" else
+                    "key_rejected" if self.failed_kind in KEY_KINDS else "unreachable")
+        return "ok"
+
+
 @dataclass
 class _Entry:
     value: Any
@@ -72,6 +102,7 @@ class ResponseCache:
         self._errors: OrderedDict[Hashable, Tuple[float, UniFiAPIError]] = OrderedDict()
         self._key_locks: Dict[Hashable, _KeyLock] = {}
         self._generation = 0
+        self.wire = WireStatus()
         self._guard = threading.Lock()                  # protects the cache maps and generation
         self._wire = threading.BoundedSemaphore(max(1, max_in_flight))
 
@@ -105,7 +136,9 @@ class ResponseCache:
                 with self._wire:
                     value = read()
             except UniFiAPIError as error:
+                self._note_wire(error)
                 return self._after_failure(key, error, label, generation)
+            self._note_wire(None)
             entry = _Entry(copy.deepcopy(value), self._clock(), self._wall())
             with self._guard:
                 if generation == self._generation:
@@ -176,7 +209,23 @@ class ResponseCache:
             raise error
         return self._serve_stale(entry, error, label)
 
+    def _note_wire(self, error: Optional[UniFiAPIError]) -> None:
+        """Record what a read of the controller said about the connection (not about the data: an endpoint that is
+        missing, an HTTP error status, is still an answer)."""
+        now = self._wall()
+        with self._guard:
+            if error is None:
+                self.wire.answered_at = self.wire.ok_at = now
+            elif error.kind in CONNECTION_KINDS or error.kind in KEY_KINDS:
+                self.wire.failed_at, self.wire.failed_kind = now, error.kind
+                if error.kind in KEY_KINDS:
+                    self.wire.answered_at = now         # it answered, with a refusal: the failure above says which
+            else:
+                self.wire.answered_at = now
+
     def _serve_stale(self, entry: _Entry, error: UniFiAPIError, label: str) -> Any:
+        with self._guard:
+            self.wire.stale_at = self._wall()
         moment = time.strftime("%H:%M:%S", time.localtime(entry.wall))
         logs.warn(f"the controller could not be read ({error.kind or 'error'}); served from the cache as of {moment}")
         return self._give(entry, label, "stale")

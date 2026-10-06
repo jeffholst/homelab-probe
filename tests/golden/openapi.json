@@ -516,6 +516,167 @@
         "summary": "Meta"
       }
     },
+    "/api/v1/notifications/test": {
+      "post": {
+        "operationId": "notifications_test_api_v1_notifications_test_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "properties": {
+                    "delivered": {
+                      "type": "boolean"
+                    },
+                    "results": {
+                      "items": {
+                        "properties": {
+                          "delivered": {
+                            "type": "boolean"
+                          },
+                          "destination": {
+                            "type": "string"
+                          },
+                          "reason": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "destination",
+                          "delivered",
+                          "reason"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "delivered",
+                    "results"
+                  ],
+                  "title": "Response Notifications Test Api V1 Notifications Test Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "How each destination answered"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "No notification destination is configured"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A test was sent a moment ago: try again after Retry-After"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A local file cannot be used"
+          }
+        },
+        "summary": "Send a test notification now"
+      }
+    },
     "/api/v1/platforms": {
       "get": {
         "description": "The platforms this server can show; UniFi is the only one.",
@@ -866,6 +1027,114 @@
         "tags": [
           "setup"
         ]
+      }
+    },
+    "/api/v1/status": {
+      "get": {
+        "operationId": "status_api_v1_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "properties": {
+                    "controller": {
+                      "properties": {
+                        "last_read_ok_at": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "state": {
+                          "enum": [
+                            "ok",
+                            "unreachable",
+                            "certificate",
+                            "key_rejected",
+                            "unknown"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "last_read_ok_at"
+                      ],
+                      "type": "object"
+                    },
+                    "data": {
+                      "required": [
+                        "stale",
+                        "warnings",
+                        "last_response_at"
+                      ],
+                      "type": "object"
+                    },
+                    "generated_at": {
+                      "type": "string"
+                    },
+                    "notifications": {
+                      "type": "object"
+                    },
+                    "problems": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "read_only": {
+                      "type": "boolean"
+                    },
+                    "scheduler": {
+                      "required": [
+                        "enabled",
+                        "jobs"
+                      ],
+                      "type": "object"
+                    },
+                    "storage": {
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "generated_at",
+                    "read_only",
+                    "controller",
+                    "data",
+                    "scheduler"
+                  ],
+                  "title": "Response Status Api V1 Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The status (more for an administrator)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Not logged in"
+          }
+        },
+        "summary": "What this server has seen of the controller, its jobs and its storage"
       }
     },
     "/api/v1/unifi/sites": {

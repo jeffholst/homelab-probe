@@ -64,6 +64,7 @@ class Scheduler:
                  tick_seconds: float = TICK_SECONDS) -> None:
         self.app, self._clock, self.tick_seconds = app, clock, tick_seconds
         self.last: Dict[str, JobResult] = {}
+        self.last_ok: Dict[str, float] = {}               # when each job last ended in ``ok``
         self._due: Dict[str, float] = {}
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
@@ -122,6 +123,17 @@ class Scheduler:
             now = self._clock()
         return ran
 
+    def status(self) -> Dict[str, Dict[str, Any]]:
+        """What each job did last, for the status page: wall-clock times (seconds since the epoch, None if never), the
+        result and a fixed reason, and when it is due next."""
+        out: Dict[str, Dict[str, Any]] = {}
+        for job in JOBS:
+            done = self.last.get(job)
+            out[job] = {"last_run_at": done.finished if done else None, "result": done.result if done else None,
+                        "reason": done.reason if done else None, "duration_ms": done.duration_ms if done else None,
+                        "last_success_at": self.last_ok.get(job), "next_run_at": self._due.get(job)}
+        return out
+
     def _first_due(self, job: str, now: float, every: float) -> float:
         """When a job first runs: a diagnose at once; a snapshot when the newest one is as old as the interval."""
         if job != "snapshot":
@@ -161,6 +173,8 @@ class Scheduler:
             done = JobResult(job, run_id, result, reason, round((time.monotonic() - started) * 1000), self._clock(),
                              **counts)
             self.last[job] = done
+            if result == "ok":
+                self.last_ok[job] = done.finished
             logs.log_event(_log, logging.INFO if result != "failed" else logging.WARNING, "scheduler.run",
                            f"Scheduled {job}: {result} ({reason})", job=job, run_id=run_id, result=result,
                            reason=reason, duration_ms=done.duration_ms, findings=done.findings,
@@ -185,11 +199,16 @@ class Scheduler:
             return "skipped", "partial_data"                        # a partial read cannot say that anything cleared
         if any(path.is_symlink() for path in (self._base(), site_dir(self._base(), document.meta["site"]))):
             raise SnapshotStoreError("snapshots_unsafe")            # the state is never written through a link
+        def delivered(results: List[Tuple[str, bool, str]]) -> None:
+            """Called the moment a message went out, so a state that then cannot be saved does not hide it."""
+            self.app.state.deliveries.record(results)
+            counts["destinations"] = ",".join(f"{kind}:{'sent' if ok else 'failed'}" for kind, ok, _ in results)
+
         outcome = process(findings, config=config, settings=settings, site=document.meta["site"], base=self._base(),
-                          minimum=WARNING, baseline_if_new=True, warn=logs.warn, cancelled=self._stop.is_set)
+                          minimum=WARNING, baseline_if_new=True, warn=logs.warn, cancelled=self._stop.is_set,
+                          on_delivery=delivered)
         if outcome.kind == "cancelled":
             return "skipped", "stopping"
-        counts["destinations"] = ",".join(f"{kind}:{'sent' if ok else 'failed'}" for kind, ok, _ in outcome.results)
         return ("failed", "undelivered") if outcome.undelivered else ("ok", outcome.kind)
 
     def _snapshot(self, counts: Dict[str, Any]) -> Tuple[str, str]:

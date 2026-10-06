@@ -20,7 +20,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from .. import __version__, logs
 from ..config import Config
 from ..util import is_loopback
-from . import routes, settings_api, snapshots_api, users_api, wizard
+from . import routes, settings_api, snapshots_api, status_api, users_api, wizard
 from .auth import AuthState, OriginGuard, guard, public, public_router, session_router
 from .errors import ApiError, api_error_handler, request_validation_error_handler
 from .scheduler import Scheduler
@@ -102,6 +102,7 @@ def create_app(config: Config, settings_path: Optional[Path] = None, state_dir: 
     app.state.config, app.state.settings_path, app.state.state_dir = config, settings_path, state_dir
     app.state.read_only = read_only
     app.state.scheduler = Scheduler(app) if scheduler else None
+    app.state.deliveries = status_api.Deliveries()
     app.state.setup = setup
     unconfigured = setup is not None and bool(setup.mode)         # a server in a setup mode reads no controller yet
     app.state.service = None if unconfigured else service or ControllerService(config, demo=demo)
@@ -114,6 +115,7 @@ def create_app(config: Config, settings_path: Optional[Path] = None, state_dir: 
     app.include_router(settings_api.router())
     app.include_router(snapshots_api.router())
     app.include_router(users_api.router())
+    app.include_router(status_api.router())
     app.include_router(public_router())
     app.include_router(session_router())
 

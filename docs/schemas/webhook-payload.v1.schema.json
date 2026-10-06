@@ -57,6 +57,10 @@
           "severity"
         ]
       }
+    },
+    "test": {
+      "const": true,
+      "description": "Present (and true) only in the test message an administrator asks for; then `events` is empty. A real message never has it."
     }
   },
   "required": [
