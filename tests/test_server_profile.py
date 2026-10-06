@@ -396,3 +396,21 @@ def test_renew_ends_every_session_of_the_user_and_keeps_the_start_of_the_caller(
     assert store.lookup(new_value, accounts_store) is renewed and renewed.created == mine.created
     assert renewed.csrf != mine.csrf and renewed.address == "10.0.0.2" and renewed.key != other.key
     assert store.lookup(kept, accounts_store) is not None
+
+
+def test_a_wrong_current_password_costs_one_derivation_and_the_new_hash_is_made_only_after_it_is_verified(
+        tmp_path, monkeypatch):
+    store = AccountStore(tmp_path)
+    store.add("carol", "viewer", PASSWORD)
+    calls = []
+    real = accounts._scrypt
+    monkeypatch.setattr(accounts, "_scrypt", lambda *a, **k: calls.append(1) or real(*a, **k))
+    with pytest.raises(accounts.WrongPasswordError):
+        store.change_password("carol", "not the password", NEW, "x")
+    assert len(calls) == 1                                          # the check of the current password, nothing more
+    calls.clear()
+    with pytest.raises(accounts.PolicyError):
+        store.change_password("carol", PASSWORD, "short", "x")
+    assert calls == []                                              # the rule is checked before any derivation
+    store.change_password("carol", PASSWORD, NEW, "x")
+    assert len(calls) == 2                                          # the check and the new hash

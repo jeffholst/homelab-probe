@@ -426,7 +426,6 @@ class AccountStore:
         a wrong ``current`` raises ``WrongPasswordError``. ``on_change`` is the audit callback (see ``_save_change``).
         The login time is not touched: this is not a login."""
         check_password_policy(new)
-        hashed = hash_password(new)
         name = normalize_username(username)
         with file_lock(self._lock_path):
             before = self._read()
@@ -436,7 +435,7 @@ class AccountStore:
                 raise NoSuchUserError(f"there is no user {name}")
             if not verify_password(current, user.password_hash):
                 raise WrongPasswordError("the current password is wrong")
-            changed = replace(user, password_hash=hashed)
+            changed = replace(user, password_hash=hash_password(new))
             after = [changed if candidate.username == name else candidate for candidate in before]
             return self._save_change(before, after, changed, on_change)
 
