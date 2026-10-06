@@ -1,7 +1,7 @@
 # Homelab Probe
 ![Homelab Probe](docs/images/homelab-probe.png)
 
-Homelab Probe is a read-only UniFi Network probe for inventory, troubleshooting, snapshots and diagnostics. Use it from the `hlp` command, or run the authenticated local web API with `hlp serve` for browser/API clients. It never changes the controller: requests are GETs except the controller's event-history endpoint, which requires a read-only POST. The only off-box output is opt-in notifications from `diagnose --notify`.
+Homelab Probe is a read-only UniFi Network probe for inventory, troubleshooting, snapshots and diagnostics. Use it from the `hlp` command, or run the login-protected web API with `hlp serve` for browser/API clients (it listens on this machine only by default; the server options can expose it to other machines on purpose, see [docs/web.md](docs/web.md)). It never changes the controller: requests are GETs except the controller's event-history endpoint, which requires a read-only POST. The only data the tool sends anywhere else is opt-in notifications from `diagnose --notify`; the web API shows controller data to whoever you give a login.
 
 > **Status: early development.** Tested against one live controller (Network 10.6.106); other versions and hardware may differ. See [open issues](https://github.com/jeffholst/homelab-probe/issues) for the roadmap.
 
@@ -22,7 +22,7 @@ Homelab Probe is a read-only UniFi Network probe for inventory, troubleshooting,
 | `init` | Guided first-time setup for `.env`, `hlp.toml` and snapshots | [details](docs/configuration.md#guided-setup-init) |
 | `new-clients` | List clients that are in no client group | [details](docs/inventory.md#new-clients) |
 | `query` | List and filter devices, clients, reservations, ports, networks and Wi-Fi networks | [details](docs/inventory.md#devices) |
-| `serve` | Run the login-protected local web API | [details](docs/web.md#running-the-server-serve) |
+| `serve` | Run the login-protected web API (needs the `web` extra) | [details](docs/web.md#running-the-server-serve) |
 | `snapshot` | Save the current inventory to compare later | [details](docs/inventory.md#snapshots-and-diff) |
 | `topology` | Draw the uplink tree, ports, speeds, client counts and problems | [details](docs/network.md#topology) |
 | `wan` | Show internet state, monitoring and speedtest history | [details](docs/network.md#wan) |
@@ -83,7 +83,7 @@ source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install .
 ```
 
-This installs `hlp`. A tagged release can be installed without a clone; check the [releases page](https://github.com/jeffholst/homelab-probe/releases) and [changelog](CHANGELOG.md), then replace `vX.Y.Z`:
+This installs `hlp`. `hlp serve` also needs the web extra: `pip install '.[web]'` (or `uv run --extra web hlp.py serve`). A tagged release can be installed without a clone; check the [releases page](https://github.com/jeffholst/homelab-probe/releases) and [changelog](CHANGELOG.md), then replace `vX.Y.Z`:
 
 ```bash
 uv tool install git+https://github.com/jeffholst/homelab-probe@vX.Y.Z
