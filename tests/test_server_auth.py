@@ -128,7 +128,7 @@ def test_a_good_password_logs_in_and_me_says_who(app):
     response = attempt(client)
     body = response.json()
     assert response.status_code == 200 and set(body) == {"username", "role", "csrf_token", "idle_seconds_left",
-                                                         "session_seconds_left"}
+                                                         "session_seconds_left", "can_change_password"}
     assert (body["username"], body["role"]) == ("bob", "viewer") and len(body["csrf_token"]) >= 40
     assert body["idle_seconds_left"] == 1800 and body["session_seconds_left"] == 12 * 3600
     me = client.get("/api/v1/auth/me")

@@ -21,12 +21,13 @@ in a DEBUG record. This module imports only the standard library and this packag
 import datetime
 import json
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
 
 from . import logs
 from .audit import AUDIT_AREAS, audit
 from .client import UniFiAPIError, UniFiClient
 from .client_view import build_client_detail, client_data, find_clients
+from .dashboard import build_dashboard, connection_state, unreachable_dashboard
 from .diagnose import apply_ignores, diagnose, findings_document, needs_for
 from .doctor import Check
 from .doctor import to_dict as doctor_dict
@@ -38,9 +39,10 @@ from .new_clients import new_clients_data
 from .new_clients import report as new_clients_report
 from .query import query_data, query_rows
 from .settings import DiagnoseSettings
+from .sitefile import StoreError
 from .snapshot import EventQuery, Needs, collect_event_snapshot, collect_snapshot, extend_snapshot
 from .topology import JSON_VERSION as TOPOLOGY_JSON_VERSION
-from .topology import build_topology
+from .topology import build_topology, device_links
 from .wan import DEFAULT_DAYS, build_wan
 from .wan import JSON_VERSION as WAN_JSON_VERSION
 from .wifi import DEFAULT_MIN_SIGNAL, build_wifi
@@ -241,15 +243,56 @@ def diagnose_document(client: UniFiClient, site: str, settings: Optional[Diagnos
                       today: Optional[datetime.date] = None) -> Document:
     """The health checks of ``areas`` (all of them by default) after the ignore list: the dict that ``diagnose
     --json`` prints. ``areas`` also say what is read (see ``needs_for``). ``meta["complete"]`` is False when an
-    optional read failed, so a caller that compares passes (``--watch``) can skip a pass that missed data, and
-    ``meta["site"]`` says which site was read."""
+    optional read failed, so a caller that compares passes (``--watch``) can skip a pass that missed data,
+    ``meta["site"]`` says which site was read and ``meta["links"]`` is where each device was last reported plugged in
+    (``topology.device_links``: the evidence the web interface groups findings with; read from the snapshot already
+    taken, so it asks the controller for nothing more)."""
     settings = settings or DiagnoseSettings()
     with logs.collect_warnings(quiet=not echo) as warnings:
         snap = collect_snapshot(client, site, needs_for(areas, since))
         findings, ignored = apply_ignores(diagnose(snap, settings, areas=areas), settings.ignore, today)
     return Document("diagnose", findings_document(findings, ignored, show_ignored, areas),
                     [logs.scrub(w) for w in warnings],
-                    {"complete": not snap.degraded, "site": site_identity(snap.site)})
+                    {"complete": not snap.degraded, "site": site_identity(snap.site), "links": device_links(snap)})
+
+
+# -- dashboard ----------------------------------------------------------------------------------------
+
+# The dashboard summarises every check, so it reads what a full `diagnose` reads (nothing more: its WAN, Wi-Fi,
+# device, client and event sections come from that snapshot).
+DASHBOARD_NEEDS = needs_for(None, parse_duration(DEFAULT_SINCE))
+
+
+def dashboard_document(client: UniFiClient, site: str, settings: Optional[DiagnoseSettings] = None,
+                       triage: Optional[Callable[[Dict[str, Any]], Mapping[str, Mapping[str, Any]]]] = None,
+                       stale: Optional[Callable[[], List[str]]] = None, echo: bool = True,
+                       today: Optional[datetime.date] = None, now: Optional[float] = None) -> Document:
+    """How the network is, and how much of that is known (see ``dashboard``).
+
+    ``triage`` reads the triage entries of a site (given the site's record; it may raise ``StoreError``, and the counts
+    by triage state are then null), ``stale`` says which failed reads were answered from an older cache (the server's
+    ``stale_served``). A controller that cannot be reached, whose certificate fails or that refuses the key gives a
+    document of unavailable sections instead of an error, so a dashboard can say so; every other failure (no such
+    site, a bad answer) is raised as in any other document. ``meta["complete"]`` is False for a partial read."""
+    settings = settings or DiagnoseSettings()
+    with logs.collect_warnings(quiet=not echo) as warnings:
+        try:
+            snap = collect_snapshot(client, site, DASHBOARD_NEEDS)
+        except UniFiAPIError as error:
+            state = connection_state(error.kind)
+            if state == "ok":
+                raise
+            message = f"the controller could not be read ({state}); nothing is known about the network"
+            return Document("dashboard", unreachable_dashboard(state), [*(logs.scrub(w) for w in warnings), message],
+                            {"complete": False})
+        entries: Optional[Mapping[str, Mapping[str, Any]]] = None
+        if triage is not None:
+            try:
+                entries = triage(snap.site)
+            except StoreError:
+                entries = None
+        data = build_dashboard(snap, settings, entries, now, today, stale() if stale is not None else ())
+    return Document("dashboard", data, [logs.scrub(w) for w in warnings], {"complete": not snap.degraded})
 
 
 # -- snapshot and diff ------------------------------------------------------------------------------

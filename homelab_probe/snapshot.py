@@ -39,6 +39,9 @@ class Snapshot:
     legacy_clients: List[Dict[str, Any]] = field(default_factory=list)
     legacy_clients_available: bool = True
     all_users: List[Dict[str, Any]] = field(default_factory=list)
+    # False when the client history (legacy stat/alluser) was requested and could not be read, so an empty
+    # ``all_users`` is "unknown", not "no clients"; True otherwise (also when it was not requested).
+    all_users_available: bool = True
     # Integration API per-device detail and latest statistics, keyed by device id.
     device_details: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     device_stats: Dict[str, Dict[str, Any]] = field(default_factory=dict)
@@ -76,6 +79,16 @@ def _legacy_or_empty(client: UniFiClient, site_ref: str, resource: str, notes: L
         )
         notes.append(f"legacy stat/{resource} unavailable; {impact}: {e}")
         return []
+
+
+def _legacy_users_or_empty(
+    client: UniFiClient, site_ref: str, notes: List[str]
+) -> tuple[List[Dict[str, Any]], bool]:
+    """``(client history, available)``: an empty list with ``available`` True is an answer, one with False is the
+    failure path."""
+    before = len(notes)
+    users = _legacy_or_empty(client, site_ref, "alluser", notes)
+    return users, len(notes) == before
 
 
 def _legacy_clients_or_empty(
@@ -341,9 +354,9 @@ def _submit_extras(reads: "_Reads", needs: Needs, client: UniFiClient, site_ref:
         reads.submit("neighbors", lambda notes: _neighbors_or_empty(client, site_ref, notes))
     if users and (needs.groups or needs.offline or needs.reservations):
         if needs.users_required:
-            reads.submit("alluser", lambda notes: client.legacy_stat(site_ref, "alluser"))
+            reads.submit("alluser", lambda notes: (client.legacy_stat(site_ref, "alluser"), True))
         else:
-            reads.submit("alluser", lambda notes: _legacy_or_empty(client, site_ref, "alluser", notes))
+            reads.submit("alluser", lambda notes: _legacy_users_or_empty(client, site_ref, notes))
     if needs.reservations or needs.networks:
         reads.submit("networks", lambda notes: _legacy_rest_or_empty(client, site_ref, "networkconf", notes))
     if needs.health:
@@ -397,7 +410,7 @@ def _apply_extras(snap: Snapshot, reads: "_Reads", needs: Needs, users: bool) ->
     if needs.neighbors:
         snap.neighbors, snap.neighbors_available = reads.result("neighbors")
     if users and (needs.groups or needs.offline or needs.reservations):
-        snap.all_users = reads.result("alluser")
+        snap.all_users, snap.all_users_available = reads.result("alluser")
     if needs.reservations or needs.networks:
         snap.networks, snap.networks_available = reads.result("networks")
     if needs.health:

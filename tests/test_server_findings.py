@@ -404,3 +404,102 @@ def test_a_change_answers_with_the_same_complete_finding_the_list_shows(admin):
     listed = next(i for i in admin.get(LIST).json()["items"] if i["id"] == top["id"])
     assert answer == listed and {"rank", "priority", "limitations", "next_checks", "docs"} <= set(answer)
     assert answer["triage"]["state"] == "acknowledged"
+
+
+# -- findings that share a cause (issue #230) ----------------------------------------------------------------------
+
+def take_offline(app, *names):
+    for device in app.state.fake.fx["devices"]:
+        if device["name"] in names:
+            device["state"] = "OFFLINE"
+
+
+def offline_items(client):
+    return {i["subject"]: i for i in client.get(LIST).json()["items"] if i["code"] == "device.offline"}
+
+
+def test_on_the_untouched_fixture_no_finding_has_a_group_and_the_key_is_there_for_every_one(viewer):
+    items = viewer.get(LIST).json()["items"]
+    assert items and all("group" in i and i["group"] is None for i in items)
+    assert offline_items(viewer)["Garage AP"]["group"] is None               # its switch is online
+
+
+def test_a_device_behind_an_offline_switch_is_shown_as_probably_caused_by_it_with_the_chain(app, viewer):
+    take_offline(app, "Office Switch", "Office AP")
+    items = offline_items(viewer)
+    switch = items["Office Switch"]
+    assert switch["group"] is None and switch["severity"] == "critical"
+    for name, port in (("Garage AP", 5), ("Office AP", 2)):
+        child = items[name]
+        group = child["group"]
+        assert group["kind"] == "offline_behind_offline_uplink" and group["cause"] == switch["id"]
+        assert group["cause_code"] == "device.offline" and "probably" in group["summary"].lower()
+        assert any("keeps its last known uplink" in text for text in group["limitations"])
+        chain = group["evidence"]["chain"]
+        assert [h["name"] for h in chain] == [name, "Office Switch"]
+        assert [h["finding"] for h in chain] == [child["id"], switch["id"]]
+        assert chain[0]["uplink_port"] == port and chain[1]["uplink_port"] is None and all(h["offline"] for h in chain)
+
+
+def test_the_cause_is_the_root_most_offline_device_even_through_a_switch(app, viewer):
+    take_offline(app, "Gateway", "Office Switch")
+    items = offline_items(viewer)
+    assert items["Gateway"]["group"] is None
+    assert items["Office Switch"]["group"]["cause"] == items["Gateway"]["id"]
+    group = items["Garage AP"]["group"]
+    assert group["cause"] == items["Gateway"]["id"]
+    assert [h["name"] for h in group["evidence"]["chain"]] == ["Garage AP", "Office Switch", "Gateway"]
+
+
+def test_grouping_changes_neither_the_list_nor_the_order_nor_the_counts_and_hides_nothing(app, viewer):
+    take_offline(app, "Office Switch")
+    body = viewer.get(LIST).json()
+    items = body["items"]
+    grouped = [i for i in items if i["group"]]
+    assert grouped
+    ids = [i["id"] for i in items]
+    assert len(set(ids)) == len(ids) and all(i["group"]["cause"] in ids for i in grouped)   # reachable by its id
+    assert body["summary"]["total"] == len(items) and [i["rank"] for i in items] == list(range(1, len(items) + 1))
+    severities = [i["severity"] for i in items]
+    assert severities == sorted(severities, key=["critical", "warning", "info"].index)       # ranking is untouched
+    # the same findings, in the same order, as without the group
+    plain = [{k: v for k, v in i.items() if k != "group"} for i in items]
+    assert plain == [{k: v for k, v in i.items() if k != "group"} for i in viewer.get(LIST).json()["items"]]
+
+
+def test_a_device_without_a_known_uplink_is_not_grouped_even_with_an_offline_switch(app, viewer):
+    take_offline(app, "Office Switch")
+    fixture = app.state.fake.fx
+    del fixture["device_detail"]["ap2"]["uplink"]
+    for device in fixture["legacy"]["device"]:
+        if device["name"] == "Garage AP":
+            del device["uplink"]
+    items = offline_items(viewer)
+    assert items["Garage AP"]["group"] is None and items["Office Switch"]["group"] is None
+
+
+def test_an_ignore_rule_that_hides_the_cause_leaves_nothing_to_point_at(tmp_path, clock):
+    app = make_app(tmp_path)
+    take_offline(app, "Office Switch")
+    (tmp_path / "hlp.toml").write_text('[[ignore]]\ncode = "device.offline"\nsubject = "Office Switch"\nreason = "spare"\n')
+    items = offline_items(logged_in(app, "alice"))
+    assert "Office Switch" not in items and items["Garage AP"]["group"] is None
+
+
+def test_the_change_answers_with_the_group_the_list_shows(app, admin):
+    take_offline(app, "Office Switch")
+    child = offline_items(admin)["Garage AP"]
+    answer = put(admin, child["id"], state="acknowledged", note="seen").json()
+    assert answer["group"] == offline_items(admin)["Garage AP"]["group"] and answer["group"]["cause"]
+    cause = put(admin, answer["group"]["cause"], state="acknowledged").json()
+    assert cause["group"] is None and cause["id"] == answer["group"]["cause"]
+
+
+def test_a_group_carries_no_path_or_address_and_the_schema_declares_it(app, viewer, tmp_path):
+    take_offline(app, "Office Switch")
+    text = json.dumps(offline_items(viewer)["Garage AP"]["group"])
+    assert str(tmp_path) not in text and "10.0.0." not in text
+    response = app.openapi()["paths"]["/api/v1/unifi/sites/{site}/findings"]["get"]["responses"]["200"]
+    item = response["content"]["application/json"]["schema"]["properties"]["items"]["items"]
+    group = item["properties"]["group"]
+    assert group["type"] == ["object", "null"] and {"kind", "cause", "evidence"} <= set(group["properties"])

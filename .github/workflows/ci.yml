@@ -28,13 +28,13 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Lockfile matches pyproject.toml
         run: uv lock --check
-      - name: Install (with the web extra, which the server tests need)
-        run: uv sync --locked --extra web
+      - name: Install (with the web and pretty extras, which the server and styling tests need)
+        run: uv sync --locked --extra web --extra pretty
       - name: Tests
         run: uv run pytest -q
 
   base-install:
-    name: Tests (command line only, no web extra)
+    name: Tests (command line only, no extras)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -44,7 +44,7 @@ jobs:
           python-version: "3.10"
       - name: Install the base package and the dev tools only
         run: uv sync --locked
-      - name: The command line works without FastAPI (the server tests skip themselves)
+      - name: The command line works without FastAPI or Rich (the server and styling tests skip themselves)
         run: uv run pytest -q
 
   coverage:
@@ -58,7 +58,7 @@ jobs:
           python-version: "3.13"
       - name: Fish and zsh, which the completion tests run for real (they skip without them)
         run: sudo apt-get update -qq && sudo apt-get install -y -qq fish zsh
-      - run: uv sync --locked --extra web
+      - run: uv sync --locked --extra web --extra pretty
       - name: Tests, with line and branch coverage
         run: uv run coverage run -m pytest -q
       - name: Every line and branch is covered
@@ -72,7 +72,7 @@ jobs:
       - uses: astral-sh/setup-uv@v10.2.0
         with:
           enable-cache: true
-      - run: uv sync --locked --extra web
+      - run: uv sync --locked --extra web --extra pretty
       - run: uv run ruff check .
 
   types:
@@ -83,5 +83,65 @@ jobs:
       - uses: astral-sh/setup-uv@v10.2.0
         with:
           enable-cache: true
-      - run: uv sync --locked --extra web
+      - run: uv sync --locked --extra web --extra pretty
       - run: uv run mypy
+
+  web:
+    name: Web app (Node 22, Playwright smoke)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      # The smoke test starts the real server with synthetic data (`hlp --demo serve`), so it needs the web extra.
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+          python-version: "3.13"
+      - run: uv sync --locked --extra web
+      - name: Install the packages (exactly what package-lock.json says)
+        working-directory: web
+        run: npm ci
+      - name: Generated types match docs/schemas (regenerate and fail on any difference)
+        working-directory: web
+        run: npm run check:types
+      - name: Lint
+        working-directory: web
+        run: npm run lint
+      - name: Types (tsc)
+        working-directory: web
+        run: npm run typecheck
+      - name: Unit and component tests (Vitest)
+        working-directory: web
+        run: npm test
+      - name: Production build
+        working-directory: web
+        run: npm run build
+      - name: Browser for the smoke test
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+      - name: Playwright smoke (phone and desktop, against the demo server)
+        working-directory: web
+        run: npx playwright test
+      - name: Playwright traces of a failure
+        if: failure()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: playwright-test-results
+          path: web/test-results/
+          retention-days: 7
+
+  docker:
+    name: Docker image (build and smoke test, nothing is published)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build the image
+        run: docker build --tag homelab-probe:ci .
+      - name: The image works (version, non-root, setup mode, demo server, read-only file system, no secrets)
+        run: tools/docker_smoke.sh homelab-probe:ci
+      - name: The compose file is valid
+        run: docker compose config --quiet

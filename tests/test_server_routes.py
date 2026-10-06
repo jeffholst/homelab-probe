@@ -123,6 +123,8 @@ CASES = {
                                                                 settings=documents.DiagnoseSettings(), echo=False)),
     "new-clients": (f"{SITE}/new-clients", "new-clients", None,
                     lambda c: documents.new_clients_document(c, "default", echo=False)),
+    "dashboard": (f"{SITE}/dashboard", "dashboard", None,
+                  lambda c: documents.dashboard_document(c, "default", triage=lambda site: {}, echo=False)),
     "client": (f"{SITE}/clients/{DESKTOP}", "client", None,
                lambda c: documents.client_document(c, "default", DESKTOP, echo=False)),
 }
@@ -307,7 +309,7 @@ def test_every_report_route_is_a_get_without_a_path_parameter_and_only_named_par
         assert all(p["name"] not in {"url", "path", "target", "host", "proxy"}
                    for operation in item.values() for p in operation.get("parameters", []) if p["in"] == "path"), path
         assert set(re.findall(r"\{(\w+)\}", path)) <= {"site", "mac", "name", "finding", "note"}, path
-    for module in ("routes.py", "app.py", "auth.py", "snapshots_api.py", "findings_api.py",
+    for module in ("routes.py", "app.py", "auth.py", "snapshots_api.py", "findings_api.py", "search_api.py",
                    "notes_api.py"):
         source = (ROOT / "homelab_probe" / "server" / module).read_text(encoding="utf-8")
         assert ":path}" not in source, module                       # a Starlette `path` convertor takes slashes

@@ -114,7 +114,7 @@ def _name(value: Optional[str], what: str, required: bool = False) -> str:
     return text
 
 
-def _settings(request: Request) -> DiagnoseSettings:
+def effective_settings(request: Request) -> DiagnoseSettings:
     try:
         return load_effective(settings_file(request))
     except ConfigError as error:
@@ -186,13 +186,13 @@ def build_router() -> APIRouter:
             areas = diagnose_areas(argparse.Namespace(only=only or [], skip=skip or [], no_events=no_events))
         except ValueError as error:
             raise ApiError(422, "invalid_parameter", str(error)) from None
-        settings, name = _settings(request), checked_site(site)
+        settings, name = effective_settings(request), checked_site(site)
         return respond(request, lambda client: diagnose_document(client, name, settings, areas, seconds,
                                                                    show_ignored, echo=False), refresh=refresh)
 
     @router.get(f"{at}/audit", responses=schema("audit", settings=True), summary="Configuration audit")
     def audit(request: Request, site: SiteP, show_ignored: bool = False, refresh: RefreshQ = False) -> JSONResponse:
-        settings, name = _settings(request), checked_site(site)
+        settings, name = effective_settings(request), checked_site(site)
         return respond(request, lambda client: audit_document(client, name, settings, show_ignored, echo=False),
                         refresh=refresh)
 
@@ -205,7 +205,7 @@ def build_router() -> APIRouter:
 
     @router.get(f"{at}/topology", responses=schema("topology", settings=True), summary="The uplink tree")
     def topology(request: Request, site: SiteP, clients: bool = False, refresh: RefreshQ = False) -> JSONResponse:
-        settings, name = _settings(request), checked_site(site)
+        settings, name = effective_settings(request), checked_site(site)
         return respond(request, lambda client: topology_document(client, name, settings, clients, echo=False),
                         refresh=refresh)
 
@@ -222,7 +222,7 @@ def build_router() -> APIRouter:
 
     @router.get(f"{at}/wan", responses=schema("wan"), summary="Internet health")
     def wan(request: Request, site: SiteP, days: DaysQ = DEFAULT_DAYS, refresh: RefreshQ = False) -> JSONResponse:
-        settings, name = _settings(request), checked_site(site)
+        settings, name = effective_settings(request), checked_site(site)
         return respond(request, lambda client: wan_document(client, name, days, settings, echo=False),
                         refresh=refresh)
 
@@ -288,7 +288,7 @@ def build_router() -> APIRouter:
                 summary="DHCP reservations")
     def reservations(request: Request, site: SiteP, search: TextQ = "", offline: bool = False,
                      refresh: RefreshQ = False) -> JSONResponse:
-        settings, name = _settings(request), checked_site(site)
+        settings, name = effective_settings(request), checked_site(site)
         return respond(request, lambda api: query_document(api, name, "reservations", search, offline=offline,
                                                              settings=settings, echo=False), refresh=refresh)
 
@@ -305,7 +305,7 @@ def build_router() -> APIRouter:
         if len(address.replace(":", "")) != 12:
             raise ApiError(422, "invalid_parameter", "The MAC address is not valid.")
         seconds = _duration(since)
-        settings, name = _settings(request), checked_site(site)
+        settings, name = effective_settings(request), checked_site(site)
         return respond(request, lambda api: client_document(api, name, address, settings, seconds, events,
                                                               echo=False), refresh=refresh, check=_client_found)
 

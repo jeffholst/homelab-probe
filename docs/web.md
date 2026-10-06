@@ -1,6 +1,6 @@
 # Web interface
 
-The web interface is built in stages (see the roadmap in issue #160). What exists so far is the **backend** and the way it serves the built web app (the app's own screens come with later stages): the **server** (`serve`, which needs the `web` extra) with its login, roles and CSRF protection, the read-only report API under `/api/v1/unifi` and a guided first-run setup API; and the **accounts** that may log in, managed with `web-user` (base install only; it does not contact the controller or read your `.env`). The web app that uses these comes next; the server [already serves a built one](#the-web-app-files) from `homelab_probe/web/`.
+The web interface is built in stages (see the roadmap in issue #160). What exists so far is the **backend**, plus the first screens of the web app (login, the navigation shell, a home page and a profile page, built in `web/`). When a built bundle is installed, the server serves it as described in [The web app files](#the-web-app-files). The **server** (`serve`, which needs the `web` extra) provides login, roles and CSRF protection, the read-only report API under `/api/v1/unifi` and a guided first-run setup API; **accounts** are managed with `web-user` (base install only; it does not contact the controller or read your `.env`).
 
 ## Running the server: `serve`
 
@@ -98,16 +98,26 @@ A server whose package holds a built web app (`homelab_probe/web/`, the output o
 
 ### Logging in: `/api/v1/auth`
 
-- **`POST /api/v1/auth/login`** with `{"username": ..., "password": ...}` (JSON, and an `Origin` header, which a browser sends) returns `{username, role, csrf_token, idle_seconds_left, session_seconds_left}` and sets the session cookie. The only error for a wrong password, an unknown user or a disabled one is `401 invalid_credentials` ("Invalid username or password."), and they cost the same work. The CSRF token goes into `X-CSRF-Token` on every unsafe request.
-- **`GET /api/v1/auth/me`** says who is logged in and how long the session has left; **`POST /api/v1/auth/logout`** ends it.
+- **`POST /api/v1/auth/login`** with `{"username": ..., "password": ...}` (JSON, and an `Origin` header, which a browser sends) returns `{username, role, csrf_token, idle_seconds_left, session_seconds_left, can_change_password}` and sets the session cookie. The only error for a wrong password, an unknown user or a disabled one is `401 invalid_credentials` ("Invalid username or password."), and they cost the same work. The CSRF token goes into `X-CSRF-Token` on every unsafe request.
+- **`GET /api/v1/auth/me`** says who is logged in, how long the session has left and `can_change_password` (true for the local accounts, whose passwords are kept here; an authenticator that keeps them elsewhere would say false); **`POST /api/v1/auth/logout`** ends the session. The login answers with the same document.
 - **The cookie** is `HttpOnly`, `SameSite=Strict`, `Path=/`, with no `Domain` and no expiry. Over HTTPS it is also `Secure` and named `__Host-hlp_session` (a browser then refuses to let a subdomain or a plain-HTTP page replace it); over HTTP it is `hlp_session`, and each name is accepted only on its own scheme. Its value is 32 random bytes; the server keeps only a hash of it, in memory, so a restart logs everybody out. There is no "remember me".
 - **A session ends** after `SESSION_IDLE_MINUTES` without a request (default 30) or `SESSION_MAX_HOURS` after the login (default 12), and **on the next request after its user's password was changed or reset, the user was disabled or deleted, or the role changed**, whether that was done by the `web-user` command or anything else. A new login ends the session it replaces, and each user keeps at most 10 sessions.
 - **Guessing is slowed down**, not blocked for good. Failures are counted per address and per username; the first three cost nothing, then the wait doubles (2, 4, 8 ... seconds) up to 5 minutes for an address and **30 seconds for a username**, so nobody can lock a real user out for long. While a wait lasts every attempt, right password or wrong, gets `429 too_many_attempts` with `Retry-After`. A success clears the counts.
-- **The audit log** gets `auth.login` (with the role), `auth.login_failed`, `auth.throttled` (once, when a wait begins) and `auth.logout`, each with the user and the address. A username that does not exist is written as `(unknown user)`, never as typed (it may be a password typed in the wrong box). A login that cannot be written to the audit log does not happen (500); a failure is still refused if its entry cannot be written. Passwords and session ids never reach the log or the audit trail.
+- **The audit log** gets `auth.login` (with the role), `auth.login_failed`, `auth.throttled` (once, when a wait begins) and `auth.logout` (and `auth.password_failed` with `user.password_changed`, see [changing your own password](#changing-your-own-password-post-apiv1authpassword)), each with the user and the address. A username that does not exist is written as `(unknown user)`, never as typed (it may be a password typed in the wrong box). A login that cannot be written to the audit log does not happen (500); a failure is still refused if its entry cannot be written. Passwords and session ids never reach the log or the audit trail.
+
+### Changing your own password: `POST /api/v1/auth/password`
+
+Any logged-in user, a viewer included, may change their own password; no administrator is needed (an administrator resetting **someone else's** password uses [`/api/v1/users/{username}/password`](#users-apiv1users)). The body is `{"current_password": ..., "new_password": ...}` (JSON, the CSRF token and the `Origin` like every unsafe request).
+
+- **The current password is checked**, and every wrong one counts in the **same throttle as a failed login** (per address and per user name, the same waits), so a session left open cannot be used to guess it: while a wait lasts the answer is `429 too_many_attempts` with `Retry-After`, whatever the passwords are. A wrong one is `422 invalid_current_password` ("The current password is wrong.").
+- **The new password follows the rule of every other path** (at least 12 and at most 1024 characters): `422 invalid_password` with the sentence of the rule that was broken. The rule is checked **before** the current password, so such a request says nothing about whether the current one was right and does not count as a failed guess. A body with anything but the two passwords is `422 invalid_parameter`; a password is never part of an answer.
+- **The other sessions of the user end and yours goes on.** The answer is the document of `GET /api/v1/auth/me` for a **new session**: the cookie value and the CSRF token change (`csrf_token` in the answer is the one to send from now on, and the old one is refused with `403 csrf_token`), while the start of the login stays, so changing the password does not lengthen it. Sessions of other users are not touched.
+- **Refusals.** `serve --read-only` answers `403 read_only` (the accounts are a file on this machine); an account whose `can_change_password` is false answers `403 password_not_changeable`; `500 audit_unavailable` means the change was not made because its audit entry could not be written.
+- **Audit.** `user.password_changed` (the user as the actor and as `user`, with the address), written in the same step as the change; `auth.password_failed` for a wrong current password and `auth.throttled` when a wait begins, as for a login. No password or hash is in the log, the audit trail or an answer. The `last_login` of the account is not changed: this is not a login.
 
 ### The API: `/api/v1/unifi`
 
-Every report is a `GET` that returns the same document as the command's `--json`, with two more keys, and takes the command's options as query parameters (`?only=wan&only=wifi`, `?days=90`, `?include_offline=true`). `{site}` is a site name, internal reference or UUID (`default` on most controllers).
+Every report is a `GET` that returns the same document as the command's `--json` (the dashboard summary, below, has no command), with two more keys, and takes the command's options as query parameters (`?only=wan&only=wifi`, `?days=90`, `?include_offline=true`). `{site}` is a site name, internal reference or UUID (`default` on most controllers).
 
 | Route | Same as | Query parameters |
 | ----- | ------- | ---------------- |
@@ -127,6 +137,7 @@ Every report is a `GET` that returns the same document as the command's `--json`
 | `.../reservations` | `query reservations` | `search`, `offline` |
 | `.../new-clients` | `new-clients` | `search` |
 | `.../clients/{mac}` | `client` | `events`, `since` (the MAC in any spelling) |
+| `.../dashboard` | none: the [dashboard summary](#dashboard-summary-apiv1unifisitessitedashboard) | |
 | `/api/v1/schemas`, `/api/v1/schemas/{name}` | | the [JSON Schemas](schemas.md) |
 
 Every route also takes `refresh=true`, which reads the controller again instead of using the cache (honoured at most every 5 seconds; a faster one is ignored and the response says so in `warnings`).
@@ -221,6 +232,7 @@ Each finding has:
 | `rank`, `priority` | The place in the order and **what put it there**: `reasons` (for example `critical severity`, `the check affects the network as a whole`, `first recorded 10 days ago`), the `scope` of the check (`network`, `device`, `link`, `wireless`, `client`, `events`) and a `score`. The order is: findings nobody has looked at, then acknowledged, then snoozed; within each, severity, then scope, then how long the finding has been known **where there is a record**; then code and subject, so the same input is always in the same order |
 | `triage` | `state` (`open`, `acknowledged`, `snoozed`), who, when, the `until` of a snooze and a short plain-text `note` |
 | `first_seen_at`, `limitations` | When it was first recorded, or `null`, and then a limitation says that how long it has been happening is **unknown**: there is no invented history. Another limitation says when the read was partial (`no_events`, or an optional read failed) |
+| `group` | `null`, or the finding that **probably explains this one**, with the evidence for the claim (see below) |
 | `next_checks`, `docs` | **General** guidance for this kind of check (labelled as such in `next_checks_are`) and a link to the finding-code table; not advice specific to the finding |
 
 The top level has `summary` (the counts by severity, as `diagnose` has them, and by triage state), `complete` (every check ran and every read worked: false with `no_events` or when an optional read failed), `triage_available` (false, with a limitation, when the triage file cannot be read: the findings are still shown) and the usual `generated_at` and `warnings`. **A read never writes anything.**
@@ -229,7 +241,28 @@ The top level has `summary` (the counts by severity, as `diagnose` has them, and
 - **When a finding clears.** The scheduler ([below](#the-scheduler)) records what each diagnose run finds (first and last seen) and **drops the entry of a finding that a complete read of every check no longer shows**, acknowledged or not. A failed or partial read changes nothing, so it can never imply that something was fixed; a finding that comes back after clearing is a new one, open. Without the scheduler, an acknowledgment lasts until its snooze ends or an administrator reopens it, and "first seen" is known only for findings somebody triaged.
 - **Where it is kept.** `snapshots/<site id>/triage.json`, one file per site beside the snapshots and the notification state (so it is in the Docker volume that already covers `snapshots/`), owner-only, written atomically under a lock, never through a symbolic link, and refused if it names another site. It holds the id, the code, the state, who and when, and the first and last seen times: **no name, MAC or address.** At most 5000 findings are tracked per site.
 - **Audit.** `triage.changed` with the id, the code, the new state and the `until`: never a name, a MAC or the note. `--read-only` refuses a change (the scheduler cannot run then, so nothing else writes the file).
-- Grouping findings that share a cause (for example devices that are offline behind an offline switch) is not here: it needs the uplink topology as evidence and is a separate issue.
+- **Findings that share a cause.** A finding has a `group` only where the controller's data supports it, never as a guess, and **nothing is hidden or merged**: the grouped finding stays in the list at its own rank (the list, the ranking and the counts are the same with or without it), and `group.cause` is the `id` of another finding of the same list. The one case so far is `offline_behind_offline_uplink`: a `device.offline` finding for a device whose last reported uplink leads, through devices that are all offline too, to an offline device that has its own `device.offline` finding; that device, the one farthest up the chain, is the cause (a gateway rather than the switch below it, when both are offline). A `group` has `kind`, `cause`, `cause_code`, a one-sentence `summary`, `evidence` (`source`, and the `chain` from the grouped device to the cause: each hop has `name`, `mac`, `offline`, the `finding` id of its own offline finding or `null`, and the `uplink_port` of the next device it was plugged into) and `limitations`. **An offline device keeps its last known uplink**, so the chain shows where the devices *were* connected and the claim is "probably", never "confirmed" (a power cut or a cabling fault would look the same): the limitations say so. It is **not** grouped when the device has no known uplink or the uplink names a device the controller does not list, when its parent is online, when the offline devices above it have no finding (an ignore rule hid it: there is nothing to point at), or when the uplinks form a loop. The same group is in the answer of `PUT .../triage`. It is built from the uplinks already read for the findings, so it asks the controller for nothing more.
+
+### Dashboard summary: `/api/v1/unifi/sites/{site}/dashboard`
+
+`GET .../dashboard` is one small document for the first page of a web interface: **how the network is, and how much of that is known.** There is no command for it. It is built from the reads a full `diagnose` makes (the same cache entries, so a page that also shows the findings costs no extra read, and no new controller endpoint) and uses the same builders as `diagnose`, `wan` and `wifi`. Both roles read it; it never writes. Its [schema](schemas.md) is `dashboard.v1.schema.json`.
+
+| Key | What it says |
+| --- | --- |
+| `status` | `critical` or `warning` when a check found that (a finding that is acknowledged or snoozed still counts: triage never hides a finding); `ok` **only** for a complete, fresh read of a controller that answered; otherwise `unknown`. A partial, old or failed read is never `ok`. |
+| `complete` | False when an optional read failed, so some findings or sections may be missing (the `warnings` of the response say which; it is the flag `diagnose` has). |
+| `stale` | True when a read failed and an older cached answer (at most 10 minutes old) was used instead; `generated_at` then says how old the data is. |
+| `controller.state` | `ok`, `unreachable` (no answer), `certificate` (TLS check failed) or `key_rejected` (the API key was refused). |
+| `findings` | `total`, `ignored` (what the [ignore list](diagnose.md) hid), `by_severity`, `by_state` (`open`, `acknowledged`, `snoozed`, from the [triage](#findings-and-triage-apiv1unifisitessitefindings) file: **`null`**, never zero, when it cannot be used, with `triage_available` false) and `attention`: the five open findings to look at first, in the order of the findings list (`id`, `rank`, `severity`, `code`, `subject`, `message`). |
+| `devices` | `total`, `online`, `offline` and `other` (adopting, updating, pending adoption...). |
+| `clients` | `connected`, `wired`, `wireless` and `offline` (previously seen, not connected; `null` when the client history could not be read). |
+| `wan` | The headline of [`wan`](network.md): `status`, `internet_status`, `latency_ms`, `drops`, `availability_pct` (the lowest 24-hour availability), `nat` and the `last_speedtest`. |
+| `wifi` | Access points (`access_points`, `access_points_online`), `radios`, `wireless_clients`, and the `lowest_satisfaction` and `highest_utilization` of the radios of online access points. |
+| `events` | `total` in the last 24 hours, `truncated`, `notable_total` (above low severity) and the five newest `notable` events. |
+
+- **`available`.** Every section has it. False means the section was **not read** (for example `wan` when the health read failed, `wifi` without the legacy device list, `events` without the event log): the other keys are then absent, and a number is never filled with zero. A number whose source is missing is `null`.
+- **A controller that cannot be reached is a `200`**, not a `502`: `controller.state` says why, `status` is `unknown`, `complete` is false, every section is `{"available": false}` and `site` is `null`, with one fixed warning. A dashboard can show that; an error page cannot. A failure that is not about the connection (an unknown site is `404`, an answer that cannot be used `502`) is the usual error. A controller that is down while the cache still holds an older answer gives the old data with `stale` true and the state of the failed connection.
+- **Reads:** the same as `diagnose` (devices, clients, the legacy device and client lists, the client history, the network configuration, `stat/health`, speedtests and the one event-log query); `tests/test_needs.py` pins this.
 
 ### Notes: `/api/v1/unifi/sites/{site}/notes`
 
@@ -244,6 +277,19 @@ A note is a short plain-text remark an administrator keeps about a finding, a de
 - **Findings list.** Each finding shows `note_count`; when the notes file cannot be read the list says `notes_available: false` and gives a limitation instead of showing zero.
 - **Where it is kept.** `snapshots/<site id>/notes.json`, per site like the triage state and the snapshots (so a note cannot reach another site, and the Docker volume that covers `snapshots/` covers it), owner-only, written atomically under a lock, never through a symbolic link. A damaged file is `500 notes_unreadable` with a fixed message that names no path. Notes are never sent to the controller or in a notification.
 - **Audit.** `note.added`, `note.edited` and `note.deleted` with the note id and the kind of subject (`device`, `client`, `finding`): never the text or a MAC. `--read-only` refuses every change.
+
+### Search: `/api/v1/unifi/sites/{site}/search`
+
+`GET .../search?q=TEXT` is the backend of a global search box: one request finds clients, devices, Wi-Fi networks (SSIDs), networks, findings and subjects with notes. Both roles read; it never writes.
+
+- **Parameters.** `q` is 2 to 64 characters once trimmed of white space (`422 invalid_parameter` otherwise; the text as sent may be up to 256 characters, so spaces around a valid query do no harm) and `limit` (default 10, 1 to 50) bounds **each kind** separately. `q` is never a pattern: `.*` is two characters, not a wildcard.
+- **What matches.** Text is a case-insensitive substring. **MACs in any spelling** (`aa:bb:cc:dd:ee:ff`, `AA-BB-CC-DD-EE-FF`, `aabb.ccdd.eeff`, `AABBCCDDEEFF`, or a fragment of at least four hex digits) and **IP addresses in any spelling** (a whole address is compared in its canonical form, so `FE80:0:0:0:0:0:0:1` finds `fe80::1`; a fragment matches as text) find the same hit. Clients: every name and hostname the controller has for them, MAC and IP, including clients that are not connected now (from the client history). Devices: name, MAC, IP and model. Wi-Fi networks: name. Networks: name, subnet and VLAN. Findings (the ones the findings list shows, after the ignore rules): code, subject, message, MAC and the finding `id`, whole. Notes: the subject reference (MAC in any spelling, or the finding id) and the **last-known name** the notes were written under, so a device that is gone can still be found.
+- **The response** has `items`, ordered by kind (`client`, `device`, `ssid`, `network`, `finding`, `note`) and, within a kind, best match first (the whole value, then one that starts with the text, then one that contains it), then by label and key, so the same data always gives the same answer. Every item has `kind`, `key` (the MAC of a client or device, the controller's id of a Wi-Fi network or network, the `id` of the [findings list](#findings-and-triage-apiv1unifisitessitefindings) for a finding, the note subject such as `device:AA:BB:CC:DD:EE:FF` for a note), `label` (what to show) and `matched` (the fields that matched), plus a few short fields of the kind (`mac`, `ip`, `status`, `model`; `security`, `enabled`; `vlan`, `subnet`; `severity`, `code`, `message`; `subject_kind`, `note_count`, `last_note_at`). `kinds` says for each kind how many matched in all (`total`) and how many are in `items` (`shown`); `truncated` is true when any kind was cut by `limit`.
+- **Text is returned as the controller wrote it.** Names are untrusted and can hold markup, control or direction-changing characters: they are never cleaned, escaped or interpreted, and whoever shows them renders them as text.
+- **Partial reads are said, never hidden.** `complete` is false when an optional read failed (see `warnings`) or a source could not be searched; `unavailable` names the kinds not searched at all (`ssid`, `network`, `note`) and `limitations` says so in words, so "no hit" is never mistaken for "nothing there". A notes file that is damaged, a symbolic link or another site's makes the notes `unavailable`; it never fails the search.
+- **Reads.** The same snapshot the findings list reads plus the Wi-Fi networks (`rest/wlanconf`), through the cache: a search after a findings request costs one new read, and the next searches none. No new endpoint, no write, and the event-log query is the one the findings already make. The search text is not logged.
+- **One site.** Everything is of the site in the path; the notes are the site's own file, so a name that exists only in another site is never a hit, and an unknown site is `404 site_not_found`.
+- **Errors.** As the other report routes: `404`, `422`, `500 settings_invalid`, and `502`/`504` by kind.
 
 ### Backup: `/api/v1/backup`
 
@@ -336,7 +382,7 @@ While no administrator exists, all of them need the token in an **`X-Setup-Token
 
 ## The scheduler
 
-`hlp serve --scheduler` runs two jobs on a background thread of the server, one after the other. It starts when the server is set up (not before) and stops with the server. It is **off** by default (a workstation's `serve`). The container image ([#188](https://github.com/jeffholst/homelab-probe/issues/188), not built yet) starts the server with `--scheduler`; until then, add the flag to your own `serve` command.
+`hlp serve --scheduler` runs two jobs on a background thread of the server, one after the other. It starts when the server is set up (not before) and stops with the server. It is **off** by default (a workstation's `serve`). The [container image](docker.md) starts the server with `--scheduler`; otherwise add the flag to your own `serve` command.
 
 | Job | Every | What it does |
 | --- | ----- | ------------ |
@@ -404,6 +450,7 @@ Both live in the data directory, readable by the owner only (`0600`, and `0700` 
   | `user.role_changed` | `set-role` |
   | `user.disabled`, `user.enabled` | `disable`, `enable` |
   | `user.password_reset` | `reset-password` |
+  | `user.password_changed` | a user changed their own password over the API |
   | `user.password_upgraded` | a login replaced an old hash with one made with the current parameters |
   | `user.deleted` | `delete` |
 
@@ -413,4 +460,8 @@ Both live in the data directory, readable by the owner only (`0600`, and `0700` 
 
 ## What is not here yet
 
-The web app's screens (the setup wizard among them) come with later stages of the roadmap; the server already [serves a built one](#the-web-app-files). The login uses the interface the accounts module was built for: an `Authenticator` that turns a username and password into a `Principal(username, role, source)`, with `LocalAccounts` (this page's accounts) as the first implementation. A wrong password, an unknown user and a disabled one all take the same work and give the same answer, so the answer does not reveal which usernames exist. Authentication checks the current account record and records the login under the same file lock, so a concurrent disable, role change or deletion cannot return a stale principal.
+The remaining app screens (including the setup wizard) come in later roadmap stages; the server serves the built app when one is installed (see [The web app files](#the-web-app-files)). The login uses the interface the accounts module was built for: an `Authenticator` that turns a username and password into a `Principal(username, role, source)`, with `LocalAccounts` (this page's accounts) as the first implementation. A wrong password, an unknown user and a disabled one all take the same work and give the same answer, so the answer does not reveal which usernames exist. Authentication checks the current account record and records the login under the same file lock, so a concurrent disable, role change or deletion cannot return a stale principal.
+
+## The web app (`web/`)
+
+The browser interface lives in `web/` (React, TypeScript, Vite) and talks to the API above from the same origin: the session cookie, the `X-CSRF-Token` from the login on every unsafe request (kept in memory, never in browser storage) and the `{error, message}` of every failure. This first part has the login and logout, a navigation shell for phone, tablet and desktop, light, dark and system themes, the loading, refreshing, empty, error, stale and partial states, and a home and a profile page; the pages for the reports, findings and settings follow. Controller strings are rendered as text only, with the control, invisible and bidirectional characters that `util.printable` removes also removed here. How to run it against `hlp --demo serve` and what CI checks are in [development.md](development.md#the-web-interface-web).

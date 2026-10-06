@@ -1,0 +1,136 @@
+import { useEffect, useState, type FormEvent } from "react";
+import { Navigate, useSearchParams } from "react-router-dom";
+
+import { isApiError } from "../api/errors";
+import { useMeta } from "../app/meta";
+import { safeNext, useLogin, useSession } from "../auth/session";
+import { Banner, ErrorState, Loading } from "../components/DataStates";
+import { Text } from "../components/Text";
+import { ThemeSwitch } from "../components/ThemeSwitch";
+import { usePageTitle } from "../lib/usePageTitle";
+
+/** Seconds left until `until` (ms since the epoch), ticking once a second; 0 when there is no wait. */
+function useCountdown(until: number | null): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (until === null) return;
+    const timer = window.setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [until]);
+  return until === null ? 0 : Math.max(0, Math.ceil((until - now) / 1000));
+}
+
+export function LoginPage() {
+  usePageTitle("Log in");
+  const [params] = useSearchParams();
+  const next = safeNext(params.get("next"));
+  const session = useSession();
+  const meta = useMeta();
+  const login = useLogin();
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [waitUntil, setWaitUntil] = useState<number | null>(null);
+  const secondsLeft = useCountdown(waitUntil);
+
+  if (session.data) return <Navigate to={next} replace />;
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    if (secondsLeft > 0 || login.isPending) return;
+    login.mutate(
+      { username, password },
+      {
+        onSuccess: () => {
+          setPassword("");
+        },
+        onError: (error) => {
+          setPassword("");
+          if (isApiError(error) && error.status === 429) setWaitUntil(Date.now() + (error.retryAfter ?? 5) * 1000);
+        },
+      },
+    );
+  }
+
+  const error = login.error;
+  const unencrypted = meta.data !== undefined && !meta.data.https && !meta.data.loopback;
+
+  return (
+    <div className="login">
+      <header className="login__top">
+        <p className="brand">Homelab Probe</p>
+        <ThemeSwitch />
+      </header>
+      <main id="main" className="login__main">
+        <div className="card login__card">
+          <h1>Log in</h1>
+          {unencrypted && (
+            <Banner tone="warning" title="This connection is not encrypted">
+              <p className="banner__text">
+                Your password would travel in clear text. Use an SSH tunnel or an HTTPS reverse proxy to reach this server.
+              </p>
+            </Banner>
+          )}
+          {meta.data?.needs_setup === true && (
+            <Banner tone="info" title="This server is not set up yet">
+              <p className="banner__text">The setup screens are not part of this version of the app.</p>
+            </Banner>
+          )}
+          {meta.isPending && <Loading label="the server's details" />}
+          {meta.isError && <ErrorState error={meta.error} label="the server's details" onRetry={() => void meta.refetch()} />}
+          {error && (
+            <Banner tone="danger" role="alert" title={isApiError(error) && error.status === 429 ? "Too many attempts" : "Could not log in"}>
+              <p className="banner__text">
+                <Text value={isApiError(error) ? error.message : "Something went wrong."} />
+              </p>
+            </Banner>
+          )}
+          <form onSubmit={submit}>
+            <div className="field">
+              <label htmlFor="username">User name</label>
+              <input
+                id="username"
+                name="username"
+                className="input"
+                type="text"
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
+                required
+                value={username}
+                onChange={(event) => {
+                  setUsername(event.target.value);
+                }}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="password">Password</label>
+              <input
+                id="password"
+                name="password"
+                className="input"
+                type="password"
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(event) => {
+                  setPassword(event.target.value);
+                }}
+              />
+            </div>
+            <button type="submit" className="button" disabled={secondsLeft > 0 || login.isPending}>
+              {secondsLeft > 0 ? `Wait ${secondsLeft} s` : login.isPending ? "Logging in…" : "Log in"}
+            </button>
+          </form>
+        </div>
+      </main>
+      <footer className="login__foot muted">
+        <span>Read-only: nothing here changes your controller.</span>
+        {meta.data && <span>Version {meta.data.version}</span>}
+      </footer>
+    </div>
+  );
+}

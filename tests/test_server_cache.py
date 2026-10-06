@@ -284,3 +284,46 @@ def test_a_failure_that_arrives_after_a_refresh_is_raised_but_not_remembered(cac
         cache.fetch("k", failing_during_a_refresh)
     assert cache.fetch("k", lambda: {"fresh": True}) == {"fresh": True}        # not refused: nothing was remembered
     assert reads == [1]
+
+
+# -- which answers were old ------------------------------------------------------------------------------------
+
+def test_the_kinds_of_the_failures_answered_from_an_older_cache_are_collected_per_block(cache, clock):
+    from homelab_probe.server.cache import stale_served, track_stale
+
+    source = Source()
+    cache.fetch("k", source)
+    cache.fetch("other", lambda: 5)
+    clock.now += 100
+    source.fail = error("timeout")
+    with track_stale() as kinds, logs.collect_warnings(quiet=True):
+        assert stale_served() == []                               # nothing yet
+        cache.fetch("other", lambda: 5)                           # an answer that was read fresh is not stale
+        cache.fetch("k", source)
+        assert kinds == ["timeout"] and stale_served() == ["timeout"] and stale_served() is not kinds
+    assert stale_served() == []                                   # outside a block nothing is reported
+    source.fail = error(None)
+    with track_stale() as kinds, logs.collect_warnings(quiet=True):
+        clock.now += 10
+        cache.fetch("k", source)
+    assert kinds == ["error"]                                     # a failure with no kind is still a failure
+
+
+def test_a_fresh_or_missing_answer_is_not_stale_and_worker_threads_share_the_block(cache):
+    import contextvars
+
+    from homelab_probe.server.cache import track_stale
+
+    with track_stale() as kinds:
+        cache.fetch("k", lambda: 1)
+        cache.fetch("k", lambda: 1)
+        assert kinds == []
+        source = Source()
+        source.fail = error()
+        with pytest.raises(UniFiAPIError):
+            cache.fetch("never-read", source)                     # no older answer: an error, not a stale answer
+        assert kinds == []
+        worker = threading.Thread(target=contextvars.copy_context().run, args=(kinds.append, "seen-by-a-thread"))
+        worker.start()
+        worker.join()
+        assert kinds == ["seen-by-a-thread"]

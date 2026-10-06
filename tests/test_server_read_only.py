@@ -63,7 +63,8 @@ def test_every_unsafe_route_is_either_marked_as_writing_or_on_the_list_of_those_
     assert len(operations) >= 9
     assert names - WRITES_NOTHING == LOCAL_WRITE_ENDPOINTS == {
         "put_settings", "setup_finish", "snapshots_save", "users_add", "users_change", "users_reset_password",
-        "findings_triage", "notes_add", "notes_edit", "notes_delete", "backup_restore"}
+        "findings_triage", "notes_add", "notes_edit", "notes_delete", "backup_restore",
+        "password_change"}
 
 
 def test_a_read_only_server_refuses_the_settings_change_and_still_serves_the_settings(tmp_path):

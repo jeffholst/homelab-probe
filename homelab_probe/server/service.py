@@ -22,7 +22,7 @@ from ..client import GET_RETRIES, SYSTEM_LOG_QUERY_KEYS, UniFiAPIError, UniFiCli
 from ..config import Config
 from ..demo.session import DemoSession
 from ..documents import Document
-from .cache import DEFAULT_ERROR_TTL, DEFAULT_STALE, DEFAULT_TTL, ResponseCache, track_ages
+from .cache import DEFAULT_ERROR_TTL, DEFAULT_STALE, DEFAULT_TTL, ResponseCache, track_ages, track_stale
 
 _log = logging.getLogger(__name__)
 TIME_KEYS = ("timestampFrom", "timestampTo")      # the event-log window: its edges move every millisecond
@@ -109,7 +109,7 @@ class ControllerService:
         """``make(client)`` with a client of its own. ``generated_at`` is the age of the oldest answer it used (UTC),
         so a page built from the cache says how old its data is; ``warnings`` are the document's, including a note
         for every answer served stale."""
-        with track_ages() as ages, logs.collect_warnings(quiet=True) as served:
+        with track_ages() as ages, track_stale(), logs.collect_warnings(quiet=True) as served:
             document = make(self.client())
         moment = min(ages) if ages else time.time()
         stamp = datetime.fromtimestamp(moment, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")

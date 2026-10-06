@@ -1,0 +1,407 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/jeffholst/homelab-probe/main/docs/schemas/dashboard.v1.schema.json",
+  "title": "dashboard",
+  "description": "The dashboard summary of the web API (`GET /api/v1/unifi/sites/{site}/dashboard`; there is no command): findings counted by severity and triage state, the headline of the internet connection and Wi-Fi, device and client counts and notable events, with `status`, `complete`, `stale` and `available` so a partial or failed read never reads as healthy.",
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": 1,
+      "description": "The format of this document; it changes only when a field is removed or renamed."
+    },
+    "status": {
+      "enum": [
+        "ok",
+        "warning",
+        "critical",
+        "unknown"
+      ],
+      "description": "`critical` or `warning` when a check found it (acknowledged or snoozed findings still count); `ok` only for a complete, fresh read of a controller that answered; `unknown` otherwise. Never `ok` on a partial, old or failed read."
+    },
+    "complete": {
+      "type": "boolean",
+      "description": "False when an optional read failed, so some findings or sections may be missing (see the warnings of the response)."
+    },
+    "stale": {
+      "type": "boolean",
+      "description": "True when a read failed and an older cached answer was used instead."
+    },
+    "controller": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "enum": [
+            "ok",
+            "unreachable",
+            "certificate",
+            "key_rejected"
+          ],
+          "description": "`ok`: the controller answered; `unreachable`: no answer; `certificate`: its TLS certificate was not accepted; `key_rejected`: it refused the API key."
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "description": "Whether the controller could be read."
+    },
+    "site": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "Null when the controller could not be read.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    },
+    "findings": {
+      "type": "object",
+      "properties": {
+        "available": {
+          "type": "boolean",
+          "description": "False: this section was not read (the controller or a read it depends on was unavailable). Every other key of an unavailable section is absent; a missing number is never zero."
+        },
+        "total": {
+          "type": "integer",
+          "description": "Findings after the ignore list."
+        },
+        "ignored": {
+          "type": "integer",
+          "description": "Findings the ignore list suppressed."
+        },
+        "by_severity": {
+          "type": "object",
+          "properties": {
+            "critical": {
+              "type": "integer"
+            },
+            "warning": {
+              "type": "integer"
+            },
+            "info": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "critical",
+            "warning",
+            "info"
+          ]
+        },
+        "by_state": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "Findings by triage state; null when the triage file could not be used (not zero).",
+          "properties": {
+            "open": {
+              "type": "integer"
+            },
+            "acknowledged": {
+              "type": "integer"
+            },
+            "snoozed": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "open",
+            "acknowledged",
+            "snoozed"
+          ]
+        },
+        "triage_available": {
+          "type": "boolean"
+        },
+        "attention": {
+          "type": "array",
+          "description": "The open findings to look at first, most urgent first (the order of the findings page).",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "rank": {
+                "type": "integer"
+              },
+              "severity": {
+                "type": "string"
+              },
+              "code": {
+                "type": "string"
+              },
+              "subject": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "rank",
+              "severity",
+              "code",
+              "subject",
+              "message"
+            ]
+          }
+        }
+      },
+      "required": [
+        "available"
+      ],
+      "description": "The findings of every check of `diagnose`, counted."
+    },
+    "devices": {
+      "type": "object",
+      "properties": {
+        "available": {
+          "type": "boolean",
+          "description": "False: this section was not read (the controller or a read it depends on was unavailable). Every other key of an unavailable section is absent; a missing number is never zero."
+        },
+        "total": {
+          "type": "integer"
+        },
+        "online": {
+          "type": "integer"
+        },
+        "offline": {
+          "type": "integer"
+        },
+        "other": {
+          "type": "integer",
+          "description": "Neither online nor offline: adopting, updating, pending adoption..."
+        }
+      },
+      "required": [
+        "available"
+      ],
+      "description": "UniFi devices by state."
+    },
+    "clients": {
+      "type": "object",
+      "properties": {
+        "available": {
+          "type": "boolean",
+          "description": "False: this section was not read (the controller or a read it depends on was unavailable). Every other key of an unavailable section is absent; a missing number is never zero."
+        },
+        "connected": {
+          "type": "integer"
+        },
+        "wired": {
+          "type": "integer"
+        },
+        "wireless": {
+          "type": "integer"
+        },
+        "offline": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Previously seen clients that are not connected; null when the client history could not be read."
+        }
+      },
+      "required": [
+        "available"
+      ],
+      "description": "Connected clients, and previously seen ones that are not."
+    },
+    "wan": {
+      "type": "object",
+      "properties": {
+        "available": {
+          "type": "boolean",
+          "description": "False: this section was not read (the controller or a read it depends on was unavailable). Every other key of an unavailable section is absent; a missing number is never zero."
+        },
+        "status": {
+          "type": "string"
+        },
+        "internet_status": {
+          "type": "string"
+        },
+        "latency_ms": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "drops": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "availability_pct": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "The lowest 24-hour availability the controller reports across the WAN connections."
+        },
+        "nat": {
+          "type": "string",
+          "description": "`public`, `private`, `cgnat`, `link_local` or `unknown` (see `wan`)."
+        },
+        "last_speedtest": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "time": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "download_mbps": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "upload_mbps": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "time",
+            "download_mbps",
+            "upload_mbps"
+          ]
+        }
+      },
+      "required": [
+        "available"
+      ],
+      "description": "The headline of the internet connection (`wan`)."
+    },
+    "wifi": {
+      "type": "object",
+      "properties": {
+        "available": {
+          "type": "boolean",
+          "description": "False: this section was not read (the controller or a read it depends on was unavailable). Every other key of an unavailable section is absent; a missing number is never zero."
+        },
+        "access_points": {
+          "type": "integer"
+        },
+        "access_points_online": {
+          "type": "integer"
+        },
+        "radios": {
+          "type": "integer"
+        },
+        "wireless_clients": {
+          "type": "integer"
+        },
+        "lowest_satisfaction": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "highest_utilization": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "available"
+      ],
+      "description": "The headline of the Wi-Fi radios (`wifi`), over the access points that are online."
+    },
+    "events": {
+      "type": "object",
+      "properties": {
+        "available": {
+          "type": "boolean",
+          "description": "False: this section was not read (the controller or a read it depends on was unavailable). Every other key of an unavailable section is absent; a missing number is never zero."
+        },
+        "window_seconds": {
+          "type": "integer"
+        },
+        "total": {
+          "type": "integer"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "notable_total": {
+          "type": "integer",
+          "description": "Events above low severity in the window."
+        },
+        "notable": {
+          "type": "array",
+          "description": "The newest of those, at most five.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "severity": {
+                "type": "string"
+              },
+              "category": {
+                "type": "string"
+              },
+              "event": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "timestamp",
+              "severity",
+              "category",
+              "event",
+              "message"
+            ]
+          }
+        }
+      },
+      "required": [
+        "available"
+      ],
+      "description": "Events of the last 24 hours (the one read-only event log query)."
+    }
+  },
+  "required": [
+    "clients",
+    "complete",
+    "controller",
+    "devices",
+    "events",
+    "findings",
+    "site",
+    "stale",
+    "status",
+    "version",
+    "wan",
+    "wifi"
+  ]
+}

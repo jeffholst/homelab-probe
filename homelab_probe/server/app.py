@@ -22,10 +22,13 @@ from ..config import Config
 from ..util import is_loopback
 from . import (
     backup_api,
+    dashboard_api,
     findings_api,
     notes_api,
+    profile_api,
     restore_api,
     routes,
+    search_api,
     settings_api,
     snapshots_api,
     static,
@@ -138,11 +141,14 @@ def create_app(config: Config, settings_path: Optional[Path] = None, state_dir: 
     app.include_router(users_api.router())
     app.include_router(status_api.router())
     app.include_router(findings_api.router())
+    app.include_router(dashboard_api.router())
     app.include_router(notes_api.router())
+    app.include_router(search_api.router())
     app.include_router(backup_api.router())
     app.include_router(restore_api.router())
     app.include_router(public_router())
     app.include_router(session_router())
+    app.include_router(profile_api.router())
 
     @app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False, response_model=None)
     @public

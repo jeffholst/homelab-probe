@@ -1,6 +1,6 @@
 # Running on a schedule
 
-`diagnose --notify` is meant to run unattended: every few minutes it checks the network and sends a message only when something changed. This page shows how to run it from **cron**, a **systemd timer**, **launchd** (macOS) and **Docker**, and what is the same for all of them. Every snippet below was run once (the units with `systemd-analyze verify`, the plist with `plutil` and `launchctl`, the container with `docker build` and `docker run`) against an unreachable test controller, never a real one.
+`diagnose --notify` is meant to run unattended: every few minutes it checks the network and sends a message only when something changed. This page shows how to run it from **cron**, a **systemd timer**, **launchd** (macOS) and **Docker**, and what is the same for all of them. Every snippet below was run once (the units with `systemd-analyze verify`, the plist with `plutil` and `launchctl`, the container with `docker build` and `docker run`) against an unreachable test controller, never a real one; the [Docker image](docker.md) is also checked in CI.
 
 ## Before you pick a scheduler
 
@@ -132,38 +132,19 @@ launchd has no notion of "findings": `last exit code = 1` or `2` means findings 
 
 ## Docker
 
-The tool needs only Python, so an image is a few lines. Nothing here is published for you: build it from a checkout of the project (or of a tag) and the image contains the code, no key and no data.
-
-```dockerfile
-FROM python:3.13-slim
-
-# Install the tool from the files of this checkout (or a tag): nothing else is copied into the image.
-WORKDIR /src
-COPY pyproject.toml README.md ./
-COPY homelab_probe homelab_probe
-RUN pip install --no-cache-dir .
-
-# Run as an ordinary user. The working directory is where the tool looks for its settings file and where
-# `snapshots/` (the notification state) is written, so it is the only place that needs to survive a run.
-RUN useradd --system --uid 10001 --home-dir /data hlp \
-    && mkdir -p /data/snapshots && chown -R hlp /data
-USER hlp
-WORKDIR /data
-
-ENTRYPOINT ["hlp"]
-CMD ["diagnose", "--notify", "--fail-on", "critical"]
-```
+The [image](docker.md) runs the command line as well as the web server, so a scheduler can start it like any other command. Build it from a checkout of the project (or of a tag; nothing is published yet): the image contains the code, no key and no data. The server has its own [scheduler](web.md#the-scheduler) (`serve --scheduler`, the image's default command), which shares the notification state with the runs below, so you need one of the two, not both.
 
 ```bash
 docker build -t homelab-probe .
-docker run --rm --env-file .env -v homelab-probe-state:/data/snapshots homelab-probe diagnose --notify --notify-baseline   # once
-docker run --rm --env-file .env -v homelab-probe-state:/data/snapshots homelab-probe                                      # the scheduled run
+docker run --rm --env-file .env -v homelab-probe-data:/data homelab-probe diagnose --notify --notify-baseline   # once
+docker run --rm --env-file .env -v homelab-probe-data:/data homelab-probe diagnose --notify                     # the scheduled run
 ```
 
-- **The key stays out of the image.** `--env-file .env` hands the settings to the container as environment variables at run time. Docker reads that file literally: **no quotes and no `export`** (`UNIFI_URL="https://..."` keeps the quote marks and the tool refuses it with `UNIFI_URL must look like https://host[:port]`; a line that starts with `export` makes Docker refuse the file as an `invalid env file`). A `.env` mounted at `/data/.env` is read too, but the container user (uid 10001) must be able to read it.
-- **Keep the build directory clean.** Docker sends the whole directory to the daemon. The three `COPY` lines mean `.env` and `snapshots/` cannot end up in the image, and a `.dockerignore` with the lines `.env`, `snapshots/` and `.venv/` keeps them out of the build context too.
-- **State survives in the named volume** mounted at `/data/snapshots` (the notification state is `snapshots/<site id>/notify-state.json`); without it every run would think everything is new. A settings file is mounted into the working directory: `-v "$PWD/hlp.toml:/data/hlp.toml:ro"`, and `--config FILE` also works.
-- **Exit codes pass through:** `docker run` exits with the tool's code (`3` for an error, as above), so any of the schedulers above can run it. For systemd, `ExecStart=/usr/bin/docker run --rm --env-file /opt/homelab-probe/.env -v homelab-probe-state:/data/snapshots homelab-probe` with `SuccessExitStatus=1 2` is the same service as before.
+- **Name the command.** The image's default command is the web server, so a run with nothing after the image name starts `serve`, not a check. The scheduled run above says `diagnose --notify`.
+- **The key stays out of the image.** `--env-file .env` hands the settings to the container as environment variables at run time. Docker reads that file literally: **no quotes and no `export`** (`UNIFI_URL="https://..."` keeps the quote marks and the tool refuses it with `UNIFI_URL must look like https://host[:port]`; a line that starts with `export` makes Docker refuse the file as an `invalid env file`). A `.env` in the volume (`/data/.env`) is read too, but it must be readable by uid 10001.
+- **Keep the build directory clean.** Docker sends the build context to the daemon; the image's `.dockerignore` lets in only the files the build copies, so `.env` and `snapshots/` cannot end up in the image or the context ([what is in the image](docker.md#what-is-in-the-image)).
+- **State survives in the named volume** mounted at `/data` (the notification state is `snapshots/<site id>/notify-state.json` under it); without it every run would think everything is new. It is the same volume the server uses. A settings file is mounted into it: `-v "$PWD/hlp.toml:/data/hlp.toml:ro"`, and `--config FILE` also works.
+- **Exit codes pass through:** `docker run` exits with the tool's code (`3` for an error, as above), so any of the schedulers above can run it. For systemd, `ExecStart=/usr/bin/docker run --rm --env-file /opt/homelab-probe/.env -v homelab-probe-data:/data homelab-probe diagnose --notify` with `SuccessExitStatus=1 2` is the same service as before.
 - **A controller on your LAN** is reached from the container like from any host; for a controller on the Docker host itself use the host's address, not `127.0.0.1` (inside the container that is the container). A self-signed certificate is handled as usual with `UNIFI_VERIFY_SSL` pointing at a CA file, which you mount.
 
 ## `--watch` or a schedule?

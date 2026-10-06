@@ -21,6 +21,7 @@ from jsonschema import Draft202012Validator, ValidationError
 
 from homelab_probe import cli, events, history, topology, wan, wifi
 from homelab_probe import client_view as client_view_module
+from homelab_probe import dashboard as dashboard_module
 from homelab_probe import doctor as doctor_module
 from homelab_probe import export as export_module
 from homelab_probe import firewall as firewall_module
@@ -185,6 +186,34 @@ def full_storage(fx):
     fx["legacy"]["device"][0]["storage"][0]["used"] = fx["legacy"]["device"][0]["storage"][0]["size"]
 
 
+def dashboard_variants():
+    """The dashboard has no command: its variants are documents built the way the server builds them."""
+    import requests
+
+    from homelab_probe import documents as documents_module
+    from homelab_probe.diagnose import CODES
+    from homelab_probe.settings import DiagnoseSettings, IgnoreRule
+
+    def make(settings=None, change=None, configure=None, **kwargs):
+        def build():
+            client = controller(change)
+            if configure:
+                configure(client)
+            return documents_module.dashboard_document(client, "default", settings, echo=False, **kwargs).data
+        return build
+
+    def refuse(client):
+        def get(*args, **kwargs):
+            raise requests.exceptions.ConnectionError("down")
+
+        client.session.get = get
+
+    healthy = DiagnoseSettings(ignore=tuple(IgnoreRule(code=code, reason="test") for code in CODES))
+    return [make(), make(healthy), make(configure=fail_endpoints("stat/health", "stat/alluser")),
+            make(configure=fail_endpoints("stat/device")), make(change=no_speedtests, stale=lambda: ["timeout"]),
+            make(triage=lambda site: {}), make(configure=refuse), make(change=sparse_wan)]
+
+
 def cli_variants(*variants):
     def make(argv, change, configure=None):
         return lambda: output(argv, change, configure)
@@ -242,6 +271,7 @@ DOCUMENTS = {
                              (["diagnose", "--only", "devices", "--json"], overheating),
                              (["diagnose", "--only", "devices", "--json"], full_storage),
                              (["diagnose", "--only", "ports", "--json"], None), (["diagnose", "--no-events", "--json"], None)),
+    "dashboard": dashboard_variants(),
     "snapshot": [lambda: inventory_snapshot()],
     "diff": [lambda: json.loads(history.diff_json(diff_snapshots(inventory_snapshot(), inventory_snapshot()))),
              lambda: json.loads(history.diff_json(diff_snapshots(inventory_snapshot(), churned()))),
@@ -363,6 +393,7 @@ VERSIONS = {
     "topology": topology.JSON_VERSION, "wifi": wifi.JSON_VERSION, "wan": wan.JSON_VERSION,
     "client": client_view_module.JSON_VERSION, "events-summary": events.JSON_VERSION, "diff": history.JSON_VERSION,
     "export": export_module.JSON_VERSION, "doctor": doctor_module.JSON_VERSION,
+    "dashboard": dashboard_module.JSON_VERSION,
 }
 
 

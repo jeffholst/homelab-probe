@@ -28,7 +28,8 @@ CONFIG_VARIABLES = ("UNIFI_URL", "UNIFI_API_KEY", "UNIFI_SITE_ID", "UNIFI_VERIFY
                     "NOTIFY_SMTP_USER", "NOTIFY_SMTP_PASSWORD", "NOTIFY_EMAIL_FROM", "NOTIFY_EMAIL_TO", "LOG_LEVEL",
                     "LOG_FORMAT", "AUDIT_LOG_MAX_MB", "AUDIT_LOG_FILES",
                     "SESSION_IDLE_MINUTES", "SESSION_MAX_HOURS",
-                    "SCHEDULER_DIAGNOSE_MINUTES", "SCHEDULER_SNAPSHOT_HOURS", "SCHEDULER_SNAPSHOT_KEEP")
+                    "SCHEDULER_DIAGNOSE_MINUTES", "SCHEDULER_SNAPSHOT_HOURS", "SCHEDULER_SNAPSHOT_KEEP",
+                    "NO_COLOR", "TERM", "COLUMNS", "CI")        # terminal presentation (present.py)
 
 
 @pytest.fixture(autouse=True)

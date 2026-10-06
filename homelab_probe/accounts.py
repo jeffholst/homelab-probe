@@ -77,6 +77,10 @@ class LastAdministratorError(AccountError):
     """The change would leave no enabled administrator."""
 
 
+class WrongPasswordError(AccountError):
+    """The current password given for a change of one's own password is not the account's."""
+
+
 class AdministratorExistsError(AccountError):
     """The first administrator was asked for, and an enabled administrator exists."""
 
@@ -413,6 +417,28 @@ class AccountStore:
         hashed = hash_password(password)
         return self._update(username, lambda user: replace(user, password_hash=hashed), on_change)
 
+    def change_password(self, username: str, current: str, new: str, decoy: str,
+                        on_change: Optional[Callable[[User], None]] = None) -> User:
+        """Replace the password of ``username`` with ``new`` when ``current`` is the present one (a user changing their
+        own). The rule for ``new`` is checked first, so a request that breaks it says nothing about ``current``; the
+        verification and the change are one step under the lock, so nobody can change the password in between. An
+        unknown or disabled user costs the same work as a wrong password (``decoy``) and raises ``NoSuchUserError``;
+        a wrong ``current`` raises ``WrongPasswordError``. ``on_change`` is the audit callback (see ``_save_change``).
+        The login time is not touched: this is not a login."""
+        check_password_policy(new)
+        name = normalize_username(username)
+        with file_lock(self._lock_path):
+            before = self._read()
+            user = next((candidate for candidate in before if candidate.username == name), None)
+            if user is None or user.disabled:
+                verify_password(current, decoy)
+                raise NoSuchUserError(f"there is no user {name}")
+            if not verify_password(current, user.password_hash):
+                raise WrongPasswordError("the current password is wrong")
+            changed = replace(user, password_hash=hash_password(new))
+            after = [changed if candidate.username == name else candidate for candidate in before]
+            return self._save_change(before, after, changed, on_change)
+
     def remove(self, username: str, on_change: Optional[Callable[[User], None]] = None) -> User:
         name = normalize_username(username)
 
@@ -448,6 +474,7 @@ class LocalAccounts:
     """The accounts of ``users.json`` as an ``Authenticator``."""
 
     source = "local"
+    can_change_password = True      # the passwords are kept here; another authenticator would say False
 
     def __init__(self, store: AccountStore, audit: Optional["AuditLog"] = None) -> None:
         self.store = store
@@ -468,6 +495,11 @@ class LocalAccounts:
                 self.audit.write("user.password_upgraded", user.username, user=user.username)
 
         return self.store.authenticate_login(username, password, self._decoy, on_upgrade)
+
+    def change_password(self, username: str, current: str, new: str,
+                        on_change: Optional[Callable[[User], None]] = None) -> User:
+        """A user changes their own password (``AccountStore.change_password`` with this authenticator's decoy)."""
+        return self.store.change_password(username, current, new, self._decoy, on_change)
 
     def authenticate(self, username: object, password: str) -> Optional[Principal]:
         """The ``Principal`` of a correct password of an enabled user, else None (see ``authenticate_user``)."""

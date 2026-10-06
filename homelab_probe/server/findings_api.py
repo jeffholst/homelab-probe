@@ -27,6 +27,7 @@ from ..client import UniFiAPIError
 from ..commands import diagnose_areas
 from ..config import ConfigError
 from ..documents import diagnose_document
+from ..groups import Group, group_findings
 from ..history import DEFAULT_DIR, site_dir
 from ..notes import NotesStore
 from ..sitefile import StoreError
@@ -51,6 +52,12 @@ FINDING_SCHEMA: Dict[str, Any] = {
                    "priority": {"type": "object", "required": ["score", "scope", "reasons"]},
                    "triage": {"type": "object", "required": ["state"]},
                    "limitations": {"type": "array", "items": {"type": "string"}},
+                   "group": {"type": ["object", "null"], "description": "Set when another finding probably explains "
+                             "this one: the cause, and the evidence for the claim (never a guess)",
+                             "properties": {"kind": {"type": "string"}, "cause": {"type": "string"},
+                                            "cause_code": {"type": "string"}, "summary": {"type": "string"},
+                                            "evidence": {"type": "object"},
+                                            "limitations": {"type": "array", "items": {"type": "string"}}}},
                    "next_checks": {"type": "array", "items": {"type": "string"}}, "docs": {"type": "string"}},
 }
 LIST_SCHEMA: Dict[str, Any] = {
@@ -97,12 +104,13 @@ def note_counts(request: Request, record: Dict[str, Any]) -> Tuple[Dict[str, int
         return {}, False
 
 
-def item_of(r: Ranked) -> Dict[str, Any]:
-    """A finding as the list and the change show it: the same complete representation in both."""
+def item_of(r: Ranked, group: Optional[Group] = None) -> Dict[str, Any]:
+    """A finding as the list and the change show it: the same complete representation in both. ``group`` is the
+    finding that probably explains this one, with the evidence (None: nothing supports a shared cause)."""
     checks, docs = guidance(r.finding["code"])
     return {"id": r.id, "rank": r.rank, **r.finding, "priority": {"score": r.score, "scope": r.scope,
                                                                     "reasons": r.reasons},
-            "triage": r.triage, "first_seen_at": iso(r.first_seen_at), "limitations": r.limitations,
+            "triage": r.triage, "first_seen_at": iso(r.first_seen_at), "limitations": r.limitations, "group": group,
             "next_checks": checks, "next_checks_are": "general guidance for this kind of check", "docs": docs}
 
 
@@ -157,7 +165,8 @@ def router() -> APIRouter:
         notes, notes_available = note_counts(request, record)
         if not notes_available:
             limitations.append("Note counts are not shown: the notes file cannot be used (see the notes API).")
-        items = [{**item_of(r), "note_count": notes.get(f"finding:{r.id}", 0)} for r in ranked]
+        groups = group_findings(document.data["findings"], document.meta["links"])
+        items = [{**item_of(r, groups.get(r.id)), "note_count": notes.get(f"finding:{r.id}", 0)} for r in ranked]
         states = {state: sum(1 for r in ranked if r.triage["state"] == state) for state in STATES}
         return {"site": {"id": str(record.get("id") or ""), "name": str(record.get("name") or "")},
                 "items": items, "summary": {**document.data["summary"], **states, "total": len(items)},
@@ -191,6 +200,7 @@ def router() -> APIRouter:
         ranked = rank_findings(document.data["findings"], entries, CLOCK(), read["complete"])
         notes, _ = note_counts(request, read["site"])
         found = next(r for r in ranked if r.id == finding)
-        return {**item_of(found), "note_count": notes.get(f"finding:{finding}", 0)}
+        groups = group_findings(document.data["findings"], document.meta["links"])
+        return {**item_of(found, groups.get(finding)), "note_count": notes.get(f"finding:{finding}", 0)}
 
     return api

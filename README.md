@@ -36,6 +36,7 @@ Homelab Probe is a read-only UniFi Network probe for inventory, troubleshooting,
 - Stable JSON output and schemas for automation, plus exit codes, finding codes and shell completion
 - Optional ntfy, webhook or email notifications when findings are new, worse or fixed
 - Login-protected local web API with roles, CSRF protection, settings editing, snapshots and scheduler support
+- A Docker image (and compose file) for the web server and the command line, with a read-only root file system ([docs/docker.md](docs/docker.md))
 
 Full feature notes are in [docs/features.md](docs/features.md).
 
@@ -83,11 +84,21 @@ source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install .
 ```
 
-This installs `hlp`. `hlp serve` also needs the web extra: `pip install '.[web]'` (or `uv run --extra web hlp.py serve`). A tagged release can be installed without a clone; check the [releases page](https://github.com/jeffholst/homelab-probe/releases) and [changelog](CHANGELOG.md), then replace `vX.Y.Z`:
+This installs `hlp`. `hlp serve` also needs the web extra: `pip install '.[web]'` (or `uv run --extra web hlp.py serve`). The optional `pretty` extra (`pip install '.[pretty]'`) enables terminal styling; `--color`, `--no-progress` and `--plain` control it ([details](docs/configuration.md#terminal-styling---color---plain-and---no-progress)). A tagged release can be installed without a clone; check the [releases page](https://github.com/jeffholst/homelab-probe/releases) and [changelog](CHANGELOG.md), then replace `vX.Y.Z`:
 
 ```bash
 uv tool install git+https://github.com/jeffholst/homelab-probe@vX.Y.Z
 pip install git+https://github.com/jeffholst/homelab-probe@vX.Y.Z
+```
+
+### Docker
+
+One image runs the command line and the web server (not published yet: build it from a checkout). It starts with no configuration, in the setup mode, and prints a one-time setup token in its log ([details](docs/docker.md)):
+
+```bash
+docker build -t homelab-probe .
+docker run -d --name hlp -p 127.0.0.1:8787:8787 -v hlp-data:/data homelab-probe && docker logs hlp
+docker run --rm homelab-probe --demo diagnose
 ```
 
 ## Usage
@@ -132,7 +143,7 @@ Run these from the project root. After `pip install .`, use `hlp <command>` inst
 
 ## Documentation
 
-Start with [Configuration and troubleshooting](docs/configuration.md), [Diagnose and audit](docs/diagnose.md), [Inventory, queries and exports](docs/inventory.md), [Network views](docs/network.md), [Web interface and API](docs/web.md), [Notifications](docs/notifications.md), [Running on a schedule](docs/scheduling.md), [JSON output schemas](docs/schemas.md), [Examples](docs/examples.md), [Features](docs/features.md), [Development and API documentation](docs/development.md), [Changelog](CHANGELOG.md) and [Maintainer guide](MAINTAINING.md).
+Start with [Configuration and troubleshooting](docs/configuration.md), [Diagnose and audit](docs/diagnose.md), [Inventory, queries and exports](docs/inventory.md), [Network views](docs/network.md), [Web interface and API](docs/web.md), [Notifications](docs/notifications.md), [Running on a schedule](docs/scheduling.md), [Docker](docs/docker.md), [JSON output schemas](docs/schemas.md), [Examples](docs/examples.md), [Features](docs/features.md), [Development and API documentation](docs/development.md), [Changelog](CHANGELOG.md) and [Maintainer guide](MAINTAINING.md).
 
 Old README anchors still land here:
 <a id="credits"></a><a id="getting-an-api-key"></a><a id="diagnose"></a><a id="controller-health"></a><a id="port-health"></a><a id="recent-events"></a><a id="wi-fi-quality"></a><a id="configuration-thresholds-and-ignore-list"></a><a id="json-output-and-finding-codes"></a><a id="notifications"></a><a id="the-one-post-and-why-it-is-safe"></a><a id="names-in-exports-and-output"></a><a id="example-output"></a><a id="unificlientscsv"></a><a id="switchswitch---dencsv"></a><a id="api-documentation"></a><a id="seeing-what-the-tool-does---verbose"></a><a id="devices"></a><a id="snapshots-and-diff"></a><a id="topology"></a><a id="wi-fi"></a><a id="wan"></a><a id="audit"></a><a id="firewall"></a><a id="event-history"></a><a id="client-view"></a><a id="new-clients"></a><a id="randomized-mac-addresses"></a><a id="switch-ports"></a><a id="dhcp-reservations"></a><a id="output-files"></a><a id="acknowledgments"></a>

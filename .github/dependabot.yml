@@ -29,3 +29,29 @@ updates:
         patterns: ["*"]
     commit-message:
       prefix: "deps"
+
+  # The web interface's packages (web/package.json, locked by web/package-lock.json). npm is separate from the uv and
+  # actions entries because it needs the Node toolchain: its pull requests run the `web` job of ci.yml.
+  - package-ecosystem: "npm"
+    directory: "/web"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    groups:
+      web:
+        patterns: ["*"]
+    commit-message:
+      prefix: "deps"
+
+  # The base images of the Dockerfile (python:3.13-slim, used by two of its stages). The compose file only builds that
+  # Dockerfile, so it has no image of its own to keep current.
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    groups:
+      docker:
+        patterns: ["*"]
+    commit-message:
+      prefix: "docker"
