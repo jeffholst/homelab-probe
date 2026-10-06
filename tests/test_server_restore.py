@@ -196,13 +196,14 @@ def test_the_settings_and_the_service_are_made_anew(admin, app, blob):
 # -- who may, and what is checked first --------------------------------------------------------------------------------
 
 def test_only_an_administrator_with_the_csrf_token_and_the_confirmation_restores(app, blob, target):
-    viewer, admin = logged_in(app, "bob"), logged_in(app, "alice")       # a login writes last_login: before the snapshot
+    # Every login writes `last_login` (at one-second resolution), so all of them happen before the snapshot: a login made
+    # after it would change users.json whenever a second boundary fell between two of them.
+    viewer, admin, no_token = logged_in(app, "bob"), logged_in(app, "alice"), logged_in(app, "alice")
+    del no_token.headers["X-CSRF-Token"]
     before = tree(target)
     assert viewer.post(f"{API}/restore", json=body(blob)).status_code == 403
     assert TestClient(app).post(f"{API}/restore", json=body(blob), headers={"Origin": "http://testserver"}
                                 ).status_code == 401
-    no_token = logged_in(app, "alice")
-    del no_token.headers["X-CSRF-Token"]
     assert no_token.post(f"{API}/restore", json=body(blob)).json()["error"] == "csrf_token"
     for changed in ({"confirm": False}, {"confirm": "yes"}):
         assert admin.post(f"{API}/restore", json={**body(blob), **changed}).status_code == 422
