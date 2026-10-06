@@ -48,12 +48,16 @@ def test_version_is_the_package_version(entry, tmp_path):
     assert result.returncode == 0 and result.stdout.strip() == __version__ and result.stderr == ""
 
 
-def test_help_lists_every_command(entry, tmp_path):
-    result = start(entry, ["--help"], tmp_path)
+@pytest.mark.parametrize("help_flag", ["-h", "--help"])
+def test_help_lists_every_command_in_alphabetical_order(entry, tmp_path, help_flag):
+    result = start(entry, [help_flag], tmp_path)
     assert result.returncode == 0 and result.stdout.startswith("usage: hlp")
-    for command in ("export", "query", "new-clients", "events", "client", "topology", "snapshot", "diff", "wifi",
-                    "wan", "diagnose", "info"):
-        assert re.search(rf"\b{command}\b", result.stdout), command
+    expected = sorted(cli.COMMANDS_BY_NAME)
+    choices = re.search(r"\{([^}]+)\}", result.stdout)
+    assert choices is not None
+    assert re.sub(r"\s+", "", choices.group(1)).split(",") == expected
+    descriptions = re.findall(r"^    ([a-z][a-z-]*)\s", result.stdout, re.MULTILINE)
+    assert descriptions == expected
 
 
 def test_every_command_has_its_own_help(entry, tmp_path):

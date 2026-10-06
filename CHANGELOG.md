@@ -39,6 +39,7 @@ always listed here.
 
 ### Changed
 
+- CLI help (`-h` and `--help`) lists commands alphabetically, matching the README Commands table and Usage examples.
 - **`serve` reads `hlp.toml` from the data directory** (`--data-dir`, the current directory by default) unless `--config` names a file; the report routes used `./hlp.toml` of the working directory before, and `serve --demo` no longer reads one at all.
 
 ## [0.3.0] - 2026-10-05

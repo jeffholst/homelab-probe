@@ -27,7 +27,7 @@ def test_the_registry_lists_every_command_once_in_the_documented_order():
 def test_the_parser_is_built_from_the_registry():
     parser = cli.build_parser()
     action = next(a for a in parser._actions if a.dest == "command")
-    assert list(action.choices) == EXPECTED
+    assert list(action.choices) == sorted(EXPECTED)
     for command in COMMANDS:
         assert action.choices[command.name].format_help().startswith(f"usage: hlp {command.name}")
         assert command.help[0].isupper()
