@@ -65,8 +65,12 @@ def new_clients_data(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return [{c: r.get(c, "") for c in NEW_CLIENT_COLUMNS} for r in rows]
 
 
+def table_footer(rows: List[Dict[str, Any]]) -> str:
+    return f"{len(rows)} client(s) in no group"
+
+
 def render_table(rows: List[Dict[str, Any]]) -> str:
-    return format_table(rows, NEW_CLIENT_COLUMNS) + f"\n\n{len(rows)} client(s) in no group"
+    return format_table(rows, NEW_CLIENT_COLUMNS) + "\n\n" + table_footer(rows)
 
 
 def render(rows: List[Dict[str, Any]], as_json: bool) -> str:

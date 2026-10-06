@@ -17,7 +17,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from . import accounts, logs, progress, setup
+from . import accounts, logs, pretty, progress, setup
 from . import config as config_module
 from .backup import BackupError
 from .client import UniFiAPIError, UniFiClient
@@ -74,10 +74,12 @@ from .history import (
     site_dir,
     site_snapshots,
 )
+from .new_clients import NEW_CLIENT_COLUMNS
 from .new_clients import render_table as render_new_clients
+from .new_clients import table_footer as new_clients_footer
 from .notify import STATE_DIR, destinations_from_config, process
 from .present import Presentation
-from .query import format_table, render_csv, render_table
+from .query import format_table, render_csv, render_table, table_columns, table_footer
 from .restore import recover as recover_restore
 from .settings import DiagnoseSettings, expired_rules, load_settings, server_settings_path
 from .snapshot import EventQuery, warn
@@ -306,6 +308,9 @@ def _run_query(ctx: Context) -> int:
         say(document.to_json())
     elif args.csv:
         say(render_csv(document.data, args.kind, args.offline))
+    elif ctx.present.decorations(sys.stdout):
+        pretty.print_table(ctx.present, document.data, table_columns(args.kind, args.offline),
+                           table_footer(document.data))
     else:
         say(render_table(document.data, args.kind, args.offline))
     return 0
@@ -321,7 +326,10 @@ def _add_new_clients(parser: argparse.ArgumentParser) -> None:
 
 def _run_new_clients(ctx: Context) -> int:
     document = new_clients_document(ctx.client, ctx.config.site, ctx.args.search)
-    say(document.to_json() if ctx.args.json else render_new_clients(document.data))
+    if not ctx.args.json and ctx.present.decorations(sys.stdout):
+        pretty.print_table(ctx.present, document.data, NEW_CLIENT_COLUMNS, new_clients_footer(document.data))
+    else:
+        say(document.to_json() if ctx.args.json else render_new_clients(document.data))
     return 0
 
 
@@ -614,9 +622,13 @@ def _run_audit(ctx: Context) -> int:
     settings = ctx.settings or DiagnoseSettings()
     today = datetime.date.today()
     _warn_expired_rules(settings, today)
+    started = time.monotonic()
     document = audit_document(ctx.client, ctx.config.site, settings, args.show_ignored, today=today)
     if args.json:
         say(document.to_json())
+    elif not args.no_emoji and ctx.present.decorations(sys.stdout):
+        pretty.print_findings(ctx.present, document.data, elapsed=time.monotonic() - started,
+                              complete=not document.warnings, show_ignored=args.show_ignored)
     else:
         emoji = not args.no_emoji and stream_supports_emoji(sys.stdout)
         say(render_findings(document.data, emoji, args.show_ignored))
@@ -1216,12 +1228,16 @@ def _run_diagnose(ctx: Context) -> int:
     today = datetime.date.today()
     _warn_expired_rules(settings, today)                   # once, also before a --watch loop
     areas = args.areas
+    started = time.monotonic()
     findings, document, complete = _diagnose_once(ctx, settings, today)
+    checked_note = areas is not None and bool(args.only or args.skip)    # --no-events alone: as it always did
     if args.json:
         say(document.to_json())
+    elif args.watch is None and not args.no_emoji and ctx.present.decorations(sys.stdout):
+        pretty.print_findings(ctx.present, document.data, elapsed=time.monotonic() - started, complete=complete,
+                              show_ignored=args.show_ignored, show_checked=checked_note)
     else:
         emoji = not args.no_emoji and stream_supports_emoji(sys.stdout)
-        checked_note = areas is not None and bool(args.only or args.skip)    # --no-events alone: as it always did
         say(render_findings(document.data, emoji, args.show_ignored, checked_note))
     if args.watch is not None:
         return _watch_diagnose(ctx, settings, findings, complete)
