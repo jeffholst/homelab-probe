@@ -28,6 +28,8 @@ from ..commands import diagnose_areas
 from ..config import ConfigError
 from ..documents import diagnose_document
 from ..history import DEFAULT_DIR, site_dir
+from ..notes import NotesStore
+from ..sitefile import StoreError
 from ..triage import STATES, TriageError, TriageStore, finding_id, guidance, iso, rank_findings
 from .auth import admin, audit_event, local_write
 from .errors import ApiError, error_responses, from_controller
@@ -132,6 +134,10 @@ def router() -> APIRouter:
             limitations.append("This read was partial or left some checks out: findings may be missing, and "
                                "nothing can be said to have cleared.")
         ranked = rank_findings(document.data["findings"], entries, now, read["complete"])
+        try:
+            notes = NotesStore(store_for(request, record).directory, store_for(request, record).site_id).counts()
+        except StoreError:
+            notes = {}                                                  # without the notes file there are no counts
         items = []
         for r in ranked:
             checks, docs = guidance(r.finding["code"])
@@ -139,7 +145,7 @@ def router() -> APIRouter:
                           "priority": {"score": r.score, "scope": r.scope, "reasons": r.reasons},
                           "triage": r.triage, "first_seen_at": iso(r.first_seen_at), "limitations": r.limitations,
                           "next_checks": checks, "next_checks_are": "general guidance for this kind of check",
-                          "docs": docs})
+                          "docs": docs, "note_count": notes.get(f"finding:{r.id}", 0)})
         states = {state: sum(1 for r in ranked if r.triage["state"] == state) for state in STATES}
         return {"site": {"id": str(record.get("id") or ""), "name": str(record.get("name") or "")},
                 "items": items, "summary": {**document.data["summary"], **states, "total": len(items)},

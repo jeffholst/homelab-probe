@@ -20,7 +20,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from .. import __version__, logs
 from ..config import Config
 from ..util import is_loopback
-from . import findings_api, routes, settings_api, snapshots_api, status_api, users_api, wizard
+from . import findings_api, notes_api, routes, settings_api, snapshots_api, status_api, users_api, wizard
 from .auth import AuthState, OriginGuard, guard, public, public_router, session_router
 from .errors import ApiError, api_error_handler, request_validation_error_handler
 from .scheduler import Scheduler
@@ -117,6 +117,7 @@ def create_app(config: Config, settings_path: Optional[Path] = None, state_dir: 
     app.include_router(users_api.router())
     app.include_router(status_api.router())
     app.include_router(findings_api.router())
+    app.include_router(notes_api.router())
     app.include_router(public_router())
     app.include_router(session_router())
 
