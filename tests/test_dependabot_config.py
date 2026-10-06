@@ -24,12 +24,12 @@ def updates():
     return blocks
 
 
-def test_the_two_ecosystems_are_configured_weekly_from_the_repository_root_and_grouped():
+def test_the_ecosystems_are_configured_weekly_from_their_manifests_directory_and_grouped():
     blocks = updates()
-    assert set(blocks) == {"github-actions", "uv"}
+    assert set(blocks) == {"github-actions", "uv", "npm"}
     for name, lines in blocks.items():
         text = "\n".join(lines)
-        assert 'directory: "/"' in text, name
+        assert f'directory: "{"/web" if name == "npm" else "/"}"' in text, name
         assert 'interval: "weekly"' in text, name
         assert re.search(r'patterns: \["\*"\]', text), f"{name}: one grouped pull request, not one per package"
 
@@ -56,6 +56,13 @@ def test_the_workflows_check_the_lockfile_so_a_dependency_update_cannot_leave_it
     ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
     assert "uv lock --check" in ci and "uv sync --locked" in ci
     assert "pull_request:" in ci                                   # Dependabot pull requests run the whole suite
+
+
+def test_the_npm_entry_points_at_the_directory_of_the_one_package_and_its_lockfile_and_ci_installs_from_it():
+    assert (ROOT / "web" / "package.json").is_file() and (ROOT / "web" / "package-lock.json").is_file()
+    assert not list((ROOT / "web").glob("yarn.lock")) and not list((ROOT / "web").glob("pnpm-lock.yaml"))
+    ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
+    assert "npm ci" in ci and "working-directory: web" in ci       # an exact install: a lock change shows in the diff
 
 
 def test_dependencies_are_declared_where_dependabots_uv_ecosystem_reads_them():

@@ -85,3 +85,51 @@ jobs:
           enable-cache: true
       - run: uv sync --locked --extra web
       - run: uv run mypy
+
+  web:
+    name: Web app (Node 22, Playwright smoke)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      # The smoke test starts the real server with synthetic data (`hlp --demo serve`), so it needs the web extra.
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+          python-version: "3.13"
+      - run: uv sync --locked --extra web
+      - name: Install the packages (exactly what package-lock.json says)
+        working-directory: web
+        run: npm ci
+      - name: Generated types match docs/schemas (regenerate and fail on any difference)
+        working-directory: web
+        run: npm run check:types
+      - name: Lint
+        working-directory: web
+        run: npm run lint
+      - name: Types (tsc)
+        working-directory: web
+        run: npm run typecheck
+      - name: Unit and component tests (Vitest)
+        working-directory: web
+        run: npm test
+      - name: Production build
+        working-directory: web
+        run: npm run build
+      - name: Browser for the smoke test
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+      - name: Playwright smoke (phone and desktop, against the demo server)
+        working-directory: web
+        run: npx playwright test
+      - name: Playwright traces of a failure
+        if: failure()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: playwright-test-results
+          path: web/test-results/
+          retention-days: 7

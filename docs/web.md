@@ -1,6 +1,6 @@
 # Web interface
 
-The web interface is built in stages (see the roadmap in issue #160). What exists so far is the **backend**, with no screens yet: the **server** (`serve`, which needs the `web` extra) with its login, roles and CSRF protection, the read-only report API under `/api/v1/unifi` and a guided first-run setup API; and the **accounts** that may log in, managed with `web-user` (base install only; it does not contact the controller or read your `.env`). The web app that uses these comes next.
+The web interface is built in stages (see the roadmap in issue #160). What exists so far is the **backend**, with no screens yet: the **server** (`serve`, which needs the `web` extra) with its login, roles and CSRF protection, the read-only report API under `/api/v1/unifi` and a guided first-run setup API; and the **accounts** that may log in, managed with `web-user` (base install only; it does not contact the controller or read your `.env`). The web app that uses these is being built in `web/` (its foundation, with login, the shell and the themes, is in the repository; the server does not serve it yet, see [The web app](#the-web-app-web)).
 
 ## Running the server: `serve`
 
@@ -395,3 +395,7 @@ Both live in the data directory, readable by the owner only (`0600`, and `0700` 
 ## What is not here yet
 
 The web app (the screens of the setup wizard among them), come with later stages of the roadmap. The login uses the interface the accounts module was built for: an `Authenticator` that turns a username and password into a `Principal(username, role, source)`, with `LocalAccounts` (this page's accounts) as the first implementation. A wrong password, an unknown user and a disabled one all take the same work and give the same answer, so the answer does not reveal which usernames exist. Authentication checks the current account record and records the login under the same file lock, so a concurrent disable, role change or deletion cannot return a stale principal.
+
+## The web app (`web/`)
+
+The browser interface lives in `web/` (React, TypeScript, Vite) and talks to the API above from the same origin: the session cookie, the `X-CSRF-Token` from the login on every unsafe request (kept in memory, never in browser storage) and the `{error, message}` of every failure. This first part has the login and logout, a navigation shell for phone, tablet and desktop, light, dark and system themes, the loading, refreshing, empty, error, stale and partial states, and a home and a profile page; the pages for the reports, findings and settings follow. Controller strings are rendered as text only, with the control, invisible and bidirectional characters that `util.printable` removes also removed here. How to run it against `hlp --demo serve` and what CI checks are in [development.md](development.md#the-web-interface-web).
