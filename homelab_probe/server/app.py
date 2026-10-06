@@ -4,10 +4,11 @@ Read-only and local: it makes no request toward the controller on its own accoun
 stage do, through ``ControllerService``), it has no route that forwards a path, and it only answers GET.
 """
 
+import contextlib
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, AsyncIterator, Dict, List, Optional
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -22,6 +23,7 @@ from ..util import is_loopback
 from . import routes, settings_api, snapshots_api, users_api, wizard
 from .auth import AuthState, OriginGuard, guard, public, public_router, session_router
 from .errors import ApiError, api_error_handler, request_validation_error_handler
+from .scheduler import Scheduler
 from .security import SecurityHeaders
 from .service import ControllerService
 from .wizard import SetupState
@@ -64,7 +66,7 @@ class RequestLog:
 def create_app(config: Config, settings_path: Optional[Path] = None, state_dir: Optional[Path] = None, *,
                service: Optional[ControllerService] = None, auth: Optional[AuthState] = None, demo: bool = False,
                hosts: Optional[List[str]] = None, setup: Optional[SetupState] = None,
-               read_only: bool = False) -> FastAPI:
+               read_only: bool = False, scheduler: bool = False) -> FastAPI:
     """The app for ``config``. ``settings_path`` is the ``hlp.toml`` to use and ``state_dir`` the data directory (the
     accounts file and the audit log are there), ``service`` the way to the controller (one is made from ``config``
     when none is given: the synthetic network for a ``demo``), ``auth`` the accounts, sessions and throttle (made from
@@ -74,7 +76,22 @@ def create_app(config: Config, settings_path: Optional[Path] = None, state_dir: 
     login itself; ``tests/test_server_auth.py`` lists the routes and fails on one that is neither. With ``setup`` (a
     ``SetupState`` with a mode) the server is not set up: no service is made, and only those public routes and the
     setup routes (``wizard``) answer."""
+    if scheduler and read_only:
+        raise ValueError("the scheduler writes files (snapshots, the notification state): not with read_only")
+
+    @contextlib.asynccontextmanager
+    async def lifespan(application: FastAPI) -> AsyncIterator[None]:
+        running: Optional[Scheduler] = application.state.scheduler
+        if running is not None:
+            running.start()
+        try:
+            yield
+        finally:
+            if running is not None:
+                running.stop()
+
     app = FastAPI(
+        lifespan=lifespan,
         title="Homelab Probe", version=__version__, docs_url=None, redoc_url=None,    # their pages load a CDN script
         openapi_url=None,                      # served below, behind the login
         dependencies=[Depends(guard)],         # every route needs a login unless it is marked public
@@ -84,6 +101,7 @@ def create_app(config: Config, settings_path: Optional[Path] = None, state_dir: 
     )
     app.state.config, app.state.settings_path, app.state.state_dir = config, settings_path, state_dir
     app.state.read_only = read_only
+    app.state.scheduler = Scheduler(app) if scheduler else None
     app.state.setup = setup
     unconfigured = setup is not None and bool(setup.mode)         # a server in a setup mode reads no controller yet
     app.state.service = None if unconfigured else service or ControllerService(config, demo=demo)

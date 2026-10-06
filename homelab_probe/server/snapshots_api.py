@@ -10,7 +10,7 @@ other file, is never opened, so no path a caller sends reaches the disk.
 
 import threading
 from pathlib import Path
-from typing import Annotated, Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
@@ -21,6 +21,7 @@ from ..config import ConfigError
 from ..documents import Document, diff_document, snapshot_document
 from ..history import (
     DEFAULT_DIR,
+    SnapshotRecord,
     find_snapshot,
     load_snapshot,
     prune,
@@ -38,7 +39,7 @@ from .routes import MAX_TEXT, REFRESH_MIN_INTERVAL, RefreshQ, SiteP, checked_sit
 UNIFI = "/api/v1/unifi"
 WORDING = {404: "No such site or snapshot", 500: "The saved snapshots cannot be used"}
 MAX_KEEP = 10_000
-_SAVE_LOCK = threading.Lock()         # one save and prune at a time: two requests cannot prune each other's file
+SAVE_LOCK = threading.Lock()          # one save and prune at a time (a request, or the scheduler)
 NameQ = Annotated[Optional[str], Query(max_length=MAX_TEXT, description="A snapshot file name, as the list gives it")]
 LimitQ = Annotated[int, Query(ge=1, le=200, description="How many of the newest to list")]
 SUMMARY_SCHEMA = {
@@ -93,6 +94,33 @@ def plain(files: List[Path]) -> List[Path]:
     return [path for path in files if not path.is_symlink()]
 
 
+class SnapshotStoreError(Exception):
+    """A snapshot could not be stored; ``code`` is ``snapshots_unsafe`` (a directory is a symbolic link) or
+    ``snapshot_not_written``."""
+
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
+
+
+def store_snapshot(base: Path, record: SnapshotRecord, keep: Optional[int] = None) -> Tuple[Path, List[Path]]:
+    """Save ``record`` in the directory of its site in ``base`` (owner-only, never through a symbolic link) and, with
+    ``keep``, delete the oldest snapshots of that site beyond the newest N. The route and the scheduler both do this,
+    under one lock. Returns (the file, the files removed); ``SnapshotStoreError`` says why not."""
+    directory = site_dir(base, record["site"])
+    with SAVE_LOCK:
+        if any(path.is_symlink() for path in (base, directory)):
+            raise SnapshotStoreError("snapshots_unsafe")
+        try:
+            ensure_private_dir("snapshots", base)                  # owner-only, as the setup makes it
+            ensure_private_dir("snapshots.site", directory)
+            path = save_snapshot(record, None, directory)
+            gone = prune(directory, keep, protect=path, files=site_snapshots(base, record["site"])) if keep else []
+        except (OSError, ConfigError, SetupError) as error:
+            raise SnapshotStoreError("snapshot_not_written") from error
+    return path, gone
+
+
 class SaveBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     keep: Optional[int] = Field(default=None, ge=1, le=MAX_KEEP, description="Afterwards keep only the newest N")
@@ -133,18 +161,13 @@ def router() -> APIRouter:
             raise from_controller(error) from error
         record = built.document.data
         base = snapshot_base(request)
-        directory = site_dir(base, record["site"])
-        with _SAVE_LOCK:
-            refuse_links(base, directory)
-            try:
-                ensure_private_dir("snapshots", base)                  # owner-only, as the setup makes it
-                ensure_private_dir("snapshots.site", directory)
-                path = save_snapshot(record, None, directory)
-                gone = prune(directory, body.keep, protect=path, files=site_snapshots(base, record["site"])) \
-                    if body.keep else []
-            except (OSError, ConfigError, SetupError) as error:
-                raise ApiError(500, "snapshot_not_written", "The snapshot could not be written; see the server log.") \
-                    from error
+        try:
+            path, gone = store_snapshot(base, record, body.keep)
+        except SnapshotStoreError as error:
+            if error.code == "snapshots_unsafe":
+                raise _unsafe() from error
+            raise ApiError(500, "snapshot_not_written", "The snapshot could not be written; see the server log.") \
+                from error
         summary = snapshot_summary(path)
         audit_event(request, "snapshot.saved", request.state.session.username, name=path.name,
                     devices=summary["devices"], clients=summary["clients"], removed=len(gone))

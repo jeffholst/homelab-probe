@@ -46,6 +46,9 @@ DEFAULT_PARALLEL, MAX_PARALLEL = 6, 16     # requests in flight at once
 DEFAULT_SESSION_IDLE_MINUTES, MAX_SESSION_IDLE_MINUTES = 30, 24 * 60      # a web session ends after this idle time
 DEFAULT_SESSION_MAX_HOURS, MAX_SESSION_MAX_HOURS = 12, 24 * 30     # ... and in any case after this long
 DEFAULT_AUDIT_MB, MAX_AUDIT_MB = 5, 1024           # size of one audit log file
+DEFAULT_SCHEDULER_MINUTES, MAX_SCHEDULER_MINUTES = 15, 24 * 60     # the scheduler runs diagnose this often
+DEFAULT_SCHEDULER_SNAPSHOT_HOURS, MAX_SCHEDULER_SNAPSHOT_HOURS = 24, 24 * 30   # ... and saves a snapshot this often
+DEFAULT_SCHEDULER_KEEP, MAX_SCHEDULER_KEEP = 30, 10_000           # ... keeping this many of them
 DEFAULT_AUDIT_FILES, MAX_AUDIT_FILES = 10, 1000    # audit log files kept in all (the current one and the rotated ones)
 _CA_BUNDLE_SUFFIXES = (".pem", ".crt", ".cer")
 TRUE_WORDS = ("true", "yes", "1", "on")
@@ -61,6 +64,7 @@ KNOWN_VARIABLES = (
     "UNIFI_URL", "UNIFI_API_KEY", "UNIFI_SITE_ID", "UNIFI_VERIFY_SSL", "UNIFI_TIMEOUT", "UNIFI_PARALLEL_REQUESTS",
     "ALLOW_INSECURE_HTTP", "LOG_LEVEL", "LOG_FORMAT", "AUDIT_LOG_MAX_MB", "AUDIT_LOG_FILES",
     "SESSION_IDLE_MINUTES", "SESSION_MAX_HOURS",
+    "SCHEDULER_DIAGNOSE_MINUTES", "SCHEDULER_SNAPSHOT_HOURS", "SCHEDULER_SNAPSHOT_KEEP",
     "NOTIFY_NTFY_URL", "NOTIFY_NTFY_TOKEN", "NOTIFY_WEBHOOK_URL", "NOTIFY_WEBHOOK_TOKEN",
     "NOTIFY_SMTP_HOST", "NOTIFY_SMTP_PORT", "NOTIFY_SMTP_SECURITY", "NOTIFY_SMTP_USER", "NOTIFY_SMTP_PASSWORD",
     "NOTIFY_EMAIL_FROM", "NOTIFY_EMAIL_TO",
@@ -128,6 +132,9 @@ class Config:
     audit_log_files: int = DEFAULT_AUDIT_FILES    # AUDIT_LOG_FILES: how many are kept in all
     session_idle_minutes: int = DEFAULT_SESSION_IDLE_MINUTES    # SESSION_IDLE_MINUTES: web login idle timeout
     session_max_hours: int = DEFAULT_SESSION_MAX_HOURS          # SESSION_MAX_HOURS: web login absolute lifetime
+    scheduler_diagnose_minutes: int = DEFAULT_SCHEDULER_MINUTES      # SCHEDULER_DIAGNOSE_MINUTES
+    scheduler_snapshot_hours: int = DEFAULT_SCHEDULER_SNAPSHOT_HOURS    # SCHEDULER_SNAPSHOT_HOURS (0: no snapshots)
+    scheduler_snapshot_keep: int = DEFAULT_SCHEDULER_KEEP          # SCHEDULER_SNAPSHOT_KEEP
     env_file: Optional[Path] = field(default=None, compare=False)    # the .env that was read, if any (for --verbose)
     warnings: Tuple[str, ...] = field(default=(), compare=False)   # for cli.main to print
 
@@ -337,6 +344,23 @@ def parse_audit_log_files(text: Optional[str]) -> int:
 def parse_session_idle_minutes(text: Optional[str]) -> int:
     """How long a web login may sit unused before it ends, in minutes (``SESSION_IDLE_MINUTES``); blank: 30."""
     return _whole_number("SESSION_IDLE_MINUTES", text, DEFAULT_SESSION_IDLE_MINUTES, 1, MAX_SESSION_IDLE_MINUTES)
+
+
+def parse_scheduler_diagnose_minutes(text: Optional[str]) -> int:
+    """How often the scheduler of ``hlp serve`` runs ``diagnose``, in minutes (``SCHEDULER_DIAGNOSE_MINUTES``);
+    blank: 15."""
+    return _whole_number("SCHEDULER_DIAGNOSE_MINUTES", text, DEFAULT_SCHEDULER_MINUTES, 1, MAX_SCHEDULER_MINUTES)
+
+
+def parse_scheduler_snapshot_hours(text: Optional[str]) -> int:
+    """How often the scheduler saves a snapshot, in hours (``SCHEDULER_SNAPSHOT_HOURS``); 0 means never, blank: 24."""
+    return _whole_number("SCHEDULER_SNAPSHOT_HOURS", text, DEFAULT_SCHEDULER_SNAPSHOT_HOURS, 0,
+                         MAX_SCHEDULER_SNAPSHOT_HOURS)
+
+
+def parse_scheduler_snapshot_keep(text: Optional[str]) -> int:
+    """How many of its snapshots the scheduler keeps (``SCHEDULER_SNAPSHOT_KEEP``); blank: 30."""
+    return _whole_number("SCHEDULER_SNAPSHOT_KEEP", text, DEFAULT_SCHEDULER_KEEP, 1, MAX_SCHEDULER_KEEP)
 
 
 def parse_session_max_hours(text: Optional[str]) -> int:
@@ -568,6 +592,9 @@ def build_config(values: Mapping[str, Optional[str]], path: Optional[Path] = Non
         audit_log_files=parse_audit_log_files(values.get("AUDIT_LOG_FILES")),
         session_idle_minutes=parse_session_idle_minutes(values.get("SESSION_IDLE_MINUTES")),
         session_max_hours=parse_session_max_hours(values.get("SESSION_MAX_HOURS")),
+        scheduler_diagnose_minutes=parse_scheduler_diagnose_minutes(values.get("SCHEDULER_DIAGNOSE_MINUTES")),
+        scheduler_snapshot_hours=parse_scheduler_snapshot_hours(values.get("SCHEDULER_SNAPSHOT_HOURS")),
+        scheduler_snapshot_keep=parse_scheduler_snapshot_keep(values.get("SCHEDULER_SNAPSHOT_KEEP")),
         env_file=path,
         warnings=tuple(notes),
     )

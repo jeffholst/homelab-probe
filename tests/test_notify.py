@@ -609,7 +609,19 @@ def test_nothing_secret_or_controller_related_is_ever_sent_or_printed(fake_clien
 
 def test_a_state_that_cannot_be_saved_after_sending_is_reported(fake_client, monkeypatch, capsys, post, tmp_path):
     make_env(monkeypatch)
+
+    def refuse(path, state):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(notify_module, "save_state", refuse)
+    assert run(fake_client, monkeypatch, diagnose(state=tmp_path / "state.json")) == cli.EXIT_ERROR
+    assert "the notification was sent but its state could not be saved" in capsys.readouterr().err
+
+
+def test_a_state_that_cannot_be_locked_stops_the_run_before_anything_is_sent(fake_client, monkeypatch, capsys, post,
+                                                                           tmp_path):
+    make_env(monkeypatch)
     blocker = tmp_path / "blocker"
     blocker.write_text("a file, not a directory")
     assert run(fake_client, monkeypatch, diagnose(state=blocker / "state.json")) == cli.EXIT_ERROR
-    assert "the notification was sent but its state could not be saved" in capsys.readouterr().err
+    assert "cannot be locked" in capsys.readouterr().err and post.calls == []

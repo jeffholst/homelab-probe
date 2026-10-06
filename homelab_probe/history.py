@@ -175,7 +175,7 @@ def list_snapshots(directory: Path) -> List[Path]:
     return [p for _, p in sorted(found, key=lambda item: item[0])]
 
 
-def site_dir(base: Path, site: Dict[str, Any]) -> Path:
+def site_dir(base: Path, site: Mapping[str, Any]) -> Path:
     """Where the snapshots of ``site`` (a dict with its ``id``) go inside ``base``: one directory per site."""
     return base / site_key(site.get("id"))
 
@@ -190,7 +190,7 @@ def recorded_site_id(path: Path) -> Optional[str]:
     return site if isinstance(site, str) else None
 
 
-def site_snapshots(base: Path, site: Dict[str, Any]) -> List[Path]:
+def site_snapshots(base: Path, site: Mapping[str, Any]) -> List[Path]:
     """The saved snapshots of ``site``, oldest first: those in its own directory in ``base`` and the older ones
     that were saved straight into ``base`` (before there was a directory per site), which belong to the site their
     own record names. A snapshot of another site is never listed."""
@@ -212,7 +212,7 @@ def is_snapshot_name(name: str) -> bool:
     return True
 
 
-def find_snapshot(base: Path, site: Dict[str, Any], name: str) -> Optional[Path]:
+def find_snapshot(base: Path, site: Mapping[str, Any], name: str) -> Optional[Path]:
     """The saved snapshot called ``name`` for ``site``: in its directory, else (an older one saved straight into
     ``base``) there if its own record names this site. None for a name that is not a snapshot name, or not found."""
     if not is_snapshot_name(name):
@@ -303,7 +303,7 @@ def prune(directory: Path, keep: int, protect: Optional[Path] = None,
     candidates = [p for p in files if protected is None or Path(os.path.abspath(p)) != protected]
     doomed = candidates[:max(0, len(files) - keep)]
     for p in doomed:
-        p.unlink()
+        p.unlink(missing_ok=True)          # another run (a cron `snapshot --keep`) may have removed it already
     return doomed
 
 

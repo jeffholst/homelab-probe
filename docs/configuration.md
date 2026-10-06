@@ -27,6 +27,9 @@ UNIFI_VERIFY_SSL=true
 | `AUDIT_LOG_FILES` | No      | `10`      | How many audit log files are kept in all, 2 to 1000 |
 | `SESSION_IDLE_MINUTES` | No | `30`     | A web login ends after this many minutes without a request, 1 to 1440 ([web interface](web.md#logging-in-apiv1auth)) |
 | `SESSION_MAX_HOURS` | No    | `12`      | A web login ends this many hours after it began, 1 to 720 |
+| `SCHEDULER_DIAGNOSE_MINUTES` | No | `15` | With `serve --scheduler`: run `diagnose` (and notify) this often, 1 to 1440 minutes ([scheduler](web.md#the-scheduler)) |
+| `SCHEDULER_SNAPSHOT_HOURS` | No | `24` | With `serve --scheduler`: save a snapshot this often, 0 (never) to 720 hours |
+| `SCHEDULER_SNAPSHOT_KEEP` | No | `30` | With `serve --scheduler`: how many snapshots of a site are kept, 1 to 10000 |
 | `NOTIFY_NTFY_URL` | No      | -         | Full ntfy topic URL for `diagnose --notify` (a secret, `https://` only) |
 | `NOTIFY_NTFY_TOKEN` | No    | -         | ntfy access token, sent as a bearer token |
 | `NOTIFY_WEBHOOK_URL` | No   | -         | Generic webhook URL for `diagnose --notify` (a secret, `https://` only) |

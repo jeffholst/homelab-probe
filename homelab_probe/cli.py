@@ -115,6 +115,8 @@ def _check_demo(parser: argparse.ArgumentParser, args: argparse.Namespace) -> No
         parser.error("--demo does not read an environment file: drop --env-file")
     if args.command in DEMO_REFUSED:
         parser.error(f"--demo cannot be used with {args.command}: {DEMO_REFUSED[args.command]}")
+    if getattr(args, "scheduler", False):
+        parser.error("--demo cannot be combined with --scheduler: a demo has nothing to schedule")
     if any(getattr(args, name, False) for name in ("notify", "notify_dry_run", "notify_baseline")):
         parser.error("--demo cannot be combined with --notify: nothing is ever sent from a demo")
 

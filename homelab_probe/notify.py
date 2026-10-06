@@ -18,6 +18,7 @@ Email uses verified STARTTLS or implicit TLS by default. Plain SMTP is available
 and a password is never sent over an unencrypted connection.
 """
 
+import contextlib
 import json
 import logging
 import os
@@ -37,7 +38,7 @@ import requests
 from .config import Config, ConfigError, SmtpSettings
 from .diagnose import CODES, CRITICAL, INFO, SEVERITY_ORDER, WARNING, Finding, area_of
 from .logs import log_event
-from .util import printable, site_key
+from .util import LockTimeout, file_lock, printable, site_key
 
 _log = logging.getLogger(__name__)
 
@@ -46,7 +47,6 @@ STATE_DIR = "snapshots"                                 # the git-ignored direct
 STATE_FILE_NAME = "notify-state.json"
 # Before there was one state per site the file was shared; it is still read (for the site "default" only) when the
 # site has none of its own yet, and is never changed or removed.
-LEGACY_STATE_FILE = f"{STATE_DIR}/{STATE_FILE_NAME}"
 LEGACY_SITE_REF = "default"
 MAX_LINES = 20                                          # events spelled out in one message
 KIND_ORDER = {"new": 0, "worsened": 1, "reminder": 2, "recovered": 3}
@@ -413,3 +413,111 @@ def save_state(path: Path, state: Dict[str, Any]) -> None:
         json.dump(state, f, indent=2)
         f.write("\n")
     os.replace(temporary, path)
+
+
+# -- one notification step, for the command line and the scheduler -----------------------------------------------
+
+LOCK_WAIT_SECONDS = 120.0       # how long a run waits for another run's turn with the state
+
+
+@dataclass
+class Outcome:
+    """What one notification step did. ``kind`` is ``baseline`` (the current findings were recorded as already
+    reported), ``nothing`` (nothing new, worse or fixed), ``dry_run`` or ``sent``; ``results`` is one (destination kind,
+    delivered, reason) per destination that was tried; ``undelivered`` is true when a message had to be sent and every
+    destination failed."""
+
+    kind: str
+    results: List[Tuple[str, bool, str]] = field(default_factory=list)
+    undelivered: bool = False
+    events: int = 0
+
+
+def load_site_state(explicit: Optional[Path], site: Dict[str, str],
+                    base: Path = Path(STATE_DIR)) -> Tuple[Path, Dict[str, Any], str, bool]:
+    """(where the state is kept, the state, a warning, whether there was a state at all) for ``site``. The default file
+    is the site's own; a state that belongs to another site is refused. The shared file of earlier versions is read,
+    for the site ``default`` only, while that site has no file of its own (it is never changed: the next save writes
+    the new file). ``base`` is the directory that holds the states (``snapshots/`` of the working directory for the
+    command line, that of the data directory for the server)."""
+    path = explicit or state_path_for(site, base)
+    legacy = base / STATE_FILE_NAME
+    if explicit is None and not path.exists() and site.get("ref") == LEGACY_SITE_REF and legacy.exists():
+        found = legacy
+    else:
+        found = path
+    existed = found.exists()
+    state, problem = load_state(found)
+    check_state_site(state, site, path)
+    return path, state, problem, existed
+
+
+def process(findings: List[Finding], *, config: Config, settings: Any, site: Dict[str, str],
+            state_file: Optional[Path] = None, base: Path = Path(STATE_DIR), minimum: str = WARNING,
+            areas: Optional[List[str]] = None,
+            redact: bool = False, dry_run: bool = False, baseline_only: bool = False, baseline_if_new: bool = False,
+            report: Callable[[str], None] = lambda message: None,
+            warn: Callable[[str], None] = lambda message: None) -> Outcome:
+    """The notification step: what is new, worse or fixed since the last run is sent to every destination and
+    remembered. Everything from reading the state to saving it happens under one lock on the state, so a scheduler
+    and a cron job (or two of either) never both announce the same finding. ``baseline_only`` records the current
+    findings as already reported; ``baseline_if_new`` does so when there was no state yet (a first run would otherwise
+    announce everything). ``report`` receives the lines a person is told, ``warn`` a damaged-state warning. Raises
+    ``ConfigError`` for a state that cannot be saved, or one that stays locked by another run."""
+    path = state_file or state_path_for(site, base)
+    with contextlib.ExitStack() as stack:
+        try:
+            stack.enter_context(file_lock(path.with_name(path.name + ".lock"), LOCK_WAIT_SECONDS))
+        except LockTimeout:
+            raise ConfigError(f"the notification state {path} is in use by another run that did not finish in "
+                              f"{LOCK_WAIT_SECONDS:g} seconds; nothing was sent") from None
+        except OSError as e:
+            raise ConfigError(f"the notification state in {path.parent} cannot be locked: {e.strerror or e}") from e
+        return _locked_step(findings, config, settings, site, state_file, base, minimum, areas, redact, dry_run,
+                            baseline_only, baseline_if_new, report, warn)
+
+
+def _locked_step(findings: List[Finding], config: Config, settings: Any, site: Dict[str, str],
+                 state_file: Optional[Path], base: Path, minimum: str, areas: Optional[List[str]], redact: bool,
+                 dry_run: bool,
+                 baseline_only: bool, baseline_if_new: bool, report: Callable[[str], None],
+                 warn: Callable[[str], None]) -> Outcome:
+    state_path, state, problem, existed = load_site_state(state_file, site, base)
+    if problem:
+        warn(problem)
+    now = time.time()
+    if baseline_only or (baseline_if_new and not existed):
+        saved = {**baseline(findings, now, minimum, areas, state), "site": site["id"]}
+        try:
+            save_state(state_path, saved)
+        except OSError as e:
+            raise ConfigError(
+                f"the notification baseline could not be saved to {state_path}: {e.strerror or e}") from e
+        report(f"Notification baseline saved: {len(saved['active'])} current finding(s) count as already reported")
+        return Outcome("baseline")
+    events, new_state = plan(findings, state, now, minimum, settings.notify_repeat_hours, areas)
+    new_state = {**new_state, "site": site["id"]}
+    if not events:
+        if new_state != state:
+            try:
+                save_state(state_path, new_state)          # e.g. a finding improved but is still reported
+            except OSError as e:
+                raise ConfigError(
+                    f"the notification state could not be saved to {state_path}: {e.strerror or e}") from e
+        report("Notification: nothing new, worse or fixed since the last notified run")
+        return Outcome("nothing")
+    if dry_run:
+        title, body = render_text(events, redact)
+        report(f"Notification dry run (nothing sent, state unchanged): {title}\n{body}")
+        return Outcome("dry_run", events=len(events))
+    results = send(destinations_from_config(config), events, redact, config.timeout)
+    for kind, delivered, reason in results:
+        report(f"Notification to {kind}: " + ("sent" if delivered else f"FAILED ({reason})"))
+    delivered_somewhere = any(ok for _, ok, _ in results)
+    if delivered_somewhere:
+        try:
+            save_state(state_path, new_state)
+        except OSError as e:
+            raise ConfigError(f"the notification was sent but its state could not be saved to {state_path}: "
+                              f"{e.strerror or e}; it will be sent again next run") from e
+    return Outcome("sent", results, not delivered_somewhere, len(events))

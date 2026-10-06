@@ -17,10 +17,20 @@ The value helpers further down (``number``, ``plural``, ``normalize_mac``, ``for
 copied into several modules; they live here once.
 """
 
+import contextlib
 import ipaddress
+import os
 import re
+import sys
+import time
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Sequence
+from pathlib import Path
+from typing import Any, Dict, Iterator, List, Optional, Sequence
+
+if sys.platform == "win32":     # pragma: no cover (the other platforms never take this branch)
+    import msvcrt
+else:
+    import fcntl
 
 # Controls that are never wanted in a name: C0 (except tab, newline, CR, handled separately),
 # DEL and C1. Also removed: bidirectional overrides and isolates (they reorder text to disguise
@@ -189,6 +199,39 @@ def site_key(site_id: Any) -> str:
     if not key:
         return "unknown"
     return "_" + key if key.startswith(".") else key
+
+
+class LockTimeout(Exception):
+    """A lock was not free within the time that was allowed."""
+
+
+@contextlib.contextmanager
+def file_lock(path: Path, timeout: Optional[float] = None) -> Iterator[None]:
+    """An exclusive lock on ``path`` across processes (and threads), released when the block ends. Without ``timeout``
+    it waits for as long as it takes; with one it raises ``LockTimeout`` when the lock is not free in that many
+    seconds. The lock file is created owner-only (and its directory)."""
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        deadline = None if timeout is None else time.monotonic() + timeout
+        while True:
+            try:
+                if sys.platform == "win32":     # pragma: no cover (the other platforms take the else branch)
+                    os.write(fd, b"\0")
+                    os.lseek(fd, 0, os.SEEK_SET)
+                    msvcrt.locking(fd, msvcrt.LK_LOCK if deadline is None else msvcrt.LK_NBLCK, 1)
+                else:
+                    fcntl.flock(fd, fcntl.LOCK_EX | (0 if deadline is None else fcntl.LOCK_NB))
+                break
+            except OSError:
+                if deadline is None or time.monotonic() >= deadline:
+                    if deadline is None:
+                        raise
+                    raise LockTimeout(str(path)) from None
+                time.sleep(0.05)
+        yield
+    finally:
+        os.close(fd)                    # closing releases the lock
 
 
 def record_for(table: Dict[str, Dict[str, Any]], key: Any) -> Dict[str, Any]:

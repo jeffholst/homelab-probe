@@ -74,20 +74,7 @@ from .history import (
     site_snapshots,
 )
 from .new_clients import render_table as render_new_clients
-from .notify import (
-    LEGACY_SITE_REF,
-    LEGACY_STATE_FILE,
-    STATE_DIR,
-    baseline,
-    check_state_site,
-    destinations_from_config,
-    load_state,
-    plan,
-    render_text,
-    save_state,
-    send,
-    state_path_for,
-)
+from .notify import STATE_DIR, destinations_from_config, process
 from .query import format_table, render_csv, render_table
 from .settings import DiagnoseSettings, expired_rules, load_settings, server_settings_path
 from .snapshot import EventQuery, warn
@@ -938,6 +925,10 @@ def _add_serve(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--read-only", action="store_true",
                         help="Write no file on this machine: the settings editor and the setup's files answer 403 "
                              "(logging in and the audit log still work)")
+    parser.add_argument("--scheduler", action="store_true",
+                        help="Run diagnose (and notify) and take snapshots on a timer inside the server "
+                             "(SCHEDULER_DIAGNOSE_MINUTES, SCHEDULER_SNAPSHOT_HOURS, SCHEDULER_SNAPSHOT_KEEP); it "
+                             "writes files, so not with --read-only")
     parser.add_argument("--port", type=_port, default=DEFAULT_PORT, metavar="PORT",
                         help=f"The port to listen on (default {DEFAULT_PORT})")
     parser.add_argument("--data-dir", type=Path, default=Path("."), metavar="DIR",
@@ -948,6 +939,9 @@ def _add_serve(parser: argparse.ArgumentParser) -> None:
 
 
 def _check_serve(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    if args.scheduler and args.read_only:
+        parser.error("--scheduler writes files (snapshots, the notification state) and cannot be combined with "
+                     "--read-only")
     try:
         check_bind(args.host, args.allowed_host)
     except ValueError as e:
@@ -1010,7 +1004,7 @@ def _run_serve(args: argparse.Namespace) -> int:
     run(config, args.host, args.port, args.config, args.data_dir, demo=args.demo,
         announce=lambda message: say(message, file=sys.stderr), allowed=args.allowed_host,
         forwarded_allow_ips=args.forwarded_allow_ips, setup=setup_state, reload=reload,
-        read_only=args.read_only)
+        read_only=args.read_only, scheduler=args.scheduler)
     return 0
 
 
@@ -1111,67 +1105,16 @@ def _prepare_diagnose(args: argparse.Namespace, config: Config) -> None:
                           "docs/notifications.md); nothing was sent")
 
 
-def _load_site_state(args: argparse.Namespace, site: Dict[str, str]) -> Tuple[Path, Dict[str, Any], str]:
-    """(where the state is kept, the state, a warning) for ``site``. The default file is the site's own; a state
-    that belongs to another site is refused. The shared file of earlier versions is read, for the site ``default``
-    only, while that site has no file of its own (it is never changed: the next save writes the new file)."""
-    path = args.notify_state or state_path_for(site)
-    if args.notify_state is None and not path.exists() and site.get("ref") == LEGACY_SITE_REF \
-            and Path(LEGACY_STATE_FILE).exists():
-        state, problem = load_state(Path(LEGACY_STATE_FILE))
-    else:
-        state, problem = load_state(path)
-    check_state_site(state, site, path)
-    return path, state, problem
-
-
 def _notify(findings: List[Any], config: Any, settings: Any, args: argparse.Namespace, site: Dict[str, str]) -> bool:
     """Run the notification step of ``diagnose --notify``. True when a message had to be sent and
     every destination failed (the caller turns that into exit code 3 if nothing else applies). ``site`` is the site
-    that was read: its findings are remembered apart from every other site's."""
-    minimum = args.notify_min or WARNING
-    state_path, state, problem = _load_site_state(args, site)
-    if problem:
-        warn(problem)
-    now = time.time()
-    if args.notify_baseline:
-        saved = {**baseline(findings, now, minimum, args.areas, state), "site": site["id"]}
-        try:
-            save_state(state_path, saved)
-        except OSError as e:
-            raise ConfigError(
-                f"the notification baseline could not be saved to {state_path}: {e.strerror or e}"
-            ) from e
-        say(f"Notification baseline saved: {len(saved['active'])} current finding(s) count as already reported",
-             file=sys.stderr)
-        return False
-    events, new_state = plan(findings, state, now, minimum, settings.notify_repeat_hours, args.areas)
-    new_state = {**new_state, "site": site["id"]}
-    if not events:
-        if new_state != state:
-            try:
-                save_state(state_path, new_state)          # e.g. a finding improved but is still reported
-            except OSError as e:
-                raise ConfigError(
-                    f"the notification state could not be saved to {state_path}: {e.strerror or e}"
-                ) from e
-        say("Notification: nothing new, worse or fixed since the last notified run", file=sys.stderr)
-        return False
-    if args.notify_dry_run:
-        title, body = render_text(events, args.notify_redact)
-        say(f"Notification dry run (nothing sent, state unchanged): {title}\n{body}", file=sys.stderr)
-        return False
-    results = send(destinations_from_config(config), events, args.notify_redact, config.timeout)
-    for kind, delivered, reason in results:
-        say(f"Notification to {kind}: " + ("sent" if delivered else f"FAILED ({reason})"), file=sys.stderr)
-    delivered_somewhere = any(ok for _, ok, _ in results)
-    if delivered_somewhere:
-        try:
-            save_state(state_path, new_state)
-        except OSError as e:
-            raise ConfigError(f"the notification was sent but its state could not be saved to {state_path}: "
-                              f"{e.strerror or e}; it will be sent again next run") from e
-    return not delivered_somewhere
+    that was read: its findings are remembered apart from every other site's. The step is ``notify.process``, which
+    the scheduler of ``serve`` uses too, under one lock on the state."""
+    outcome = process(findings, config=config, settings=settings, site=site, state_file=args.notify_state,
+                      minimum=args.notify_min or WARNING, areas=args.areas, redact=args.notify_redact,
+                      dry_run=args.notify_dry_run, baseline_only=args.notify_baseline,
+                      report=lambda message: say(message, file=sys.stderr), warn=warn)
+    return outcome.undelivered
 
 
 WATCH_SLEEP = time.sleep          # looked up when used, so a test can replace the wait between passes

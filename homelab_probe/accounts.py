@@ -33,14 +33,10 @@ import threading
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional, Protocol, Tuple
+from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple
 
 from . import logs
-
-if sys.platform == "win32":     # pragma: no cover (the other platforms never take this branch)
-    import msvcrt
-else:
-    import fcntl
+from .util import file_lock
 
 USERS_FILE = "users.json"
 AUDIT_FILE = "audit.log"
@@ -241,23 +237,6 @@ def _enabled_admins(users: List[User]) -> int:
     return sum(u.role == "admin" and not u.disabled for u in users)
 
 
-@contextlib.contextmanager
-def _locked(path: Path) -> Iterator[None]:
-    """An exclusive lock on ``path`` across processes (and threads), released when the block ends."""
-    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
-    try:
-        if sys.platform == "win32":     # pragma: no cover (the other platforms take the else branch)
-            os.write(fd, b"\0")
-            os.lseek(fd, 0, os.SEEK_SET)
-            msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
-        else:
-            fcntl.flock(fd, fcntl.LOCK_EX)
-        yield
-    finally:
-        os.close(fd)                    # closing releases the lock
-
-
 class AccountStore:
     """The accounts file of one data directory. Every method that changes it reads the current file under the lock
     first, so a concurrent change by the server or another ``hlp web-user`` is never overwritten."""
@@ -349,7 +328,7 @@ class AccountStore:
         """Run ``change(users) -> (users, result)`` on the current file under the lock and write the outcome. The
         last enabled administrator is protected here, so no operation can bypass it. An audit callback runs under
         the same lock; when it fails, the account change is rolled back."""
-        with _locked(self._lock_path):
+        with file_lock(self._lock_path):
             before = self._read()
             after, result = change(list(before))
             if _enabled_admins(before) >= 1 and _enabled_admins(after) == 0:
@@ -436,7 +415,7 @@ class AccountStore:
                            on_upgrade: Optional[Callable[[User], None]] = None) -> Optional[User]:
         """Verify and record a login against the current account under the file lock."""
         name = normalize_username(username)
-        with _locked(self._lock_path):
+        with file_lock(self._lock_path):
             before = self._read()
             user = next((candidate for candidate in before if candidate.username == name), None)
             if user is None or user.disabled:
