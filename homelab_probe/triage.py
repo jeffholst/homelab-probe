@@ -21,30 +21,24 @@ been known **where there is a record** (it is left out, and said so, when there 
 same order.
 """
 
-import contextlib
 import hashlib
-import json
 import math
-import os
 import re
-import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any, Dict, Iterator, List, Mapping, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from .diagnose import CRITICAL, INFO, WARNING
 from .diagnose.areas import area_of
-from .util import LockTimeout, file_lock, normalize_mac, printable
+from .sitefile import SiteFile, StoreError
+from .util import normalize_mac, printable
 
 FILE_NAME = "triage.json"
-FORMAT_VERSION = 1
 STATES = ("open", "acknowledged", "snoozed")
 _ID = re.compile(r"[0-9a-f]{16}")
 MAX_ENTRIES = 5000                       # findings tracked per site: a bound on the file, not one to meet
 MAX_NOTE = 200
 MAX_SNOOZE_DAYS = 365
-LOCK_WAIT_SECONDS = 20.0
 DAY = 86400.0
 
 SEVERITY_WEIGHT = {CRITICAL: 3, WARNING: 2, INFO: 1}
@@ -90,13 +84,8 @@ def iso(moment: Optional[float]) -> Optional[str]:
     return None if moment is None else datetime.fromtimestamp(moment, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-class TriageError(Exception):
-    """A triage change that cannot be made; ``code`` is a fixed word (``invalid``, ``full``, ``unsafe``, ``unreadable``,
-    ``locked``, ``another_site``) and the message never holds a name, a path or a secret."""
-
-    def __init__(self, code: str, message: str) -> None:
-        super().__init__(message)
-        self.code = code
+# The errors of the triage file are the errors of any site file (``sitefile.StoreError``), kept under the old name.
+TriageError = StoreError
 
 
 def _number(value: Any) -> bool:
@@ -113,77 +102,14 @@ def _valid_entry(key: Any, value: Any) -> bool:
             and (value.get("until") is None or _number(value.get("until"))))
 
 
-class TriageStore:
+class TriageStore(SiteFile):
     """The triage file of one site. ``directory`` is the site's directory (``snapshots/<site id>``)."""
 
-    def __init__(self, directory: Path, site_id: str) -> None:
-        self.directory, self.site_id = Path(directory), site_id
-        self.path = self.directory / FILE_NAME
+    file_name = FILE_NAME
+    label = "triage"
 
-    # -- reading and writing the file -------------------------------------------------------------------------
-
-    def _refuse_links(self) -> None:
-        lock = self.directory / (FILE_NAME + ".lock")
-        if any(path.is_symlink() for path in (self.directory.parent, self.directory, self.path, lock)):
-            raise TriageError("unsafe", "The triage file, its lock or a directory above it is a symbolic link, which "
-                                        "is left alone.")
-
-    @contextlib.contextmanager
-    def locked(self) -> Iterator[None]:
-        self._refuse_links()
-        try:
-            with file_lock(self.directory / (FILE_NAME + ".lock"), LOCK_WAIT_SECONDS):
-                yield
-        except LockTimeout as error:
-            raise TriageError("locked", "Another change to the triage was in progress too long.") from error
-        except OSError as error:
-            raise TriageError("unreadable", "The triage file cannot be used.") from error
-
-    def load(self) -> Dict[str, Dict[str, Any]]:
-        """The entries by id (empty when there is no file). ``TriageError`` for a file that is damaged or is another
-        site's."""
-        self._refuse_links()
-        try:
-            text = self.path.read_text(encoding="utf-8")
-        except FileNotFoundError:
-            return {}
-        except (OSError, UnicodeError) as error:
-            raise TriageError("unreadable", "The triage file cannot be read.") from error
-        try:
-            document = json.loads(text)
-            entries = document["entries"]
-            ok = document["version"] == FORMAT_VERSION and isinstance(entries, dict) and all(
-                _valid_entry(key, value) for key, value in entries.items())
-            site = document.get("site")
-        except (ValueError, KeyError, TypeError, AttributeError) as error:
-            raise TriageError("unreadable", "The triage file is damaged.") from error
-        if not ok:
-            raise TriageError("unreadable", "The triage file is damaged.")
-        if site != self.site_id:          # a finding id does not name the site, so a file that does not is not ours
-            raise TriageError("another_site", "The triage file does not belong to this site.")
-        loaded: Dict[str, Dict[str, Any]] = entries
-        return loaded
-
-    def _save(self, entries: Mapping[str, Mapping[str, Any]]) -> None:
-        document = {"version": FORMAT_VERSION, "site": self.site_id, "entries": entries}
-        try:
-            self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-            os.chmod(self.directory, 0o700)           # a directory made earlier, with looser rights, is closed too
-        except OSError as error:
-            raise TriageError("unreadable", "The triage file cannot be written.") from error
-        descriptor, temporary = tempfile.mkstemp(dir=self.directory, prefix=FILE_NAME + ".", suffix=".tmp")
-        try:
-            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-                json.dump(document, handle, indent=2, sort_keys=True)
-                handle.write("\n")
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.chmod(temporary, 0o600)
-            os.replace(temporary, self.path)
-        except OSError as error:
-            with contextlib.suppress(OSError):
-                os.unlink(temporary)
-            raise TriageError("unreadable", "The triage file cannot be written.") from error
+    def valid_entry(self, key: str, entry: Any) -> bool:
+        return _valid_entry(key, entry)
 
     # -- changes ---------------------------------------------------------------------------------------------
 
@@ -208,7 +134,7 @@ class TriageStore:
                      "first_seen_at": (old or {}).get("first_seen_at", now), "last_seen_at": (old or {}).get(
                          "last_seen_at", now)}
             entries[ident] = entry
-            self._save(entries)
+            self.save(entries)
             return entry
 
     def reconcile(self, present: Mapping[str, str], complete: bool, now: float) -> Dict[str, int]:
@@ -234,7 +160,7 @@ class TriageStore:
                 for ident in [ident for ident in entries if ident not in present]:
                     del entries[ident]
                     dropped += 1
-            self._save(entries)
+            self.save(entries)
             return {"added": added, "kept": len(entries) - added, "dropped": dropped}
 
 

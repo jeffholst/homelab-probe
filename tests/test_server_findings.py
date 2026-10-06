@@ -12,6 +12,7 @@ pytest.importorskip("tomlkit")
 from fastapi.testclient import TestClient  # noqa: E402
 from server_support import CONFIG, auth_for, logged_in  # noqa: E402
 
+from homelab_probe import sitefile  # noqa: E402
 from homelab_probe import triage as triage_module  # noqa: E402
 from homelab_probe.demo.session import DemoSession  # noqa: E402
 from homelab_probe.server import findings_api, scheduler  # noqa: E402
@@ -286,7 +287,7 @@ def test_too_many_tracked_findings_is_a_409(admin, monkeypatch):
 def test_a_busy_lock_is_a_503_and_a_damaged_file_a_500_with_fixed_text(admin, tmp_path, monkeypatch):
     from homelab_probe.util import file_lock
 
-    monkeypatch.setattr(triage_module, "LOCK_WAIT_SECONDS", 0.2)
+    monkeypatch.setattr(sitefile, "LOCK_WAIT_SECONDS", 0.2)
     ident = first(admin)["id"]
     (tmp_path / "snapshots" / "site-1").mkdir(parents=True, exist_ok=True)
     with file_lock(tmp_path / "snapshots" / "site-1" / "triage.json.lock"):

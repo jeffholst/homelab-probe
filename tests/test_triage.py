@@ -7,7 +7,7 @@ import threading
 
 import pytest
 
-from homelab_probe import triage
+from homelab_probe import sitefile, triage
 from homelab_probe.diagnose import CODES, CRITICAL, INFO, WARNING
 from homelab_probe.triage import TriageError, TriageStore, finding_id, rank_findings
 
@@ -158,7 +158,7 @@ def test_a_change_made_while_another_is_in_progress_waits_and_both_survive(store
 def test_a_lock_that_is_not_free_in_time_is_busy_not_lost(store, monkeypatch):
     from homelab_probe.util import file_lock
 
-    monkeypatch.setattr(triage, "LOCK_WAIT_SECONDS", 0.2)
+    monkeypatch.setattr(sitefile, "LOCK_WAIT_SECONDS", 0.2)
     with file_lock(store.directory / "triage.json.lock"):
         with pytest.raises(TriageError) as caught:
             store.set_state("4" * 16, "wan.availability", "acknowledged", "alice", NOW)
