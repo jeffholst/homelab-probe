@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { type Session } from "../api/types";
-import { SESSION_KEY, useApi, useServices } from "../app/services";
+import { SESSION_KEY, endSession, useApi, useServices } from "../app/services";
 
 /** Who is logged in: a `Session`, `null` for nobody, `undefined` while the first answer is on its way. */
 export function useSession() {
@@ -35,8 +35,7 @@ export function useLogout() {
   return useMutation({
     mutationFn: () => api.logout(),
     onSettled: () => {
-      queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== SESSION_KEY[0] });
-      queryClient.setQueryData(SESSION_KEY, null);
+      endSession(queryClient);
     },
   });
 }

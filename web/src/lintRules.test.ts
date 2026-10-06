@@ -38,6 +38,37 @@ describe("the lint rules that keep strings text", () => {
     expect((await messages('export const t = () => window.sessionStorage.setItem("a", "b");\n', "src/pages/D.tsx")).join()).toContain("Browser storage");
   });
 
+  // Every spelling of a forbidden access: the property written as a name, as a string, as a template, or destructured.
+  it.each([
+    ['el.innerHTML = text;', "Do not assign markup"],
+    ['el["innerHTML"] = text;', "Do not assign markup"],
+    ["el['outerHTML'] = text;", "Do not assign markup"],
+    ["el[`innerHTML`] = text;", "Do not assign markup"],
+    ['el.insertAdjacentHTML("beforeend", text);', "Do not write markup"],
+    ['el["insertAdjacentHTML"]("beforeend", text);', "Do not write markup"],
+    ["el[`insertAdjacentHTML`]('beforeend', text);", "Do not write markup"],
+    ["document.write(text);", "Do not write markup"],
+    ['document["write"](text);', "Do not write markup"],
+    ['document["writeln"](text);', "Do not write markup"],
+    ["window.document.write(text);", "Do not write markup"],
+    ['window["document"]["write"](text);', "Do not write markup"],
+    ['window["localStorage"].setItem("a", "b");', "Browser storage"],
+    ['globalThis["sessionStorage"].clear();', "Browser storage"],
+    ["window[`localStorage`].clear();", "Browser storage"],
+    ['self["indexedDB"].open("x");', "Browser storage"],
+    ["const { localStorage: store } = window;", "Browser storage"],
+    ['const { "sessionStorage": store } = globalThis;', "Browser storage"],
+    ["const props = { ['dangerouslySetInnerHTML']: { __html: text } };", "dangerouslySetInnerHTML is forbidden"],
+  ])("rejects the computed and destructured form: %s", async (code, expected) => {
+    const found = await messages(`declare const el: HTMLElement; declare const text: string;\n${code}\nexport {};\n`, "src/pages/F.tsx");
+    expect(found.join()).toContain(expected);
+  });
+
+  it("does not take a stream's write or an unrelated property for the document's", async () => {
+    const found = await messages('declare const stream: { write(t: string): void }; stream.write("x"); const o = { write: 1, innerHTMLLength: 2 }; export { o };\n', "src/pages/G.tsx");
+    expect(found).toEqual([]);
+  });
+
   it("allows storage in the theme module and ordinary code everywhere", async () => {
     expect(await messages('export const t = () => window.localStorage.getItem("hlp-theme");\n', "src/theme/storage.ts")).toEqual([]);
     expect(await messages("export const A = () => <p>text</p>;\n", "src/pages/E.tsx")).toEqual([]);
