@@ -306,6 +306,15 @@ def describe_snapshot(snap: "Snapshot") -> str:
     return "read " + (", ".join(found) if found else "nothing")
 
 
+_CORE_READS = frozenset({"devices", "clients", "legacy_devices", "legacy_clients"})
+
+
+def _extra_reads(reads: "_Reads") -> bool:
+    """Was an optional read (network configuration, health, events, ...) asked for in this collection? The device
+    detail reads (``extras0``, ...) are a stage of their own."""
+    return any(name not in _CORE_READS and not name.startswith("extras") for name in reads.notes)
+
+
 class _Reads:
     """Runs the independent reads of one collection, one by one or on the client's thread pool, and keeps each
     read's warnings apart so they are shown in a fixed order whatever finished first.
@@ -467,7 +476,8 @@ def collect_snapshot(
                 snap.legacy_devices, snap.legacy_devices_available = reads.result("legacy_devices")
             if needs.legacy_clients is not False:
                 snap.legacy_clients, snap.legacy_clients_available = reads.result("legacy_clients")
-            client.stage("Reading network details")
+            if _extra_reads(reads):
+                client.stage("Reading network details")          # only when an optional read was asked for
             _apply_extras(snap, reads, needs, users=True)
             if needs.device_extras is not False:
                 client.stage("Reading device details")
@@ -486,6 +496,7 @@ def extend_snapshot(client: UniFiClient, snap: Snapshot, needs: Needs, now_ms: O
     and clients or the client history, which are already there. A command that first looks something up
     in the cheap data (``client``) uses this to read the rest only when the lookup found something."""
     site_ref = snap.site.get("internalReference") or snap.site.get("name") or ""
+    client.stage("Reading more details")
     with client.parallel() as pool:
         reads = _Reads(pool)
         try:

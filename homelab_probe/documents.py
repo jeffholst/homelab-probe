@@ -307,6 +307,7 @@ INVENTORY_NEEDS = Needs(reservations=True, groups=True, users_required=True)
 def snapshot_document(client: UniFiClient, site: str, echo: bool = True) -> Document:
     """The network as it is right now, as a snapshot record (the content of a snapshot file)."""
     with logs.collect_warnings(quiet=not echo) as warnings:
+        client.stage("Connecting to the controller")
         try:
             version = str(client.info().get("applicationVersion") or "")
         except UniFiAPIError:
@@ -344,6 +345,7 @@ def export_document(client: UniFiClient, site: str, include_offline: bool = Fals
 
 def info_document(client: UniFiClient) -> Document:
     """The controller's application info and its sites, as read (names are raw: a renderer cleans them)."""
+    client.stage("Reading the controller's information")
     data = {"application": client.info(),
             "sites": [{"name": s.get("name"), "ref": s.get("internalReference"), "id": s.get("id")}
                       for s in client.sites()]}

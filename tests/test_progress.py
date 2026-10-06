@@ -231,7 +231,7 @@ def test_the_guard_is_installed_while_progress_runs_and_put_back_after():
     before = logs.STDERR_GUARD
     shown, _, _ = make()
     with shown:
-        assert logs.STDERR_GUARD == shown.hold and progress.current is shown
+        assert logs.STDERR_GUARD == progress._guard and progress.current is shown
     assert logs.STDERR_GUARD == before and progress.current is None
 
 
@@ -307,7 +307,7 @@ def test_it_writes_nothing_where_progress_is_not_welcome(options):
         clock.now += 60
         shown.tick()
     assert stream.getvalue() == "" and shown.enabled is False and progress.current is None
-    assert logs.STDERR_GUARD != shown.hold
+    assert logs.STDERR_GUARD != progress._guard
 
 
 @pytest.mark.parametrize("args, expected", [
@@ -353,9 +353,35 @@ def snapshot_stages(needs):
 
 def test_a_collection_names_its_real_boundaries_in_order():
     from homelab_probe.snapshot import Needs
-    assert snapshot_stages(Needs()) [:3] == ["Connecting to the controller", "Reading devices", "Reading clients"]
-    assert snapshot_stages(Needs())[-2:] == ["Reading network details", "Reading device details"] or \
-        "Reading network details" in snapshot_stages(Needs())
+    assert snapshot_stages(Needs()) == ["Connecting to the controller", "Reading devices", "Reading clients",
+                                        "Reading device details"]
+    with_extras = snapshot_stages(Needs(networks=True))
+    assert with_extras.index("Reading network details") == with_extras.index("Reading clients") + 1
+
+
+def test_a_stage_is_only_named_when_there_is_work_of_that_kind():
+    from homelab_probe.snapshot import Needs
+    nothing_optional = snapshot_stages(Needs(device_extras=False))
+    assert nothing_optional == ["Connecting to the controller", "Reading devices", "Reading clients"]
+    assert "Reading network details" not in snapshot_stages(Needs())          # the topology's reads: no optional read
+
+
+def test_a_second_phase_names_itself():
+    from homelab_probe.snapshot import Needs, collect_snapshot, extend_snapshot
+    client = demo_client(demo_config("default"))
+    snap = collect_snapshot(client, "default", Needs())
+    stages = []
+    client.stage = stages.append
+    extend_snapshot(client, snap, Needs(networks=True))
+    assert stages == ["Reading more details"]
+
+
+def test_a_stage_is_never_blank_even_before_the_work_names_one():
+    shown, stream, clock = make()
+    with shown:
+        clock.now += 1
+        shown.tick()
+    assert "Contacting the controller" in stream.getvalue()
 
 
 def test_the_documents_name_their_own_stage_after_the_read():
@@ -369,8 +395,15 @@ def test_the_documents_name_their_own_stage_after_the_read():
     documents.wifi_document(client, "default", echo=False)
     assert stages[-1] == "Checking Wi-Fi"
     stages.clear()
+    at_the_info_read = []
+    real_info = client.info
+    client.info = lambda: (at_the_info_read.append(list(stages)), real_info())[1]    # what was named when it ran
     documents.snapshot_document(client, "default", echo=False)
-    assert stages[-1] == "Preparing the snapshot"
+    client.info = real_info
+    assert at_the_info_read == [["Connecting to the controller"]] and stages[-1] == "Preparing the snapshot"
+    stages.clear()
+    documents.info_document(client)
+    assert stages == ["Reading the controller's information"]
 
 
 def test_the_event_command_names_its_read():
@@ -443,14 +476,15 @@ def test_an_error_on_a_terminal_clears_the_line_before_the_message(monkeypatch, 
 
 
 def test_a_progress_that_was_replaced_does_not_undo_the_one_that_replaced_it():
+    before = logs.STDERR_GUARD
     first, _, _ = make()
     second, _, _ = make()
     first.start()
     second.start()
     first.stop()
-    assert progress.current is second and logs.STDERR_GUARD == second.hold
+    assert progress.current is second and logs.STDERR_GUARD == progress._guard
     second.stop()
-    assert progress.current is None
+    assert progress.current is None and logs.STDERR_GUARD == before and progress._outer_guard is None
 
 
 def test_the_command_line_asks_for_progress_only_for_the_eligible_commands(monkeypatch, capsys):
@@ -465,3 +499,9 @@ def test_the_command_line_asks_for_progress_only_for_the_eligible_commands(monke
     assert cli.main(["--demo", "wifi"]) == 0
     assert cli.main(["--demo", "export", "--output-dir", "out"]) == 0
     assert made == [True, False]
+
+
+def test_the_guard_with_nothing_running_lets_the_write_through():
+    with progress._guard():
+        pass
+    assert progress.current is None

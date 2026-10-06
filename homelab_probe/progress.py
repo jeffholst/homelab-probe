@@ -33,6 +33,7 @@ from .present import Presentation
 
 ELIGIBLE = frozenset({"audit", "client", "diagnose", "diff", "events", "firewall", "info", "new-clients", "query",
                       "snapshot", "topology", "wan", "wifi"})
+INITIAL_STAGE = "Contacting the controller"
 DELAY = 0.2                 # seconds of work before anything is drawn
 INTERVAL = 0.1              # seconds between redraws
 SPINNER_UNICODE = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
@@ -40,6 +41,19 @@ SPINNER_ASCII = "|/-\\"
 HIDE_CURSOR, SHOW_CURSOR, ERASE_LINE = "\x1b[?25l", "\x1b[?25h", "\r\x1b[K"
 
 current: Optional["Progress"] = None
+_outer_guard: Optional[Callable[[], Any]] = None      # what ``logs.STDERR_GUARD`` was before the first progress started
+
+
+@contextlib.contextmanager
+def _guard() -> Iterator[None]:
+    """``logs.STDERR_GUARD`` while any progress runs: it always asks the one that is current, so a progress that was
+    replaced or stopped can never be left behind as the guard."""
+    running = current
+    if running is None:
+        yield
+    else:
+        with running.hold():
+            yield
 
 
 def eligible(args: Any) -> bool:
@@ -81,7 +95,7 @@ class Progress:
         self._delay = DELAY if delay is None else delay        # read now, so a test can change the module values
         self._interval = INTERVAL if interval is None else interval
         self._lock = threading.RLock()
-        self._label = ""
+        self._label = INITIAL_STAGE      # never a blank label: a read nobody named is still "contacting the controller"
         self._note = ""
         self._started: Optional[float] = None
         self._drawn = False          # a line is on the screen now
@@ -90,7 +104,6 @@ class Progress:
         self._frame = 0
         self._done = threading.Event()
         self._thread: Optional[threading.Thread] = None
-        self._previous_guard: Callable[[], Any] = logs.STDERR_GUARD
 
     # -- what the work says -------------------------------------------------------------------------------
 
@@ -113,8 +126,10 @@ class Progress:
                 return
             self._started = self._clock()
             current = self
-            self._previous_guard = logs.STDERR_GUARD
-            logs.STDERR_GUARD = self.hold
+            global _outer_guard
+            if _outer_guard is None:
+                _outer_guard = logs.STDERR_GUARD
+            logs.STDERR_GUARD = _guard
             atexit.register(self.stop)
         if self._threaded:
             self._thread = threading.Thread(target=self._run, name="hlp-progress", daemon=True)
@@ -133,8 +148,10 @@ class Progress:
                 self._hidden = False
             if current is self:
                 current = None
-            if logs.STDERR_GUARD == self.hold:
-                logs.STDERR_GUARD = self._previous_guard
+                global _outer_guard
+                # the last one out puts back what was there before
+                logs.STDERR_GUARD = _outer_guard or contextlib.nullcontext
+                _outer_guard = None
         self._done.set()
         thread = self._thread
         if thread is not None and thread is not threading.current_thread():
