@@ -69,7 +69,7 @@ def test_a_note_has_an_author_and_when_it_was_written_and_changed(store):
     note = store.add("device:" + MAC, "moved to the shelf", "alice", NOW)
     assert len(note["id"]) == 16 and note["author"] == "alice" == note["modified_by"]
     assert note["created_at"] == note["modified_at"] == NOW and note["subject"] == "device:AA:BB:CC:00:00:01"
-    edited = store.edit(note["id"], "moved to the rack", "bob", NOW + 60)
+    edited = store.edit(note["id"], "moved to the rack", "bob", NOW + 60, note["revision"])
     assert (edited["text"], edited["author"], edited["created_at"], edited["modified_at"], edited["modified_by"]) == (
         "moved to the rack", "alice", NOW, NOW + 60, "bob")
     assert store.listing()[0]["text"] == "moved to the rack"
@@ -96,7 +96,7 @@ def test_a_note_can_be_deleted_and_says_what_it_was(store):
     note = store.add("device:" + MAC, "x", "alice", NOW)
     gone = store.remove(note["id"])
     assert gone["text"] == "x" and store.listing() == []
-    for call in (lambda: store.remove(note["id"]), lambda: store.edit(note["id"], "y", "alice", NOW)):
+    for call in (lambda: store.remove(note["id"]), lambda: store.edit(note["id"], "y", "alice", NOW, "0" * 16)):
         with pytest.raises(StoreError) as caught:
             call()
         assert caught.value.code == "not_found"
@@ -181,3 +181,117 @@ def test_a_busy_lock_is_busy_not_lost(store, monkeypatch):
 def test_the_base_of_the_site_files_accepts_any_object_under_a_text_key(tmp_path):
     base = sitefile.SiteFile(tmp_path, "site-1")
     assert base.valid_entry("a", {}) and not base.valid_entry("a", []) and not base.valid_entry(1, {})
+
+
+# -- review: limits, revisions, the shape of the file, retained subjects ---------------------------------------------
+
+def test_a_note_of_the_documented_maximum_is_kept_and_one_more_character_is_refused(store):
+    assert notes.MAX_TEXT == 4000
+    assert len(store.add("device:" + MAC, "x" * 4000, "alice", NOW)["text"]) == 4000
+    with pytest.raises(StoreError):
+        store.add("device:" + MAC, "x" * 4001, "alice", NOW)
+
+
+def test_a_stale_edit_is_refused_and_keeps_the_change_that_was_saved_first(store):
+    note = store.add("device:" + MAC, "first", "alice", NOW)
+    first = store.edit(note["id"], "alice's change", "alice", NOW + 1, note["revision"])
+    with pytest.raises(StoreError) as caught:
+        store.edit(note["id"], "bob's change", "bob", NOW + 2, note["revision"])      # bob still holds the old revision
+    assert caught.value.code == "conflict"
+    assert store.listing()[0]["text"] == "alice's change" and store.listing()[0]["modified_by"] == "alice"
+    assert first["revision"] != note["revision"]
+    store.edit(note["id"], "bob's change", "bob", NOW + 3, first["revision"])         # after a reload it goes through
+    assert store.listing()[0]["text"] == "bob's change"
+
+
+def test_the_revision_changes_with_every_change_even_to_the_same_text(store):
+    note = store.add("device:" + MAC, "same", "alice", NOW)
+    again = store.edit(note["id"], "same", "alice", NOW + 1, note["revision"])
+    assert again["revision"] != note["revision"] and again["revision"] == store.listing()[0]["revision"]
+
+
+def test_a_note_file_is_checked_in_every_part_before_a_reader_uses_it(store):
+    good = {"subject": "device:" + MAC.upper(), "text": "x", "author": "alice", "created_at": NOW, "modified_at": NOW,
+            "modified_by": "alice"}
+    store.directory.mkdir(parents=True)
+
+    def attempt(key, entry):
+        store.path.write_text(json.dumps({"version": 1, "site": "site-1", "entries": {key: entry}}))
+        return store.load()
+
+    assert attempt("a" * 16, good) and attempt("b" * 16, {**good, "context": {"name": "Garage", "at": NOW}})
+    bad = [("short", good), ("A" * 16, good), ("a" * 16, [])]
+    bad += [("a" * 16, {**good, **{field: value}}) for field, value in (
+        ("subject", "Garage AP"), ("subject", "device:aa:bb:cc:00:00:01"), ("subject", 5), ("text", ""), ("text", 3),
+        ("author", None), ("modified_by", 1), ("created_at", "x"), ("modified_at", True), ("created_at", float("nan")),
+        ("context", "x"), ("context", {"name": 1, "at": NOW}), ("context", {"name": "x", "at": "y"}))]
+    bad += [("a" * 16, {k: v for k, v in good.items() if k != missing}) for missing in good]
+    for key, entry in bad:
+        with pytest.raises(StoreError) as caught:
+            attempt(key, entry)
+        assert caught.value.code == "unreadable", (key, entry)
+
+
+def test_the_last_known_name_is_kept_with_the_note_and_is_not_a_subject(store):
+    store.add("device:" + MAC, "moved", "alice", NOW, name="  Garage AP ")
+    assert store.listing()[0]["context"] == {"name": "Garage AP", "at": NOW}
+    with pytest.raises(StoreError):
+        store.add("device:" + MAC, "x", "alice", NOW, name="n" * 121)
+    note = store.add("device:" + MAC, "again", "alice", NOW + 5)
+    assert "context" not in note
+    renamed = store.edit(note["id"], "again", "alice", NOW + 6, note["revision"], name="Workshop AP")
+    assert renamed["context"] == {"name": "Workshop AP", "at": NOW + 6} and store.counts() == {"device:" + MAC.upper(): 2}
+
+
+def test_every_subject_with_notes_is_listed_with_its_last_known_name_whether_or_not_it_exists_now(store):
+    store.add("device:" + MAC, "one", "alice", NOW, name="Garage AP")
+    store.add("device:" + MAC, "two", "alice", NOW + 10, name="Workshop AP")             # renamed since
+    store.add("client:11:22:33:44:55:66", "left", "alice", NOW + 20)
+    ident = finding_id("device.offline", "Garage AP", MAC)
+    store.add(f"finding:{ident}", "cleared", "alice", NOW + 30, name="Garage AP offline")
+    found = store.subjects()
+    assert [s["subject"] for s in found] == [f"finding:{ident}", "client:11:22:33:44:55:66", "device:" + MAC.upper()]
+    by = {s["subject"]: s for s in found}
+    assert by["device:" + MAC.upper()]["last_known"] == {"name": "Workshop AP", "recorded_at": NOW + 10}
+    assert by["device:" + MAC.upper()]["note_count"] == 2 and by["device:" + MAC.upper()]["kind"] == "device"
+    assert by["client:11:22:33:44:55:66"]["last_known"] is None
+    assert [s["subject"] for s in store.subjects("workshop")] == ["device:" + MAC.upper()]       # the last-known name
+    assert [s["subject"] for s in store.subjects(" 11:22 ")] == ["client:11:22:33:44:55:66"]       # the reference
+    assert [s["subject"] for s in store.subjects("OFFLINE")] == [f"finding:{ident}"] and store.subjects("nothing") == []
+    for note in store.listing("client:11:22:33:44:55:66"):
+        store.remove(note["id"])
+    assert "client:11:22:33:44:55:66" not in {s["subject"] for s in store.subjects()}
+
+
+def test_a_lock_that_is_a_symbolic_link_a_file_without_a_site_and_a_looser_directory(store, tmp_path):
+    store.directory.mkdir(parents=True, mode=0o755)
+    os.chmod(store.directory, 0o755)
+    store.add("device:" + MAC, "x", "alice", NOW)
+    assert stat.S_IMODE(os.stat(store.directory).st_mode) == 0o700
+    document = json.loads(store.path.read_text())
+    document.pop("site")
+    store.path.write_text(json.dumps(document))
+    with pytest.raises(StoreError) as caught:
+        store.listing()
+    assert caught.value.code == "another_site"
+    document["site"] = "site-1"
+    store.path.write_text(json.dumps(document))
+    (store.directory / "notes.json.lock").unlink()
+    (store.directory / "notes.json.lock").symlink_to(tmp_path / "elsewhere.lock")
+    with pytest.raises(StoreError) as linked:
+        store.add("device:" + MAC, "y", "alice", NOW)
+    assert linked.value.code == "unsafe" and not (tmp_path / "elsewhere.lock").exists()
+
+
+def test_a_directory_that_cannot_be_closed_is_a_fixed_error(store, monkeypatch):
+    real = os.chmod
+
+    def refuse(path, mode, *args, **kwargs):
+        if str(path) == str(store.directory):
+            raise PermissionError("not yours")
+        return real(path, mode, *args, **kwargs)
+
+    monkeypatch.setattr(os, "chmod", refuse)
+    with pytest.raises(StoreError) as caught:
+        store.add("device:" + MAC, "x", "alice", NOW)
+    assert caught.value.code == "unreadable" and "not yours" not in str(caught.value)

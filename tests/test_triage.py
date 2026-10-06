@@ -292,3 +292,72 @@ def test_the_guidance_is_general_per_area_with_a_docs_link():
 
 def test_iso_times():
     assert triage.iso(0) == "1970-01-01T00:00:00Z" and triage.iso(None) is None
+
+
+# -- review: links, sites, entries, permissions ---------------------------------------------------------------
+
+def test_a_lock_that_is_a_symbolic_link_is_refused_and_nothing_outside_is_made_or_locked(store, tmp_path):
+    store.directory.mkdir(parents=True)
+    target = tmp_path / "elsewhere.lock"
+    (store.directory / "triage.json.lock").symlink_to(target)
+    for call in (lambda: store.set_state("a" * 16, "wan.availability", "acknowledged", "alice", NOW),
+                 lambda: store.reconcile({}, True, NOW), store.load):
+        with pytest.raises(TriageError) as caught:
+            call()
+        assert caught.value.code == "unsafe"
+    assert not target.exists() and not store.path.exists()
+
+
+def test_a_file_that_does_not_name_this_site_is_refused_however_it_is_missing_the_name(store):
+    store.set_state("a" * 16, "wan.availability", "acknowledged", "alice", NOW)
+    document = json.loads(store.path.read_text())
+    for site in ("site-2", None, "", 5):
+        changed = dict(document)
+        if site is None:
+            changed.pop("site")
+        else:
+            changed["site"] = site
+        store.path.write_text(json.dumps(changed))
+        with pytest.raises(TriageError) as caught:
+            store.load()
+        assert caught.value.code in {"another_site", "unreadable"}, site
+
+
+def test_every_part_of_an_entry_is_checked_before_it_is_used(store):
+    good = {"code": "wan.availability", "state": "acknowledged", "by": "alice", "at": NOW, "until": None, "note": "",
+            "first_seen_at": NOW, "last_seen_at": NOW}
+    store.directory.mkdir(parents=True)
+
+    def attempt(key, entry):
+        store.path.write_text(json.dumps({"version": 1, "site": "site-1", "entries": {key: entry}}))
+        return store.load()
+
+    assert attempt("a" * 16, good) == {"a" * 16: good}
+    assert attempt("b" * 16, {**good, "until": NOW + 1}) and attempt("c" * 16, {**good, "until": 5.5})
+    bad = [("short", good), ("A" * 16, good), ("a" * 16, [])]
+    bad += [("a" * 16, {**good, **{field: value}}) for field, value in (
+        ("code", 5), ("state", "closed"), ("by", None), ("note", 3), ("at", "now"), ("at", True), ("at", None),
+        ("first_seen_at", "x"), ("last_seen_at", None), ("until", "tomorrow"), ("until", True), ("at", float("inf")))]
+    bad += [("a" * 16, {k: v for k, v in good.items() if k != missing}) for missing in good if missing != "until"]
+    for key, entry in bad:
+        with pytest.raises(TriageError) as caught:
+            attempt(key, entry)
+        assert caught.value.code == "unreadable", (key, entry)
+
+
+def test_a_site_directory_made_with_looser_rights_is_closed_and_a_failure_to_do_so_is_a_fixed_error(store, monkeypatch):
+    store.directory.mkdir(parents=True, mode=0o755)
+    os.chmod(store.directory, 0o755)
+    store.set_state("a" * 16, "wan.availability", "acknowledged", "alice", NOW)
+    assert stat.S_IMODE(os.stat(store.directory).st_mode) == 0o700
+
+    def refuse(path, mode, *args, **kwargs):
+        if str(path) == str(store.directory):
+            raise PermissionError("not yours")
+        return real(path, mode, *args, **kwargs)
+
+    real = os.chmod
+    monkeypatch.setattr(os, "chmod", refuse)
+    with pytest.raises(TriageError) as caught:
+        store.set_state("b" * 16, "wan.availability", "acknowledged", "alice", NOW)
+    assert caught.value.code == "unreadable" and "not yours" not in str(caught.value)

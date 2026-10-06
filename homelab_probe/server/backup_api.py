@@ -135,7 +135,8 @@ def router() -> APIRouter:
         with Slot():
             try:
                 package = backup.unpack(open_sealed(blob, body.passphrase))
-                shown = backup.preview(package, directory, settings_path_of(request.app), os.environ)
+                shown = backup.preview(package, directory, settings_path_of(request.app), os.environ,
+                                       bool(request.app.state.env_named))
                 shown["recovery"] = {"required": bool(backup.live_files(directory, settings_path_of(request.app), ())),
                                      "keep": restore.RECOVERY_KEEP, "folder": restore.RECOVERY_DIR}
             except BackupError as error:

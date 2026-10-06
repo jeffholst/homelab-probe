@@ -478,3 +478,70 @@ def test_a_journal_that_cannot_be_written_leaves_nothing_behind(tmp_path, monkey
         restore_now(old, package_of(new))
     assert caught.value.code == "restore_failed" and tree(old) == before
     assert not [p for p in old.iterdir() if p.name.startswith(restore.JOURNAL)]
+
+
+# -- review: a staged file that was replaced by a link ----------------------------------------------------------------
+
+def test_a_staged_file_that_became_a_link_is_never_moved_into_place(tmp_path):
+    old, new = old_and_new(tmp_path)
+    before = always_state(old)
+    restore.FAULT = crash_at("journal:applying", 1)
+    with pytest.raises(Crash):
+        restore_now(old, package_of(new))
+    restore.FAULT = None
+    staged = old / ("users.json" + restore.NEW)
+    outside = tmp_path / "outside.json"
+    outside.write_bytes(staged.read_bytes())                    # the very bytes the journal expects
+    staged.unlink()
+    staged.symlink_to(outside)
+    assert restore.recover(old, old / "hlp.toml") == "rolled_back"
+    assert not (old / "users.json").is_symlink() and always_state(old) == before
+    assert outside.exists() and not os.path.lexists(staged)
+
+
+def test_an_installed_file_that_was_replaced_by_a_link_is_not_taken_for_installed(tmp_path):
+    old, new = old_and_new(tmp_path)
+    before = always_state(old)
+    restore.FAULT = crash_at("installed:2", 1)
+    with pytest.raises(Crash):
+        restore_now(old, package_of(new))
+    restore.FAULT = None
+    entry = restore.plan(package_of(new), old, old / "hlp.toml")[0]
+    target = old / entry.target if entry.target != "@settings" else old / "hlp.toml"
+    data = target.read_bytes()
+    outside = tmp_path / "copy"
+    outside.write_bytes(data)
+    target.unlink()
+    target.symlink_to(outside)
+    assert restore.recover(old, old / "hlp.toml") == "rolled_back"
+    assert always_state(old) == before
+
+
+def test_a_staged_path_that_is_not_a_regular_file_is_neither_completed_nor_silently_undone(tmp_path):
+    old, new = old_and_new(tmp_path)
+    restore.FAULT = crash_at("journal:applying", 1)
+    with pytest.raises(Crash):
+        restore_now(old, package_of(new))
+    restore.FAULT = None
+    staged = old / ("users.json" + restore.NEW)
+    staged.unlink()
+    staged.mkdir()                                     # not a file at all
+    with pytest.raises(BackupError) as caught:
+        restore.recover(old, old / "hlp.toml")
+    assert caught.value.code == "restore_pending" and (old / restore.JOURNAL).exists()
+    staged.rmdir()
+    assert restore.recover(old, old / "hlp.toml") == "rolled_back"
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="needs named pipes")
+def test_a_staged_pipe_is_refused_without_waiting_for_a_writer(tmp_path):
+    old, new = old_and_new(tmp_path)
+    before = always_state(old)
+    restore.FAULT = crash_at("journal:applying", 1)
+    with pytest.raises(Crash):
+        restore_now(old, package_of(new))
+    restore.FAULT = None
+    staged = old / ("users.json" + restore.NEW)
+    staged.unlink()
+    os.mkfifo(staged)
+    assert restore.recover(old, old / "hlp.toml") == "rolled_back" and always_state(old) == before

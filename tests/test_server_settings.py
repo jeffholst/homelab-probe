@@ -416,7 +416,8 @@ def test_a_failed_write_is_a_500_with_a_fixed_message_and_leaves_no_temporary_fi
     monkeypatch.setattr(os, "replace", broken)
     response = put(admin, "absent", thresholds={"slow_link_mbps": 1000})
     assert response.status_code == 500 and response.json()["error"] == "settings_not_written"
-    assert "No space" not in response.text and list(tmp_path.glob("hlp.toml*")) == []
+    assert "No space" not in response.text and [p.name for p in tmp_path.glob("hlp.toml*")
+                                                                         if p.suffix != ".lock"] == []
 
 
 def test_the_response_after_a_change_is_the_new_document_with_the_new_version(tmp_path, admin):
@@ -424,3 +425,16 @@ def test_the_response_after_a_change_is_the_new_document_with_the_new_version(tm
     changed = put(admin, first["version"], thresholds={"slow_link_mbps": 1000}).json()
     assert changed["version"] == admin.get(URL).json()["version"] != first["version"]
     assert put(admin, changed["version"], thresholds={"slow_link_mbps": 100}).status_code == 200
+
+
+def test_a_settings_change_waits_for_the_lock_a_restore_takes_and_then_says_it_is_busy(tmp_path, admin, monkeypatch):
+    from homelab_probe.server import settings_api
+    from homelab_probe.util import file_lock
+
+    monkeypatch.setattr(settings_api, "LOCK_WAIT", 0.2)
+    version = admin.get(URL).json()["version"]
+    with file_lock(tmp_path / "hlp.toml.lock"):
+        response = put(admin, version, thresholds={"slow_link_mbps": 10})
+    assert response.status_code == 503 and response.json()["error"] == "settings_busy"
+    assert not (tmp_path / "hlp.toml").exists() and put(admin, version, thresholds={"slow_link_mbps": 10}
+                                                       ).status_code == 200

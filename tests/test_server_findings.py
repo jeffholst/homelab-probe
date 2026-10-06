@@ -386,3 +386,21 @@ def test_a_directory_that_cannot_be_made_for_the_lock_is_a_fixed_error(admin, tm
     response = put(admin, first(admin)["id"], state="acknowledged")
     assert response.status_code == 500 and response.json()["error"] == "triage_unreadable"
     assert str(tmp_path) not in response.text
+
+
+# -- review: the schema says what the code does ---------------------------------------------------------------
+
+def test_the_note_limit_in_the_schema_is_the_limit_of_the_store(admin, viewer, app):
+    schema = viewer.get("/api/v1/openapi.json").json()["components"]["schemas"]["TriageBody"]
+    assert schema["properties"]["note"]["maxLength"] == triage_module.MAX_NOTE == 200
+    ident = first(admin)["id"]
+    assert put(admin, ident, state="acknowledged", note="x" * 200).status_code == 200
+    assert put(admin, ident, state="acknowledged", note="x" * 201).status_code == 422
+
+
+def test_a_change_answers_with_the_same_complete_finding_the_list_shows(admin):
+    top = first(admin)
+    answer = put(admin, top["id"], state="acknowledged", note="seen").json()
+    listed = next(i for i in admin.get(LIST).json()["items"] if i["id"] == top["id"])
+    assert answer == listed and {"rank", "priority", "limitations", "next_checks", "docs"} <= set(answer)
+    assert answer["triage"]["state"] == "acknowledged"

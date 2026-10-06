@@ -319,32 +319,38 @@ def load_snapshot(path: Path) -> SnapshotRecord:
         text = path.read_text(encoding="utf-8")
     except OSError as e:
         raise ConfigError(f"cannot read snapshot {path}: {e.strerror or e}") from e
+    return parse_snapshot(text, path)
+
+
+def parse_snapshot(text: str, source: Any) -> SnapshotRecord:
+    """Validate the text of a snapshot file (``source`` names it in a message). Any problem raises ConfigError. The one
+    reader of the format: ``load_snapshot`` and the backup check use it."""
     try:
         record = json.loads(text)
     except ValueError as e:
-        raise ConfigError(f"{path} is not a snapshot file (invalid JSON: {e})") from e
+        raise ConfigError(f"{source} is not a snapshot file (invalid JSON: {e})") from e
     if not isinstance(record, dict) or "schema_version" not in record:
-        raise ConfigError(f"{path} is not a snapshot file (no schema_version)")
+        raise ConfigError(f"{source} is not a snapshot file (no schema_version)")
     if (
         isinstance(record["schema_version"], bool)
         or not isinstance(record["schema_version"], int)
         or record["schema_version"] != SCHEMA_VERSION
     ):
-        raise ConfigError(f"{path} uses snapshot format {record['schema_version']!r}; "
+        raise ConfigError(f"{source} uses snapshot format {record['schema_version']!r}; "
                           f"this version of hlp reads format {SCHEMA_VERSION}")
     record.setdefault("tool_version", "")
     record.setdefault("captured_at", "")
     for key in ("site", "controller"):
         if not isinstance(record.get(key), dict):
-            raise ConfigError(f"{path} is damaged: '{key}' is missing or not an object")
+            raise ConfigError(f"{source} is damaged: '{key}' is missing or not an object")
     site, controller = record["site"], record["controller"]
     site.setdefault("name", "")
     site.setdefault("id", "")
     controller.setdefault("application_version", "")
     if not all(isinstance(site.get(key), str) for key in ("name", "id")):
-        raise ConfigError(f"{path} is damaged: 'site' contains invalid values")
+        raise ConfigError(f"{source} is damaged: 'site' contains invalid values")
     if not isinstance(controller.get("application_version"), str):
-        raise ConfigError(f"{path} is damaged: 'controller' contains invalid values")
+        raise ConfigError(f"{source} is damaged: 'controller' contains invalid values")
 
     defaults: Dict[str, Dict[str, Any]] = {
         "devices": {"mac": "", "name": "", "ip": "", "model": "", "type": "", "firmware": "",
@@ -360,23 +366,23 @@ def load_snapshot(path: Path) -> SnapshotRecord:
     }
     for key in ("devices", "clients", "reservations"):
         if not isinstance(record.get(key), list):
-            raise ConfigError(f"{path} is damaged: '{key}' is missing or not a list")
+            raise ConfigError(f"{source} is damaged: '{key}' is missing or not a list")
         if any(not isinstance(item, dict) or not isinstance(item.get("mac"), str) or not item["mac"]
                for item in record[key]):
-            raise ConfigError(f"{path} is damaged: '{key}' contains an item without a MAC address")
+            raise ConfigError(f"{source} is damaged: '{key}' contains an item without a MAC address")
         for item in record[key]:
             for field, default in defaults[key].items():
                 item.setdefault(field, default.copy() if isinstance(default, list) else default)
             if any(not isinstance(item[field], str) for field in string_fields[key]):
-                raise ConfigError(f"{path} is damaged: '{key}' contains invalid values")
+                raise ConfigError(f"{source} is damaged: '{key}' contains invalid values")
             if key == "clients" and (
                 (isinstance(item["vlan"], bool) or not isinstance(item["vlan"], (int, str)))
                 or not isinstance(item["groups"], list)
                 or any(not isinstance(group, str) for group in item["groups"])
             ):
-                raise ConfigError(f"{path} is damaged: 'clients' contains invalid values")
+                raise ConfigError(f"{source} is damaged: 'clients' contains invalid values")
     if not isinstance(record["tool_version"], str) or not isinstance(record["captured_at"], str):
-        raise ConfigError(f"{path} is damaged: snapshot metadata contains invalid values")
+        raise ConfigError(f"{source} is damaged: snapshot metadata contains invalid values")
     # Defaults and field types are checked above (isinstance cannot check a TypedDict).
     return cast(SnapshotRecord, record)
 

@@ -35,13 +35,15 @@ from tomlkit.exceptions import TOMLKitError
 from ..config import ConfigError
 from ..settings import DiagnoseSettings, IgnoreRule, known_codes, load_settings, server_settings_path
 from ..setup import SETTINGS_STUB
-from ..util import printable
+from ..util import LockTimeout, file_lock, printable
 from .auth import admin, audit_event, local_write
 from .errors import ApiError
 
 API = "/api/v1"
 IGNORE_FIELDS = ("code", "subject", "message", "reason")
 MAX_RULES = 500
+LOCK_WAIT = 10.0                  # seconds to wait for another writer of the file (a restore, `hlp init`)
+CHANGED = "The settings file changed since you loaded it: load it again."
 _LOCK = threading.Lock()          # one change at a time: the version check and the write are one step
 # A threshold that an environment variable manages would be shown as such, and a write to it refused (the file would be
 # ignored). None is managed that way today; this is where one is declared: setting name -> variable name.
@@ -269,25 +271,29 @@ def router() -> APIRouter:
             raise ApiError(409, "environment_managed", f"{', '.join(managed)} is set by an environment variable "
                            f"({', '.join(ENVIRONMENT_MANAGED[name] for name in managed)}), which wins over the file: "
                            "change it there, not here.")
-        with _LOCK:
-            content = _read(path)
-            if version_of(content) != body.version:
-                raise ApiError(409, "settings_changed", "The settings file changed since you loaded it: load it again.")
-            try:
-                load_effective(path)
-            except ConfigError:
-                raise ApiError(409, "settings_file_invalid", "The settings file cannot be used as it is, so it "
-                               "cannot be edited here: fix it by hand first.") from None
-            old = None if content is None else content.decode("utf-8")
-            text = apply_change(old, body)
-            after = validate(text)
-            if text == (SETTINGS_STUB if old is None else old):
-                return document(request, content, after)             # nothing to change: nothing is written
-            if version_of(_read(path)) != body.version:               # it changed while this request worked
-                raise ApiError(409, "settings_changed", "The settings file changed since you loaded it: load it again.")
-            thresholds, rules = _changes(old, text)
-            write_file(path, text, content)
-            written = text.encode("utf-8")
+        try:
+            with _LOCK, file_lock(path.parent / (path.name + ".lock"), LOCK_WAIT):     # the lock a restore takes too
+                content = _read(path)
+                if version_of(content) != body.version:
+                    raise ApiError(409, "settings_changed", CHANGED)
+                try:
+                    load_effective(path)
+                except ConfigError:
+                    raise ApiError(409, "settings_file_invalid", "The settings file cannot be used as it is, so it "
+                                   "cannot be edited here: fix it by hand first.") from None
+                old = None if content is None else content.decode("utf-8")
+                text = apply_change(old, body)
+                after = validate(text)
+                if text == (SETTINGS_STUB if old is None else old):
+                    return document(request, content, after)             # nothing to change: nothing is written
+                if version_of(_read(path)) != body.version:               # it changed while this request worked
+                    raise ApiError(409, "settings_changed", CHANGED)
+                thresholds, rules = _changes(old, text)
+                write_file(path, text, content)
+                written = text.encode("utf-8")
+        except LockTimeout:
+            raise ApiError(503, "settings_busy", "The settings file is being changed by something else; try again in "
+                           "a moment.") from None
         audit_event(request, "settings.updated", request.state.session.username, thresholds=",".join(thresholds),
                     ignore_rules=f"{len(after.ignore)} rule(s)" if rules else "unchanged")
         return document(request, written, after)

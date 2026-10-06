@@ -14,6 +14,7 @@ up with the same files, written the same way:
 Nothing here contacts the controller, prints a secret or puts one in a message.
 """
 
+import contextlib
 import io
 import os
 import re
@@ -50,7 +51,7 @@ from .config import (
     validate_site,
     validate_smtp,
 )
-from .util import printable
+from .util import LockTimeout, file_lock, printable
 
 ENV_FILE = ".env"
 SETTINGS_FILE = "hlp.toml"
@@ -68,6 +69,10 @@ SETTINGS_STUB = """# Homelab Probe settings. Every value is optional; the defaul
 # subject = "Spare *"
 # reason = "kept in a drawer"
 """
+
+
+ENV_FILE_LOCK, SETTINGS_LOCK = f"{ENV_FILE}.lock", f"{SETTINGS_FILE}.lock"   # the locks a restore takes too
+LOCK_WAIT = 10.0
 
 
 class SetupError(Exception):
@@ -304,13 +309,16 @@ def existing_values(text: str) -> Dict[str, str]:
     return {k: v for k, v in dotenv_values(stream=io.StringIO(text)).items() if v is not None and k in KNOWN_VARIABLES}
 
 
-def apply(values: Mapping[str, Optional[str]], directory: Path,
-          admin: Optional[Tuple[str, str]] = None) -> List[StepResult]:
-    """Check ``values`` and then set ``directory`` up: ``.env`` (merged into the one that is there, which is kept as
-    ``.env.bak``), ``hlp.toml`` if there is none, the private ``snapshots/`` directory and, with ``admin`` (a username
-    and a password), the first administrator. Raises ``SetupError`` before writing anything if the values are not
-    good."""
-    directory = Path(directory)
+def _refuse(problems: List[Tuple[str, str]], values: Mapping[str, Optional[str]]) -> None:
+    """``SetupError`` listing ``problems`` when there are any (a setting that was already in the ``.env`` says so)."""
+    if problems:
+        old = " (already in the existing .env)"
+        raise SetupError("; ".join(f"{name}: {message}{'' if name in values else old}" if name else message
+                                   for name, message in problems))
+
+
+def _write_files(values: Mapping[str, Optional[str]], directory: Path) -> List[StepResult]:
+    """The files of ``apply`` (``.env``, the settings stub, ``snapshots/``); the caller holds their locks."""
     env_path = directory / ENV_FILE
     existing = read_existing_env(env_path)
     # What the file will hold: the settings already in it that are not being replaced, and the new ones. That is what
@@ -321,15 +329,28 @@ def apply(values: Mapping[str, Optional[str]], directory: Path,
             merged.pop(name, None)
         else:
             merged[name] = value
-    problems = validate_values(merged)
-    if problems:
-        old = " (already in the existing .env)"
-        raise SetupError("; ".join(f"{name}: {message}{'' if name in values else old}" if name else message
-                                   for name, message in problems))
+    _refuse(validate_values(merged), values)
     text = render_env(values, existing)                              # may raise SetupError: still nothing written
-    steps = [write_private_file("setup.env", env_path, text),
-             write_settings_stub(directory / SETTINGS_FILE),
-             ensure_private_dir("setup.snapshots", directory / SNAPSHOT_DIR)]
+    return [write_private_file("setup.env", env_path, text),
+            write_settings_stub(directory / SETTINGS_FILE),
+            ensure_private_dir("setup.snapshots", directory / SNAPSHOT_DIR)]
+
+
+def apply(values: Mapping[str, Optional[str]], directory: Path,
+          admin: Optional[Tuple[str, str]] = None) -> List[StepResult]:
+    """Check ``values`` and then set ``directory`` up: ``.env`` (merged into the one that is there, which is kept as
+    ``.env.bak``), ``hlp.toml`` if there is none, the private ``snapshots/`` directory and, with ``admin`` (a username
+    and a password), the first administrator. Raises ``SetupError`` before writing anything if the values are not
+    good. The two files are written under the locks a restore takes, so the two never write at once."""
+    directory = Path(directory)
+    try:
+        with contextlib.ExitStack() as stack:
+            if directory.is_dir():                    # a directory that is not there yet has nobody to wait for
+                stack.enter_context(file_lock(directory / ENV_FILE_LOCK, LOCK_WAIT))
+                stack.enter_context(file_lock(directory / SETTINGS_LOCK, LOCK_WAIT))
+            steps = _write_files(values, directory)
+    except LockTimeout:
+        raise SetupError("another change to the settings is in progress; try again in a moment") from None
     if admin is not None:
         try:
             user = AccountStore(directory).add(admin[0], "admin", admin[1])

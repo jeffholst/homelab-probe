@@ -36,6 +36,7 @@ import hashlib
 import json
 import os
 import re
+import stat
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -204,7 +205,13 @@ def _discard_staged(directory: Path, settings_path: Path, records: List[Dict[str
 
 
 def _sha(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    """The SHA-256 of a regular file, read without following a link: ``OSError`` for anything else (a staged file that
+    was replaced by a link must never be moved into place)."""
+    descriptor = os.open(path, os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0))   # never wait on a pipe
+    with os.fdopen(descriptor, "rb") as handle:
+        if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+            raise OSError("not a regular file")
+        return hashlib.sha256(handle.read()).hexdigest()
 
 
 def _forward(directory: Path, settings_path: Path, records: List[Dict[str, Any]]) -> None:
@@ -213,7 +220,7 @@ def _forward(directory: Path, settings_path: Path, records: List[Dict[str, Any]]
         target = target_path(directory, settings_path, record["target"])
         new, old = _sibling(target, NEW), _sibling(target, OLD)
         if record["install"]:
-            if not new.exists():
+            if not os.path.lexists(new):
                 if not os.path.lexists(target) or _sha(target) != record["sha256"]:
                     raise OSError("a staged file is missing")   # neither staged nor installed: it cannot be completed
                 continue                                        # installed before a crash

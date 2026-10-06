@@ -5,6 +5,8 @@ from homelab_probe.notes import NotesStore
 from homelab_probe.triage import TriageStore
 
 NOW = 1_900_000_000.0
+SNAPSHOT = ('{"schema_version": 1, "site": {"name": "Default", "id": "site-1"}, '
+            '"controller": {"application_version": "10.0"}, "devices": [], "clients": [], "reservations": []}')
 KEY = "the-api-key-0123456789"
 NOTE = "the secret reason for the note"
 CERT = "-----BEGIN CERTIFICATE-----\nMIIBszCCAVmgAwIBAgIUAAAA\n-----END CERTIFICATE-----\n"
@@ -26,9 +28,9 @@ def make_data(base, *, admin=True):
     NotesStore(site, "site-1").add("device:AA:BB:CC:00:00:01", NOTE, "alice", NOW)
     NotesStore(site, "site-1").add("finding:" + "a" * 16, "another", "alice", NOW)
     TriageStore(site, "site-1").set_state("b" * 16, "wan.availability", "acknowledged", "alice", NOW)
-    (site / "snapshot-20260101-000000Z.json").write_text('{"schema_version": 1}')
+    (site / "snapshot-20260101-000000Z.json").write_text(SNAPSHOT)
     (site / "notify-state.json").write_text("{}")
-    (base / "snapshots" / "snapshot-20250101-000000Z.json").write_text('{"schema_version": 1}')
+    (base / "snapshots" / "snapshot-20250101-000000Z.json").write_text(SNAPSHOT)
     (base / "audit.log").write_text('{"event": "x"}\n')
     (base / "audit.log.1").write_text('{"event": "old"}\n')
     return base

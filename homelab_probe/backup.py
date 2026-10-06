@@ -53,7 +53,7 @@ from typing import Any, Dict, Iterable, Iterator, List, Mapping, Optional, Tuple
 from . import __version__
 from .accounts import AUDIT_FILE, USERS_FILE, AccountError, parse_users
 from .config import DEFAULT_ENV_FILE, ConfigError
-from .history import DEFAULT_DIR, is_snapshot_name
+from .history import DEFAULT_DIR, is_snapshot_name, parse_snapshot
 from .notes import FILE_NAME as NOTES_FILE
 from .notes import NotesStore
 from .settings import DEFAULT_FILENAME as SETTINGS_FILE
@@ -203,10 +203,8 @@ def live_files(directory: Path, settings_path: Path, include: Iterable[str]) -> 
                 found[f"{DEFAULT_DIR}/{path.name}"] = _listed(path)
             elif mode is not None and stat.S_ISLNK(mode) and classify(f"{DEFAULT_DIR}/{path.name}/{NOTES_FILE}"):
                 raise BackupError("unsafe")             # a link where a site's directory would be: not followed
-    if "audit" in wanted and _directory(directory):
-        for path in sorted(directory.iterdir()):
-            if classify(path.name) == "audit":
-                found[path.name] = _listed(path)
+    if "audit" in wanted:
+        found.update(_audit_paths(directory))
     return found
 
 
@@ -214,6 +212,8 @@ def _read(path: Path, limit: int) -> bytes:
     flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
     try:
         descriptor = os.open(path, flags)
+    except FileNotFoundError:
+        raise
     except OSError:
         raise BackupError("unsafe") from None
     with os.fdopen(descriptor, "rb") as handle:
@@ -223,43 +223,92 @@ def _read(path: Path, limit: int) -> bytes:
     return data
 
 
-def lock_paths(paths: Iterable[Path]) -> List[Path]:
-    """The lock files of the accounts and of the per-site notes and triage files among ``paths``, in the one order
-    every taker uses (the accounts first, then the rest sorted), so two of them can never wait for each other."""
+LOCKED_NAMES = (USERS_FILE, NOTES_FILE, TRIAGE_FILE, DEFAULT_ENV_FILE, SETTINGS_FILE)
+
+
+def lock_paths(paths: Iterable[Path], settings: Optional[Path] = None) -> List[Path]:
+    """The lock files of the files among ``paths`` that have a writer who takes one (the accounts, the per-site notes
+    and triage files, ``.env`` and the settings file, which is ``settings`` when that is named otherwise), in the one
+    order every taker uses (the accounts first, then the rest sorted), so two of them never wait for each other."""
     wanted = []
     for path in paths:
-        if path.name in (USERS_FILE, NOTES_FILE, TRIAGE_FILE):
+        if path.name in LOCKED_NAMES or (settings is not None and path == settings):
             wanted.append(path.parent / (path.name + ".lock"))
     return sorted(set(wanted), key=lambda p: (p.name != USERS_FILE + ".lock", str(p)))
 
 
 @contextlib.contextmanager
-def locked(paths: Iterable[Path]) -> Iterator[None]:
-    """Hold the locks of ``lock_paths(paths)``, the ones the writers take; ``BackupError("busy")`` when one is not free
-    in ``LOCK_WAIT_SECONDS``."""
+def locked(paths: Iterable[Path], settings: Optional[Path] = None) -> Iterator[None]:
+    """Hold the locks of ``lock_paths(paths, settings)``, the ones the writers take; ``BackupError("busy")`` when one is
+    not free in ``LOCK_WAIT_SECONDS``."""
     try:
         with contextlib.ExitStack() as stack:
-            for path in lock_paths(paths):
+            for path in lock_paths(paths, settings):
                 stack.enter_context(file_lock(path, LOCK_WAIT_SECONDS))
             yield
     except LockTimeout:
         raise BackupError("busy") from None
 
 
+AUDIT_TRIES = 5
+
+
+def _audit_paths(directory: Path) -> Dict[str, Path]:
+    """The audit log and its rotated files of the data directory, by name."""
+    found: Dict[str, Path] = {}
+    if _directory(directory):
+        for path in sorted(directory.iterdir()):
+            if classify(path.name) == "audit":
+                found[path.name] = _listed(path)
+    return found
+
+
+def _signature(paths: Dict[str, Path]) -> Tuple[Any, ...]:
+    """What identifies the state of the audit files: their names, sizes, times and file numbers (a rotation or an append
+    changes it)."""
+    return tuple((name, info.st_size, info.st_mtime_ns, info.st_ino)
+                 for name, info in ((n, os.lstat(p)) for n, p in sorted(paths.items())))
+
+
+def _read_audit(directory: Path, total: int) -> Dict[str, bytes]:
+    """The audit log and its rotated files as they were at one moment. The writer (``AuditLog``) appends and rotates
+    without a lock the reader could share, so the files are read and then checked to be unchanged; a change (an append,
+    a rotation) means a read again, and a log that keeps changing is ``busy``."""
+    for _ in range(AUDIT_TRIES):
+        try:
+            paths = _audit_paths(directory)
+            before = _signature(paths)
+            files = {name: _read(path, MAX_FILE) for name, path in paths.items()}
+            if sum(len(data) for data in files.values()) + total > MAX_TOTAL:
+                raise BackupError("too_large")
+            if _signature(_audit_paths(directory)) == before:
+                return files
+        except FileNotFoundError:
+            continue                                           # a file went in a rotation: read again
+    raise BackupError("busy")
+
+
 def collect(directory: Path, settings_path: Path, include: Iterable[str] = (), lock: bool = True) -> Dict[str, bytes]:
-    """The bytes of every file ``live_files`` lists, read under the locks of the accounts and of the per-site notes and
-    triage files (so a writer is never half-way through one; ``lock=False`` when the caller already holds them).
-    ``BackupError``: ``busy`` when a lock is not free in ``LOCK_WAIT_SECONDS``, ``unsafe`` for a link, ``too_large``
-    over ``MAX_FILE`` or ``MAX_TOTAL``."""
-    paths = live_files(directory, settings_path, include)
+    """The bytes of every file ``live_files`` lists, read under the locks of the files that have writers (see
+    ``lock_paths``) so a writer is never half-way through one (``lock=False`` when the caller already holds them); the
+    audit files, which their writer does not lock, are read until they are seen unchanged. ``BackupError``: ``busy``
+    when a lock is not free in ``LOCK_WAIT_SECONDS`` or the audit log keeps changing, ``unsafe`` for a link,
+    ``too_large`` over ``MAX_FILE`` or ``MAX_TOTAL``."""
+    wanted = set(include)
+    paths = live_files(directory, settings_path, wanted - {"audit"})
     files: Dict[str, bytes] = {}
     total = 0
-    with locked(paths.values() if lock else ()):
+    with locked(paths.values() if lock else (), settings_path):
         for name, path in paths.items():
-            files[name] = _read(path, MAX_FILE)
+            try:
+                files[name] = _read(path, MAX_FILE)
+            except FileNotFoundError:
+                raise BackupError("unsafe") from None                # it was there when it was listed
             total += len(files[name])
             if total > MAX_TOTAL:
                 raise BackupError("too_large")
+    if "audit" in wanted:
+        files.update(_read_audit(directory, total))
     return files
 
 
@@ -320,6 +369,11 @@ def _members(archive: zipfile.ZipFile) -> List[zipfile.ZipInfo]:
     return infos
 
 
+def _is_version(value: Any, allowed: Tuple[int, ...]) -> bool:
+    """Is ``value`` exactly one of the version integers (``True`` and ``1.0`` equal ``1`` in Python and are not)?"""
+    return type(value) is int and value in allowed
+
+
 def _manifest(raw: bytes) -> Dict[str, Any]:
     try:
         manifest = json.loads(raw.decode("utf-8"))
@@ -334,9 +388,9 @@ def _manifest(raw: bytes) -> Dict[str, Any]:
             or not all(isinstance(v, dict) and isinstance(v.get("size"), int) and not isinstance(v.get("size"), bool)
                        and isinstance(v.get("sha256"), str) for v in files.values())):
         raise BackupError("bad_manifest")
-    if manifest.get("format") != FORMAT:
+    if not _is_version(manifest.get("format"), (FORMAT,)):
         raise BackupError("unsupported_format")
-    if manifest.get("data_format") not in SUPPORTED_DATA_FORMATS:
+    if not _is_version(manifest.get("data_format"), SUPPORTED_DATA_FORMATS):
         raise BackupError("unsupported_data_format")
     return manifest
 
@@ -439,9 +493,8 @@ def inspect(package: Package) -> Dict[str, Any]:
             summary["sites"] = sorted({*summary["sites"], key})
         elif category == "snapshots":
             try:
-                if not isinstance(json.loads(_text(data, category)), dict):
-                    raise ValueError
-            except ValueError:
+                parse_snapshot(_text(data, category), "the snapshot")
+            except ConfigError:
                 raise _invalid(category) from None
         else:
             _text(data, category)
@@ -454,11 +507,14 @@ def _version_tuple(text: str) -> Tuple[int, ...]:
     return tuple(int(part) for part in re.findall(r"\d+", text.split("+")[0].split("-")[0])[:4])
 
 
-def preview(package: Package, directory: Path, settings_path: Path, environ: Mapping[str, str]) -> Dict[str, Any]:
+def preview(package: Package, directory: Path, settings_path: Path, environ: Mapping[str, str],
+            env_named: bool = False) -> Dict[str, Any]:
     """What restoring ``package`` over the data directory would do, with no secret in it: the date and versions, the
     compatibility, every category with whether it is in the backup, how many files it has and what a restore does to
     the files now there; the accounts that would replace the present ones; the names (never the values) of the
-    settings an environment variable keeps overriding; and warnings. ``BackupError`` as ``inspect``."""
+    settings an environment variable keeps overriding; and warnings. ``env_named`` says the server reads its settings
+    from a file named with ``--env-file`` or ``HLP_ENV``: the ``.env`` of the data directory is then not used at all, so
+    every setting of the backup stays overridden. ``BackupError`` as ``inspect``."""
     summary = inspect(package)
     manifest = package.manifest
     present = live_files(directory, settings_path, OPTIONAL)
@@ -479,11 +535,16 @@ def preview(package: Package, directory: Path, settings_path: Path, environ: Map
             "restore": actions[category] if included else
             ("keep what is there" if category in OPTIONAL else "not in the backup"),
         })
-    overridden = sorted(name for name in summary["settings_names"] if environ.get(name, "").strip())
+    overridden = sorted(name for name in summary["settings_names"]
+                        if env_named or environ.get(name, "").strip())
     running = _version_tuple(__version__)
     made_by = _version_tuple(manifest["app_version"])
     warnings = []
-    if overridden:
+    if env_named and summary["settings_names"]:
+        warnings.append({"code": "env_file_named",
+                         "message": "This server reads its settings from a file named with --env-file or HLP_ENV, so "
+                                    "the .env of the backup is restored to the data directory but not used."})
+    elif overridden:
         warnings.append({"code": "environment_overrides",
                          "message": "These settings are also set in the environment, which keeps winning over the "
                                     "restored file: " + ", ".join(overridden) + "."})

@@ -3,6 +3,7 @@
 import base64
 import json
 import os
+import threading
 
 import pytest
 
@@ -459,3 +460,85 @@ def test_every_session_ends_even_when_the_account_is_unchanged_by_the_backup(adm
     assert admin.post(f"{API}/restore", json=body(own)).status_code == 200
     assert app.state.auth.sessions.count() == 0
     assert admin.get("/api/v1/auth/me").status_code == 401 and other.get("/api/v1/auth/me").status_code == 401
+
+
+# -- review: every writer a restore must wait for, the session limits and the scheduler --------------------------------
+
+def test_a_restore_holds_the_lock_of_every_file_it_replaces_even_one_that_is_not_there_yet(admin, blob, target,
+                                                                                          monkeypatch):
+    from homelab_probe.util import LockTimeout, file_lock
+
+    held = {}
+
+    def during(step):
+        if step == "journal:applying":
+            for name in ("users.json.lock", ".env.lock", "hlp.toml.lock", "snapshots/site-1/notes.json.lock",
+                         "snapshots/site-1/triage.json.lock", "snapshots/site-9/notes.json.lock"):    # site-9 is new
+                try:
+                    with file_lock(target / name, 0.1):
+                        held[name] = False
+                except LockTimeout:
+                    held[name] = True
+
+    restore.FAULT = during
+    assert admin.post(f"{API}/restore", json=body(blob)).status_code == 200
+    assert held and all(held.values()), held
+
+
+def test_the_lock_of_a_settings_file_named_elsewhere_is_taken_too(tmp_path):
+    named = tmp_path / "elsewhere" / "named.toml"
+    paths = [named, tmp_path / "users.json", tmp_path / "other.json"]
+    assert backup.lock_paths(paths) == [tmp_path / "users.json.lock"]
+    assert backup.lock_paths(paths, named) == [tmp_path / "users.json.lock", named.parent / "named.toml.lock"]
+
+
+def test_the_session_limits_and_the_audit_rotation_of_the_restored_settings_take_effect_at_once(
+        admin, app, blob, source, target, monkeypatch):
+    (source / ".env").write_text(f"UNIFI_URL=https://source.example\nUNIFI_API_KEY={SOURCE_KEY}\n"
+                                 "SESSION_IDLE_MINUTES=7\nAUDIT_LOG_MAX_MB=3\n")
+    other = logged_in(make_app(source), "alice").post(
+        API, json={"passphrase": PASS, "confirm": PASS, "include": []}).content
+    before = app.state.auth
+    assert before.sessions.idle == 30 * 60
+    assert admin.post(f"{API}/restore", json=body(other)).status_code == 200
+    assert app.state.auth is not before and app.state.auth.sessions.idle == 7 * 60
+    assert app.state.auth.audit._handler.maxBytes == 3 * 1024 * 1024
+    assert before.audit._handler.stream is None                         # the old handler was closed
+    token = login(TestClient(app), "dave", "dave has a long password")
+    assert token and audit(target)[-1]["event"] == "auth.login"          # the new handler writes the same file
+
+
+def test_a_scheduled_job_that_is_running_is_waited_for_before_files_are_replaced(app, admin, blob, target):
+    scheduler = app.state.scheduler = Scheduler(app)
+    release, running = threading.Event(), threading.Event()
+
+    def job():                                       # what a job does: it holds the place while it works
+        with scheduler.idle(5):
+            running.set()
+            release.wait(5)
+
+    worker = threading.Thread(target=job)
+    worker.start()
+    assert running.wait(5)
+    before, outcome = always(target), {}
+    restorer = threading.Thread(target=lambda: outcome.update(r=admin.post(f"{API}/restore", json=body(blob))))
+    restorer.start()
+    restorer.join(0.5)
+    assert restorer.is_alive() and always(target) == before             # it waits: nothing is replaced under the job
+    release.set()
+    worker.join(5)
+    restorer.join(10)
+    assert outcome["r"].status_code == 200 and always(target) != before
+    assert Scheduler(app).ready()
+
+
+def test_a_job_that_does_not_end_makes_the_restore_busy_and_changes_nothing(app, admin, blob, target, monkeypatch):
+    scheduler = app.state.scheduler = Scheduler(app)
+    monkeypatch.setattr(restore_api, "JOB_WAIT_SECONDS", 0.2)
+    before = tree(target)
+    with scheduler.idle(1) as got:                                       # a job holds the place
+        assert got
+        response = admin.post(f"{API}/restore", json=body(blob))
+    assert response.status_code == 503 and response.json()["error"] == "backup_busy"
+    assert tree(target) == before and not app.state.maintenance.active
+    assert admin.post(f"{API}/restore", json=body(blob)).status_code == 200

@@ -23,10 +23,11 @@ replaced **as one set**, never merged.
   passphrases or any content. A failure is ``backup.restore_failed`` with a fixed reason and the previous state back.
 """
 
+import contextlib
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, Iterator, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import ConfigDict, Field
@@ -35,14 +36,16 @@ from .. import backup, logs, restore
 from ..backup import BackupError
 from ..config import ConfigError
 from . import backup_api
-from .auth import audit_event, local_write, setup_ok
+from .auth import AuthState, audit_event, local_write, setup_ok
 from .backup_crypto import MAX_PASSPHRASE, MIN_PASSPHRASE, open_sealed, seal
 from .errors import ApiError, error_responses
+from .scheduler import Scheduler
 from .service import ControllerService
 from .settings_api import settings_path_of
 from .wizard import Draft, reload_default, setup_access
 
 _log = logging.getLogger(__name__)
+JOB_WAIT_SECONDS = 60.0
 WORDING = {403: "A read-only server or a demo does not restore", 422: "The passphrase or the backup is not acceptable",
            500: "The restore could not be made; the previous state was put back where it could",
            503: "A restore is in progress, or too many backups at once"}
@@ -85,9 +88,25 @@ def reloaded(request: Request) -> None:
     state.service = factory(config)
     state.config = config
     logs.register_secrets(*config.secret_values())
+    previous = state.auth                  # the session limits and the audit rotation come from the settings
+    state.auth = AuthState.for_directory(directory, config)
+    previous.audit.close()
     if setup is not None and setup.mode:
         setup.mode, setup.draft = None, Draft(site=setup.draft.site)
         setup.generation += 1
+
+
+@contextlib.contextmanager
+def quiet_scheduler(scheduler: Optional[Scheduler]) -> Iterator[None]:
+    """Wait (a minute at most) for a scheduled job that is running and keep the next from starting while the restore
+    runs; ``BackupError("busy")`` when the job does not end."""
+    if scheduler is None:
+        yield
+        return
+    with scheduler.idle(JOB_WAIT_SECONDS) as acquired:
+        if not acquired:
+            raise BackupError("busy")
+        yield
 
 
 def router() -> APIRouter:
@@ -116,7 +135,8 @@ def router() -> APIRouter:
             if not state.maintenance.begin():
                 raise ApiError(503, "restore_in_progress", str(BackupError("restore_in_progress")))
             try:
-                name = _replace(request, package, directory, settings_file, recovery, existing)
+                with quiet_scheduler(state.scheduler):
+                    name = _replace(request, package, directory, settings_file, recovery, existing)
             except BackupError as error:
                 audit_event(request, "backup.restore_failed", actor, reason=error.code)
                 raise backup_api.failure(error) from error
@@ -141,7 +161,7 @@ def _replace(request: Request, package: backup.Package, directory: Path, setting
                            for e in restore.plan(package, directory, settings_file)]
     touched += list(backup.live_files(directory, settings_file, ()).values())
     name: Optional[str] = None
-    with backup.locked(touched):
+    with backup.locked(touched, settings_file):
         entries = restore.plan(package, directory, settings_file)
         if existing:
             present = backup.collect(directory, settings_file, (), lock=False)

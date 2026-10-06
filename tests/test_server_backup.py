@@ -10,6 +10,7 @@ import pytest
 pytest.importorskip("fastapi")
 pytest.importorskip("cryptography")
 
+from backup_support import SNAPSHOT  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from server_support import CONFIG, auth_for, logged_in  # noqa: E402
 
@@ -47,7 +48,7 @@ def app(tmp_path):
     (tmp_path / "hlp.toml").write_text("[thresholds]\nslow_link_mbps = 100\n")
     (tmp_path / ".env").write_text(f"UNIFI_URL=https://controller.example\nUNIFI_API_KEY={KEY}\n")
     NotesStore(tmp_path / "snapshots" / "site-1", "site-1").add("device:AA:BB:CC:00:00:01", NOTE, "alice", 1.0)
-    (tmp_path / "snapshots" / "site-1" / "snapshot-20260101-000000Z.json").write_text("{}")
+    (tmp_path / "snapshots" / "site-1" / "snapshot-20260101-000000Z.json").write_text(SNAPSHOT)
     (tmp_path / "audit.log").write_text('{"event": "x"}\n')
     return app
 
@@ -296,3 +297,11 @@ def test_a_backup_of_a_format_this_version_does_not_read_is_refused_before_a_key
     monkeypatch.setattr(crypto, "_key", lambda *a: pytest.fail("a key was derived"))
     response = preview(admin, forged)
     assert response.status_code == 422 and response.json()["error"] == "backup_unsupported_format"
+
+
+def test_the_preview_knows_when_the_server_reads_a_named_settings_file(admin, tmp_path):
+    named = logged_in(make_app(tmp_path, env_named=True), "alice")
+    shown = preview(named, export(named).content).json()
+    assert shown["environment_overrides"] == ["UNIFI_API_KEY", "UNIFI_URL"]
+    assert [w["code"] for w in shown["warnings"]] == ["env_file_named"]
+    assert [w["code"] for w in preview(admin, export(admin).content).json()["warnings"]] == []
