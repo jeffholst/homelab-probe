@@ -28,6 +28,7 @@ uv run hlp.py snapshot                    # save the inventory to ./snapshots/
 uv run hlp.py diff                        # what changed since the newest snapshot?
 uv run hlp.py topology                    # how the gateway, switches and APs are wired
 uv run hlp.py topology --clients          # ...with the wired clients under each device
+uv run hlp.py topology --format mermaid   # ...as a Mermaid graph to paste into a README (or --format dot for Graphviz)
 uv run hlp.py wifi                        # radios and a channel plan from the neighbors
 uv run hlp.py wifi --band 2.4 --ap hall   # one band, one AP
 uv run hlp.py wan                         # is it my internet or my LAN?

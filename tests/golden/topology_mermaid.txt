@@ -1,0 +1,15 @@
+flowchart TD
+    n0["Gateway<br/>UCG Max<br/>CRITICAL x2"]
+    n1["Office Switch<br/>USW-Lite-8-PoE<br/>1 client<br/>WARNING x8"]
+    n2["Office AP<br/>U7 Pro<br/>1 client"]
+    n3["Garage AP<br/>U6 Pro<br/>OFFLINE<br/>WARNING"]
+    n0 -->|"port 2, 100 Mbps, supports 1000"| n1
+    n1 -->|"port 2"| n2
+    n1 -.->|"port 5"| n3
+    classDef critical fill:#f8d7da,stroke:#b00020,color:#000
+    classDef warning fill:#fff3cd,stroke:#b26a00,color:#000
+    classDef offline stroke:#6c757d,stroke-dasharray:5 5,color:#555
+    classDef client fill:#f8f9fa,stroke:#adb5bd,color:#000
+    class n0 critical
+    class n1,n3 warning
+    class n3 offline

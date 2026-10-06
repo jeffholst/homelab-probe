@@ -228,7 +228,8 @@ _UNICODE = {"tee": "├── ", "last": "└── ", "pipe": "│   ", "gap": 
 _ASCII = {"tee": "+-- ", "last": "`-- ", "pipe": "|   ", "gap": "    "}
 
 
-def _worst(findings: List[NodeFinding]) -> str:
+def worst_severity(findings: List[NodeFinding]) -> str:
+    """The most serious severity among ``findings`` ("" when there are none)."""
     return min((f["severity"] for f in findings), key=lambda s: SEVERITY_ORDER[s], default="")
 
 
@@ -255,7 +256,7 @@ def _line(n: Node, emoji: bool, root: bool) -> str:
         parts.append(f"{total} client{'s' if total != 1 else ''}")
     if not n["online"]:
         parts.append("[OFFLINE]")
-    worst = _worst(n["findings"])
+    worst = worst_severity(n["findings"])
     if worst:
         parts.append(_marker(worst, len(n["findings"]), emoji))
     return "   ".join(parts)

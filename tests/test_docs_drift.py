@@ -44,6 +44,11 @@ SAMPLES = [
     ("Wi-Fi networks", "query_wlans"),
     ("Event history", "events"),
 ]
+# (heading, language of the fenced block, golden case): the graph formats of `topology` under "Graph formats".
+GRAPH_SAMPLES = [
+    ("Graph formats", "mermaid", "topology_mermaid"),
+    ("Graph formats", "dot", "topology_dot"),
+]
 CSV_SAMPLES = [
     ("unifi_clients.csv", "unifi_clients.csv"),
     ("switch_Office Switch.csv", "switch_Office Switch.csv"),
@@ -298,6 +303,15 @@ def find_sample(heading):
     raise AssertionError(f"no text block under the heading {heading!r} in the README or docs/")
 
 
+def find_graph_sample(heading, language):
+    for path in doc_paths():
+        text = path.read_text(encoding="utf-8")
+        for found_heading, found_language, body in fenced_blocks(text):
+            if found_heading == heading and found_language == language:
+                return path, text, body
+    raise AssertionError(f"no {language} block under the heading {heading!r} in the README or docs/")
+
+
 def find_csv_sample(heading):
     for path in doc_paths():
         text = path.read_text(encoding="utf-8")
@@ -327,6 +341,18 @@ def test_the_documented_sample_matches_the_real_output(fake_client, heading, cas
         "Regenerate it with UPDATE_README_SAMPLES=1 uv run pytest tests/test_docs_drift.py and review the diff.")
 
 
+@pytest.mark.parametrize("heading, language, case", GRAPH_SAMPLES, ids=[case for _, _, case in GRAPH_SAMPLES])
+def test_the_documented_graph_sample_matches_the_real_output(fake_client, heading, language, case):
+    path, text, body = find_graph_sample(heading, language)
+    actual = run_command(fake_client, CASES[case])[1]
+    if os.environ.get("UPDATE_README_SAMPLES"):
+        path.write_text(text.replace(body, actual.rstrip("\n")), encoding="utf-8")
+        return
+    assert normalise(body) == normalise(actual), (
+        f"the {language} sample under '{heading}' in {path.name} no longer matches `hlp {' '.join(CASES[case])}`. "
+        "Regenerate it with UPDATE_README_SAMPLES=1 uv run pytest tests/test_docs_drift.py and review the diff.")
+
+
 @pytest.mark.parametrize("heading, filename", CSV_SAMPLES, ids=[filename for _, filename in CSV_SAMPLES])
 def test_documented_csv_samples_match_fixture_and_golden(fake_client, tmp_path, heading, filename):
     code, _, _ = run_command(fake_client, ["export", "--include-offline", "-o", str(tmp_path)])
@@ -347,6 +373,8 @@ def test_documented_csv_samples_match_fixture_and_golden(fake_client, tmp_path, 
 
 def test_every_sample_has_a_golden_file():
     for _, case in SAMPLES:
+        assert (GOLDEN / f"{case}.txt").exists(), case
+    for _, _, case in GRAPH_SAMPLES:
         assert (GOLDEN / f"{case}.txt").exists(), case
     for _, filename in CSV_SAMPLES:
         assert (GOLDEN / filename).exists(), filename

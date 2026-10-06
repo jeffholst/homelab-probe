@@ -34,8 +34,54 @@ Each line is `port N -> device`, where N is the **parent's** port the device plu
 - **Order:** children are sorted by the parent's port number, then by name.
 - **Unattached:** a device that cannot be reached from a gateway is listed separately with the reason: no uplink information, an uplink to an unknown device, or an uplink loop. Nothing silently disappears. An offline device's position is its last known one.
 - `--clients` lists the wired clients under each device with their port. `--json` prints the nested tree (and `--clients` adds `wired_clients`). `--no-emoji` forces plain ASCII drawing and text labels, which is also used automatically when output is not a UTF-8 terminal.
+- `--format mermaid` and `--format dot` draw the tree as a graph instead (see [Graph formats](#graph-formats)); `--format text` is the tree above and the default.
 
 The uplink and port data comes from the legacy `stat/device` and `stat/sta` data and the Integration API device detail, which is used for the parent when the legacy data has none (then no port number is shown).
+
+### Graph formats
+
+`--format mermaid` or `--format dot` prints the same tree as a graph, to paste into a README, a wiki page, a ticket or a dashboard. A Mermaid block renders as a diagram on GitHub and GitLab, and Graphviz turns DOT into an image (`hlp topology --format dot | dot -Tsvg -o topology.svg`). It is the output of `hlp --demo topology --format mermaid` on the synthetic fixture:
+
+```mermaid
+flowchart TD
+    n0["Gateway<br/>UCG Max<br/>CRITICAL x2"]
+    n1["Office Switch<br/>USW-Lite-8-PoE<br/>1 client<br/>WARNING x8"]
+    n2["Office AP<br/>U7 Pro<br/>1 client"]
+    n3["Garage AP<br/>U6 Pro<br/>OFFLINE<br/>WARNING"]
+    n0 -->|"port 2, 100 Mbps, supports 1000"| n1
+    n1 -->|"port 2"| n2
+    n1 -.->|"port 5"| n3
+    classDef critical fill:#f8d7da,stroke:#b00020,color:#000
+    classDef warning fill:#fff3cd,stroke:#b26a00,color:#000
+    classDef offline stroke:#6c757d,stroke-dasharray:5 5,color:#555
+    classDef client fill:#f8f9fa,stroke:#adb5bd,color:#000
+    class n0 critical
+    class n1,n3 warning
+    class n3 offline
+```
+
+The same tree as DOT:
+
+```dot
+digraph topology {
+    graph [rankdir=TB, fontname="Helvetica"];
+    node [shape=box, fontname="Helvetica"];
+    edge [fontname="Helvetica"];
+    n0 [label="Gateway\nUCG Max\nCRITICAL x2", style="filled", fillcolor="#f8d7da", color="#b00020"];
+    n1 [label="Office Switch\nUSW-Lite-8-PoE\n1 client\nWARNING x8", style="filled", fillcolor="#fff3cd", color="#b26a00"];
+    n2 [label="Office AP\nU7 Pro\n1 client", style="solid", color="#343a40"];
+    n3 [label="Garage AP\nU6 Pro\nOFFLINE\nWARNING", style="filled,dashed", fillcolor="#fff3cd", color="#b26a00"];
+    n0 -> n1 [label="port 2, 100 Mbps, supports 1000"];
+    n1 -> n2 [label="port 2"];
+    n1 -> n3 [label="port 5", style=dashed];
+}
+```
+
+- **Nodes** are the devices: the name, the model, the number of connected clients, `OFFLINE` and the worst finding of the device with how many there are (`WARNING x8`), the same flags as the tree. With `--clients` the wired clients are nodes too, joined to their switch by an edge labelled with the port. Devices that cannot be reached from a gateway are in a group called Unattached, with the reason in their label.
+- **Edges** go from the parent to the device and say which port of the **parent** it plugs into and the negotiated speed (`port 2, 100 Mbps, supports 1000`), like the tree. The link to an offline device is dashed.
+- **Colors:** critical devices are red, warning devices amber and offline devices dashed (a device can be both), the same flags `diagnose` raises. The graph does not list the findings themselves; run the text view or `diagnose` for those.
+- **Names are data, not syntax.** The node ids are generated (`n0`, `n1`, `c0`) in tree order, never taken from a name, so the output is the same on every run and a device called `end` or `a --> b` cannot add a node, link or statement. In Mermaid every label is a quoted string in which punctuation (quotes, `<`, `>`, `&`, `|`, brackets, `;`, `#`, `%`, backslash) is written as an entity, which Mermaid shows as the character; in DOT backslash, quote and `&` are escaped. Control characters and line breaks in a name are removed first, as in the text view.
+- `--format mermaid` and `--format dot` cannot be combined with `--json` (a usage error, exit code 64): `--json` is the data and the graphs are drawings of it. `--no-emoji` has no effect on a graph. The graph uses the same `--config` thresholds and ignore list as the tree. SVG or HTML output is not provided; render the DOT with Graphviz or the Mermaid with its own tools.
 
 ## Wi-Fi
 
