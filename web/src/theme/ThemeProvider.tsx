@@ -4,7 +4,7 @@ import { applyThemePreference, readThemePreference, writeThemePreference, type T
 
 interface ThemeContextValue {
   preference: ThemePreference;
-  setPreference(preference: ThemePreference): void;
+  setPreference: (preference: ThemePreference) => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);

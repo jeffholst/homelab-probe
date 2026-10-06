@@ -119,7 +119,7 @@ describe("the API client", () => {
     let requested = "";
     const client = createApiClient({
       fetch: (url) => {
-        requested = String(url);
+        requested = typeof url === "string" ? url : "";
         return Promise.resolve(new Response("{}"));
       },
     });

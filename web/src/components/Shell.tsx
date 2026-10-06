@@ -53,14 +53,35 @@ export function Shell() {
     }
   }, [location.pathname]);
 
+  // The menu button is inert while the drawer is open, so focus goes back to it only once the page has been
+  // re-rendered without the drawer.
+  const restoreFocus = useRef(false);
+  function closeDrawer(returnFocus: boolean) {
+    restoreFocus.current = returnFocus;
+    setMenuOpen(false);
+  }
+
   useEffect(() => {
-    if (drawerOpen) closeButton.current?.focus();
+    if (!drawerOpen && restoreFocus.current) {
+      restoreFocus.current = false;
+      menuButton.current?.focus();
+    }
   }, [drawerOpen]);
 
-  function closeDrawer(returnFocus: boolean) {
-    setMenuOpen(false);
-    if (returnFocus) menuButton.current?.focus();
-  }
+  useEffect(() => {
+    if (!drawerOpen) return;
+    closeButton.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        restoreFocus.current = true;
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [drawerOpen]);
 
   const user = session.data;
   return (
@@ -89,12 +110,6 @@ export function Shell() {
         className="nav"
         aria-label="Main"
         data-open={drawerOpen}
-        onKeyDown={(event) => {
-          if (event.key === "Escape" && drawerOpen) {
-            event.stopPropagation();
-            closeDrawer(true);
-          }
-        }}
       >
         <div className="nav__head">
           <button

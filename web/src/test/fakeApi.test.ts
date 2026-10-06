@@ -11,6 +11,8 @@ const post = (fake: FakeApi, path: string, body?: unknown, headers: Record<strin
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
 
+const jsonOf = async (response: Response) => (await response.json()) as Record<string, unknown>;
+
 const login = async (fake: FakeApi, password = "correct horse") =>
   post(fake, "/auth/login", { username: "demo", password });
 
@@ -51,7 +53,7 @@ describe("the fake API behaves like the real one", () => {
     const response = await login(fake);
     const session = (await response.json()) as Record<string, unknown>;
     expect(Object.keys(session).sort()).toEqual(["csrf_token", "idle_seconds_left", "role", "session_seconds_left", "username"]);
-    const me = await (await fake.fetch("/api/v1/auth/me", { credentials: "include" })).json();
+    const me = await jsonOf(await fake.fetch("/api/v1/auth/me", { credentials: "include" }));
     expect(me).toMatchObject({ username: "demo", csrf_token: session["csrf_token"] });
   });
 
@@ -82,7 +84,7 @@ describe("the fake API behaves like the real one", () => {
     fake.crossSite = true;
     const response = await login(fake);
     expect(response.status).toBe(403);
-    expect((await response.json()).error).toBe("csrf_origin");
+    expect((await jsonOf(response)).error).toBe("csrf_origin");
   });
 
   it("refuses an unsafe request whose body is not JSON (415)", async () => {
@@ -94,7 +96,7 @@ describe("the fake API behaves like the real one", () => {
       body: "username=demo",
     });
     expect(response.status).toBe(415);
-    expect((await response.json()).error).toBe("unsupported_media_type");
+    expect((await jsonOf(response)).error).toBe("unsupported_media_type");
   });
 
   it("needs the CSRF token on logout (403 csrf_token) and ends the session when it is right", async () => {
@@ -102,7 +104,7 @@ describe("the fake API behaves like the real one", () => {
     const session = (await (await login(fake)).json()) as { csrf_token: string };
     const refused = await post(fake, "/auth/logout");
     expect(refused.status).toBe(403);
-    expect((await refused.json()).error).toBe("csrf_token");
+    expect((await jsonOf(refused)).error).toBe("csrf_token");
     expect((await post(fake, "/auth/logout", undefined, { "X-CSRF-Token": "wrong" })).status).toBe(403);
     expect((await post(fake, "/auth/logout", undefined, { "X-CSRF-Token": session.csrf_token })).status).toBe(200);
     expect((await fake.fetch("/api/v1/auth/me", { credentials: "include" })).status).toBe(401);
@@ -157,7 +159,7 @@ describe("the fake API behaves like the real one", () => {
     expect(viewer.role).toBe("viewer");
     const response = await fake.fetch("/api/v1/users", { credentials: "include" });
     expect(response.status).toBe(403);
-    expect((await response.json()).error).toBe("forbidden");
+    expect((await jsonOf(response)).error).toBe("forbidden");
   });
 
   it("uses an origin that a browser on this page would send", () => {

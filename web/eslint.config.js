@@ -52,7 +52,7 @@ export default tseslint.config(
     languageOptions: {
       ecmaVersion: 2023,
       globals: { ...globals.browser },
-      parserOptions: { projectService: { allowDefaultProject: ["*.js"] }, tsconfigRootDir: import.meta.dirname },
+      parserOptions: { project: ["./tsconfig.json", "./tsconfig.node.json"], tsconfigRootDir: import.meta.dirname },
     },
     rules: {
       "no-eval": "error",
@@ -82,7 +82,25 @@ export default tseslint.config(
     },
   },
   {
-    files: ["**/*.mjs"],
+    // Plain JavaScript (the scripts, this file, the script that runs before the first paint) has no type information.
+    files: ["**/*.mjs", "eslint.config.js", "public/**/*.js"],
     ...tseslint.configs.disableTypeChecked,
+  },
+  {
+    files: ["public/**/*.js"],
+    languageOptions: { globals: { ...globals.browser } },
+    rules: {
+      // public/theme-init.js reads the theme preference before the first paint, like src/theme/storage.ts.
+      "no-restricted-syntax": ["error", ...markup],
+      "no-restricted-globals": "off",
+    },
+  },
+  {
+    // Tests inspect storage to prove nothing but the theme word is ever put there.
+    files: ["src/**/*.test.{ts,tsx}", "src/test/**"],
+    rules: {
+      "no-restricted-syntax": ["error", ...markup],
+      "no-restricted-globals": "off",
+    },
   },
 );

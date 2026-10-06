@@ -35,7 +35,7 @@ export function useLogout() {
   return useMutation({
     mutationFn: () => api.logout(),
     onSettled: () => {
-      queryClient.clear();
+      queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== SESSION_KEY[0] });
       queryClient.setQueryData(SESSION_KEY, null);
     },
   });

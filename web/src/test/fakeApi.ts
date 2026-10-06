@@ -220,6 +220,13 @@ export class FakeApi {
     if (matched === null) return json(404, { detail: "Not Found" });
     const { route, params } = matched;
 
+    // A refusal that comes before the login check on the real server (not set up, restoring, a proxy's failure).
+    const forced = this.forced.find((entry) => path.startsWith(entry.prefix) && entry.times > 0);
+    if (forced) {
+      forced.times -= 1;
+      throw new ApiRefused(forced.status, forced.code, forced.message);
+    }
+
     let session: FakeSession | null = null;
     if (!route.public) {
       session = withCookies ? this.currentSession() : null;
@@ -229,12 +236,6 @@ export class FakeApi {
         throw new ApiRefused(403, "csrf_token", "The CSRF token is missing or wrong.");
       }
       session.lastSeen = this.clock();
-    }
-
-    const forced = this.forced.find((entry) => path.startsWith(entry.prefix) && entry.times > 0);
-    if (forced) {
-      forced.times -= 1;
-      throw new ApiRefused(forced.status, forced.code, forced.message);
     }
 
     let body: unknown;

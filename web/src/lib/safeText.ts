@@ -25,6 +25,8 @@
  */
 
 const LINE_BREAKS = new RegExp("[\\t\\r\\n\\u0085\\u2028\\u2029]+", "g");
+// The control characters are the point of this expression.
+// eslint-disable-next-line no-control-regex
 const CONTROLS = new RegExp("[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f-\\u009f]", "g");
 const HIDDEN = new RegExp("[\\u200b\\u202a-\\u202e\\u2060-\\u2064\\u2066-\\u2069\\ufeff]", "g");
 
