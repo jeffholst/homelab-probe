@@ -328,7 +328,7 @@ While no administrator exists, all of them need the token in an **`X-Setup-Token
 
 ## The scheduler
 
-`hlp serve --scheduler` runs two jobs on a background thread of the server, one after the other. It starts when the server is set up (not before) and stops with the server. It is **off** by default (a workstation's `serve`). The container image ([#188](https://github.com/jeffholst/homelab-probe/issues/188), not built yet) starts the server with `--scheduler`; until then, add the flag to your own `serve` command.
+`hlp serve --scheduler` runs two jobs on a background thread of the server, one after the other. It starts when the server is set up (not before) and stops with the server. It is **off** by default (a workstation's `serve`). The [container image](docker.md) starts the server with `--scheduler`; otherwise add the flag to your own `serve` command.
 
 | Job | Every | What it does |
 | --- | ----- | ------------ |

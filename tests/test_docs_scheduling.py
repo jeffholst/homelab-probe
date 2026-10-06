@@ -1,13 +1,12 @@
 """docs/scheduling.md (issue #137): the snippets are real configuration files, so they are tested like code.
 
-The cron line is run through ``sh`` against a stub, the systemd units, the launchd plist and the Dockerfile are parsed
-and compared with what the program really does (its exit codes, its default state file, its arguments). Building the
-image and running the units needs Docker and systemd, so those were run by hand for the pull request (see its text);
-everything that can be checked without them is checked here.
+The cron line is run through ``sh`` against a stub, the systemd units and the launchd plist are parsed and compared with
+what the program really does (its exit codes, its default state file, its arguments). Running the units needs systemd,
+so that was done by hand for the pull request (see its text); the Docker image has its own checks
+(tests/test_docker_files.py and tools/docker_smoke.sh); everything else that can be checked is checked here.
 """
 
 import configparser
-import json
 import plistlib
 import re
 import shlex
@@ -272,8 +271,9 @@ def test_the_docker_run_in_the_unit_example_matches_the_docker_section():
     unit_line = re.search(r"ExecStart=(/usr/bin/docker run [^`]*)", docker).group(1)
     run_lines = [line for line in blocks("bash", docker)[0].splitlines() if line.startswith("docker run")]
     assert unit_line.split()[:3] == ["/usr/bin/docker", "run", "--rm"]
-    assert "-v homelab-probe-state:/data/snapshots" in unit_line
-    assert all("-v homelab-probe-state:/data/snapshots" in line for line in run_lines)
+    assert "-v homelab-probe-data:/data " in unit_line
+    assert unit_line.endswith("homelab-probe diagnose --notify")
+    assert all("-v homelab-probe-data:/data " in line for line in run_lines)
 
 
 # -- launchd -------------------------------------------------------------------------------------------------------
@@ -299,61 +299,29 @@ def test_the_launchctl_commands_use_the_plists_label_and_file_name():
 
 # -- Docker --------------------------------------------------------------------------------------------------------
 
-def instructions():
-    (block,) = blocks("dockerfile")
-    joined = re.sub(r"\\\n\s*", " ", "\n".join(line for line in block.splitlines() if not line.startswith("#")))
-    return [tuple(line.strip().split(None, 1)) for line in joined.splitlines() if line.strip()]
+def test_the_docker_section_points_to_the_docker_page_and_has_no_dockerfile_of_its_own():
+    docker = section("Docker")
+    assert "(docker.md)" in docker and not blocks("dockerfile")
+    assert "FROM " not in TEXT
 
 
-def test_the_dockerfile_installs_only_what_the_package_needs_and_runs_as_a_normal_user():
-    steps = instructions()
-    names = [name for name, _ in steps]
-    assert names[0] == "FROM" and names.count("USER") == 1 and names.index("USER") < names.index("ENTRYPOINT")
-    copied = [arguments.split() for name, arguments in steps if name == "COPY"]
-    for *sources, _target in copied:
-        for source in sources:
-            assert (ROOT / source).exists(), source
-    assert [c[:-1] for c in copied] == [["pyproject.toml", "README.md"], ["homelab_probe"]]
-    user = dict(steps)["USER"]
-    assert user not in ("root", "0")
-    assert re.search(rf"useradd .*--uid 10001 .*\b{user}\b", " ".join(a for n, a in steps if n == "RUN"))
-    assert "uid 10001" in section("Docker")
-    assert "COPY . " not in TEXT                                  # the key and the saved inventories stay out
-
-
-def test_the_image_uses_a_python_the_project_supports():
-    base = dict(instructions())["FROM"]
-    version = tuple(int(n) for n in re.fullmatch(r"python:(\d+)\.(\d+)-slim", base).groups())
-    assert version >= (3, 10)
-    assert 'requires-python = ">=3.10"' in (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-
-
-def test_the_entry_point_and_default_command_are_real():
-    steps = dict(instructions())
-    assert json.loads(steps["ENTRYPOINT"]) == ["hlp"]
-    assert 'hlp = "homelab_probe.cli:main"' in (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    args = parse_cli(json.loads(steps["CMD"]))
-    assert args.command == "diagnose" and args.notify is True and args.fail_on == "critical"
-
-
-def test_the_volume_is_where_the_program_keeps_its_notification_state():
-    """The image's last WORKDIR plus the program's relative default is the directory the volume must cover."""
-    steps = instructions()
-    workdir = [arguments for name, arguments in steps if name == "WORKDIR"][-1]
+def test_the_docker_commands_name_a_real_command_and_mount_the_volume_on_the_images_working_directory():
+    """The image's default command is the web server, so a scheduled run must name its command; the volume is mounted
+    on the working directory, where the program keeps the notification state."""
+    dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+    workdir = re.findall(r"^WORKDIR (\S+)", dockerfile, flags=re.M)[-1]
+    runs = [line for line in blocks("bash", section("Docker"))[0].splitlines() if line.startswith("docker run")]
+    assert len(runs) == 2 and "--notify-baseline" in runs[0] and "--notify-baseline" not in runs[1]
+    for line in runs:
+        assert f"-v homelab-probe-data:{workdir} " in line
+        arguments = shlex.split(line.split("homelab-probe ", 1)[1], comments=True)
+        assert parse_cli(arguments).notify is True
     state = f"{workdir}/{notify.state_path_for({'id': 'site-1'})}"
-    mount = re.search(r"-v homelab-probe-state:(\S+)", section("Docker")).group(1)
-    assert state.startswith(mount + "/")
-    assert re.search(rf"mkdir -p {re.escape(mount)}\b", " ".join(a for n, a in steps if n == "RUN"))
+    assert state.startswith(workdir + "/snapshots/")
 
 
 def test_the_dockerignore_advice_names_what_must_stay_out():
     docker = section("Docker")
-    for name in (".env", "snapshots/", ".venv/"):
-        assert f"`{name}`" in docker
+    assert "`.env`" in docker and "`snapshots/`" in docker
     gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
     assert "snapshots/" in gitignore and ".venv/" in gitignore and "*.env" in gitignore
-
-
-def test_the_first_run_and_the_scheduled_run_are_different_commands():
-    runs = [line for line in blocks("bash", section("Docker"))[0].splitlines() if line.startswith("docker run")]
-    assert len(runs) == 2 and "--notify-baseline" in runs[0] and "--notify-baseline" not in runs[1]

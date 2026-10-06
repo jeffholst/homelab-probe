@@ -67,7 +67,9 @@ web/                     the web interface (React, TypeScript, Vite): its own np
   src/styles/, theme/    design tokens (light, dark, system) and the theme preference (the only thing put in browser storage)
   src/test/fakeApi.ts    a fake of the server's API for Vitest, held to tests/golden/openapi.json
   e2e/                   the Playwright smoke test and the script that serves the build in front of `hlp --demo serve`
+Dockerfile, compose.yaml, .dockerignore   the container image (a placeholder web build stage, the wheels, the non-root runtime) and its compose example
 tools/                   development scripts, not part of the package
+  docker_smoke.sh        the checks CI runs on the built image (version, non-root, setup mode, demo server, nothing secret in it)
   record_fixture.py      records a controller into a sanitised fixture
   sanitize.py            the deterministic sanitiser and its leak check
   build_docs.py          builds the documentation bundle (docs.json) for the web interface's Docs page
@@ -107,7 +109,7 @@ New features are new subcommands (a section and a registry row in `commands.py`)
 
 **Releases.** A release is a `vX.Y.Z` tag that **the owner** pushes; nothing here tags or publishes by itself. To prepare one: finish the entry for the version in [CHANGELOG.md](../CHANGELOG.md) (grouped Added, Changed, Fixed and Security; a change to an exit code, a finding code or a JSON `version` always gets a line) and replace its `Unreleased` by the date, set `__version__` in `homelab_probe/__init__.py` (the one place the version is written; `pyproject.toml` reads it), and merge that as a pull request. Then `git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z`. The [release workflow](../.github/workflows/release.yml) runs only for that push: it checks the lockfile, installs dependencies, refuses a tag that is not `v` plus the package version or a changelog entry without a real date (`tools/release_notes.py`), runs the tests, builds the wheel and source distribution with `uv build`, and creates the GitHub release with the changelog entry as its notes and the two files attached. It is the only workflow allowed to write to the repository and uses the runner's `gh` CLI rather than a third-party publishing action. A test keeps the changelog, the version and the workflow in step.
 
-**Dependency updates.** [Dependabot](../.github/dependabot.yml) checks once a week (Mondays) for newer versions of the GitHub Actions that CI uses and of the Python dependencies in `pyproject.toml`/`uv.lock`, and opens one pull request per group, not one per package. They go through the same CI as any change (tests on Python 3.10 to 3.13, `ruff`, `mypy`, `uv lock --check`) and are merged by hand. The actions are pinned to exact versions on purpose (`astral-sh/setup-uv` publishes no floating major tag), which is what lets Dependabot keep them current; a test checks the pins. For security advisories, switch on **Dependabot alerts** and **Dependabot security updates** in the repository's Settings, under Advanced Security (they are repository settings, not files).
+**Dependency updates.** [Dependabot](../.github/dependabot.yml) checks once a week (Mondays) for newer versions of the GitHub Actions that CI uses, of the Python dependencies in `pyproject.toml`/`uv.lock` and of the base images named in the `Dockerfile`, and opens one pull request per group, not one per package. They go through the same CI as any change (tests on Python 3.10 to 3.13, `ruff`, `mypy`, `uv lock --check`) and are merged by hand. The actions are pinned to exact versions on purpose (`astral-sh/setup-uv` publishes no floating major tag), which is what lets Dependabot keep them current; a test checks the pins. For security advisories, switch on **Dependabot alerts** and **Dependabot security updates** in the repository's Settings, under Advanced Security (they are repository settings, not files).
 
 Checks (the same ones CI runs on every push and pull request, in `.github/workflows/ci.yml`):
 
@@ -117,6 +119,8 @@ uv run ruff check .       # lint (rules E, F, B, I, UP in pyproject.toml; lines 
 uv run mypy               # types, checked in untyped functions too; CI fails on any finding
 uv lock --check           # uv.lock must match pyproject.toml; run `uv lock` after changing dependencies
 ```
+
+**The Docker image** ([Docker](docker.md)) is built by the **Docker image** job of `ci.yml` on every push and pull request (`docker build`, nothing is pushed, no login, no `packages: write`), and `tools/docker_smoke.sh` then checks it: `--version`, a non-root user, a command in `--demo` mode, a container with no configuration becoming healthy in the setup mode, a `--demo serve` container reached through the published port, a read-only root file system with a writable `/data`, and no secret or state file in the image. `tests/test_docker_files.py` checks the files without Docker (the `Dockerfile`, `compose.yaml`, `.dockerignore`, the workflow job and the documented commands). Publishing the image is part of a release, not of this job.
 
 **Tests that keep the documentation and the output honest:**
 
