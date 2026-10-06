@@ -560,6 +560,69 @@ kbd {
   gap: var(--space-2);
 }
 
+/* -- setup ---------------------------------------------------------------------------------------------------- */
+
+.setup {
+  width: min(100%, 48rem);
+  margin-inline: auto;
+  padding: var(--space-4);
+}
+
+.setup__section {
+  padding-block: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.setup__fields {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.setup__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-block: var(--space-3);
+}
+
+.setup__confirmation {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--target-size);
+  margin-bottom: var(--space-3);
+}
+
+.setup__confirmation input {
+  flex: 0 0 auto;
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.setup__template {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: var(--space-3);
+  background: var(--color-surface-sunken);
+}
+
+.setup details {
+  margin-block: var(--space-3);
+}
+
+.setup summary {
+  cursor: pointer;
+  min-height: var(--target-size);
+}
+
+.setup__grid {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+}
+
 /* -- motion --------------------------------------------------------------------------------------------------- */
 
 @media (prefers-reduced-motion: reduce) {

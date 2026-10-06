@@ -26,6 +26,8 @@ export interface RequestOptions<T> {
   /** Sent as JSON. */
   body?: unknown;
   signal?: AbortSignal | undefined;
+  /** First-run authorization only; held by the setup page, never remembered by the client. */
+  setupToken?: string | undefined;
   /** Checks and converts the parsed JSON; without it the answer is taken as `T` (the report documents). */
   parse?: (value: unknown) => T;
 }
@@ -80,6 +82,7 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     const headers = new Headers({ Accept: "application/json" });
     const init: RequestInit = { method, headers, credentials: "include", cache: "no-store" };
     if (settings.signal) init.signal = settings.signal;
+    if (settings.setupToken) headers.set("X-Setup-Token", settings.setupToken);
     if (settings.body !== undefined) {
       headers.set("Content-Type", "application/json");
       init.body = JSON.stringify(settings.body);
@@ -97,7 +100,8 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     const body = await readBody(response);
     if (!response.ok) {
       const failure = errorFromResponse(response.status, response.headers.get("Retry-After"), body);
-      if (response.status === 401 && path !== LOGIN_PATH) {
+      const rejectedSetupToken = settings.setupToken !== undefined && failure.code === "invalid_setup_token";
+      if (response.status === 401 && path !== LOGIN_PATH && !rejectedSetupToken) {
         csrfToken = null;
         options.onUnauthorized?.();
       }

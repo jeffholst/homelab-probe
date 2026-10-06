@@ -40,9 +40,16 @@ export function collectProblems(page: Page): string[] {
   return problems;
 }
 
-/** Waits for running CSS transitions and animations (the drawer sliding in), so a check or a screenshot sees the settled page. */
+/** Hidden details controls can retain pending transitions; wait only for visible, finite animations. */
 export async function settle(page: Page): Promise<void> {
-  await page.evaluate(() => Promise.all(document.getAnimations().map((animation) => animation.finished.catch(() => undefined))));
+  await page.evaluate(() => Promise.all(document.getAnimations()
+    .filter((animation) => {
+      const effect = animation.effect;
+      return effect instanceof KeyframeEffect && effect.target instanceof Element
+        && effect.target.checkVisibility() && animation.playState === "running"
+        && Number.isFinite(effect.getComputedTiming().endTime);
+    })
+    .map((animation) => animation.finished.catch(() => undefined))));
 }
 
 export async function expectNoHorizontalOverflow(page: Page): Promise<void> {

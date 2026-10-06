@@ -122,9 +122,9 @@ describe("the login page", () => {
     expect(screen.queryByText("This connection is not encrypted")).toBeNull();
   });
 
-  it("says when the server needs its setup, which this app cannot do yet", async () => {
+  it("refuses an unknown setup mode before showing a login form", async () => {
     renderApp("/login", { meta: { needs_setup: true, setup_mode: "first_run" } });
-    expect(await screen.findByText("This server is not set up yet")).toBeInTheDocument();
+    expect(await screen.findByText("Unknown setup mode")).toBeInTheDocument();
   });
 
   it("shows a failure to reach the server with a way to retry", async () => {

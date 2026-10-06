@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
 
 import { isApiError } from "../api/errors";
@@ -8,21 +8,7 @@ import { Banner, ErrorState, Loading } from "../components/DataStates";
 import { Text } from "../components/Text";
 import { ThemeSwitch } from "../components/ThemeSwitch";
 import { usePageTitle } from "../lib/usePageTitle";
-
-/** Seconds left until `until` (ms since the epoch), ticking once a second; 0 when there is no wait. */
-function useCountdown(until: number | null): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (until === null) return;
-    const timer = window.setInterval(() => {
-      setNow(Date.now());
-    }, 1000);
-    return () => {
-      window.clearInterval(timer);
-    };
-  }, [until]);
-  return until === null ? 0 : Math.max(0, Math.ceil((until - now) / 1000));
-}
+import { useCountdown } from "../lib/useCountdown";
 
 export function LoginPage() {
   usePageTitle("Log in");
@@ -72,11 +58,6 @@ export function LoginPage() {
               <p className="banner__text">
                 Your password would travel in clear text. Use an SSH tunnel or an HTTPS reverse proxy to reach this server.
               </p>
-            </Banner>
-          )}
-          {meta.data?.needs_setup === true && (
-            <Banner tone="info" title="This server is not set up yet">
-              <p className="banner__text">The setup screens are not part of this version of the app.</p>
             </Banner>
           )}
           {meta.isPending && <Loading label="the server's details" />}

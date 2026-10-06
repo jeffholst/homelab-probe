@@ -19,7 +19,7 @@
  *
  * Not copied: the report documents. A page issue adds the routes it reads with `fake.route(...)`.
  */
-import golden from "../../../tests/golden/openapi.json";
+import golden from "../../../tests/golden/openapi.json" with { type: "json" };
 import type { Meta, Platform, Role } from "../api/types";
 
 export interface FakeAccount {
@@ -37,6 +37,7 @@ export interface FakeApiOptions {
   now?: () => number;
   idleSeconds?: number;
   maxSeconds?: number;
+  setupToken?: string;
 }
 
 export interface RouteRequest {
@@ -47,6 +48,7 @@ export interface RouteRequest {
   query: URLSearchParams;
   body: unknown;
   session: FakeSession | null;
+  headers: Headers;
 }
 
 export interface FakeSession {
@@ -66,6 +68,7 @@ interface Route {
   names: string[];
   handler: Handler;
   public: boolean;
+  setup: boolean;
   role: Role;
 }
 
@@ -127,6 +130,7 @@ export class FakeApi {
   private readonly clock: () => number;
   private readonly idleMs: number;
   private readonly maxMs: number;
+  private readonly setupToken: string;
   /** Simulates a page of another site posting to this server: its Origin is not ours. */
   crossSite = false;
 
@@ -140,6 +144,7 @@ export class FakeApi {
     this.clock = options.now ?? (() => Date.now());
     this.idleMs = (options.idleSeconds ?? 30 * 60) * 1000;
     this.maxMs = (options.maxSeconds ?? 12 * 3600) * 1000;
+    this.setupToken = options.setupToken ?? "synthetic-setup-token";
 
     this.route("GET", "/meta", () => this.meta, { public: true });
     this.route("POST", "/auth/login", (request) => this.login(request), { public: true });
@@ -149,7 +154,7 @@ export class FakeApi {
   }
 
   /** Registers a route, which must be in the OpenAPI snapshot. A later registration of the same route wins. */
-  route(method: string, template: string, handler: Handler, options: { public?: boolean; role?: Role } = {}): void {
+  route(method: string, template: string, handler: Handler, options: { public?: boolean; role?: Role; setup?: boolean } = {}): void {
     if (!inContract(method, template)) {
       throw new Error(`${method} ${API}${template} is not in tests/golden/openapi.json: the fake may not serve it`);
     }
@@ -161,7 +166,8 @@ export class FakeApi {
         return "([^/]+)";
       })}$`,
     );
-    this.routes.unshift({ method, template, pattern, names, handler, public: options.public ?? false, role: options.role ?? "viewer" });
+    this.routes.unshift({ method, template, pattern, names, handler, public: options.public ?? false,
+      setup: options.setup ?? false, role: options.setup ? "admin" : options.role ?? "viewer" });
   }
 
   /** Answers the next `times` requests whose path starts with `prefix` with this error (a server failure to react to). */
@@ -228,7 +234,22 @@ export class FakeApi {
     }
 
     let session: FakeSession | null = null;
-    if (!route.public) {
+    if (this.meta.needs_setup && !route.public && !route.setup) {
+      throw new ApiRefused(503, "not_configured", "The server is not set up yet: finish the setup first.");
+    }
+    const tokenAccess = route.setup && this.meta.needs_setup && !this.accounts.some((account) => account.role === "admin" && !account.disabled);
+    if (tokenAccess) {
+      const wait = this.waitFor("(setup)");
+      if (wait > 0) {
+        const seconds = Math.ceil(wait / 1000);
+        throw new ApiRefused(429, "too_many_attempts", "Too many attempts.", { retry_after: seconds }, { "Retry-After": String(seconds) });
+      }
+      if (headers.get("X-Setup-Token") !== this.setupToken) {
+        this.fail("address", 300);
+        throw new ApiRefused(401, "invalid_setup_token", "The setup token is missing or wrong.");
+      }
+      this.failures.delete("address");
+    } else if (!route.public) {
       session = withCookies ? this.currentSession() : null;
       if (session === null) throw new ApiRefused(401, "not_logged_in", "Log in first.");
       if (RANK[session.role] < RANK[route.role]) throw new ApiRefused(403, "forbidden", "Your role may not do this.");
@@ -237,6 +258,7 @@ export class FakeApi {
       }
       session.lastSeen = this.clock();
     }
+    if (route.setup && this.meta.read_only) throw new ApiRefused(403, "read_only", "This server is read-only.");
 
     let body: unknown;
     if (typeof init?.body === "string" && init.body !== "") {
@@ -246,7 +268,7 @@ export class FakeApi {
         throw new ApiRefused(422, "invalid_parameter", "A parameter is not valid.");
       }
     }
-    const result = route.handler({ method, path, params, query: url.searchParams, body, session });
+    const result = route.handler({ method, path, params, query: url.searchParams, body, session, headers });
     return result instanceof Response ? result : json(200, result);
   }
 

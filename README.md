@@ -93,7 +93,7 @@ pip install git+https://github.com/jeffholst/homelab-probe@vX.Y.Z
 
 ### Docker
 
-One image runs the command line and the web server (not published yet: build it from a checkout). It starts with no configuration, in the setup mode, and prints a one-time setup token in its log ([details](docs/docker.md)):
+One image runs the command line and the web server (not published yet: build it from a checkout). It starts with no configuration, in the setup mode, and prints a one-time setup token in its log ([details](docs/docker.md)). Browser [first-run setup](docs/web.md#browser-first-run-setup) is available when a built web bundle is installed; Docker bundle integration is still pending:
 
 ```bash
 docker build -t homelab-probe .

@@ -63,7 +63,7 @@ tests/
   test_json_schemas.py   real `--json` output (and the snapshot and webhook payload) validates against docs/schemas/
 docs/                    the detail behind the README: one page per group of commands, settings, notifications, examples
   schemas.md, schemas/   a versioned JSON Schema for every --json output, the snapshot file and the webhook payload
-web/                     the web interface (React, TypeScript, Vite): its own npm project, not part of the Python package
+web/                     the web interface (React, TypeScript, Vite): its own npm project; SetupGate checks metadata before login, SetupPage consumes the typed setup API with ephemeral credentials
   src/api/               typed fetch client (same origin, CSRF header from memory), the one ApiError, the server's own answers
   src/generated/         types generated from docs/schemas (committed; CI regenerates and fails on a difference)
   src/components/, pages/  the shell, the data-state components (Loading, Refreshing, Empty, Error, stale and partial banners), Text, pages
@@ -81,7 +81,7 @@ tools/                   development scripts, not part of the package
 
 ### The web interface (`web/`)
 
-The browser UI is a separate npm project. Nothing in it reaches the command line or the Python wheel, and Node is needed only to work on the UI (Node 22, npm). The server does not serve the built bundle yet; until it does, the UI runs against `hlp serve` through a development proxy.
+The browser UI is a separate npm project. Nothing in it adds a runtime dependency to the command line or Python wheel, and Node is needed only to work on the UI (Node 22, npm). The server can serve a bundle copied into `homelab_probe/web/`; `npm run build` writes only to `web/dist`, and Docker/release bundle integration is still separate work. During development, the UI runs against `hlp serve` through a proxy.
 
 ```bash
 uv run --extra web hlp.py --demo serve     # terminal 1: synthetic network; prints "Demo login: user demo, password ..."
@@ -103,7 +103,7 @@ npm run dev                                 # terminal 2: http://localhost:5173,
 | `npm run build` | The production bundle, written to `web/dist` only |
 | `npm run e2e` | Playwright smoke on a phone (390x844) and a desktop (1280x800) viewport |
 
-The Playwright smoke builds the app and starts `uv run --extra web hlp.py --demo serve` on a free port, then serves `web/dist` on another free port in front of it, with the content-security policy the real server sends, so a script or style the policy forbids fails the test. It reads the demo login from the server's output. The first run needs the browser: `npx playwright install chromium`. `E2E_SCREENSHOTS=/some/dir npm run e2e` also saves screenshots of the login page and the shell.
+The Playwright smoke builds the app and starts `uv run --extra web hlp.py --demo serve` on a free port, then serves `web/dist` on another free port in front of it, with the content-security policy the real server sends, so a script or style the policy forbids fails the test. It reads the demo login from the server's output. Setup tests use the contract-checked synthetic API at phone/desktop sizes in light/dark themes. A separate first-admin test starts the real backend with an isolated temporary data directory, a minimal environment and an unreachable synthetic controller address; no controller test or notification send runs. The first run needs the browser: `npx playwright install chromium`. `E2E_SCREENSHOTS=/some/dir npm run e2e` also saves screenshots of login, the shell, setup and unfinished fallback states.
 
 Rules for the UI code: strings from the controller (names, SSIDs, event text, notes) are rendered with `<Text>`/`safeText()` only, never as markup; colours and sizes come from the tokens in `src/styles/tokens.css` (a test checks WCAG AA contrast of the pairs in both themes); there are no inline styles or scripts, which the server's policy would refuse; the CSRF token is kept in memory and nothing but the theme word goes to `localStorage`; a new route in the fake API must exist in `tests/golden/openapi.json`. A change to a JSON schema needs `npm run generate:types` in the same pull request.
 
