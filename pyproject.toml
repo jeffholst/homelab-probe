@@ -43,6 +43,12 @@ web = [
     "cryptography>=44",       # the encrypted application backup (scrypt and AES-256-GCM); no custom cryptography
 ]
 
+# Optional terminal styling of the command line (`--color`, colored output in the commands that adopt it). The tool
+# runs identically without it: `homelab_probe/present.py` is the only module that imports it, and only when asked.
+pretty = [
+    "rich>=13.7",
+]
+
 [dependency-groups]
 dev = [
     "coverage>=7.6",

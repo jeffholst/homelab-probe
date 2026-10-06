@@ -53,6 +53,27 @@ describe("the route guard", () => {
     expect(await screen.findByRole("heading", { name: "Log in" })).toBeInTheDocument();
   });
 
+  it("forgets what the previous session read when it ends on the server, so the next person to log in does not see it", async () => {
+    const fake = new FakeApi();
+    const user = userEvent.setup();
+    const { services } = renderApp("/", { fake });
+    await logIn(user);
+    expect(await screen.findByText("UniFi")).toBeInTheDocument();
+    expect(services.queryClient.getQueryData(["platforms"])).toBeDefined();
+
+    fake.restartServer(); // the session ends; the next request is a 401
+    fake.platforms = [{ id: "other", name: "Other platform", configured: true }];
+    await act(async () => {
+      await services.queryClient.refetchQueries({ queryKey: ["platforms"] }).catch(() => undefined);
+    });
+    expect(await screen.findByRole("heading", { name: "Log in" })).toBeInTheDocument();
+    expect(services.queryClient.getQueryData(["platforms"])).toBeUndefined();
+
+    await logIn(user, "viewer pass", "viewer");
+    expect(await screen.findByText("Other platform")).toBeInTheDocument();
+    expect(screen.queryByText("UniFi")).toBeNull();
+  });
+
   it("does not follow a next= that leaves the app", () => {
     for (const hostile of ["//evil.example", "https://evil.example/", "/\\evil.example", "javascript:alert(1)", "/a\u0000b", "", null, "/login"]) {
       expect(safeNext(hostile)).toBe("/");

@@ -121,6 +121,27 @@ def test_a_required_client_history_fails_and_an_optional_one_degrades(fake_clien
     assert "legacy stat/alluser unavailable" in capsys.readouterr().err
 
 
+def test_the_snapshot_says_whether_the_client_history_was_read(fake_client, monkeypatch):
+    """An empty list is an answer when the read worked and "unknown" when it failed: ``all_users_available`` tells."""
+    assert collect_snapshot(fake_client, "default", Needs()).all_users_available is True        # not requested
+    assert collect_snapshot(fake_client, "default", Needs(offline=True)).all_users_available is True
+    fake_client.session.fx["legacy"]["alluser"] = []
+    empty = collect_snapshot(fake_client, "default", Needs(offline=True))
+    assert empty.all_users == [] and empty.all_users_available is True
+    legacy_stat = fake_client.legacy_stat
+
+    def broken(site_ref, resource):
+        if resource == "alluser":
+            raise UniFiAPIError("unavailable")
+        return legacy_stat(site_ref, resource)
+
+    monkeypatch.setattr(fake_client, "legacy_stat", broken)
+    failed = collect_snapshot(fake_client, "default", Needs(offline=True))
+    assert failed.all_users == [] and failed.all_users_available is False
+    with pytest.raises(UniFiAPIError):                               # a required history that fails raises instead
+        collect_snapshot(fake_client, "default", Needs(offline=True, users_required=True))
+
+
 # -- what each command reads ---------------------------------------------------------------------------------
 
 def run(fake_client, monkeypatch, argv):
@@ -188,3 +209,14 @@ def test_client_defers_device_reads_until_a_unique_match(fake_client, monkeypatc
     assert any(path.endswith("/stat/device") for path in fake_client.session.calls)
     assert len([path for path in fake_client.session.calls
                 if "/devices/" in path and not path.endswith("/devices")]) == 8
+
+
+def test_the_dashboard_document_reads_exactly_what_a_full_diagnose_reads(fake_client):
+    """The dashboard has no command: its document function declares ``DASHBOARD_NEEDS``, which is that of ``diagnose``."""
+    from homelab_probe import documents
+
+    documents.dashboard_document(fake_client, "default", echo=False)
+    assert reads(fake_client) == BASE | {"alluser", "networkconf", "health", "speedtests", "events"}
+    assert len(fake_client.session.posts) == 1
+    assert documents.DASHBOARD_NEEDS.events is not None and not documents.DASHBOARD_NEEDS.neighbors
+    assert not documents.DASHBOARD_NEEDS.firewall and not documents.DASHBOARD_NEEDS.wlans

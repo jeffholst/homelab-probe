@@ -225,3 +225,26 @@ def test_the_real_session_carries_the_key_and_refuses_cookies():
 def test_a_demo_service_uses_the_synthetic_controller():
     service = ControllerService(CONFIG, demo=True)
     assert isinstance(service.session, DemoSession) and service.client().info()["applicationVersion"]
+
+
+def test_a_build_knows_which_of_its_reads_were_answered_from_an_older_cache(session):
+    from homelab_probe.server.cache import stale_served
+
+    clock = [1000.0]
+    service = ControllerService(CONFIG, session=session, ttl=30, stale_ttl=600, clock=lambda: clock[0])
+    seen = []
+
+    def make(client):
+        document = Document("x", client.info())
+        seen.append(stale_served())
+        return document
+
+    service.build(make)
+    clock[0] += 100
+    session.status = 401
+    service.build(make)
+    session.status = None
+    clock[0] += 100
+    service.build(make)
+    assert seen == [[], ["unauthorized"], []]                        # per build: a later build starts clean
+    assert stale_served() == []

@@ -123,6 +123,8 @@ CASES = {
                                                                 settings=documents.DiagnoseSettings(), echo=False)),
     "new-clients": (f"{SITE}/new-clients", "new-clients", None,
                     lambda c: documents.new_clients_document(c, "default", echo=False)),
+    "dashboard": (f"{SITE}/dashboard", "dashboard", None,
+                  lambda c: documents.dashboard_document(c, "default", triage=lambda site: {}, echo=False)),
     "client": (f"{SITE}/clients/{DESKTOP}", "client", None,
                lambda c: documents.client_document(c, "default", DESKTOP, echo=False)),
 }

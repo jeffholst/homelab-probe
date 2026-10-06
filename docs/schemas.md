@@ -28,6 +28,7 @@ The web server (see [the web interface](web.md#the-api-apiv1unifi)) returns the 
 | `diff --json` | what changed between two inventories | [`diff.v1.schema.json`](schemas/diff.v1.schema.json) |
 | `snapshot` | the saved file (`schema_version`) | [`snapshot.v1.schema.json`](schemas/snapshot.v1.schema.json) |
 | `diagnose --notify` | the webhook payload | [`webhook-payload.v1.schema.json`](schemas/webhook-payload.v1.schema.json) |
+| web API only: `GET .../dashboard` | the dashboard summary: status, completeness, findings counts, internet, Wi-Fi, devices, clients, events | [`dashboard.v1.schema.json`](schemas/dashboard.v1.schema.json) |
 
 ## How they are versioned
 
