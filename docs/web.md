@@ -98,7 +98,7 @@ Any logged-in user, a viewer included, may change their own password; no adminis
 
 ### The API: `/api/v1/unifi`
 
-Every report is a `GET` that returns the same document as the command's `--json`, with two more keys, and takes the command's options as query parameters (`?only=wan&only=wifi`, `?days=90`, `?include_offline=true`). `{site}` is a site name, internal reference or UUID (`default` on most controllers).
+Every report is a `GET` that returns the same document as the command's `--json` (the dashboard summary, below, has no command), with two more keys, and takes the command's options as query parameters (`?only=wan&only=wifi`, `?days=90`, `?include_offline=true`). `{site}` is a site name, internal reference or UUID (`default` on most controllers).
 
 | Route | Same as | Query parameters |
 | ----- | ------- | ---------------- |
@@ -118,6 +118,7 @@ Every report is a `GET` that returns the same document as the command's `--json`
 | `.../reservations` | `query reservations` | `search`, `offline` |
 | `.../new-clients` | `new-clients` | `search` |
 | `.../clients/{mac}` | `client` | `events`, `since` (the MAC in any spelling) |
+| `.../dashboard` | none: the [dashboard summary](#dashboard-summary-apiv1unifisitessitedashboard) | |
 | `/api/v1/schemas`, `/api/v1/schemas/{name}` | | the [JSON Schemas](schemas.md) |
 
 Every route also takes `refresh=true`, which reads the controller again instead of using the cache (honoured at most every 5 seconds; a faster one is ignored and the response says so in `warnings`).
@@ -222,6 +223,27 @@ The top level has `summary` (the counts by severity, as `diagnose` has them, and
 - **Where it is kept.** `snapshots/<site id>/triage.json`, one file per site beside the snapshots and the notification state (so it is in the Docker volume that already covers `snapshots/`), owner-only, written atomically under a lock, never through a symbolic link, and refused if it names another site. It holds the id, the code, the state, who and when, and the first and last seen times: **no name, MAC or address.** At most 5000 findings are tracked per site.
 - **Audit.** `triage.changed` with the id, the code, the new state and the `until`: never a name, a MAC or the note. `--read-only` refuses a change (the scheduler cannot run then, so nothing else writes the file).
 - **Findings that share a cause.** A finding has a `group` only where the controller's data supports it, never as a guess, and **nothing is hidden or merged**: the grouped finding stays in the list at its own rank (the list, the ranking and the counts are the same with or without it), and `group.cause` is the `id` of another finding of the same list. The one case so far is `offline_behind_offline_uplink`: a `device.offline` finding for a device whose last reported uplink leads, through devices that are all offline too, to an offline device that has its own `device.offline` finding; that device, the one farthest up the chain, is the cause (a gateway rather than the switch below it, when both are offline). A `group` has `kind`, `cause`, `cause_code`, a one-sentence `summary`, `evidence` (`source`, and the `chain` from the grouped device to the cause: each hop has `name`, `mac`, `offline`, the `finding` id of its own offline finding or `null`, and the `uplink_port` of the next device it was plugged into) and `limitations`. **An offline device keeps its last known uplink**, so the chain shows where the devices *were* connected and the claim is "probably", never "confirmed" (a power cut or a cabling fault would look the same): the limitations say so. It is **not** grouped when the device has no known uplink or the uplink names a device the controller does not list, when its parent is online, when the offline devices above it have no finding (an ignore rule hid it: there is nothing to point at), or when the uplinks form a loop. The same group is in the answer of `PUT .../triage`. It is built from the uplinks already read for the findings, so it asks the controller for nothing more.
+
+### Dashboard summary: `/api/v1/unifi/sites/{site}/dashboard`
+
+`GET .../dashboard` is one small document for the first page of a web interface: **how the network is, and how much of that is known.** There is no command for it. It is built from the reads a full `diagnose` makes (the same cache entries, so a page that also shows the findings costs no extra read, and no new controller endpoint) and uses the same builders as `diagnose`, `wan` and `wifi`. Both roles read it; it never writes. Its [schema](schemas.md) is `dashboard.v1.schema.json`.
+
+| Key | What it says |
+| --- | --- |
+| `status` | `critical` or `warning` when a check found that (a finding that is acknowledged or snoozed still counts: triage never hides a finding); `ok` **only** for a complete, fresh read of a controller that answered; otherwise `unknown`. A partial, old or failed read is never `ok`. |
+| `complete` | False when an optional read failed, so some findings or sections may be missing (the `warnings` of the response say which; it is the flag `diagnose` has). |
+| `stale` | True when a read failed and an older cached answer (at most 10 minutes old) was used instead; `generated_at` then says how old the data is. |
+| `controller.state` | `ok`, `unreachable` (no answer), `certificate` (TLS check failed) or `key_rejected` (the API key was refused). |
+| `findings` | `total`, `ignored` (what the [ignore list](diagnose.md) hid), `by_severity`, `by_state` (`open`, `acknowledged`, `snoozed`, from the [triage](#findings-and-triage-apiv1unifisitessitefindings) file: **`null`**, never zero, when it cannot be used, with `triage_available` false) and `attention`: the five open findings to look at first, in the order of the findings list (`id`, `rank`, `severity`, `code`, `subject`, `message`). |
+| `devices` | `total`, `online`, `offline` and `other` (adopting, updating, pending adoption...). |
+| `clients` | `connected`, `wired`, `wireless` and `offline` (previously seen, not connected; `null` when the client history could not be read). |
+| `wan` | The headline of [`wan`](network.md): `status`, `internet_status`, `latency_ms`, `drops`, `availability_pct` (the lowest 24-hour availability), `nat` and the `last_speedtest`. |
+| `wifi` | Access points (`access_points`, `access_points_online`), `radios`, `wireless_clients`, and the `lowest_satisfaction` and `highest_utilization` of the radios of online access points. |
+| `events` | `total` in the last 24 hours, `truncated`, `notable_total` (above low severity) and the five newest `notable` events. |
+
+- **`available`.** Every section has it. False means the section was **not read** (for example `wan` when the health read failed, `wifi` without the legacy device list, `events` without the event log): the other keys are then absent, and a number is never filled with zero. A number whose source is missing is `null`.
+- **A controller that cannot be reached is a `200`**, not a `502`: `controller.state` says why, `status` is `unknown`, `complete` is false, every section is `{"available": false}` and `site` is `null`, with one fixed warning. A dashboard can show that; an error page cannot. A failure that is not about the connection (an unknown site is `404`, an answer that cannot be used `502`) is the usual error. A controller that is down while the cache still holds an older answer gives the old data with `stale` true and the state of the failed connection.
+- **Reads:** the same as `diagnose` (devices, clients, the legacy device and client lists, the client history, the network configuration, `stat/health`, speedtests and the one event-log query); `tests/test_needs.py` pins this.
 
 ### Notes: `/api/v1/unifi/sites/{site}/notes`
 

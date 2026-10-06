@@ -34,6 +34,7 @@ DEFAULT_ERROR_TTL = 5.0      # seconds a failure is remembered
 DEFAULT_MAX_ENTRIES = 1024
 _log = logging.getLogger(__name__)
 _ages: contextvars.ContextVar[Optional[List[float]]] = contextvars.ContextVar("homelab_probe_cache_ages", default=None)
+_stale: contextvars.ContextVar[Optional[List[str]]] = contextvars.ContextVar("homelab_probe_cache_stale", default=None)
 
 
 @contextlib.contextmanager
@@ -46,6 +47,26 @@ def track_ages() -> Iterator[List[float]]:
         yield ages
     finally:
         _ages.reset(token)
+
+
+@contextlib.contextmanager
+def track_stale() -> Iterator[List[str]]:
+    """The ``UniFiAPIError.kind`` of every read inside the block that failed and was answered from an older cached
+    answer instead (an empty list: everything was read, or served fresh). Worker threads share the list like the one
+    of ``track_ages``."""
+    kinds: List[str] = []
+    token = _stale.set(kinds)
+    try:
+        yield kinds
+    finally:
+        _stale.reset(token)
+
+
+def stale_served() -> List[str]:
+    """What ``track_stale`` has seen so far in this context (empty outside one): a document that wants to say that
+    its data is old calls this after it has read."""
+    kinds = _stale.get()
+    return [] if kinds is None else list(kinds)
 
 
 CONNECTION_KINDS = frozenset({"connection", "timeout", "tls"})       # the controller did not answer at all
@@ -226,6 +247,9 @@ class ResponseCache:
     def _serve_stale(self, entry: _Entry, error: UniFiAPIError, label: str) -> Any:
         with self._guard:
             self.wire.stale_at = self._wall()
+        kinds = _stale.get()
+        if kinds is not None:
+            kinds.append(error.kind or "error")
         moment = time.strftime("%H:%M:%S", time.localtime(entry.wall))
         logs.warn(f"the controller could not be read ({error.kind or 'error'}); served from the cache as of {moment}")
         return self._give(entry, label, "stale")
