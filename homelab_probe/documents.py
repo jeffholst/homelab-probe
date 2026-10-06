@@ -40,7 +40,7 @@ from .query import query_data, query_rows
 from .settings import DiagnoseSettings
 from .snapshot import EventQuery, Needs, collect_event_snapshot, collect_snapshot, extend_snapshot
 from .topology import JSON_VERSION as TOPOLOGY_JSON_VERSION
-from .topology import build_topology
+from .topology import build_topology, device_links
 from .wan import DEFAULT_DAYS, build_wan
 from .wan import JSON_VERSION as WAN_JSON_VERSION
 from .wifi import DEFAULT_MIN_SIGNAL, build_wifi
@@ -241,15 +241,17 @@ def diagnose_document(client: UniFiClient, site: str, settings: Optional[Diagnos
                       today: Optional[datetime.date] = None) -> Document:
     """The health checks of ``areas`` (all of them by default) after the ignore list: the dict that ``diagnose
     --json`` prints. ``areas`` also say what is read (see ``needs_for``). ``meta["complete"]`` is False when an
-    optional read failed, so a caller that compares passes (``--watch``) can skip a pass that missed data, and
-    ``meta["site"]`` says which site was read."""
+    optional read failed, so a caller that compares passes (``--watch``) can skip a pass that missed data,
+    ``meta["site"]`` says which site was read and ``meta["links"]`` is where each device was last reported plugged in
+    (``topology.device_links``: the evidence the web interface groups findings with; read from the snapshot already
+    taken, so it asks the controller for nothing more)."""
     settings = settings or DiagnoseSettings()
     with logs.collect_warnings(quiet=not echo) as warnings:
         snap = collect_snapshot(client, site, needs_for(areas, since))
         findings, ignored = apply_ignores(diagnose(snap, settings, areas=areas), settings.ignore, today)
     return Document("diagnose", findings_document(findings, ignored, show_ignored, areas),
                     [logs.scrub(w) for w in warnings],
-                    {"complete": not snap.degraded, "site": site_identity(snap.site)})
+                    {"complete": not snap.degraded, "site": site_identity(snap.site), "links": device_links(snap)})
 
 
 # -- snapshot and diff ------------------------------------------------------------------------------

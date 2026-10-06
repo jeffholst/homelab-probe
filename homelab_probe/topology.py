@@ -96,6 +96,31 @@ def _link(snap: Snapshot, idx: DeviceIndex, mac: str) -> Tuple[str, Optional[int
     return parent, port, own, number(up.get("speed"))
 
 
+class DeviceLink(TypedDict):
+    """Where one device is plugged in, as the controller last reported it (see ``device_links``)."""
+
+    name: str
+    mac: str
+    online: bool
+    parent: str                              # the parent's MAC, "" when no uplink is known
+    parent_port: Optional[int]               # the port of the PARENT it plugs into
+    port: Optional[int]                      # its own uplink port
+
+
+def device_links(snap: Snapshot) -> Dict[str, DeviceLink]:
+    """The uplink of every device by MAC, without building the tree or running any check. **An offline device keeps
+    its last known uplink** in the controller's data, so for one that is not online the link says where it was
+    connected, not where it is connected now. ``parent`` is "" when the data names no parent; it can name a device
+    that is not in the snapshot, or the device itself, and a caller that follows it must not trust it blindly."""
+    idx = DeviceIndex(snap)
+    links: Dict[str, DeviceLink] = {}
+    for mac in sorted(set(idx.legacy) | set(idx.integration)):
+        parent, port, own, _speed = _link(snap, idx, mac)
+        links[mac] = {"name": idx.name(mac), "mac": mac, "online": not idx.offline(mac), "parent": parent,
+                      "parent_port": port, "port": own}
+    return links
+
+
 def _assign_findings(findings: List[Finding], names: Dict[str, str]) -> Dict[str, List[Finding]]:
     """Give device findings to their exact target MAC."""
     result: Dict[str, List[Finding]] = {}

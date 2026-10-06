@@ -23,6 +23,7 @@ homelab_probe/
   topology.py            uplink tree: wiring, link speeds, client counts, flags
   topology_graph.py      the tree as a Mermaid flowchart or a Graphviz DOT digraph (escaping for both syntaxes)
   history.py             saved inventories (snapshot) and the diff between them
+  groups.py              findings that share a cause (a device offline behind an offline uplink), with the evidence; the web findings list uses it (standard library only)
   diagnose/              read-only health checks, one module per topic, and areas.py (what --only/--skip choose between)
     __init__.py            diagnose(): runs every check, worst findings first
     model.py               severities, exit codes, the catalogue of finding codes, Finding

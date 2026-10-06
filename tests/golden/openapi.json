@@ -5000,6 +5000,36 @@
                               "null"
                             ]
                           },
+                          "group": {
+                            "description": "Set when another finding probably explains this one: the cause, and the evidence for the claim (never a guess)",
+                            "properties": {
+                              "cause": {
+                                "type": "string"
+                              },
+                              "cause_code": {
+                                "type": "string"
+                              },
+                              "evidence": {
+                                "type": "object"
+                              },
+                              "kind": {
+                                "type": "string"
+                              },
+                              "limitations": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "summary": {
+                                "type": "string"
+                              }
+                            },
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
                           "id": {
                             "type": "string"
                           },
@@ -5288,6 +5318,36 @@
                     "first_seen_at": {
                       "type": [
                         "string",
+                        "null"
+                      ]
+                    },
+                    "group": {
+                      "description": "Set when another finding probably explains this one: the cause, and the evidence for the claim (never a guess)",
+                      "properties": {
+                        "cause": {
+                          "type": "string"
+                        },
+                        "cause_code": {
+                          "type": "string"
+                        },
+                        "evidence": {
+                          "type": "object"
+                        },
+                        "kind": {
+                          "type": "string"
+                        },
+                        "limitations": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "summary": {
+                          "type": "string"
+                        }
+                      },
+                      "type": [
+                        "object",
                         "null"
                       ]
                     },
