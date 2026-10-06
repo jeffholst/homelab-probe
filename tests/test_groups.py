@@ -162,3 +162,23 @@ def test_the_fixture_with_the_switch_offline_groups_the_garage_ap_under_it(fake_
                   if f["code"] == "device.offline"}
     assert groups and set(groups) == {by_subject["Garage AP"]}
     assert groups[by_subject["Garage AP"]]["cause"] == by_subject["Office Switch"]
+
+
+def test_a_device_with_no_state_is_unknown_not_offline_and_is_never_a_cause(fake_client):
+    fixture = fake_client.session.fx
+    fixture["devices"][1].pop("state")                                        # the switch: no state at all
+    fixture["devices"][3]["state"] = "OFFLINE"                                # Garage AP, behind that switch
+    document = diagnose_document(fake_client, "default", echo=False)
+    assert document.meta["links"]["AA:00:00:00:00:02"]["online"] is None
+    assert document.meta["links"]["AA:00:00:00:00:04"]["online"] is False
+    assert document.meta["links"]["AA:00:00:00:00:01"]["online"] is True
+    garage = next(f for f in document.data["findings"] if f["subject"] == "Garage AP" and f["code"] == "device.offline")
+    # even if the unknown-state switch has an offline finding of its own, an unconfirmed parent is no cause
+    switch = {"severity": "critical", "code": "device.offline", "subject": "Office Switch",
+              "message": "device is unknown", "mac": "AA:00:00:00:00:02"}
+    assert group_findings([garage, switch], document.meta["links"]) == {}
+
+
+def test_a_device_the_integration_api_does_not_list_has_an_unknown_state():
+    snap = Snapshot(site={}, devices=[], clients=[], legacy_devices=[{"mac": SW, "name": "Switch"}])
+    assert device_links(snap)[SW]["online"] is None
