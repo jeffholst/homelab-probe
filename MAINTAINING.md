@@ -82,7 +82,8 @@ Choose a release when the intended features are complete and checks pass, rather
 3. Update `__version__` in `homelab_probe/__init__.py`. In `CHANGELOG.md`, give the changes a heading such as
    `## [0.3.0] - YYYY-MM-DD`, replacing the example version and date with the chosen version and actual release
    date. Leave a fresh `## [Unreleased]` section above it. Run `uv lock` to refresh package metadata if needed,
-   and include any resulting lockfile change.
+   and include any resulting lockfile change. The OpenAPI golden file records the version too, so regenerate it:
+   `UPDATE_GOLDEN=1 uv run pytest tests/test_server_routes.py`.
 4. Run the routine checks and the release-notes check below. It should print the intended release notes;
    it stops with an error if the tag, package version, or dated changelog entry does not agree.
 5. Commit the release preparation, open a PR against `main` in `jeffholst/homelab-probe`, and finish review.
