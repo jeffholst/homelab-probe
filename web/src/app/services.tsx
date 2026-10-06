@@ -9,6 +9,19 @@ import { ThemeProvider } from "../theme/ThemeProvider";
 /** Query key of the logged-in user (a `Session`, or null when nobody is logged in). */
 export const SESSION_KEY = ["session"] as const;
 
+/**
+ * Marks nobody as logged in and forgets everything that was read with the session, so the next person to log in on this
+ * page cannot see the previous one's data (and, while it is fresh, cached data would not even be read again).
+ */
+export function endSession(queryClient: QueryClient): void {
+  // The session itself and `meta` (what the server says about itself before anyone logs in) are not the session's data:
+  // the login page needs `meta`, and the first 401 of a visit (`/auth/me`) arrives while it is being read.
+  const sessionData = (query: { queryKey: readonly unknown[] }) => query.queryKey[0] !== SESSION_KEY[0] && query.queryKey[0] !== "meta";
+  void queryClient.cancelQueries({ predicate: sessionData });
+  queryClient.removeQueries({ predicate: sessionData });
+  queryClient.setQueryData(SESSION_KEY, null);
+}
+
 export interface Services {
   client: ApiClient;
   api: Api;
@@ -32,8 +45,7 @@ export function createServices(options: { fetch?: typeof fetch } = {}): Services
   const client = createApiClient({
     ...(options.fetch ? { fetch: options.fetch } : {}),
     onUnauthorized: () => {
-      queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== SESSION_KEY[0] });
-      queryClient.setQueryData(SESSION_KEY, null);
+      endSession(queryClient);
     },
   });
   return { client, api: createApi(client), queryClient };

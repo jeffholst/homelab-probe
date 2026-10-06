@@ -1,6 +1,6 @@
 # Web interface
 
-The web interface is built in stages (see the roadmap in issue #160). What exists so far is the **backend**, with no screens yet: the **server** (`serve`, which needs the `web` extra) with its login, roles and CSRF protection, the read-only report API under `/api/v1/unifi` and a guided first-run setup API; and the **accounts** that may log in, managed with `web-user` (base install only; it does not contact the controller or read your `.env`). The web app that uses these is being built in `web/` (its foundation, with login, the shell and the themes, is in the repository; the server does not serve it yet, see [The web app](#the-web-app-web)).
+The web interface is built in stages (see the roadmap in issue #160). What exists so far is the **backend**, plus the first screens of the web app (login, the navigation shell, a home page and a profile page, built in `web/` and not yet served by the server): the **server** (`serve`, which needs the `web` extra) with its login, roles and CSRF protection, the read-only report API under `/api/v1/unifi` and a guided first-run setup API; and the **accounts** that may log in, managed with `web-user` (base install only; it does not contact the controller or read your `.env`). The web app that uses these is being built in `web/` (its foundation, with login, the shell and the themes, is in the repository; the server does not serve it yet, see [The web app](#the-web-app-web)).
 
 ## Running the server: `serve`
 

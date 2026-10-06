@@ -52,7 +52,7 @@ describe("the fake API behaves like the real one", () => {
     const fake = new FakeApi();
     const response = await login(fake);
     const session = (await response.json()) as Record<string, unknown>;
-    expect(Object.keys(session).sort()).toEqual(["csrf_token", "idle_seconds_left", "role", "session_seconds_left", "username"]);
+    expect(Object.keys(session).sort()).toEqual(["can_change_password", "csrf_token", "idle_seconds_left", "role", "session_seconds_left", "username"]);
     const me = await jsonOf(await fake.fetch("/api/v1/auth/me", { credentials: "include" }));
     expect(me).toMatchObject({ username: "demo", csrf_token: session["csrf_token"] });
   });

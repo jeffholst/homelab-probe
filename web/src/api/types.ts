@@ -30,6 +30,8 @@ export interface Session {
   role: Role;
   idle_seconds_left: number;
   session_seconds_left: number;
+  /** True for the local accounts, whose passwords are kept by the server (`POST /api/v1/auth/password`). */
+  can_change_password: boolean;
 }
 
 export interface Platform {
@@ -93,6 +95,7 @@ export function parseSession(value: unknown): { session: Session; csrfToken: str
       role,
       idle_seconds_left: seconds(fields, "idle_seconds_left", "the session"),
       session_seconds_left: seconds(fields, "session_seconds_left", "the session"),
+      can_change_password: flag(fields, "can_change_password", "the session"),
     },
   };
 }

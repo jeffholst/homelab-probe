@@ -226,7 +226,7 @@ test.describe("sessions", () => {
     const meta = (await (await page.request.get("/api/v1/meta")).json()) as Record<string, unknown>;
     expect(Object.keys(meta).sort()).toEqual(["demo", "https", "login_required", "loopback", "needs_setup", "read_only", "setup_mode", "version"]);
     const me = (await (await page.request.get("/api/v1/auth/me")).json()) as Record<string, unknown>;
-    expect(Object.keys(me).sort()).toEqual(["csrf_token", "idle_seconds_left", "role", "session_seconds_left", "username"]);
+    expect(Object.keys(me).sort()).toEqual(["can_change_password", "csrf_token", "idle_seconds_left", "role", "session_seconds_left", "username"]);
     const platforms = (await (await page.request.get("/api/v1/platforms")).json()) as Record<string, unknown>[];
     expect(Object.keys(platforms[0] ?? {}).sort()).toEqual(["configured", "id", "name"]);
   });
