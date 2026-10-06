@@ -232,7 +232,11 @@ class Presentation:
         return clean if loaded is None else loaded[1](clean)
 
     def print(self, *parts: Part, stream: Any = None, end: str = "\n") -> None:
-        """Print one line to ``stream`` (default stdout) made of ``parts``, each a string or a ``(text, role)`` pair."""
+        """Print one line to ``stream`` (default stdout) made of ``parts``, each a string or a ``(text, role)`` pair.
+        Like ``commands.say`` it first ends any transient progress line."""
+        from .progress import finish  # a late import: progress.py builds on this module
+
+        finish()
         stream = sys.stdout if stream is None else stream
         line = "".join(self.style(*part, stream=stream) if isinstance(part, tuple) else self.style(part, stream=stream)
                        for part in parts)

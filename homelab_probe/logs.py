@@ -26,9 +26,9 @@ import re
 import sys
 import threading
 import uuid
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterator, List, Optional, TextIO
+from typing import Any, Callable, ContextManager, Dict, Iterator, List, Optional, TextIO
 from urllib.parse import quote, quote_plus
 
 from .util import printable
@@ -237,6 +237,11 @@ class _Formatter(logging.Formatter):
         return " ".join(parts)
 
 
+# What is held around every write to stderr by this module: ``progress.Progress`` swaps in a context manager that erases
+# its transient line first and keeps it from redrawing meanwhile, so a warning is never drawn on top of the spinner.
+STDERR_GUARD: Callable[[], ContextManager[None]] = nullcontext
+
+
 class _Handler(logging.Handler):
     """Writes each record as one line to the *current* ``sys.stderr`` (looked up per record, because a test or a
     caller may replace it after the handler was made) or to a stream given to it."""
@@ -254,8 +259,9 @@ class _Handler(logging.Handler):
             if self.mode == "cli" and not self.verbose and _cli_prefix(record) == "[verbose] ":
                 return                          # on the command line only warnings and errors show by default
             out = self.stream or sys.stderr
-            out.write(self.format(record) + "\n")
-            out.flush()
+            with STDERR_GUARD():
+                out.write(self.format(record) + "\n")
+                out.flush()
         except Exception:                       # logging must never take the program down
             self.handleError(record)
 
