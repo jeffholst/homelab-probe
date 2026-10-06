@@ -18,7 +18,7 @@ async function freePort(): Promise<number> {
 }
 
 process.env["E2E_PORT"] ??= String(await freePort());
-const port = process.env["E2E_PORT"] as string;
+const port = process.env["E2E_PORT"];
 
 export default defineConfig({
   testDir: "./e2e",

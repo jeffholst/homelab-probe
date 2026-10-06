@@ -29,8 +29,8 @@ describe("the lint rules that keep strings text", () => {
   });
 
   it("forbids writing markup into the document", async () => {
-    const found = await messages('export function f(el: HTMLElement, text: string) { el.innerHTML = text; el.insertAdjacentHTML("beforeend", text); }\n', "src/pages/C.tsx");
-    expect(found).toHaveLength(2);
+    const found = await messages('export function f(el: HTMLElement, text: string) { el.innerHTML = text; el.insertAdjacentHTML("beforeend", text); document.write(text); process.stderr.write(text); }\n', "src/pages/C.tsx");
+    expect(found).toHaveLength(3); // innerHTML, insertAdjacentHTML, document.write: but not a stream's write
   });
 
   it("forbids browser storage outside the theme module, including through window", async () => {

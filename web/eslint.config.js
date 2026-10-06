@@ -25,7 +25,8 @@ const markup = [
     message: "Do not assign markup: render text (<Text>) or build elements with React.",
   },
   {
-    selector: "CallExpression[callee.property.name=/^(insertAdjacentHTML|write|writeln)$/]",
+    selector:
+      "CallExpression[callee.property.name='insertAdjacentHTML'], CallExpression[callee.object.name='document'][callee.property.name=/^(write|writeln)$/]",
     message: "Do not write markup into the document: render text (<Text>) or build elements with React.",
   },
 ];
