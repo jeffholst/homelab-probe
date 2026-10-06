@@ -46,7 +46,7 @@ docker run -d --name hlp -p 127.0.0.1:8787:8787 -v hlp-data:/data homelab-probe 
     serve --host 0.0.0.0 --allowed-host localhost --allowed-host hlp.example.lan --scheduler
 ```
 
-(in `compose.yaml` the same words are the `command:` list.) Other options of [`serve`](web.md#running-the-server-serve) go the same way: `--read-only`, `--port`, `--forwarded-allow-ips`. If you change `--port`, the image's health check, which asks port 8787, reports the container unhealthy; override it with `--health-cmd` or `healthcheck:`.
+(in `compose.yaml` the same words are the `command:` list.) Other options of [`serve`](web.md#running-the-server-serve) go the same way: `--read-only`, `--port`, `--forwarded-allow-ips`. If you change `--port`, the image's health check, which asks port 8787, reports the container unhealthy; override it with the `healthcheck:` of compose or the health options of `docker run`.
 
 ### The command line
 
@@ -101,7 +101,7 @@ Two different things, for two different needs:
   docker run --rm --user 0 --entrypoint chown -v hlp-data-new:/data homelab-probe -R 10001 /data
   ```
 
-  (`--user 0` is only for these one-off commands, which must read and give away files the server user owns. Compose names its volume `<project>_hlp-data`, see `docker volume ls`.)
+  (running as user 0 is only for these one-off commands, which must read and give away files the server user owns. Compose names its volume `<project>_hlp-data`, see `docker volume ls`.)
 
 ## Update
 
@@ -128,7 +128,7 @@ Docker keeps container logs without limit by default, so cap them:
         max-file: "5"
 ```
 
-(already in `compose.yaml`; for `docker run` it is `--log-opt max-size=10m --log-opt max-file=5`). `docker compose logs --no-log-prefix hlp | grep '^{' | jq 'select(.level != "INFO")'` shows only the warnings. The audit log of accounts and settings is a file in the volume (`audit.log`), not part of these logs.
+(already in `compose.yaml`; for `docker run` the same two settings are `docker run --log-opt max-size=10m --log-opt max-file=5 ...`). `docker compose logs --no-log-prefix hlp | grep '^{' | jq 'select(.level != "INFO")'` shows only the warnings. The audit log of accounts and settings is a file in the volume (`audit.log`), not part of these logs.
 
 ## Reverse proxy and TLS
 
