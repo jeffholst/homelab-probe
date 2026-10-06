@@ -380,7 +380,8 @@
         "properties": {
           "note": {
             "default": "",
-            "maxLength": 400,
+            "description": "Plain text, at most 200 characters",
+            "maxLength": 200,
             "title": "Note",
             "type": "string"
           },

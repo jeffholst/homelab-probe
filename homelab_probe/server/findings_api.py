@@ -28,7 +28,7 @@ from ..commands import diagnose_areas
 from ..config import ConfigError
 from ..documents import diagnose_document
 from ..history import DEFAULT_DIR, site_dir
-from ..triage import STATES, TriageError, TriageStore, finding_id, guidance, iso, rank_findings
+from ..triage import MAX_NOTE, STATES, Ranked, TriageError, TriageStore, finding_id, guidance, iso, rank_findings
 from .auth import admin, audit_event, local_write
 from .errors import ApiError, error_responses, from_controller
 from .routes import RefreshQ, SiteP, checked_site
@@ -64,7 +64,7 @@ class TriageBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     state: Literal["open", "acknowledged", "snoozed"]
     until: Optional[str] = Field(default=None, max_length=10, description="With snoozed: the last day, 2026-10-10")
-    note: str = Field(default="", max_length=400)
+    note: str = Field(default="", max_length=MAX_NOTE, description=f"Plain text, at most {MAX_NOTE} characters")
 
 
 def end_of(day: str) -> float:
@@ -82,6 +82,15 @@ def end_of(day: str) -> float:
 def store_for(request: Request, site: Dict[str, Any]) -> TriageStore:
     base = Path(request.app.state.state_dir or ".") / DEFAULT_DIR
     return TriageStore(site_dir(base, site), str(site.get("id") or ""))
+
+
+def item_of(r: Ranked) -> Dict[str, Any]:
+    """A finding as the list and the change show it: the same complete representation in both."""
+    checks, docs = guidance(r.finding["code"])
+    return {"id": r.id, "rank": r.rank, **r.finding, "priority": {"score": r.score, "scope": r.scope,
+                                                                    "reasons": r.reasons},
+            "triage": r.triage, "first_seen_at": iso(r.first_seen_at), "limitations": r.limitations,
+            "next_checks": checks, "next_checks_are": "general guidance for this kind of check", "docs": docs}
 
 
 def failure(error: TriageError) -> ApiError:
@@ -132,14 +141,7 @@ def router() -> APIRouter:
             limitations.append("This read was partial or left some checks out: findings may be missing, and "
                                "nothing can be said to have cleared.")
         ranked = rank_findings(document.data["findings"], entries, now, read["complete"])
-        items = []
-        for r in ranked:
-            checks, docs = guidance(r.finding["code"])
-            items.append({"id": r.id, "rank": r.rank, **r.finding,
-                          "priority": {"score": r.score, "scope": r.scope, "reasons": r.reasons},
-                          "triage": r.triage, "first_seen_at": iso(r.first_seen_at), "limitations": r.limitations,
-                          "next_checks": checks, "next_checks_are": "general guidance for this kind of check",
-                          "docs": docs})
+        items = [item_of(r) for r in ranked]
         states = {state: sum(1 for r in ranked if r.triage["state"] == state) for state in STATES}
         return {"site": {"id": str(record.get("id") or ""), "name": str(record.get("name") or "")},
                 "items": items, "summary": {**document.data["summary"], **states, "total": len(items)},
@@ -169,7 +171,7 @@ def router() -> APIRouter:
         audit_event(request, "triage.changed", user, finding=finding, code=code, state=body.state,
                     until=body.until or "")
         entries = store_for(request, read["site"]).load()
-        ranked = rank_findings([ours[finding]], entries, CLOCK(), read["complete"])[0]
-        return {"id": ranked.id, **ranked.finding, "triage": ranked.triage}
+        ranked = rank_findings(document.data["findings"], entries, CLOCK(), read["complete"])
+        return item_of(next(r for r in ranked if r.id == finding))
 
     return api

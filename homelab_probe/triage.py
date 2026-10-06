@@ -24,7 +24,9 @@ same order.
 import contextlib
 import hashlib
 import json
+import math
 import os
+import re
 import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -38,6 +40,7 @@ from .util import LockTimeout, file_lock, normalize_mac, printable
 FILE_NAME = "triage.json"
 FORMAT_VERSION = 1
 STATES = ("open", "acknowledged", "snoozed")
+_ID = re.compile(r"[0-9a-f]{16}")
 MAX_ENTRIES = 5000                       # findings tracked per site: a bound on the file, not one to meet
 MAX_NOTE = 200
 MAX_SNOOZE_DAYS = 365
@@ -96,6 +99,20 @@ class TriageError(Exception):
         self.code = code
 
 
+def _number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def _valid_entry(key: Any, value: Any) -> bool:
+    """Is ``value`` an entry as ``set_state`` and ``reconcile`` write it? (Everything the readers do arithmetic on is a
+    number, so a file edited by hand cannot make a read raise.)"""
+    return (isinstance(key, str) and _ID.fullmatch(key) is not None and isinstance(value, dict)
+            and isinstance(value.get("code"), str) and value.get("state") in STATES
+            and isinstance(value.get("by"), str) and isinstance(value.get("note"), str)
+            and _number(value.get("at")) and _number(value.get("first_seen_at")) and _number(value.get("last_seen_at"))
+            and (value.get("until") is None or _number(value.get("until"))))
+
+
 class TriageStore:
     """The triage file of one site. ``directory`` is the site's directory (``snapshots/<site id>``)."""
 
@@ -106,9 +123,10 @@ class TriageStore:
     # -- reading and writing the file -------------------------------------------------------------------------
 
     def _refuse_links(self) -> None:
-        if any(path.is_symlink() for path in (self.directory.parent, self.directory, self.path)):
-            raise TriageError("unsafe", "The triage file or a directory above it is a symbolic link, which is left "
-                                        "alone.")
+        lock = self.directory / (FILE_NAME + ".lock")
+        if any(path.is_symlink() for path in (self.directory.parent, self.directory, self.path, lock)):
+            raise TriageError("unsafe", "The triage file, its lock or a directory above it is a symbolic link, which "
+                                        "is left alone.")
 
     @contextlib.contextmanager
     def locked(self) -> Iterator[None]:
@@ -135,21 +153,24 @@ class TriageStore:
             document = json.loads(text)
             entries = document["entries"]
             ok = document["version"] == FORMAT_VERSION and isinstance(entries, dict) and all(
-                isinstance(key, str) and isinstance(value, dict) and value.get("state") in STATES
-                for key, value in entries.items())
+                _valid_entry(key, value) for key, value in entries.items())
             site = document.get("site")
         except (ValueError, KeyError, TypeError, AttributeError) as error:
             raise TriageError("unreadable", "The triage file is damaged.") from error
         if not ok:
             raise TriageError("unreadable", "The triage file is damaged.")
-        if site not in (None, self.site_id):
-            raise TriageError("another_site", "The triage file belongs to another site.")
+        if site != self.site_id:          # a finding id does not name the site, so a file that does not is not ours
+            raise TriageError("another_site", "The triage file does not belong to this site.")
         loaded: Dict[str, Dict[str, Any]] = entries
         return loaded
 
     def _save(self, entries: Mapping[str, Mapping[str, Any]]) -> None:
         document = {"version": FORMAT_VERSION, "site": self.site_id, "entries": entries}
-        self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+        try:
+            self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+            os.chmod(self.directory, 0o700)           # a directory made earlier, with looser rights, is closed too
+        except OSError as error:
+            raise TriageError("unreadable", "The triage file cannot be written.") from error
         descriptor, temporary = tempfile.mkstemp(dir=self.directory, prefix=FILE_NAME + ".", suffix=".tmp")
         try:
             with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
