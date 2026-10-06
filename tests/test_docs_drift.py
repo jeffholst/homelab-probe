@@ -3,6 +3,7 @@ the detail is in docs/ (see tests/test_docs_layout.py); everything below looks a
 
 * every `hlp ...` example in them parses with the real argument parser;
 * every command has a row in the README's Commands table, and every long option is mentioned somewhere;
+* the README's Commands table and Usage examples list commands alphabetically;
 * the sample output blocks equal what the commands print against the synthetic fixture, wherever they now live
   (compared through golden_support.normalise, so times and padding do not matter).
 
@@ -26,7 +27,7 @@ from golden_support import CASES, GOLDEN, normalise, run_command
 
 from homelab_probe import cli
 
-LAUNCHERS = re.compile(r"(?:uv run hlp\.py|hlp)\s+(.*)$")
+LAUNCHERS = re.compile(r"(?:uv run (?:--extra \S+ )?hlp\.py|hlp)\s+(.*)$")
 STOP = {"||", "|", ">", ">>", "&&", ";", "2>&1"}
 
 # README sample block -> golden case. A block that starts with a `uv run ...` line keeps that line.
@@ -103,7 +104,7 @@ def command_lines(text):
 
 def example_argv(line):
     line = re.sub(r"^\s*(?:\$ |\*/\d+ \* \* \* \* cd \S+ && )", "", line.strip())
-    if not (line.startswith("uv run hlp.py") or line.startswith("hlp ")):
+    if not (line.startswith("uv run ") or line.startswith("hlp ")):
         return None
     match = LAUNCHERS.match(line)
     if not match:
@@ -153,6 +154,7 @@ def test_the_example_extractor_handles_the_shapes_the_readme_uses():
     assert example_argv("*/15 * * * * cd /path/to/x && uv run hlp.py diagnose --fail-on critical || notify-me"
                         ) == ["diagnose", "--fail-on", "critical"]
     assert example_argv("hlp --env-file lab.env diagnose") == ["--env-file", "lab.env", "diagnose"]
+    assert example_argv("uv run --extra web hlp.py serve # local web API") == ["serve"]
     assert example_argv("hlp <command>") is None
     assert example_argv("hlp.toml settings are read") is None
     assert example_argv("some other command") is None
@@ -164,6 +166,30 @@ def test_every_command_has_a_row_in_the_commands_table():
     section = read().split("## Commands", 1)[1].split("\n## ", 1)[0]
     documented = set(re.findall(r"(?m)^\| `([a-z-]+)`", section))
     assert documented == set(subcommands(cli.build_parser())), "the Commands table and the parser disagree"
+
+
+def test_readme_commands_table_is_alphabetical():
+    section = read().split("## Commands", 1)[1].split("\n## ", 1)[0]
+    commands = re.findall(r"(?m)^\| `([a-z-]+)`", section)
+    assert commands, "the README Commands table has no commands"
+    assert commands == sorted(commands), "the README Commands table must list commands alphabetically"
+
+
+def test_readme_usage_examples_are_alphabetical():
+    blocks = [body for heading, language, body in fenced_blocks(read())
+              if heading == "Usage" and language == "bash"]
+    assert blocks, "the README has no bash Usage examples"
+    parser = cli.build_parser()
+    commands = []
+    for body in blocks:
+        for line in body.splitlines():
+            if not line.strip() or line.lstrip().startswith("#"):
+                continue
+            argv = example_argv(line)
+            assert argv is not None, f"could not extract a README Usage example: {line}"
+            commands.append(parser.parse_args(argv).command)
+    assert commands, "the README Usage examples have no commands"
+    assert commands == sorted(commands), "the README Usage examples must list commands alphabetically"
 
 
 def all_long_options():

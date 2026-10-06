@@ -95,7 +95,7 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Read settings from this .env file (before the command). Default: "
                              "$HLP_ENV, else ./.env in the current directory")
     sub = parser.add_subparsers(dest="command", required=True)
-    for command in COMMANDS:
+    for command in sorted(COMMANDS, key=lambda command: command.name):
         command.add_arguments(sub.add_parser(command.name, help=command.help))
     return parser
 

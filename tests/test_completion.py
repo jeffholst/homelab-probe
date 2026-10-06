@@ -107,7 +107,7 @@ def complete(tmp_path):
 
 
 def test_bash_completes_commands(complete):
-    assert complete([PROGRAM, "di"], 1) == ["diff", "diagnose"]
+    assert complete([PROGRAM, "di"], 1) == ["diagnose", "diff"]
     assert complete([PROGRAM, "comp"], 1) == ["completion"]
     assert "diagnose" in complete([PROGRAM, ""], 1) and "query" in complete([PROGRAM, ""], 1)
 
