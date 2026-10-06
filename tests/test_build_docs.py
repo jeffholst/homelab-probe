@@ -191,7 +191,7 @@ def test_the_heading_tree_nests_by_level(real):
     assert (top["text"], top["anchor"], top["line"], top["level"]) == ("Homelab Probe", "homelab-probe", 1, 1)
     installation = next(h for h in top["children"] if h["text"] == "Installation")
     assert [(c["level"], c["anchor"]) for c in installation["children"]] == [
-        (3, "configure"), (3, "install-dependencies")]
+        (3, "configure"), (3, "install-dependencies"), (3, "docker")]
     assert next(h for h in top["children"] if h["text"] == "Usage")["children"][0]["text"] == "Exit codes"
 
 
