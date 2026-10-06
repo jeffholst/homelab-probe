@@ -52,7 +52,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .. import config as config_module
 from .. import logs, tlsprobe
 from .. import setup as setup_engine
-from ..accounts import AccountError, AccountStore, check_password_policy, check_username
+from ..accounts import AccountError, AccountStore, PolicyError, check_password_policy, check_username
 from ..client import UniFiAPIError, UniFiClient
 from ..config import KNOWN_VARIABLES, Config, ConfigError
 from ..diagnose.areas import AREA_NAMES
@@ -62,7 +62,7 @@ from ..settings import DiagnoseSettings
 from ..setup import validate_field
 from ..util import printable
 from .auth import address_of, admin, audit_event, local_write, refuse_if_read_only, setup_ok
-from .errors import ApiError, from_controller
+from .errors import ApiError, from_controller, policy_message
 from .service import ControllerService
 
 _log = logging.getLogger(__name__)
@@ -360,8 +360,10 @@ def _credentials(store: AccountStore, body: "FinishBody", needs_admin: bool) -> 
         name = check_username(body.username)
         check_password_policy(body.password)
         taken = store.get(name) is not None
-    except AccountError as error:
-        raise ApiError(422, "invalid_admin", printable(str(error))) from None
+    except PolicyError as error:
+        raise ApiError(422, "invalid_admin", policy_message(error)) from None
+    except AccountError:
+        raise ApiError(500, "accounts_unreadable", "The accounts file cannot be read; see the server log.") from None
     if taken:
         raise ApiError(422, "invalid_admin", "That user name is taken.")
     return name, body.password

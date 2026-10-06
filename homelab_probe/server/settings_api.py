@@ -10,9 +10,12 @@ reads (thresholds and ignore rules).
   send it back and is refused with 409 when the file is different now, also when it changed while this request worked.
 * **Safe writes.** The file is replaced in one step, its permissions kept (a new one is owner-only), the old content
   kept as ``hlp.toml.bak``; a symbolic link is left alone. A request that changes nothing writes nothing.
-* **Who.** Anyone logged in may read; only an administrator may change, with the CSRF token, and ``serve --read-only``
-  refuses it. Each change is an audit entry (``settings.updated``) naming the thresholds that changed and the number
-  of ignore rules, never their text.
+* **Who.** Administrators only, for reading and for changing (the latter with the CSRF token); ``serve --read-only``
+  refuses a change. Each change is an audit entry (``settings.updated``) naming the thresholds that changed and the
+  number of ignore rules, never their text.
+* **Where a value comes from** is said per threshold (``provenance``: ``default``, ``file`` or ``environment``). A
+  threshold that an environment variable manages (``ENVIRONMENT_MANAGED``; none today) is refused on write (409) instead
+  of pretending to change.
 """
 
 import dataclasses
@@ -40,6 +43,9 @@ API = "/api/v1"
 IGNORE_FIELDS = ("code", "subject", "message", "reason")
 MAX_RULES = 500
 _LOCK = threading.Lock()          # one change at a time: the version check and the write are one step
+# A threshold that an environment variable manages would be shown as such, and a write to it refused (the file would be
+# ignored). None is managed that way today; this is where one is declared: setting name -> variable name.
+ENVIRONMENT_MANAGED: Dict[str, str] = {}
 
 
 def settings_file(request: Request) -> Path:
@@ -73,9 +79,16 @@ def rule_dict(rule: IgnoreRule, today: datetime.date) -> Dict[str, Any]:
             "until": rule.until.isoformat() if rule.until else None, "expired": rule.expired(today)}
 
 
+def provenance(in_file: List[str], names: List[str]) -> Dict[str, str]:
+    """Where each value comes from: the environment (a variable declared in ``ENVIRONMENT_MANAGED`` is set), the file,
+    or the default."""
+    return {name: ("environment" if os.environ.get(ENVIRONMENT_MANAGED.get(name, ""), "").strip()
+                   else "file" if name in in_file else "default") for name in names}
+
+
 def document(request: Request, content: Optional[bytes], settings: DiagnoseSettings) -> Dict[str, Any]:
-    """What ``GET`` answers: the effective values with their defaults, which of them the file sets, the ignore rules,
-    the version to send back, and whether notification destinations are configured (never their values)."""
+    """What ``GET`` answers: the effective values with their defaults and where each comes from, the ignore rules, the
+    version to send back, and whether notification destinations are configured (never their values)."""
     values = {k: v for k, v in dataclasses.asdict(settings).items() if k != "ignore"}
     defaults = {k: v for k, v in dataclasses.asdict(DiagnoseSettings()).items() if k != "ignore"}
     in_file: List[str] = []
@@ -89,7 +102,7 @@ def document(request: Request, content: Optional[bytes], settings: DiagnoseSetti
     return {
         "version": version_of(content), "exists": content is not None, "file": settings_file(request).name,
         "read_only": bool(request.app.state.read_only),
-        "thresholds": values, "defaults": defaults, "set_in_file": in_file,
+        "thresholds": values, "defaults": defaults, "provenance": provenance(in_file, sorted(values)),
         "ignore": [rule_dict(rule, today) for rule in settings.ignore],
         "codes": sorted(known_codes()),
         "notifications": {"ntfy": bool(config.notify_ntfy_url), "webhook": bool(config.notify_webhook_url),
@@ -232,7 +245,7 @@ def _changes(old: Optional[str], new: str) -> Tuple[List[str], bool]:
 def router() -> APIRouter:
     api = APIRouter(prefix=f"{API}/settings", tags=["settings"])
 
-    @api.get("", summary="The diagnose settings: thresholds and ignore rules")
+    @api.get("", dependencies=[Depends(admin)], summary="The diagnose settings: thresholds and ignore rules")
     def get_settings(request: Request) -> Dict[str, Any]:
         path = settings_file(request)
         content = _read(path)
@@ -247,6 +260,11 @@ def router() -> APIRouter:
     @local_write
     def put_settings(request: Request, body: SettingsBody) -> Dict[str, Any]:
         path = settings_file(request)
+        managed = sorted(name for name in (body.thresholds or {}) if provenance([], [name])[name] == "environment")
+        if managed:
+            raise ApiError(409, "environment_managed", f"{', '.join(managed)} is set by an environment variable "
+                           f"({', '.join(ENVIRONMENT_MANAGED[name] for name in managed)}), which wins over the file: "
+                           "change it there, not here.")
         with _LOCK:
             content = _read(path)
             if version_of(content) != body.version:

@@ -38,7 +38,7 @@ from ..util import normalize_mac
 from ..wan import DEFAULT_DAYS
 from ..wifi import DEFAULT_MIN_SIGNAL, parse_band
 from . import apischema
-from .errors import ApiError, from_controller
+from .errors import ERROR_SCHEMA, ApiError, from_controller
 from .service import Built
 from .settings_api import load_effective, settings_file
 
@@ -46,8 +46,6 @@ _log = logging.getLogger(__name__)
 UNIFI = "/api/v1/unifi"
 REFRESH_MIN_INTERVAL = 5.0       # seconds between two manual refreshes; a faster one is ignored (and says so)
 MAX_TEXT = 120
-ERROR_SCHEMA = {"type": "object", "required": ["error", "message"],
-                "properties": {"error": {"type": "string"}, "message": {"type": "string"}}}
 CANDIDATE_SCHEMA = {
     "type": "object", "required": ["Name", "MAC Address", "IP Address", "Status"],
     "properties": {"Name": {"type": "string"}, "MAC Address": {"type": "string"},

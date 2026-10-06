@@ -510,3 +510,53 @@ def test_only_if_no_admin_refuses_a_second_administrator_under_the_lock(tmp_path
         store.add("bob", "admin", PASSWORD, only_if_no_admin=True)
     store.add("carol", "admin", PASSWORD)                                       # without the flag nothing changes
     assert [u.username for u in store.users()] == ["viewer1", "alice", "carol"]
+
+
+def test_update_changes_role_and_disabled_in_one_step_and_calls_back_only_when_something_changed(tmp_path):
+    store = AccountStore(tmp_path)
+    store.add("alice", "admin", PASSWORD)
+    store.add("bob", "viewer", PASSWORD)
+    seen = []
+    store.update("bob", on_change=lambda old, new: seen.append((old, new)))                       # nothing to change
+    store.update("bob", "viewer", False, on_change=lambda old, new: seen.append((old, new)))     # the same values
+    assert seen == []
+    user = store.update("bob", "admin", True, on_change=lambda old, new: seen.append((old, new)))
+    assert (user.role, user.disabled) == ("admin", True) and store.get("bob") == user
+    assert [(o.role, o.disabled, n.role, n.disabled) for o, n in seen] == [("viewer", False, "admin", True)]
+
+
+def test_update_applies_the_last_administrator_rule_to_the_whole_change_and_rolls_back_on_a_failed_audit(tmp_path):
+    store = AccountStore(tmp_path)
+    store.add("alice", "admin", PASSWORD)
+    store.add("bob", "viewer", PASSWORD)
+    with pytest.raises(accounts.LastAdministratorError):
+        store.update("alice", "viewer", False)
+    with pytest.raises(accounts.NoSuchUserError):
+        store.update("nobody", "admin")
+    with pytest.raises(accounts.PolicyError):
+        store.update("bob", "root")
+
+    def broken(old, new):
+        raise OSError("disk full")
+
+    with pytest.raises(accounts.AuditWriteError):
+        store.update("bob", "admin", on_change=broken)
+    assert store.get("bob").role == "viewer" and store.get("alice").role == "admin"
+
+
+def test_every_refusal_has_its_own_kind(tmp_path):
+    store = AccountStore(tmp_path)
+    store.add("alice", "admin", PASSWORD)
+    with pytest.raises(accounts.UserExistsError):
+        store.add("ALICE", "viewer", PASSWORD)
+    with pytest.raises(accounts.AdministratorExistsError):
+        store.add("bob", "admin", PASSWORD, only_if_no_admin=True)
+    with pytest.raises(accounts.PolicyError):
+        store.add("bob", "viewer", "short")
+    with pytest.raises(accounts.PolicyError):
+        store.add("a", "viewer", PASSWORD)
+    with pytest.raises(accounts.NoSuchUserError):
+        store.reset_password("nobody", PASSWORD)
+    assert all(issubclass(kind, AccountError) for kind in (accounts.PolicyError, accounts.UserExistsError,
+                                                          accounts.NoSuchUserError, accounts.LastAdministratorError,
+                                                          accounts.AdministratorExistsError, accounts.AuditWriteError))
