@@ -64,6 +64,20 @@ class SessionStore:
             self._trim_locked(user.username)
         return value, session
 
+    def renew(self, old: Session, user: User) -> Tuple[str, Session]:
+        """After ``user`` changed their own password: end every session of that user and give the caller one new
+        session (a new cookie value and CSRF token, the same address and the **same start**, so the change does not
+        lengthen the login). Returns the cookie value and the session."""
+        value = secrets.token_urlsafe(32)
+        now = self._clock()
+        session = Session(_hash(value), user.username, user.role, _hash(user.password_hash),
+                          secrets.token_urlsafe(32), old.created, now, old.address)
+        with self._lock:
+            for key in [k for k, s in self._sessions.items() if s.username == user.username]:
+                del self._sessions[key]
+            self._sessions[session.key] = session
+        return value, session
+
     def lookup(self, value: Optional[str], accounts: AccountStore) -> Optional[Session]:
         """The live session for a cookie value, or None. Touches it (the idle timer) when it is good; removes it when
         it is expired or its account no longer matches."""

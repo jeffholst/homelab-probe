@@ -24,6 +24,7 @@ from . import (
     backup_api,
     findings_api,
     notes_api,
+    profile_api,
     restore_api,
     routes,
     settings_api,
@@ -138,6 +139,7 @@ def create_app(config: Config, settings_path: Optional[Path] = None, state_dir: 
     app.include_router(restore_api.router())
     app.include_router(public_router())
     app.include_router(session_router())
+    app.include_router(profile_api.router())
 
     @app.get("/", include_in_schema=False)
     @public
