@@ -37,6 +37,22 @@ BAD_STATES = frozenset({"offline", "down", "disconnected"})
 INDENT = "    "
 
 
+def print_heading(present: Presentation, command: str, site: Dict[str, str]) -> None:
+    """One compact identity, using only the resolved site's public identity; never configuration values."""
+    if not present.decorations() or present.environ.get("CI", ""):
+        return
+    identity = site.get("ref") or site.get("name") or site.get("id")
+    text = f"Homelab Probe | {command}" + (f" | {printable(identity)}" if identity else "")
+    console = present.console()
+    if console is None:
+        lines = textwrap.wrap(text, present.width(), break_on_hyphens=False)
+    else:
+        lines = [line.plain for line in present.literal(text).wrap(console, present.width(), overflow="fold")]
+    for line in lines:
+        present.print((line, "heading"))
+    present.print("")
+
+
 def elapsed_text(seconds: float) -> str:
     """``0.8s``, ``12s`` or ``1m 05s``."""
     if seconds < 10:

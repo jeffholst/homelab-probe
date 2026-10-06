@@ -223,6 +223,8 @@ A command that takes more than about 0.2 seconds draws **one line on stderr**, r
 With the `pretty` extra on a terminal of at least 40 columns, `diagnose` and `audit` group their findings by severity and finish with an honest summary, and `query` and `new-clients` print tables that fit. For example (`hlp --demo diagnose --only devices`, the synthetic network, colors left out):
 
 ```text
+Homelab Probe | Diagnose | default
+
 Critical (1)
   ✗ CRITICAL  Gateway  device.overheating
     │ reports that it is overheating
@@ -244,6 +246,14 @@ Checked: devices  not checked: health, wan, clients, reservations, ports, wifi, 
 - **An honest summary.** The last line counts what was found, the ignored findings and the time the command took. "No issues found" is green only when every check could read what it needed; after a partial read it says *no issues found in what could be read, but the read was incomplete*, and findings from a partial read are followed by a note that there may be more. `Checked:` lists the areas only when `--only`/`--skip` chose them (from the document, never guessed).
 - **The same everywhere else.** Exit codes, `--json`, `--csv`, exports and the output with `--plain`, without the extra, or when stdout is not a terminal are exactly what they were.
 - **Existing findings controls are preserved.** `diagnose --watch` keeps its plain initial findings and change-only stream. `diagnose --no-emoji` and `audit --no-emoji` use the existing text-label renderer, without enhanced symbols.
+
+### Compact command headings and help
+
+Enhanced `diagnose`, `audit`, `query` and `new-clients` output starts with one compact heading, for example `Homelab Probe | Query | default`. The site is the controller's resolved internal reference (or its name or id when no reference is available), never a guess from `.env`; collecting it makes no extra requests. Long names wrap to the terminal's display width without being cut, and names are literal text, not formatting instructions.
+
+Headings need the optional `pretty` extra and interactive stdout of at least 40 columns. They are absent with `--plain`, `CI` set, `TERM=dumb`, redirected output, machine-readable modes, `diagnose --watch`, and the findings commands' `--no-emoji` option. `--color never` and `NO_COLOR` remove color but keep the heading on an eligible terminal; `--no-progress` only removes the spinner. Other commands remain concise, without a banner.
+
+The top-level `--help` separates general options, connection options, presentation controls and the alphabetically ordered commands. Help stays ordinary, copyable argparse text, with no logo or color even on an enhanced terminal; `hlp <command> --help` still shows that command's flags. The accent uses the terminal theme's standard cyan, with written labels that remain readable without color on light or dark backgrounds.
 
 ## Shell completion
 
