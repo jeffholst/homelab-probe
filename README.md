@@ -1,7 +1,7 @@
 # Homelab Probe
 ![Homelab Probe](docs/images/homelab-probe.png)
 
-Homelab Probe is a read-only UniFi Network probe for inventory, troubleshooting, snapshots and diagnostics. Use it from the `hlp` command, or run the login-protected web API with `hlp serve` for browser/API clients (it listens on this machine only by default; the server options can expose it to other machines on purpose, see [docs/web.md](docs/web.md)). It never changes the controller: requests are GETs except the controller's event-history endpoint, which requires a read-only POST. The only data the tool sends anywhere else is opt-in notifications from `diagnose --notify`; the web API shows controller data to whoever you give a login.
+Homelab Probe is a read-only UniFi Network probe for inventory, troubleshooting, snapshots and diagnostics. Use it from the `hlp` command, or run the login-protected web API with `hlp serve` for browser/API clients (it also serves the built web app when the install has one, see [docs/web.md](docs/web.md#the-web-app-files); it listens on this machine only by default; the server options can expose it to other machines on purpose, see [docs/web.md](docs/web.md)). It never changes the controller: requests are GETs except the controller's event-history endpoint, which requires a read-only POST. The only data the tool sends anywhere else is opt-in notifications from `diagnose --notify`; the web API shows controller data to whoever you give a login.
 
 > **Status: early development.** Tested against one live controller (Network 10.6.106); other versions and hardware may differ. See [open issues](https://github.com/jeffholst/homelab-probe/issues) for the roadmap.
 
@@ -22,7 +22,7 @@ Homelab Probe is a read-only UniFi Network probe for inventory, troubleshooting,
 | `init` | Guided first-time setup for `.env`, `hlp.toml` and snapshots | [details](docs/configuration.md#guided-setup-init) |
 | `new-clients` | List clients that are in no client group | [details](docs/inventory.md#new-clients) |
 | `query` | List and filter devices, clients, reservations, ports, networks and Wi-Fi networks | [details](docs/inventory.md#devices) |
-| `serve` | Run the login-protected web API (needs the `web` extra) | [details](docs/web.md#running-the-server-serve) |
+| `serve` | Run the login-protected web API, and the built web app when the install has one (needs the `web` extra) | [details](docs/web.md#running-the-server-serve) |
 | `snapshot` | Save the current inventory to compare later | [details](docs/inventory.md#snapshots-and-diff) |
 | `topology` | Draw the uplink tree, ports, speeds, client counts and problems (or a Mermaid or DOT graph) | [details](docs/network.md#topology) |
 | `wan` | Show internet state, monitoring and speedtest history | [details](docs/network.md#wan) |
@@ -107,7 +107,7 @@ uv run hlp.py info                                 # controller version and site
 uv run hlp.py init                                 # guided local setup
 uv run hlp.py new-clients                          # clients in no client group
 uv run hlp.py query clients -s printer --json      # filter clients; --search is the long form
-uv run --extra web hlp.py serve                    # local web API on 127.0.0.1:8787
+uv run --extra web hlp.py serve                    # local web API (and web app, if built in) on 127.0.0.1:8787
 uv run hlp.py snapshot                             # save inventory to ./snapshots/
 uv run hlp.py topology --format mermaid --clients  # a Mermaid graph (or dot) with the wired clients
 uv run hlp.py wan --days 90                        # internet health

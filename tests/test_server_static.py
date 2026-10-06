@@ -77,6 +77,18 @@ def api_only(tmp_path):
     return make_app(tmp_path / "plain", tmp_path / "does-not-exist")
 
 
+def opens(root, relative):
+    """What ``static.open_file`` gives for ``relative``: the file's bytes (the descriptor is closed), or None."""
+    opened = static.open_file(Path(root), relative)
+    if opened is None:
+        return None
+    descriptor, _ = opened
+    try:
+        return os.read(descriptor, 1 << 20)
+    finally:
+        os.close(descriptor)
+
+
 def asgi_get(app, path, method="GET"):
     """One request with the path exactly as given (``scope["path"]`` is what a server hands over after decoding), so
     a test is not at the mercy of a client library that normalises ``..``. Returns (status, headers, body)."""
@@ -156,8 +168,8 @@ def test_a_missing_asset_is_a_404_and_never_the_page(client):
 
 
 def test_a_directory_is_not_listed(bundle):
-    assert static.resolve(bundle, "folder") is None and static.resolve(bundle, "assets") is None
-    assert static.resolve(bundle, "folder/inner.txt") == bundle / "folder" / "inner.txt"
+    assert opens(bundle, "folder") is None and opens(bundle, "assets") is None
+    assert opens(bundle, "folder/inner.txt") == b"inner"
 
 
 def test_the_request_log_has_the_route_template_not_the_path(client):
@@ -300,8 +312,8 @@ def test_a_link_in_the_bundle_is_never_followed(tmp_path, outside, bundle):
         assert SECRET not in response.text and "document.getElementById" not in response.text, path
         assert response.status_code in (200, 404) and (response.status_code == 404 or "PLACEHOLDER" in response.text), path
     assert client.get("/assets/alias.css").status_code == 404 and client.get("/assets/leak.js").status_code == 404
-    assert static.resolve(bundle.resolve(), "leak.txt") is None and static.resolve(bundle.resolve(), "alias.js") is None
-    assert static.resolve(bundle.resolve(), "leakdir/secret.txt") is None
+    assert opens(bundle.resolve(), "leak.txt") is None and opens(bundle.resolve(), "alias.js") is None
+    assert opens(bundle.resolve(), "leakdir/secret.txt") is None
 
 
 def test_a_name_that_is_not_text_a_file_system_accepts_is_a_404_not_an_error(client):
@@ -310,18 +322,102 @@ def test_a_name_that_is_not_text_a_file_system_accepts_is_a_404_not_an_error(cli
 
 @pytest.mark.parametrize("relative", ["", "/etc/passwd", "..", "../x", "a/../b", "a/./b", "a\\b", "a\0b", ".hidden",
                                       "assets/.hidden.js", "a//b", "assets/", "missing", "folder"])
-def test_resolve_refuses_what_is_not_a_plain_file_of_the_bundle(bundle, relative):
-    assert static.resolve(bundle.resolve(), relative) is None
+def test_open_file_refuses_what_is_not_a_plain_file_of_the_bundle(bundle, relative):
+    assert opens(bundle.resolve(), relative) is None
 
 
-def test_resolve_refuses_an_absolute_path_to_a_real_file(bundle, outside):
-    assert static.resolve(bundle.resolve(), str(outside / "secret.txt")) is None
-    assert static.resolve(bundle.resolve(), "assets/index-0a1b2c3d.js") is not None
+def test_open_file_refuses_an_absolute_path_to_a_real_file(bundle, outside):
+    assert opens(bundle.resolve(), str(outside / "secret.txt")) is None
+    assert opens(bundle.resolve(), "assets/index-0a1b2c3d.js") is not None
 
 
 def test_what_is_well_formed():
     assert all(static.well_formed(p) for p in ("", "a", "a/b", "a/", "a//b", "10.0.0.1", ".env", "a:b"))
     assert not any(static.well_formed(p) for p in ("..", "a/../b", "./a", "a/.", "/a", "a\\b", "a\0"))
+
+
+# -- no gap between checking and opening ----------------------------------------------------------------------
+
+def swap_before_open(monkeypatch, name, action):
+    """Run ``action()`` just before the first ``os.open`` of ``name`` made by ``static`` (the moment after a check
+    and before an open, if there were one)."""
+    real, done = os.open, []
+
+    def hooked(path, flags, *args, **kwargs):
+        if path == name and not done:
+            done.append(True)
+            action()
+        return real(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(static.os, "open", hooked)
+    return done
+
+
+def test_a_file_swapped_for_a_link_just_before_it_is_opened_is_not_followed(tmp_path, bundle, outside, monkeypatch):
+    target = bundle / "assets" / "index-0a1b2c3d.js"
+
+    def swap():
+        target.unlink()
+        target.symlink_to(outside / "secret.txt")
+
+    done = swap_before_open(monkeypatch, target.name, swap)
+    response = TestClient(make_app(tmp_path / "swap", bundle)).get(ASSET)
+    assert done and response.status_code == 404 and SECRET not in response.text
+
+
+def test_a_directory_swapped_for_a_link_just_before_it_is_opened_is_not_followed(tmp_path, bundle, outside, monkeypatch):
+    (outside / "index-0a1b2c3d.js").write_text(SECRET, encoding="utf-8")
+    assets = bundle / "assets"
+
+    def swap():
+        shutil.rmtree(assets)
+        assets.symlink_to(outside, target_is_directory=True)
+
+    done = swap_before_open(monkeypatch, "assets", swap)
+    response = TestClient(make_app(tmp_path / "swapdir", bundle)).get(ASSET)
+    assert done and response.status_code == 404 and SECRET not in response.text
+
+
+def test_what_is_served_is_what_was_opened_even_if_the_file_changes_after(tmp_path, bundle, monkeypatch):
+    target = bundle / "assets" / "index-0a1b2c3d.js"
+    real, opened = os.fdopen, []
+
+    def replace_after_open(descriptor, *args, **kwargs):
+        if not opened and os.fstat(descriptor).st_ino == target.stat().st_ino:
+            opened.append(descriptor)
+            target.unlink()                                         # the name now holds something else
+            target.write_text("something else", encoding="utf-8")
+        return real(descriptor, *args, **kwargs)
+
+    monkeypatch.setattr(static.os, "fdopen", replace_after_open)
+    response = TestClient(make_app(tmp_path / "after", bundle)).get(ASSET)
+    assert opened and response.text == (PLACEHOLDER / "assets" / "index-0a1b2c3d.js").read_text(encoding="utf-8")
+
+
+def test_a_file_answer_has_a_length_a_validator_and_a_date_and_head_reads_nothing(client, monkeypatch):
+    got, head = client.get(ASSET), client.head(ASSET)
+    size = len((PLACEHOLDER / "assets" / "index-0a1b2c3d.js").read_bytes())
+    assert got.headers["content-length"] == str(size) and head.headers["content-length"] == str(size)
+    assert got.headers["etag"] == head.headers["etag"] and got.headers["etag"].startswith('"')
+    assert got.headers["last-modified"] == head.headers["last-modified"] and got.headers["last-modified"].endswith("GMT")
+    assert client.get("/favicon.svg").headers["etag"] != got.headers["etag"]
+    status, headers, body = asgi_get(client.app, ASSET, "HEAD")           # what the app itself sends, before any server
+    assert status == 200 and body == b"" and headers["content-length"] == str(size)
+
+
+def test_a_server_without_the_descriptor_calls_is_api_only(tmp_path, bundle, monkeypatch):
+    def unsupported(*args, **kwargs):
+        raise NotImplementedError
+
+    monkeypatch.setattr(static.os, "open", unsupported)             # as on a system with no dir_fd
+    assert static.find_bundle(bundle) is None
+
+
+def test_the_bundle_is_resolved_when_the_app_is_made_not_when_it_starts(tmp_path, bundle):
+    """``app.state.web`` is set by ``create_app`` itself (not by the lifespan): readable before any startup."""
+    app = make_app(tmp_path / "early", bundle)
+    assert app.state.web == bundle.resolve()
+    assert make_app(tmp_path / "early2", tmp_path / "nothing").state.web is None
 
 
 # -- public, and only that ---------------------------------------------------------------------------------------
