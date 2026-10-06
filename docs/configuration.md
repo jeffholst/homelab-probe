@@ -207,7 +207,7 @@ The optional **`pretty` extra** (Rich) lets commands style their output on a ter
 - **Names stay literal.** A device or SSID called `[red]x[/red]` is printed as exactly that, never parsed as markup, and control characters in names are removed before anything is styled.
 - Only the presentation changes: exit codes, JSON schemas, CSV, the `--verbose` log format and the redaction of secrets are the same either way.
 
-This is the shared foundation (issue #233), the progress line (issue #234) and the findings and tables on a terminal (issue #235); headings arrive with issue #236. For developers, `homelab_probe/present.py` is the one module that decides (see [development](development.md)).
+Terminal presentation includes the shared foundation (issue #233), the progress line (issue #234), findings and tables on a terminal (issue #235), and compact command headings and polished help (issue #236). For developers, `homelab_probe/present.py` is the one module that decides (see [development](development.md)).
 
 ### What the progress line shows
 
