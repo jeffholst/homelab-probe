@@ -75,7 +75,10 @@ TAG = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
 RELEASE_TAG = re.compile(r"v\d+\.\d+\.\d+.*")
 REPOSITORY_URL = re.compile(r"https://[A-Za-z0-9.-]+/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+")
 
-HIDDEN = re.compile("[\x00-\x08\x0b-\x1f\x7f\u200b-\u200f\u2028\u2029\u202a-\u202e\u2060-\u2069\ufeff]")
+HIDDEN = re.compile(
+    "[\x00\x01\x02\x03\x04\x05\x06\x07\x08\x0b\x0c\x0d\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19"
+    "\x1a\x1b\x1c\x1d\x1e\x1f\x7f\u200b-\u200f\u2028\u2029\u202a-\u202e\u2060-\u2069\ufeff]"
+)
 SCHEME = re.compile(r"([A-Za-z][A-Za-z0-9+.-]*):")
 ANCHOR_TAG = re.compile(r'<a id="([A-Za-z0-9_-]+)"></a>')
 FENCE_OPEN = re.compile(r"^( *)(`{3,})([^`]*)$")
