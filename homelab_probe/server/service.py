@@ -77,6 +77,8 @@ class ControllerService:
         self._clock = clock
         self._last_refresh: Optional[float] = None
         self._refresh_lock = threading.Lock()
+        self.last_warnings = 0              # warnings of the most recent build (an optional read failed, or stale data)
+        self.last_build: Optional[float] = None
 
     @staticmethod
     def _real_session(config: Config) -> Any:
@@ -111,7 +113,9 @@ class ControllerService:
             document = make(self.client())
         moment = min(ages) if ages else time.time()
         stamp = datetime.fromtimestamp(moment, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        return Built(document, stamp, list(dict.fromkeys([*document.warnings, *served])))
+        warnings = list(dict.fromkeys([*document.warnings, *served]))
+        self.last_warnings, self.last_build = len(warnings), time.time()
+        return Built(document, stamp, warnings)
 
     def ready(self) -> Tuple[bool, str]:
         """Can the controller be read? One cached read of its application info; the reason is a fixed word."""

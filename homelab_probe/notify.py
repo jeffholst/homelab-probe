@@ -316,22 +316,30 @@ def _report(kind: str, outcome: Tuple[bool, str], started: float, trace: Optiona
         trace(line)
 
 
+TEST_TITLE = "hlp: test notification"
+TEST_BODY = "This is a test message from Homelab Probe. If you can read it, delivery to this destination works."
+
+
 def send(destinations: List[Destination], events: List[Event], redact: bool, timeout: float,
          post: Optional[Callable[..., Any]] = None,
          trace: Optional[Callable[[str], None]] = None,
          smtp_plain: Optional[Callable[..., Any]] = None,
-         smtp_ssl: Optional[Callable[..., Any]] = None) -> List[Tuple[str, bool, str]]:
+         smtp_ssl: Optional[Callable[..., Any]] = None, test: bool = False) -> List[Tuple[str, bool, str]]:
     """Send the message to every destination: ``[(kind, delivered, reason)]``.
 
     ``reason`` is a fixed phrase (``HTTP 403``, ``timed out``, ...), never the library's text,
     because that text contains the URL, which is a secret. Redirects are not followed (a
     redirect could carry the token to another host) and TLS is always verified. Email goes out as one
     plain-text message over one SMTP session (``smtp_plain`` and ``smtp_ssl`` stand in for ``smtplib.SMTP`` and
-    ``smtplib.SMTP_SSL`` in tests).
+    ``smtplib.SMTP_SSL`` in tests). With ``test`` the message is the fixed test message (no events; a webhook gets
+    ``"test": true`` and an empty ``events`` list), which an administrator asks for to check a destination.
     """
     post = post or requests.post
-    title, body = render_text(events, redact)
-    priority, tag = _priority(events)
+    if test:
+        title, body, priority, tag = TEST_TITLE, TEST_BODY, "3", "white_check_mark"
+    else:
+        title, body = render_text(events, redact)
+        priority, tag = _priority(events)
     results = []
     for dest in destinations:
         started = time.perf_counter()
@@ -349,7 +357,9 @@ def send(destinations: List[Destination], events: List[Event], redact: bool, tim
                             "Priority": priority, "Tags": tag})
             kwargs: Dict[str, Any] = {"data": body.encode("utf-8")}
         else:
-            kwargs = {"json": render_payload(events, redact)}
+            kwargs = {"json": {"source": "homelab-probe", "version": 1, "redacted": False, "title": title,
+                               "text": f"{title}\n{body}", "events": [], "test": True}
+                      if test else render_payload(events, redact)}
         try:
             response = post(dest.url, headers=headers, timeout=timeout, allow_redirects=False, verify=True, **kwargs)
         except requests.exceptions.SSLError:
