@@ -2,7 +2,7 @@
 
 One image runs both halves of the tool: the web server (`hlp serve`, the default command) and the command line (`docker run ... diagnose`). It starts **with no configuration at all**, in the [setup mode](web.md#first-run-setup-a-server-with-no-settings), and keeps everything it writes in one volume, `/data`.
 
-The image is **not published yet** (publishing to GHCR comes with a release, [#188](https://github.com/jeffholst/homelab-probe/issues/188)). Until then build it from a checkout of the project or of a tag; the build context holds the code and nothing else (no `.env`, no `snapshots/`, see [What is in the image](#what-is-in-the-image)). The web app itself is not part of the image yet either: the server answers the [API](web.md), and the image's web build stage is a placeholder for the app.
+The image is **not published yet** (publishing to GHCR comes with a release, [#188](https://github.com/jeffholst/homelab-probe/issues/188)). Until then build it from a checkout of the project or of a tag; the build context holds the code and nothing else (no `.env`, no `snapshots/`, see [What is in the image](#what-is-in-the-image)). The web app itself is not part of the image yet either: the server answers the [API](web.md) (`/` says so in one line), and the image's web build stage is a placeholder for the app. Where this page says to open the server in a browser, that applies once the image includes the app; the API calls shown here work now.
 
 ## Run it
 
@@ -27,7 +27,21 @@ Serving on http://0.0.0.0:8787 (Ctrl-C to stop).
 Not set up: open the server in a browser to finish the setup with this token: 7Qk...
 ```
 
-Open `http://localhost:8787` and finish the setup with that token: the controller's address and key, a certificate to trust, the first administrator ([the setup API](web.md#first-run-setup-a-server-with-no-settings)). The settings are written to `/data/.env`, which is read again at every start, so the next start needs no token. To choose the token yourself, set `HLP_SETUP_TOKEN` (at least 16 characters, in the environment of the container and not in a `.env`); it is then not printed.
+**There is no web app in the image yet**: `http://localhost:8787/` answers a one-line JSON notice (`API only: no web app is built in yet`), and the log line above, which the server prints for every install, says "browser" because the screens come in a later stage. Until the image includes them, finish the setup through the [setup API](web.md#first-run-setup-a-server-with-no-settings): the token goes in an `X-Setup-Token` header, and every `POST` needs a JSON body and an `Origin` that names the server as you reach it. Once the image serves the web app, you open `http://localhost:8787` instead and the same steps are screens. A minimal sequence with `curl` (the API key is read without echo and sent on standard input, so it is neither in the process list nor in the shell history):
+
+```bash
+TOKEN=$(docker logs hlp 2>&1 | sed -n 's/.*with this token: //p')
+api() { curl -s -H "Origin: http://localhost:8787" -H "Content-Type: application/json" -H "X-Setup-Token: $TOKEN" "$@"; }
+api http://localhost:8787/api/v1/setup/status
+printf 'API key: ' && read -rs KEY && echo
+printf '{"url": "https://controller.example.lan", "site": "default", "api_key": "%s"}' "$KEY" \
+    | api -X POST -d @- http://localhost:8787/api/v1/setup/draft
+api -X POST -d '{}' http://localhost:8787/api/v1/setup/connection
+printf '{"username": "admin", "password": "%s"}' "$ADMIN_PASSWORD" \
+    | api -X POST -d @- http://localhost:8787/api/v1/setup/finish
+```
+
+`status` shows the draft (never the key), `draft` changes it, `connection` tests the controller and lists its sites, and `finish` writes the settings and creates the first administrator (set `ADMIN_PASSWORD` to a password of at least 12 characters first). `finish` needs a draft whose connection test passed. A controller with a self-signed certificate also needs `certificate` and a `verify` choice before `connection`; every route, body and error is in [the setup API](web.md#first-run-setup-a-server-with-no-settings). The settings are written to `/data/.env`, which is read again at every start, so the next start needs no token. To choose the token yourself, set `HLP_SETUP_TOKEN` (at least 16 characters, in the environment of the container and not in a `.env`); it is then not printed.
 
 You can also skip the guided setup. A `.env` in the volume (or the environment: `-e` or `--env-file`) starts the server configured; with no administrator yet it starts in the [admin mode](web.md#first-run-setup-a-server-with-no-settings), where the same token creates the first one. Create one up front with `docker run --rm -it -v hlp-data:/data homelab-probe web-user add NAME --role admin`.
 

@@ -321,6 +321,43 @@ def test_the_page_says_what_the_default_command_is_and_that_the_image_is_not_pub
 
 
 def test_the_page_holds_no_secret_or_real_address():
-    assert not re.search(r"(?i)api_key\s*=\s*\S|token\s*=\s*\S", DOCS)
+    assert not re.search(r"(?i)api_key\s*=\s*[^\s$]|token\s*=\s*[^\s$]", DOCS)
     addresses = set(re.findall(r"\b\d{1,3}(?:\.\d{1,3}){3}\b", DOCS))
     assert addresses <= {"127.0.0.1", "0.0.0.0", "172.18.0.0", "172.16.0.0"}, addresses
+
+
+def test_the_documented_setup_calls_are_accepted_by_a_server_in_setup_mode(tmp_path):
+    """The curl sequence of the page is how a container is set up while the image has no web app: run each call (with
+    the page's own headers, paths and bodies) against a server in the setup mode, through the test client."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    from homelab_probe.config import Config
+    from homelab_probe.server.app import create_app
+    from homelab_probe.server.auth import AuthState
+    from homelab_probe.server.wizard import MODE_SETUP, SetupState
+
+    block = next(b for b in blocks("bash") if "/api/v1/setup/status" in b)
+    token = "setup-token-0123456789abcdef"
+    headers = dict(re.findall(r'-H "([\w-]+): ([^"]*)"', block))
+    assert set(headers) == {"Origin", "Content-Type", "X-Setup-Token"}
+    headers["X-Setup-Token"] = token
+    standin = Config(controller_url="https://unconfigured.invalid", api_key="unconfigured")
+    app = create_app(standin, state_dir=tmp_path, hosts=["testserver"], auth=AuthState.for_directory(tmp_path, standin),
+                     setup=SetupState(MODE_SETUP, "no_config", token))
+    client = TestClient(app)
+    headers["Origin"] = "http://testserver"                          # the page's localhost:8787 is the test host here
+    calls = re.findall(r"^(?:printf '(\{.*?\})' [^\n]*\\\n\s*\| )?api( -X POST)?(?: -d (?:@-|'(\{\})'))? "
+                       r"http://localhost:8787(/api/v1/setup/\w+)$", block, flags=re.M)
+    assert [c[3].rsplit("/", 1)[1] for c in calls] == ["status", "draft", "connection", "finish"]
+    results = {}
+    for body, post, literal, path in calls:
+        payload = (literal or body.replace("%s", "placeholder-value-123")) if post else None
+        reply = client.post(path, content=payload, headers=headers) if post else client.get(path, headers=headers)
+        results[path.rsplit("/", 1)[1]] = reply
+        assert reply.status_code not in (401, 403, 404, 405), (path, reply.text)
+        assert reply.json().get("error") != "csrf_origin", path
+    assert results["status"].status_code == 200 and results["draft"].status_code == 200
+    assert results["finish"].json()["error"] == "not_tested"          # nothing was tested, and the page says it must be
+    assert json.loads(calls[1][0].replace("%s", "k")).keys() == {"url", "site", "api_key"}
+    assert "never the key" in DOCS and "X-Setup-Token" in DOCS and "no web app in the image yet" in DOCS
