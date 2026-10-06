@@ -190,6 +190,28 @@ The accounts of [`web-user`](#managing-accounts-web-user), the same `users.json`
 
 `POST /api/v1/notifications/test` (an administrator, with the CSRF token) sends **one fixed test message** to every configured destination, through the delivery code of `diagnose --notify`, and answers `{"delivered": true, "results": [{"destination": "ntfy", "delivered": true, "reason": "HTTP 200"}]}`: a kind and a fixed reason for each, never a URL or a token. It is **never sent by itself**, at most once every 10 seconds (`429 too_soon`), and `409 no_destination` when none is configured. A webhook receives the usual payload with `events` empty and `"test": true`. It writes no file, so `--read-only` does not stop it; it is audited as `notification.tested` (the kinds and how many were delivered).
 
+### Findings and triage: `/api/v1/unifi/sites/{site}/findings`
+
+`GET .../findings` is the `diagnose` document of the site made ready for a person who has to decide what to look at first, and `PUT .../findings/{id}/triage` records what an administrator did about one. Both roles read; only an administrator changes.
+
+Each finding has:
+
+| Field | What it says |
+| ----- | ------------ |
+| `id` | A stable 16-character id: a hash of the check (`code`) and of what it is about, the device's **MAC when the finding has one** (so a renamed device keeps its state, whatever spelling the MAC has) or else the subject text (so a finding about something with no MAC is a different finding after a rename). It says nothing about the network |
+| `rank`, `priority` | The place in the order and **what put it there**: `reasons` (for example `critical severity`, `the check affects the network as a whole`, `first recorded 10 days ago`), the `scope` of the check (`network`, `device`, `link`, `wireless`, `client`, `events`) and a `score`. The order is: findings nobody has looked at, then acknowledged, then snoozed; within each, severity, then scope, then how long the finding has been known **where there is a record**; then code and subject, so the same input is always in the same order |
+| `triage` | `state` (`open`, `acknowledged`, `snoozed`), who, when, the `until` of a snooze and a short plain-text `note` |
+| `first_seen_at`, `limitations` | When it was first recorded, or `null`, and then a limitation says that how long it has been happening is **unknown**: there is no invented history. Another limitation says when the read was partial (`no_events`, or an optional read failed) |
+| `next_checks`, `docs` | **General** guidance for this kind of check (labelled as such in `next_checks_are`) and a link to the finding-code table; not advice specific to the finding |
+
+The top level has `summary` (the counts by severity, as `diagnose` has them, and by triage state), `complete` (every check ran and every read worked: false with `no_events` or when an optional read failed), `triage_available` (false, with a limitation, when the triage file cannot be read: the findings are still shown) and the usual `generated_at` and `warnings`. **A read never writes anything.**
+
+- **A state never hides or resolves a finding.** An acknowledged or snoozed finding stays in the list, after the open ones. **Acknowledged is not resolved.** `PUT` takes `state` (`open` to reopen, `acknowledged`, or `snoozed` with `until`, the last day as `2026-10-10`, at most a year ahead; a snooze ends at the start of the next day UTC and the finding is open again, with nobody writing anything) and an optional `note`. It works only on a finding that **is there now** (`404 finding_not_found`).
+- **When a finding clears.** The scheduler ([below](#the-scheduler)) records what each diagnose run finds (first and last seen) and **drops the entry of a finding that a complete read of every check no longer shows**, acknowledged or not. A failed or partial read changes nothing, so it can never imply that something was fixed; a finding that comes back after clearing is a new one, open. Without the scheduler, an acknowledgment lasts until its snooze ends or an administrator reopens it, and "first seen" is known only for findings somebody triaged.
+- **Where it is kept.** `snapshots/<site id>/triage.json`, one file per site beside the snapshots and the notification state (so it is in the Docker volume that already covers `snapshots/`), owner-only, written atomically under a lock, never through a symbolic link, and refused if it names another site. It holds the id, the code, the state, who and when, and the first and last seen times: **no name, MAC or address.** At most 5000 findings are tracked per site.
+- **Audit.** `triage.changed` with the id, the code, the new state and the `until`: never a name, a MAC or the note. `--read-only` refuses a change (the scheduler cannot run then, so nothing else writes the file).
+- Grouping findings that share a cause (for example devices that are offline behind an offline switch) is not here: it needs the uplink topology as evidence and is a separate issue.
+
 ### How the server reads the controller
 
 Every read of the controller goes through one cache shared by all requests, so a browser that polls does not turn into dozens of reads per page:

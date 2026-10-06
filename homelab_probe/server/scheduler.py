@@ -35,6 +35,7 @@ from ..diagnose import WARNING, findings_from_document
 from ..documents import Document, diagnose_document, snapshot_document
 from ..history import DEFAULT_DIR, site_dir, site_snapshots
 from ..notify import destinations_from_config, process
+from ..triage import TriageError, TriageStore, finding_id
 from .settings_api import load_effective, settings_path_of
 from .snapshots_api import SnapshotStoreError, store_snapshot
 
@@ -193,6 +194,7 @@ class Scheduler:
         counts["findings"] = len(findings)
         if self._stop.is_set():
             return "skipped", "stopping"
+        self._triage(document, findings)
         if not destinations_from_config(config):
             return "ok", "no_destination"
         if not document.meta["complete"]:
@@ -210,6 +212,17 @@ class Scheduler:
         if outcome.kind == "cancelled":
             return "skipped", "stopping"
         return ("failed", "undelivered") if outcome.undelivered else ("ok", outcome.kind)
+
+    def _triage(self, document: Document, findings: List[Any]) -> None:
+        """Record what the checks found for the triage (first and last seen) and end the entries of findings that a
+        complete read no longer shows. A failure here is a warning, not a failed run: the notifications matter more."""
+        site = document.meta["site"]
+        present = {finding_id(f.code, f.subject, f.target_mac): f.code for f in findings}
+        try:
+            TriageStore(site_dir(self._base(), site), site["id"]).reconcile(present, document.meta["complete"],
+                                                                           self._clock())
+        except TriageError:
+            logs.warn("the triage file could not be updated")
 
     def _snapshot(self, counts: Dict[str, Any]) -> Tuple[str, str]:
         state, config = self.app.state, self.app.state.config

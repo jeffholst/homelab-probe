@@ -299,12 +299,14 @@ def test_every_report_route_is_a_get_without_a_path_parameter_and_only_named_par
     reports = {p: item for p, item in spec["paths"].items() if p.startswith(("/api/v1/unifi", "/api/v1/schemas"))}
     assert len(reports) > 15
     for path, item in reports.items():
-        # The one write among the reports is saving a snapshot (an administrator's, audited, refused by --read-only).
-        assert set(item) == ({"get", "post"} if path.endswith("/snapshots") else {"get"}), path
-        assert all(p["name"] not in {"url", "path", "target", "host", "proxy"} for p in item["get"].get("parameters", [])
-                   if p["in"] == "path"), path
-        assert set(re.findall(r"\{(\w+)\}", path)) <= {"site", "mac", "name"}, path
-    for module in ("routes.py", "app.py", "auth.py", "snapshots_api.py"):
+        # The writes among the reports are an administrator's, audited and refused by --read-only: saving a snapshot
+        # and triaging a finding.
+        expected = {"get", "post"} if path.endswith("/snapshots") else {"put"} if path.endswith("/triage") else {"get"}
+        assert set(item) == expected, path
+        assert all(p["name"] not in {"url", "path", "target", "host", "proxy"}
+                   for operation in item.values() for p in operation.get("parameters", []) if p["in"] == "path"), path
+        assert set(re.findall(r"\{(\w+)\}", path)) <= {"site", "mac", "name", "finding"}, path
+    for module in ("routes.py", "app.py", "auth.py", "snapshots_api.py", "findings_api.py"):
         source = (ROOT / "homelab_probe" / "server" / module).read_text(encoding="utf-8")
         assert ":path}" not in source, module                       # a Starlette `path` convertor takes slashes
 
@@ -315,7 +317,8 @@ def test_the_openapi_document_lists_every_route_with_its_schema_and_matches_the_
     assert f"{SITE}/diagnose".replace("default", "{site}") in spec["paths"]
     for path, item in spec["paths"].items():
         if path.startswith("/api/v1/unifi"):
-            assert "application/json" in item["get"]["responses"]["200"]["content"], path
+            operation = item.get("get") or item["put"]
+            assert "application/json" in operation["responses"]["200"]["content"], path
     client_path = f"{SITE.replace('default', '{site}')}/clients/{{mac}}"
     client_responses = spec["paths"][client_path]["get"]["responses"]
     assert "409" in client_responses and "500" in client_responses

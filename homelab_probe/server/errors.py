@@ -30,6 +30,7 @@ _STATUS_TEXT = {401: "Not logged in", 403: "Not allowed", 404: "Not found",
                 409: "The request conflicts with the current state", 422: "A parameter is not valid",
                 429: "Too many requests: try again after the time in Retry-After",
                 500: "A local file cannot be used", 502: "The controller could not be read",
+                503: "Busy: try again in a moment",
                 504: "The controller timed out"}
 
 
