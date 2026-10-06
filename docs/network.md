@@ -81,7 +81,7 @@ digraph topology {
 - **Edges** go from the parent to the device and say which port of the **parent** it plugs into and the negotiated speed (`port 2, 100 Mbps, supports 1000`), like the tree. The link to an offline device is dashed.
 - **Colors:** critical devices are red, warning devices amber and offline devices dashed (a device can be both), the same flags `diagnose` raises. The graph does not list the findings themselves; run the text view or `diagnose` for those.
 - **Names are data, not syntax.** The node ids are generated (`n0`, `n1`, `c0`) in tree order, never taken from a name, so the output is the same on every run and a device called `end` or `a --> b` cannot add a node, link or statement. In Mermaid every label is a quoted string in which punctuation (quotes, `<`, `>`, `&`, `|`, brackets, `;`, `#`, `%`, backslash) is written as an entity, which Mermaid shows as the character; in DOT backslash, quote and `&` are escaped. Control characters and line breaks in a name are removed first, as in the text view.
-- `--format` cannot be combined with `--json` (a usage error, exit code 64): `--json` is the data and the graphs are drawings of it. `--no-emoji` has no effect on a graph. The graph uses the same `--config` thresholds and ignore list as the tree. SVG or HTML output is not provided; render the DOT with Graphviz or the Mermaid with its own tools.
+- `--format mermaid` and `--format dot` cannot be combined with `--json` (a usage error, exit code 64): `--json` is the data and the graphs are drawings of it. `--no-emoji` has no effect on a graph. The graph uses the same `--config` thresholds and ignore list as the tree. SVG or HTML output is not provided; render the DOT with Graphviz or the Mermaid with its own tools.
 
 ## Wi-Fi
 
