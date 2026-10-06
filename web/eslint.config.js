@@ -33,7 +33,8 @@ const markup = [
 
 const storage = [
   {
-    selector: "MemberExpression[property.name=/^(localStorage|sessionStorage|indexedDB)$/]",
+    selector:
+      "MemberExpression[property.name=/^(localStorage|sessionStorage|indexedDB)$/], MemberExpression[property.value=/^(localStorage|sessionStorage|indexedDB)$/]",
     message: "Browser storage is for the theme preference only (src/theme/storage.ts). Never store a token or any secret.",
   },
 ];
