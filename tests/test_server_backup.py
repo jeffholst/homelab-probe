@@ -10,9 +10,9 @@ import pytest
 pytest.importorskip("fastapi")
 pytest.importorskip("cryptography")
 
+from backup_support import SNAPSHOT  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from server_support import CONFIG, auth_for, logged_in  # noqa: E402
-from test_backup import SNAPSHOT  # noqa: E402
 
 from homelab_probe import backup, logs  # noqa: E402
 from homelab_probe.demo.session import DemoSession  # noqa: E402

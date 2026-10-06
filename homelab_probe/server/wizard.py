@@ -424,7 +424,7 @@ def _write_settings(state: SetupState, directory: Path, written: List[Dict[str, 
     return None
 
 
-def _reload_default(directory: Path) -> Config:
+def reload_default(directory: Path) -> Config:
     """The configuration as the server reads it when nothing else was arranged: the ``.env`` of the data directory
     and the environment."""
     path = Path(directory) / config_module.DEFAULT_ENV_FILE
@@ -600,7 +600,7 @@ def router() -> APIRouter:
                     raise ApiError(500, "admin_not_created", "The settings are saved but the administrator could not "
                                    "be created: run `hlp web-user add NAME --role admin` and restart.") from None
             try:
-                config = (state.reload or (lambda: _reload_default(directory)))()
+                config = (state.reload or (lambda: reload_default(directory)))()
             except ConfigError:
                 raise ApiError(500, "reload_failed", "The settings are saved but could not be loaded: restart the "
                                "server.") from None

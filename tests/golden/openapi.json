@@ -426,6 +426,59 @@
         "title": "PreviewBody",
         "type": "object"
       },
+      "RestoreBody": {
+        "additionalProperties": false,
+        "properties": {
+          "archive": {
+            "description": "The backup file, base64",
+            "maxLength": 89478501,
+            "title": "Archive",
+            "type": "string"
+          },
+          "confirm": {
+            "const": true,
+            "description": "Must be true: the preview was read",
+            "title": "Confirm",
+            "type": "boolean"
+          },
+          "passphrase": {
+            "maxLength": 2048,
+            "title": "Passphrase",
+            "type": "string"
+          },
+          "recovery_confirm": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recovery Confirm"
+          },
+          "recovery_passphrase": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recovery Passphrase"
+          }
+        },
+        "required": [
+          "passphrase",
+          "archive",
+          "confirm"
+        ],
+        "title": "RestoreBody",
+        "type": "object"
+      },
       "SaveBody": {
         "additionalProperties": false,
         "properties": {
@@ -945,6 +998,149 @@
           }
         },
         "summary": "What restoring a backup would do (changes nothing)",
+        "tags": [
+          "backup"
+        ]
+      }
+    },
+    "/api/v1/backup/restore": {
+      "post": {
+        "operationId": "backup_restore_api_v1_backup_restore_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Backup Restore Api V1 Backup Restore Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "What was restored"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A read-only server or a demo does not restore"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The passphrase or the backup is not acceptable"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The restore could not be made; the previous state was put back where it could"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A restore is in progress, or too many backups at once"
+          }
+        },
+        "summary": "Restore a backup over this installation",
         "tags": [
           "backup"
         ]

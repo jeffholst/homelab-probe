@@ -409,3 +409,16 @@ def test_a_key_of_any_length_is_kept_out_of_the_messages(key):
 def test_a_file_that_already_ends_with_a_blank_line_gets_no_second_one():
     assert setup.render_env({"UNIFI_SITE_ID": "lab"}, "A=1\n\n") == "A=1\n\n# Added by hlp init\nUNIFI_SITE_ID=lab\n"
     assert setup.render_env({"UNIFI_SITE_ID": "lab"}, "A=1\n   \n") == "A=1\n   \n# Added by hlp init\nUNIFI_SITE_ID=lab\n"
+
+
+def test_apply_takes_the_locks_a_restore_takes_and_is_refused_when_they_are_busy(tmp_path, monkeypatch):
+    from homelab_probe.util import file_lock
+
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(setup, "LOCK_WAIT", 0.2)
+    for name in (".env.lock", "hlp.toml.lock"):
+        with file_lock(home / name), pytest.raises(SetupError, match="another change"):
+            setup.apply(GOOD, home)
+        assert not (home / ".env").exists()
+    assert setup.apply(GOOD, home)[0].status == "created"

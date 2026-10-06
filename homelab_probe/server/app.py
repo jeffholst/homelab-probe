@@ -8,7 +8,7 @@ import contextlib
 import logging
 import time
 from pathlib import Path
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import Any, AsyncIterator, Callable, Dict, List, Optional
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -20,9 +20,21 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from .. import __version__, logs
 from ..config import Config
 from ..util import is_loopback
-from . import backup_api, findings_api, notes_api, routes, settings_api, snapshots_api, status_api, users_api, wizard
+from . import (
+    backup_api,
+    findings_api,
+    notes_api,
+    restore_api,
+    routes,
+    settings_api,
+    snapshots_api,
+    status_api,
+    users_api,
+    wizard,
+)
 from .auth import AuthState, OriginGuard, guard, public, public_router, session_router
 from .errors import ApiError, api_error_handler, request_validation_error_handler
+from .maintenance import Maintenance
 from .scheduler import Scheduler
 from .security import SecurityHeaders
 from .service import ControllerService
@@ -66,7 +78,8 @@ class RequestLog:
 def create_app(config: Config, settings_path: Optional[Path] = None, state_dir: Optional[Path] = None, *,
                service: Optional[ControllerService] = None, auth: Optional[AuthState] = None, demo: bool = False,
                hosts: Optional[List[str]] = None, setup: Optional[SetupState] = None,
-               read_only: bool = False, scheduler: bool = False, env_named: bool = False) -> FastAPI:
+               read_only: bool = False, scheduler: bool = False, env_named: bool = False,
+               reload: Optional[Callable[[], Config]] = None) -> FastAPI:
     """The app for ``config``. ``settings_path`` is the ``hlp.toml`` to use and ``state_dir`` the data directory (the
     accounts file and the audit log are there), ``service`` the way to the controller (one is made from ``config``
     when none is given: the synthetic network for a ``demo``), ``auth`` the accounts, sessions and throttle (made from
@@ -101,6 +114,8 @@ def create_app(config: Config, settings_path: Optional[Path] = None, state_dir: 
     )
     app.state.config, app.state.settings_path, app.state.state_dir = config, settings_path, state_dir
     app.state.read_only = read_only
+    app.state.maintenance = Maintenance()
+    app.state.reload = reload
     app.state.env_named = env_named                  # the settings come from a file named with --env-file or HLP_ENV
     app.state.scheduler = Scheduler(app) if scheduler else None
     app.state.deliveries = status_api.Deliveries()
@@ -120,6 +135,7 @@ def create_app(config: Config, settings_path: Optional[Path] = None, state_dir: 
     app.include_router(findings_api.router())
     app.include_router(notes_api.router())
     app.include_router(backup_api.router())
+    app.include_router(restore_api.router())
     app.include_router(public_router())
     app.include_router(session_router())
 

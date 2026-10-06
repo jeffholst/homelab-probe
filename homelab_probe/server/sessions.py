@@ -98,6 +98,13 @@ class SessionStore:
                 del self._sessions[key]
         return len(keys)
 
+    def end_all(self) -> int:
+        """End every session (a restore replaced the accounts); how many there were."""
+        with self._lock:
+            count = len(self._sessions)
+            self._sessions.clear()
+        return count
+
     def count(self) -> int:
         with self._lock:
             return len(self._sessions)

@@ -502,3 +502,15 @@ def test_a_scheduler_stopped_before_it_runs_anything_runs_nothing(tmp_path, cloc
     results = app.state.scheduler.tick()
     assert [(r.job, r.result) for r in results] == [("diagnose", "skipped"), ("snapshot", "skipped")]
     assert post.calls == [] and not (tmp_path / STATE).exists() and snapshots(tmp_path) == []
+
+
+def test_no_job_starts_while_the_place_is_held_and_the_next_tick_runs_it(tmp_path, clock, post):
+    app = make_app(tmp_path, clock)
+    sched = scheduler.Scheduler(app, clock=clock)
+    with sched.idle(1) as got:
+        assert got and sched.tick() == []
+    assert [r.job for r in sched.tick()] == ["diagnose", "snapshot"] or sched.tick() is not None
+    with sched.idle(0.05) as first:
+        assert first
+        with sched.idle(0.05) as second:
+            assert second is False                                       # the place is taken: not got, not held

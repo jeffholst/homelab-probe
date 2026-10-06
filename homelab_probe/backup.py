@@ -48,7 +48,7 @@ import zipfile
 import zlib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
+from typing import Any, Dict, Iterable, Iterator, List, Mapping, Optional, Tuple
 
 from . import __version__
 from .accounts import AUDIT_FILE, USERS_FILE, AccountError, parse_users
@@ -91,6 +91,13 @@ MESSAGES = {
     "no_administrator": "The backup has no enabled administrator, so restoring it would lock everybody out.",
     "unsafe": "A file of the data directory is a symbolic link or not a regular file, so no backup was made.",
     "busy": "Another change is in progress; try again in a moment.",
+    "recovery_failed": "The recovery backup of the present state could not be made, so nothing was changed.",
+    "restore_failed": "The restore did not complete; the previous state was put back.",
+    "restore_pending": "The restore did not complete and could not be undone yet; it is finished or undone when the "
+                       "server starts.",
+    "journal_damaged": "An unfinished restore left a journal that cannot be read; look at restore-journal.json in the "
+                       "data directory.",
+    "restore_in_progress": "A restore is in progress; try again when it has finished.",
 }
 
 
@@ -216,6 +223,33 @@ def _read(path: Path, limit: int) -> bytes:
     return data
 
 
+LOCKED_NAMES = (USERS_FILE, NOTES_FILE, TRIAGE_FILE, DEFAULT_ENV_FILE, SETTINGS_FILE)
+
+
+def lock_paths(paths: Iterable[Path], settings: Optional[Path] = None) -> List[Path]:
+    """The lock files of the files among ``paths`` that have a writer who takes one (the accounts, the per-site notes
+    and triage files, ``.env`` and the settings file, which is ``settings`` when that is named otherwise), in the one
+    order every taker uses (the accounts first, then the rest sorted), so two of them never wait for each other."""
+    wanted = []
+    for path in paths:
+        if path.name in LOCKED_NAMES or (settings is not None and path == settings):
+            wanted.append(path.parent / (path.name + ".lock"))
+    return sorted(set(wanted), key=lambda p: (p.name != USERS_FILE + ".lock", str(p)))
+
+
+@contextlib.contextmanager
+def locked(paths: Iterable[Path], settings: Optional[Path] = None) -> Iterator[None]:
+    """Hold the locks of ``lock_paths(paths, settings)``, the ones the writers take; ``BackupError("busy")`` when one is
+    not free in ``LOCK_WAIT_SECONDS``."""
+    try:
+        with contextlib.ExitStack() as stack:
+            for path in lock_paths(paths, settings):
+                stack.enter_context(file_lock(path, LOCK_WAIT_SECONDS))
+            yield
+    except LockTimeout:
+        raise BackupError("busy") from None
+
+
 AUDIT_TRIES = 5
 
 
@@ -254,31 +288,25 @@ def _read_audit(directory: Path, total: int) -> Dict[str, bytes]:
     raise BackupError("busy")
 
 
-def collect(directory: Path, settings_path: Path, include: Iterable[str] = ()) -> Dict[str, bytes]:
-    """The bytes of every file ``live_files`` lists, read under the locks of the accounts and of the per-site notes and
-    triage files (so a writer is never half-way through one); the audit files, which their writer does not lock, are
-    read until they are seen unchanged. ``BackupError``: ``busy`` when a lock is not free in ``LOCK_WAIT_SECONDS`` or
-    the audit log keeps changing, ``unsafe`` for a link, ``too_large`` over ``MAX_FILE`` or ``MAX_TOTAL``."""
+def collect(directory: Path, settings_path: Path, include: Iterable[str] = (), lock: bool = True) -> Dict[str, bytes]:
+    """The bytes of every file ``live_files`` lists, read under the locks of the files that have writers (see
+    ``lock_paths``) so a writer is never half-way through one (``lock=False`` when the caller already holds them); the
+    audit files, which their writer does not lock, are read until they are seen unchanged. ``BackupError``: ``busy``
+    when a lock is not free in ``LOCK_WAIT_SECONDS`` or the audit log keeps changing, ``unsafe`` for a link,
+    ``too_large`` over ``MAX_FILE`` or ``MAX_TOTAL``."""
     wanted = set(include)
-    paths = {name: path for name, path in live_files(directory, settings_path, wanted - {"audit"}).items()}
+    paths = live_files(directory, settings_path, wanted - {"audit"})
     files: Dict[str, bytes] = {}
     total = 0
-    try:
-        with contextlib.ExitStack() as stack:
-            for name in paths:                                           # a fixed order: the paths are sorted
-                if classify(name) in ("accounts", "notes", "triage"):
-                    stack.enter_context(file_lock(paths[name].parent / (paths[name].name + ".lock"),
-                                                  LOCK_WAIT_SECONDS))
-            for name, path in paths.items():
-                try:
-                    files[name] = _read(path, MAX_FILE)
-                except FileNotFoundError:
-                    raise BackupError("unsafe") from None                # it was there when it was listed
-                total += len(files[name])
-                if total > MAX_TOTAL:
-                    raise BackupError("too_large")
-    except LockTimeout:
-        raise BackupError("busy") from None
+    with locked(paths.values() if lock else (), settings_path):
+        for name, path in paths.items():
+            try:
+                files[name] = _read(path, MAX_FILE)
+            except FileNotFoundError:
+                raise BackupError("unsafe") from None                # it was there when it was listed
+            total += len(files[name])
+            if total > MAX_TOTAL:
+                raise BackupError("too_large")
     if "audit" in wanted:
         files.update(_read_audit(directory, total))
     return files

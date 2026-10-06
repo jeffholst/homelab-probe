@@ -19,12 +19,13 @@ the server stops, a waiting job gives up and a running one sends and writes noth
 or in the site's directory.
 """
 
+import contextlib
 import dataclasses
 import logging
 import threading
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 from fastapi import FastAPI
 
@@ -69,6 +70,7 @@ class Scheduler:
         self._due: Dict[str, float] = {}
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
+        self._running = threading.Lock()                  # held while a job runs (and while a restore needs quiet)
 
     # -- the thread ---------------------------------------------------------------------------------------------
 
@@ -100,9 +102,11 @@ class Scheduler:
     # -- one pass ------------------------------------------------------------------------------------------------
 
     def ready(self) -> bool:
-        """Is there a controller to read? Not before the guided setup has finished."""
+        """Is there a controller to read? Not before the guided setup has finished, and not while a restore replaces
+        the files the jobs write."""
         setup = self.app.state.setup
-        return self.app.state.service is not None and (setup is None or not setup.mode)
+        return (self.app.state.service is not None and (setup is None or not setup.mode)
+                and not self.app.state.maintenance.active)
 
     def tick(self) -> List[JobResult]:
         """Run the jobs that are due, once. Never raises: a job that fails is a ``failed`` result."""
@@ -118,11 +122,27 @@ class Scheduler:
                 self._due[job] = self._first_due(job, now, intervals[job])
             if now < self._due[job]:
                 continue
-            result = self._run(job)
+            if not self._running.acquire(blocking=False):
+                break                                     # a restore holds the place: nothing starts meanwhile
+            try:
+                result = self._run(job)
+            finally:
+                self._running.release()
             ran.append(result)
             self._due[job] = self._clock() + intervals[job]
             now = self._clock()
         return ran
+
+    @contextlib.contextmanager
+    def idle(self, timeout: float) -> Iterator[bool]:
+        """Wait up to ``timeout`` seconds for the job that is running, then hold the place so that none starts until
+        the block ends; yields whether it was got."""
+        acquired = self._running.acquire(timeout=timeout)
+        try:
+            yield acquired
+        finally:
+            if acquired:
+                self._running.release()
 
     def status(self) -> Dict[str, Dict[str, Any]]:
         """What each job did last, for the status page: wall-clock times (seconds since the epoch, None if never), the

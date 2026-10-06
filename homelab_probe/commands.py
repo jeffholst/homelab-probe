@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from . import accounts, logs, setup
 from . import config as config_module
+from .backup import BackupError
 from .client import UniFiAPIError, UniFiClient
 from .client_view import render_candidates, render_detail
 from .completion import SHELLS
@@ -76,6 +77,7 @@ from .history import (
 from .new_clients import render_table as render_new_clients
 from .notify import STATE_DIR, destinations_from_config, process
 from .query import format_table, render_csv, render_table
+from .restore import recover as recover_restore
 from .settings import DiagnoseSettings, expired_rules, load_settings, server_settings_path
 from .snapshot import EventQuery, warn
 from .topology import render_text as render_topology
@@ -955,6 +957,17 @@ def apply_logging(config: Config, verbose_flag: bool) -> None:
         logs.configure(config.log_format or "cli", "DEBUG" if verbose_flag else config.log_level or "WARNING")
 
 
+def finish_interrupted_restore(directory: Path, settings_file: Path) -> None:
+    """Before the settings are read: complete or undo a restore a crash interrupted (``restore.recover``); a state that
+    can be neither is a start-up error, never a silent mixture."""
+    try:
+        outcome = recover_restore(directory, settings_file)
+    except BackupError as e:
+        raise ConfigError(str(e)) from e
+    if outcome:
+        warn(f"An unfinished restore of a backup was found at start-up and was {outcome.replace('_', ' ')}.")
+
+
 def _run_serve(args: argparse.Namespace) -> int:
     """Runs before any ``.env`` is read (``Command.run_local``): a server whose settings are missing is not an error
     but the guided setup, so it resolves its own configuration (``server.runner.resolve_config``)."""
@@ -979,6 +992,8 @@ def _run_serve(args: argparse.Namespace) -> int:
             raise ConfigError("the settings are still missing")
         return overridden(fresh)
 
+    if not args.demo:
+        finish_interrupted_restore(args.data_dir, server_settings_path(args.config, args.data_dir))
     setup_state = None
     if args.demo:
         config = demo_config(args.site or "default")
