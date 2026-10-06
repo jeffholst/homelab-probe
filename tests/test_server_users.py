@@ -10,7 +10,7 @@ pytest.importorskip("tomlkit")
 from fastapi.testclient import TestClient  # noqa: E402
 from server_support import CONFIG, PASSWORD, auth_for, logged_in, login  # noqa: E402
 
-from homelab_probe.accounts import AccountError, AccountStore  # noqa: E402
+from homelab_probe.accounts import AccountError, AccountStore, PolicyError  # noqa: E402
 from homelab_probe.demo.session import DemoSession  # noqa: E402
 from homelab_probe.server import users_api  # noqa: E402
 from homelab_probe.server.app import create_app  # noqa: E402
@@ -140,8 +140,26 @@ def test_a_user_that_cannot_be_added_is_refused_with_the_reason(admin, tmp_path,
     assert NEW_PASSWORD not in response.text and [u.username for u in store(tmp_path).users()] == ["alice", "bob"]
 
 
-def test_the_password_rules_are_the_commands(admin):
-    assert "at least 12 characters" in add(admin, password="short").json()["message"]
+@pytest.mark.parametrize("body, message", [
+    ({"password": "short"}, "The password must have at least 12 characters."),
+    ({"password": "x" * 2000}, "The password must have at most 1024 characters."),
+    ({"username": "a"}, "A user name has 3 to 64 characters"),
+])
+def test_a_broken_rule_is_worded_by_the_api_by_the_kind_of_rule(admin, body, message):
+    assert message in add(admin, **body).json()["message"]
+
+
+def test_a_policy_message_of_the_accounts_module_never_reaches_a_response(admin, monkeypatch):
+    from homelab_probe.server import errors
+
+    def leaky(self, *args, **kwargs):
+        raise PolicyError("the password hunter2 is on a list", "unknown_rule")
+
+    monkeypatch.setattr(AccountStore, "add", leaky)
+    response = add(admin)
+    assert response.status_code == 422 and "hunter2" not in response.text
+    assert response.json()["message"] == "That value is not acceptable."
+    assert errors.policy_message(PolicyError("x", "role")) == "The role must be viewer or admin."
 
 
 def test_adding_is_audited_without_the_password(admin, tmp_path):
@@ -184,12 +202,31 @@ def test_a_disabled_user_is_out_at_once_and_can_come_back(app, admin, viewer):
     assert login(TestClient(app), "bob")
 
 
-def test_role_and_disabled_are_one_change(admin, tmp_path):
+def test_role_and_disabled_are_one_change_and_one_audit_entry(admin, tmp_path):
+    before = len(audit_lines(tmp_path))
     body = patch(admin, "bob", role="admin", disabled=True).json()
     assert (body["role"], body["disabled"]) == ("admin", True)
-    assert [e["event"] for e in audit_lines(tmp_path)][-2:] == ["user.role_changed", "user.disabled"]
+    entries = audit_lines(tmp_path)[before:]
+    assert [e["event"] for e in entries] == ["user.updated"]
+    assert (entries[0]["user"], entries[0]["role"], entries[0]["disabled"]) == ("bob", "admin", True)
     patch(admin, "bob", disabled=False)
     assert audit_lines(tmp_path)[-1]["event"] == "user.enabled"
+    patch(admin, "bob", role="viewer")
+    assert audit_lines(tmp_path)[-1]["event"] == "user.role_changed"
+
+
+def test_a_failed_audit_write_leaves_no_record_of_half_a_change(app, admin, tmp_path, monkeypatch):
+    attempts = []
+
+    def failing(event, actor, **fields):
+        attempts.append(event)
+        raise OSError("disk full")
+
+    monkeypatch.setattr(app.state.auth.audit, "write", failing)
+    response = patch(admin, "bob", role="admin", disabled=True)
+    assert response.status_code == 500 and response.json()["error"] == "audit_unavailable"
+    assert store(tmp_path).get("bob").role == "viewer" and not store(tmp_path).get("bob").disabled
+    assert attempts == ["user.updated"]                               # one entry for the whole change, so none is left over
 
 
 def test_the_last_enabled_administrator_cannot_be_demoted_or_disabled(admin, tmp_path):
@@ -288,6 +325,15 @@ def test_a_store_that_fails_while_changing_is_a_500_with_a_fixed_message(admin, 
     response = patch(admin, "bob", role="admin")
     assert response.status_code == 500 and response.json()["error"] == "accounts_unreadable"
     assert str(tmp_path) not in response.text
+
+
+def test_the_openapi_wording_is_that_of_each_route(app):
+    spec = app.openapi()["paths"]
+    users = spec["/api/v1/users/{username}"]["patch"]["responses"]
+    snapshots = spec["/api/v1/unifi/sites/{site}/snapshots"]["get"]["responses"]
+    assert users["404"]["description"] == "No such user" and snapshots["404"]["description"] == "No such site or snapshot"
+    assert "snapshot" not in users["404"]["description"] and "user" not in snapshots["404"]["description"]
+    assert "accounts" in users["500"]["description"] and "snapshots" in snapshots["500"]["description"]
 
 
 def test_every_error_is_in_the_openapi_document(app):

@@ -3269,7 +3269,7 @@
                 }
               }
             },
-            "description": "No such site, snapshot or user"
+            "description": "No such site or snapshot"
           },
           "422": {
             "content": {
@@ -3313,7 +3313,7 @@
                 }
               }
             },
-            "description": "The local files cannot be used"
+            "description": "The saved snapshots cannot be used"
           },
           "502": {
             "content": {
@@ -5531,7 +5531,7 @@
                 }
               }
             },
-            "description": "No such site, snapshot or user"
+            "description": "No such site or snapshot"
           },
           "422": {
             "content": {
@@ -5575,7 +5575,7 @@
                 }
               }
             },
-            "description": "The local files cannot be used"
+            "description": "The saved snapshots cannot be used"
           },
           "502": {
             "content": {
@@ -5734,7 +5734,7 @@
                 }
               }
             },
-            "description": "No such site, snapshot or user"
+            "description": "No such site or snapshot"
           },
           "422": {
             "content": {
@@ -5778,7 +5778,7 @@
                 }
               }
             },
-            "description": "The local files cannot be used"
+            "description": "The saved snapshots cannot be used"
           },
           "502": {
             "content": {
@@ -7588,7 +7588,7 @@
                 }
               }
             },
-            "description": "The local files cannot be used"
+            "description": "The accounts file cannot be used"
           }
         },
         "summary": "The users",
@@ -7713,7 +7713,7 @@
                 }
               }
             },
-            "description": "The request conflicts with the current state"
+            "description": "The user name is taken, or this would leave no enabled administrator"
           },
           "422": {
             "content": {
@@ -7735,7 +7735,7 @@
                 }
               }
             },
-            "description": "A parameter is not valid"
+            "description": "The user name, role or password is not acceptable"
           },
           "500": {
             "content": {
@@ -7757,7 +7757,7 @@
                 }
               }
             },
-            "description": "The local files cannot be used"
+            "description": "The accounts file cannot be used"
           }
         },
         "summary": "Add a user",
@@ -7901,7 +7901,7 @@
                 }
               }
             },
-            "description": "No such site, snapshot or user"
+            "description": "No such user"
           },
           "409": {
             "content": {
@@ -7923,7 +7923,7 @@
                 }
               }
             },
-            "description": "The request conflicts with the current state"
+            "description": "The user name is taken, or this would leave no enabled administrator"
           },
           "422": {
             "content": {
@@ -7945,7 +7945,7 @@
                 }
               }
             },
-            "description": "A parameter is not valid"
+            "description": "The user name, role or password is not acceptable"
           },
           "500": {
             "content": {
@@ -7967,7 +7967,7 @@
                 }
               }
             },
-            "description": "The local files cannot be used"
+            "description": "The accounts file cannot be used"
           }
         },
         "summary": "Change the role of a user or disable or enable them",
@@ -8111,7 +8111,7 @@
                 }
               }
             },
-            "description": "No such site, snapshot or user"
+            "description": "No such user"
           },
           "409": {
             "content": {
@@ -8133,7 +8133,7 @@
                 }
               }
             },
-            "description": "The request conflicts with the current state"
+            "description": "The user name is taken, or this would leave no enabled administrator"
           },
           "422": {
             "content": {
@@ -8155,7 +8155,7 @@
                 }
               }
             },
-            "description": "A parameter is not valid"
+            "description": "The user name, role or password is not acceptable"
           },
           "500": {
             "content": {
@@ -8177,7 +8177,7 @@
                 }
               }
             },
-            "description": "The local files cannot be used"
+            "description": "The accounts file cannot be used"
           }
         },
         "summary": "Reset the password of a user",

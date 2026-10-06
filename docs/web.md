@@ -164,13 +164,13 @@ The accounts of [`web-user`](#managing-accounts-web-user), the same `users.json`
 | Method and path | What it does |
 | --------------- | ------------ |
 | `GET /api/v1/users` | Every user (`username`, `role`, `disabled`, `created_at`, `last_login`) and the `total`. Never a password or a hash |
-| `POST /api/v1/users` | Add a user: `username`, `password`, `role` (default `viewer`). `201`; `409 user_exists`; `422 invalid_user` with the rule that was broken |
+| `POST /api/v1/users` | Add a user: `username`, `password`, `role` (default `viewer`). `201`; `409 user_exists`; `422 invalid_user` with a fixed sentence for the rule that was broken |
 | `PATCH /api/v1/users/{username}` | Change the `role` and/or `disabled` in one step. `404 user_not_found`; nothing is changed if the result would break the rule below |
 | `POST /api/v1/users/{username}/password` | Reset the password (`password` in the body) |
 
 - **The last enabled administrator can never be demoted or disabled** (`409 last_administrator`), on any path and for a combined change as a whole, because the account file enforces it under its lock.
 - **A change takes effect at once.** A session re-checks its account on every request, so a user who is disabled, or whose role or password changed, is out on their next request and logs in again (a role change ends the sessions too, so nobody keeps an administrator's session after a demotion). An administrator who resets their own password logs themselves out.
-- **Audit.** The events of the command line (`user.added`, `user.role_changed`, `user.disabled`, `user.enabled`, `user.password_reset`) with the administrator as the actor and the address of the request. If an entry cannot be written the change is rolled back (`500 audit_unavailable`). A password is never in an answer, an audit entry or a log.
+- **Audit.** The events of the command line (`user.added`, `user.role_changed`, `user.disabled`, `user.enabled`, `user.password_reset`) with the administrator as the actor and the address of the request, and `user.updated` (with `role` and `disabled`) when one request changes both. A change is always **one** entry, so if it cannot be written the change is rolled back (`500 audit_unavailable`) and no record claims half of it. A password is never in an answer, an audit entry or a log.
 - **No deleting** in the API: `hlp web-user delete`. A disabled user cannot log in.
 
 ### How the server reads the controller

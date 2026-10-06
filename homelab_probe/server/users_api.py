@@ -14,7 +14,9 @@ file lock).
   body only, is never part of an error, and the audit entries name the user and the role, never the password.
 * **Audit.** The events are the ones the command line writes (``user.added``, ``user.role_changed``,
   ``user.disabled``, ``user.enabled``, ``user.password_reset``) with the administrator as the actor and the address of
-  the request; when the audit entry cannot be written the change is rolled back (``500 audit_unavailable``).
+  the request, and ``user.updated`` when one request changes the role and the disabled flag together. A change is
+  always **one** entry, so when it cannot be written the change is rolled back (``500 audit_unavailable``) and no
+  record claims half of it.
 * **No deleting** here: removing an account is ``hlp web-user delete`` (a disabled account cannot log in).
 """
 
@@ -33,9 +35,8 @@ from ..accounts import (
     User,
     UserExistsError,
 )
-from ..util import printable
 from .auth import address_of, admin, local_write
-from .errors import ApiError, error_responses
+from .errors import ApiError, error_responses, policy_message
 
 API = "/api/v1/users"
 UserP = Annotated[str, Path(max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9._@-]*$", description="The user name")]
@@ -47,10 +48,11 @@ USER_SCHEMA = {
 }
 LIST_SCHEMA = {"type": "object", "required": ["items", "total"],
                "properties": {"items": {"type": "array", "items": USER_SCHEMA}, "total": {"type": "integer"}}}
+WORDING = {404: "No such user", 409: "The user name is taken, or this would leave no enabled administrator",
+           422: "The user name, role or password is not acceptable", 500: "The accounts file cannot be used"}
 USER_RESPONSES: Dict[int | str, Dict[str, Any]] = {
     200: {"description": "The user", "content": {"application/json": {"schema": USER_SCHEMA}}},
-    **error_responses(401, 403, 404, 409, 422, 500)}
-
+    **error_responses(401, 403, 404, 409, 422, 500, text=WORDING)}
 
 def user_dict(user: User) -> Dict[str, Any]:
     """What the API says about an account: never the password hash."""
@@ -69,7 +71,7 @@ def failure(error: AccountError) -> ApiError:
     messages of the accounts module never hold a password) except for a damaged file, which is described in the server
     log only."""
     if isinstance(error, PolicyError):
-        return ApiError(422, "invalid_user", printable(str(error)))
+        return ApiError(422, "invalid_user", policy_message(error))
     if isinstance(error, UserExistsError):
         return ApiError(409, "user_exists", "That user name is taken.")
     if isinstance(error, NoSuchUserError):
@@ -111,7 +113,7 @@ def router() -> APIRouter:
 
     @api.get("", summary="The users",
              responses={200: {"description": "Every user, in the order they were added", "content": {
-                 "application/json": {"schema": LIST_SCHEMA}}}, **error_responses(401, 403, 500)})
+                 "application/json": {"schema": LIST_SCHEMA}}}, **error_responses(401, 403, 500, text=WORDING)})
     def users_list(request: Request) -> Dict[str, Any]:
         try:
             users = all_users(request)
@@ -121,7 +123,7 @@ def router() -> APIRouter:
 
     @api.post("", status_code=201, summary="Add a user", responses={
         201: {"description": "The user that was added", "content": {"application/json": {"schema": USER_SCHEMA}}},
-        **error_responses(401, 403, 409, 422, 500)})
+        **error_responses(401, 403, 409, 422, 500, text=WORDING)})
     @local_write
     def users_add(request: Request, body: NewUser) -> JSONResponse:
         store = request.app.state.auth.accounts.store
@@ -140,9 +142,14 @@ def router() -> APIRouter:
             raise ApiError(422, "invalid_parameter", "Give a role and/or disabled.")
 
         def record(old: User, new: User) -> None:
-            if new.role != old.role:
+            """One audit entry per change, so that a failed write rolls back the whole change and no record is left
+            claiming half of it: the event of the command line when one thing changed, ``user.updated`` for both."""
+            role, disabled = new.role != old.role, new.disabled != old.disabled
+            if role and disabled:
+                audit(request, "user.updated", user=new.username, role=new.role, disabled=new.disabled)
+            elif role:
                 audit(request, "user.role_changed", user=new.username, role=new.role)
-            if new.disabled != old.disabled:
+            else:
                 audit(request, "user.disabled" if new.disabled else "user.enabled", user=new.username)
 
         try:

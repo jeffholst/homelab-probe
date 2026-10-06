@@ -61,7 +61,12 @@ class AccountError(Exception):
 
 
 class PolicyError(AccountError):
-    """A user name, password or role that does not meet the rules."""
+    """A user name, password or role that does not meet the rules. ``code`` says which rule (``password_short``,
+    ``password_long``, ``username``, ``role``), so a caller can word it itself and never has to pass this message on."""
+
+    def __init__(self, message: str, code: str) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 class UserExistsError(AccountError):
@@ -155,9 +160,9 @@ def needs_upgrade(stored: str) -> bool:
 
 def check_password_policy(password: str) -> None:
     if not isinstance(password, str) or len(password) < MIN_PASSWORD:
-        raise PolicyError(f"the password must have at least {MIN_PASSWORD} characters")
+        raise PolicyError(f"the password must have at least {MIN_PASSWORD} characters", "password_short")
     if len(password) > MAX_PASSWORD:
-        raise PolicyError(f"the password must have at most {MAX_PASSWORD} characters")
+        raise PolicyError(f"the password must have at most {MAX_PASSWORD} characters", "password_long")
 
 
 # -- the accounts -------------------------------------------------------------------------------------------------
@@ -172,13 +177,13 @@ def check_username(text: str) -> str:
     name = normalize_username(text)
     if not _USERNAME.fullmatch(name):
         raise PolicyError("a username has 3 to 64 characters: letters, digits and . _ @ - (it starts with a letter "
-                          "or digit), and capitals do not matter")
+                          "or digit), and capitals do not matter", "username")
     return name
 
 
 def check_role(role: str) -> str:
     if role not in ROLES:
-        raise PolicyError(f"the role must be one of {', '.join(ROLES)}")
+        raise PolicyError(f"the role must be one of {', '.join(ROLES)}", "role")
     return role
 
 

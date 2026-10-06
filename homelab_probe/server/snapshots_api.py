@@ -36,6 +36,7 @@ from .errors import ApiError, error_responses, from_controller
 from .routes import MAX_TEXT, REFRESH_MIN_INTERVAL, RefreshQ, SiteP, checked_site, respond
 
 UNIFI = "/api/v1/unifi"
+WORDING = {404: "No such site or snapshot", 500: "The saved snapshots cannot be used"}
 MAX_KEEP = 10_000
 _SAVE_LOCK = threading.Lock()         # one save and prune at a time: two requests cannot prune each other's file
 NameQ = Annotated[Optional[str], Query(max_length=MAX_TEXT, description="A snapshot file name, as the list gives it")]
@@ -111,7 +112,7 @@ def router() -> APIRouter:
 
     @api.get("/snapshots", summary="The saved snapshots of a site, newest first",
              responses={200: {"description": "The newest snapshots", "content": {"application/json": {
-                 "schema": LIST_SCHEMA}}}, **error_responses(404, 422, 500, 502, 504)})
+                 "schema": LIST_SCHEMA}}}, **error_responses(404, 422, 500, 502, 504, text=WORDING)})
     def snapshots_list(request: Request, site: SiteP, limit: LimitQ = 50) -> Dict[str, Any]:
         record, files = listed(request, site)
         return {"site": {"id": str(record.get("id") or ""), "name": str(record.get("name") or "")},
@@ -120,7 +121,7 @@ def router() -> APIRouter:
     @api.post("/snapshots", dependencies=[Depends(admin)], status_code=201,
               summary="Save a snapshot of the network now (a local write)",
               responses={201: {"description": "The snapshot that was saved", "content": {"application/json": {
-                  "schema": SAVED_SCHEMA}}}, **error_responses(404, 422, 500, 502, 504)})
+                  "schema": SAVED_SCHEMA}}}, **error_responses(404, 422, 500, 502, 504, text=WORDING)})
     @local_write
     def snapshots_save(request: Request, site: SiteP, body: SaveBody) -> JSONResponse:
         name = checked_site(site)
@@ -154,7 +155,7 @@ def router() -> APIRouter:
              responses={200: {"description": "The comparison with when it was read", "content": {
                  "application/json": {"schema": apischema.response_schema("diff", {
                      "old": {"type": "string"}, "new": {"type": ["string", "null"]}})}}},
-                 **error_responses(404, 422, 500, 502, 504)})
+                 **error_responses(404, 422, 500, 502, 504, text=WORDING)})
     def snapshots_diff(request: Request, site: SiteP, old: NameQ = None, new: NameQ = None,
                        refresh: RefreshQ = False) -> JSONResponse:
         record, files = listed(request, site)

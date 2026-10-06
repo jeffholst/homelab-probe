@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from server_support import CONFIG, PASSWORD, login, origin_of  # noqa: E402
 
 from homelab_probe import setup as setup_engine  # noqa: E402
-from homelab_probe.accounts import AccountError  # noqa: E402
+from homelab_probe.accounts import AccountError, AccountStore  # noqa: E402
 from homelab_probe.config import ConfigError  # noqa: E402
 from homelab_probe.demo import demo_client  # noqa: E402
 from homelab_probe.demo.session import DemoSession  # noqa: E402
@@ -511,3 +511,21 @@ def test_an_administrator_created_between_the_check_and_the_add_is_not_followed_
     response = finish(client)
     assert response.status_code == 409 and response.json()["error"] == "admin_exists"
     assert [u.username for u in store.users()] == ["alice"]
+
+
+def test_an_accounts_file_that_cannot_be_read_while_checking_the_first_administrator_is_a_500(client, state, monkeypatch, tmp_path):
+    tested(client)
+
+    def broken(self, name):
+        raise AccountError(f"{tmp_path}/users.json is damaged")
+
+    monkeypatch.setattr(AccountStore, "get", broken)
+    response = finish(client)
+    assert response.status_code == 500 and response.json()["error"] == "accounts_unreadable"
+    assert str(tmp_path) not in response.text and not (tmp_path / ".env").exists()
+
+
+def test_a_password_rule_in_the_setup_is_worded_by_the_api(client):
+    tested(client)
+    response = finish(client, {"username": "ada", "password": "short"})
+    assert response.json()["message"] == "The password must have at least 12 characters."
