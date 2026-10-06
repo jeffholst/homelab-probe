@@ -20,6 +20,7 @@ import os
 import re
 import shlex
 
+import build_docs
 import pytest
 import record_fixture
 from docs_support import README, all_docs_text, doc_paths
@@ -267,7 +268,8 @@ def test_every_recorder_option_is_documented(option):
 
 
 def test_every_option_the_documentation_shows_exists():
-    known = {o for _, o in all_long_options()} | {"--help", "--version"} | recorder_options()
+    docs_tool = {o for action in build_docs.build_parser()._actions for o in action.option_strings}
+    known = {o for _, o in all_long_options()} | {"--help", "--version"} | recorder_options() | docs_tool
     spans = [line for line in re.findall(r"`([^`\n]+)`", read_all()) if line.startswith("--")]
     shown = set(re.findall(r"(?<![\w-])(--[a-z][a-z-]*[a-z])(?![\w*-])", "\n".join(spans)))
     for argv in examples():
