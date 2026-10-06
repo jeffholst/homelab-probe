@@ -626,7 +626,7 @@ def _run_audit(ctx: Context) -> int:
     document = audit_document(ctx.client, ctx.config.site, settings, args.show_ignored, today=today)
     if args.json:
         say(document.to_json())
-    elif ctx.present.decorations(sys.stdout):
+    elif not args.no_emoji and ctx.present.decorations(sys.stdout):
         pretty.print_findings(ctx.present, document.data, elapsed=time.monotonic() - started,
                               complete=not document.warnings, show_ignored=args.show_ignored)
     else:
@@ -1233,7 +1233,7 @@ def _run_diagnose(ctx: Context) -> int:
     checked_note = areas is not None and bool(args.only or args.skip)    # --no-events alone: as it always did
     if args.json:
         say(document.to_json())
-    elif ctx.present.decorations(sys.stdout):
+    elif args.watch is None and not args.no_emoji and ctx.present.decorations(sys.stdout):
         pretty.print_findings(ctx.present, document.data, elapsed=time.monotonic() - started, complete=complete,
                               show_ignored=args.show_ignored, show_checked=checked_note)
     else:

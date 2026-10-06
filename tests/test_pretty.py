@@ -166,6 +166,61 @@ def test_a_table_too_wide_turns_into_stacked_rows_and_cuts_nothing(capsys):
     assert out.rstrip().endswith("2 row(s)")
 
 
+@pytest.mark.parametrize("columns, aligned", [(40, True), (39, False)])
+def test_a_table_that_exactly_fits_stays_aligned(capsys, columns, aligned):
+    rows = [{"Name": "x" * 32, "Status": "Online"}]
+    pretty.print_table(policy(columns=columns), rows, ["Name", "Status"], "1 row(s)")
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == ("Name" + " " * 30 + "Status" if aligned else "Name    " + "x" * 32)
+
+
+def test_wide_cells_force_a_table_to_stack_when_character_counts_would_fit(capsys):
+    pytest.importorskip("rich")
+    name = "\u754c" * 20
+    pretty.print_table(policy(columns=40), [{"Name": name, "Status": "Online"}], ["Name", "Status"], "1 row(s)")
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == "Name    " + name and lines[1] == "Status  Online"
+
+
+@pytest.mark.parametrize("name", ["\u754c\u754c", "e\u0301", "\U0001f600"])
+def test_table_padding_uses_display_cells_for_wide_and_combining_text(capsys, name):
+    pytest.importorskip("rich")
+    from rich.cells import cell_len
+
+    rows = [{"Name": name, "Status": "Online"}, {"Name": "printer", "Status": "Offline"}]
+    pretty.print_table(policy(), rows, ["Name", "Status"], "2 row(s)")
+    lines = capsys.readouterr().out.splitlines()
+    assert cell_len(lines[0][:lines[0].index("Status")]) == 9
+    assert cell_len(lines[1][:lines[1].index("Online")]) == 9
+    assert cell_len(lines[2][:lines[2].index("Offline")]) == 9
+
+
+def test_stacked_unicode_column_labels_are_padded_by_display_cells(capsys):
+    pytest.importorskip("rich")
+    columns = ["\u754c\u754c", "e\u0301"]
+    pretty.print_table(policy(columns=40), [{columns[0]: "x" * 40, columns[1]: "y"}], columns, "1 row(s)")
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == columns[0] + "  " + "x" * 40
+    assert lines[1] == columns[1] + " " * 5 + "y"
+
+
+@pytest.mark.parametrize("name, aligned", [("printer", True), ("\u754c", False)])
+def test_missing_rich_uses_ascii_widths_and_conservatively_stacks_unicode(capsys, monkeypatch, name, aligned):
+    import builtins
+
+    real_import = builtins.__import__
+
+    def without_cells(module, *args, **kwargs):
+        if module == "rich.cells":
+            raise ImportError("optional extra is absent")
+        return real_import(module, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", without_cells)
+    pretty.print_table(policy(), [{"Name": name, "Status": "Online"}], ["Name", "Status"], "1 row(s)")
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == ("Name     Status" if aligned else "Name    " + name)
+
+
 def test_table_cells_are_literal_and_cleaned(capsys):
     rows = [{"Name": "[red]x[/red]\x1b]0;evil\x07", "MAC Address": "AA:00:00:00:00:09", "Status": "Online", "Port": ""}]
     pretty.print_table(policy(), rows, COLUMNS, "1 row(s)")
@@ -212,6 +267,33 @@ def test_diagnose_json_and_plain_are_untouched_on_a_terminal(terminal, capsys):
     assert json.loads(capsys.readouterr().out)["version"] == 1
     cli.main(["--demo", "diagnose", "--only", "devices"])
     assert "Checked: devices  not checked:" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("command", ["diagnose", "audit"])
+def test_no_emoji_keeps_the_plain_findings_renderer_on_a_utf8_terminal(terminal, capsys, monkeypatch, command):
+    from homelab_probe import commands
+
+    monkeypatch.setattr(commands, "stream_supports_emoji", lambda stream: True)
+    cli.main(["--demo", command, "--no-emoji"])
+    out = capsys.readouterr().out
+    assert re.search(r"\[(?:CRITICAL|WARNING|INFO)\s*\]", out)
+    assert not any(symbol in out for symbol in ("\u2717", "\u26a0", "\u2022", "\U0001f6d1"))
+    assert not re.search(r"^(Critical|Warnings|Info) \(", out, re.M)
+
+
+def test_watch_keeps_the_plain_initial_output_on_a_decorated_terminal(terminal, capsys, monkeypatch):
+    from homelab_probe import commands
+
+    def stop(seconds):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(commands, "WATCH_SLEEP", stop)
+    plain_code = cli.main(["--demo", "--plain", "diagnose", "--only", "devices"])
+    expected = capsys.readouterr().out
+    code = cli.main(["--demo", "diagnose", "--only", "devices", "--watch", "30"])
+    captured = capsys.readouterr()
+    assert code == plain_code and captured.out == expected
+    assert "Watching every 30 s; only changes are printed" in captured.err and "Stopped." in captured.err
 
 
 def test_audit_query_and_new_clients_use_the_enhanced_views_on_a_terminal(terminal, capsys):

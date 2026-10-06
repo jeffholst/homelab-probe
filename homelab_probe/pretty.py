@@ -22,6 +22,7 @@ prints) and never changes them, the exit codes or any machine-readable output. A
 """
 
 import textwrap
+from collections.abc import Callable
 from typing import Any, Dict, List, Optional, Sequence
 
 from .diagnose.areas import AREA_NAMES
@@ -133,31 +134,41 @@ def print_table(present: Presentation, rows: Sequence[Dict[str, Any]], columns: 
     """An inventory table on a terminal: aligned columns with a highlighted header and colored states where it fits
     the terminal, stacked ``Column: value`` rows where it does not (nothing is cut). ``footer`` is the count line."""
     cells = [{c: printable(r.get(c, "")) for c in columns} for r in rows]       # one line each, cleaned of controls
-    widths = {c: max([len(c)] + [len(r[c]) for r in cells]) for c in columns}
-    total = sum(widths.values()) + 2 * (len(columns) - 1)
-    if total < present.width():
-        present.print(*_cells(columns, {c: c for c in columns}, widths, "heading"))
-        for row in cells:
-            present.print(*_cells(columns, row, widths, None, state_columns))
+    try:
+        from rich.cells import cell_len
+    except ImportError:
+        measure: Callable[[str], int] = len
+        measurable = all(text.isascii() for text in [*columns, *(v for row in cells for v in row.values())])
     else:
-        label_width = max(len(c) for c in columns)
+        measure = cell_len
+        measurable = True
+    widths = {c: max([measure(c)] + [measure(r[c]) for r in cells]) for c in columns}
+    total = sum(widths.values()) + 2 * (len(columns) - 1)
+    if measurable and total <= present.width():
+        present.print(*_cells(columns, {c: c for c in columns}, widths, "heading", measure))
+        for row in cells:
+            present.print(*_cells(columns, row, widths, None, measure, state_columns))
+    else:
+        label_width = max(measure(c) for c in columns)
         for index, row in enumerate(cells):
             if index:
                 present.print("")
             for column in columns:
                 if row[column]:
                     role = _state_role(row[column]) if column in state_columns else "text"
-                    present.print((column.ljust(label_width), "dim"), "  ", (row[column], role))
+                    present.print((column + " " * (label_width - measure(column)), "dim"), "  ", (row[column], role))
     present.print("")
     present.print((footer, "dim"))
 
 
 def _cells(columns: Sequence[str], values: Dict[str, str], widths: Dict[str, int], role: Optional[str],
-           state_columns: Sequence[str] = ()) -> List[Any]:
+           measure: Callable[[str], int], state_columns: Sequence[str] = ()) -> List[Any]:
     parts: List[Any] = []
     last = len(columns) - 1
     for i, column in enumerate(columns):
-        text = values[column] if i == last else values[column].ljust(widths[column])
+        text = values[column]
+        if i != last:
+            text += " " * (widths[column] - measure(text))
         cell_role = role or (_state_role(values[column]) if column in state_columns else "text")
         parts.append((text.rstrip() if i == last else text, cell_role))
         if i != last:

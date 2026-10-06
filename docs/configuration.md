@@ -240,9 +240,10 @@ Checked: devices  not checked: health, wan, clients, reservations, ports, wifi, 
 ```
 
 - **Color never carries meaning alone.** Red is critical, yellow a warning, green a healthy result, cyan a heading, dim only for secondary text (the code, the time); every finding keeps its written label. The 16 standard colors are used, which a terminal theme maps for its own light or dark background.
-- **Nothing is dropped or cut.** Every finding is shown with its subject, code and message; a long message wraps under its finding behind a bar (`│`, or `|` on a terminal that is not UTF-8), so a wrapped line can never look like a finding of its own. A table too wide for the terminal turns into stacked `Column  value` rows instead of cutting a name or an address.
+- **Nothing is dropped or cut.** Every finding is shown with its subject, code and message; a long message wraps under its finding behind a bar (`│`, or `|` on a terminal that is not UTF-8), so a wrapped line can never look like a finding of its own. Tables measure terminal display cells, including wide and combining characters; an exactly fitting table stays aligned, while one too wide turns into stacked `Column  value` rows instead of cutting a name or an address.
 - **An honest summary.** The last line counts what was found, the ignored findings and the time the command took. "No issues found" is green only when every check could read what it needed; after a partial read it says *no issues found in what could be read, but the read was incomplete*, and findings from a partial read are followed by a note that there may be more. `Checked:` lists the areas only when `--only`/`--skip` chose them (from the document, never guessed).
 - **The same everywhere else.** Exit codes, `--json`, `--csv`, exports and the output with `--plain`, without the extra, or when stdout is not a terminal are exactly what they were.
+- **Existing findings controls are preserved.** `diagnose --watch` keeps its plain initial findings and change-only stream. `diagnose --no-emoji` and `audit --no-emoji` use the existing text-label renderer, without enhanced symbols.
 
 ## Shell completion
 
