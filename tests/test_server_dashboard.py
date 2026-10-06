@@ -80,7 +80,8 @@ def go_down(session, error=None):
 def test_both_roles_read_it_and_it_validates_against_its_schema(admin, viewer):
     bodies = [client.get(URL) for client in (admin, viewer)]
     assert [b.status_code for b in bodies] == [200, 200]
-    assert bodies[0].json() == bodies[1].json()
+    first, second = bodies[0].json(), bodies[1].json()
+    assert {**first, "generated_at": ""} == {**second, "generated_at": ""}     # stamped to the second: two reads may differ
     body = bodies[0].json()
     valid(body)
     assert body["generated_at"].endswith("Z") and isinstance(body["warnings"], list)

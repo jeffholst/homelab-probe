@@ -198,18 +198,23 @@ def test_a_site_name_the_command_line_would_refuse_is_422(viewer):
 
 # -- limits -----------------------------------------------------------------------------------------------------------
 
+def without_time(body):
+    """The answer without ``generated_at``, which is stamped to the second: two reads may fall either side of one."""
+    return {**body, "generated_at": ""}
+
+
 def test_the_limit_is_per_kind_and_truncated_says_when_something_was_cut(viewer):
     body = find(viewer, "aa", limit=2).json()
     assert body["truncated"] is True and body["kinds"]["device"] == {"total": 4, "shown": 2}
     assert len(keys(body, "device")) == 2 and len(keys(body, "finding")) == 2
     whole = find(viewer, "aa", limit=50).json()
     assert whole["truncated"] is False and len(keys(whole, "device")) == 4
-    assert find(viewer, "aa").json() == find(viewer, "aa", limit=10).json() | {"generated_at": whole["generated_at"]}
+    assert without_time(find(viewer, "aa").json()) == without_time(find(viewer, "aa", limit=10).json())
 
 
 def test_the_same_data_gives_the_same_answer_every_time(viewer):
-    first = find(viewer, "10", limit=50).json()
-    assert [find(viewer, "10", limit=50).json() for _ in range(3)] == [first] * 3
+    first = without_time(find(viewer, "10", limit=50).json())
+    assert [without_time(find(viewer, "10", limit=50).json()) for _ in range(3)] == [first] * 3
 
 
 # -- hostile text -----------------------------------------------------------------------------------------------------
