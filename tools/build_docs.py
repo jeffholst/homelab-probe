@@ -63,7 +63,7 @@ README = "README.md"
 GROUPS: Tuple[Tuple[str, str, Tuple[str, ...]], ...] = (
     ("overview", "Overview", ("readme",)),
     ("using", "Using the tool", ("configuration", "diagnose", "inventory", "network")),
-    ("running", "Running it", ("web", "notifications", "scheduling", "logging")),
+    ("running", "Running it", ("web", "notifications", "scheduling", "docker", "logging")),
     ("reference", "Reference", ("schemas", "examples", "features", "development")),
 )
 OTHER_GROUP = ("more", "More")

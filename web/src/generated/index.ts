@@ -6,6 +6,7 @@
 
 export type * as AuditV1 from "./audit.v1";
 export type * as ClientV1 from "./client.v1";
+export type * as DashboardV1 from "./dashboard.v1";
 export type * as DiagnoseV1 from "./diagnose.v1";
 export type * as DiffV1 from "./diff.v1";
 export type * as DoctorV1 from "./doctor.v1";
