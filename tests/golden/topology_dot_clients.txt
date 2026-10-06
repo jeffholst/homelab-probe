@@ -1,0 +1,14 @@
+digraph topology {
+    graph [rankdir=TB, fontname="Helvetica"];
+    node [shape=box, fontname="Helvetica"];
+    edge [fontname="Helvetica"];
+    n0 [label="Gateway\nUCG Max\nCRITICAL x2", style="filled", fillcolor="#f8d7da", color="#b00020"];
+    n1 [label="Office Switch\nUSW-Lite-8-PoE\n1 client\nWARNING x8", style="filled", fillcolor="#fff3cd", color="#b26a00"];
+    c0 [label="desktop", shape=ellipse, style=filled, fillcolor="#f8f9fa", color="#adb5bd"];
+    n2 [label="Office AP\nU7 Pro\n1 client", style="solid", color="#343a40"];
+    n3 [label="Garage AP\nU6 Pro\nOFFLINE\nWARNING", style="filled,dashed", fillcolor="#fff3cd", color="#b26a00"];
+    n0 -> n1 [label="port 2, 100 Mbps, supports 1000"];
+    n1 -> c0 [label="port 3", arrowhead=none];
+    n1 -> n2 [label="port 2"];
+    n1 -> n3 [label="port 5", style=dashed];
+}

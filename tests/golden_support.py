@@ -17,6 +17,10 @@ GOLDEN = Path(__file__).parent / "golden"
 CASES = {
     "topology": ["topology", "--no-emoji"],
     "topology_clients": ["topology", "--no-emoji", "--clients"],
+    "topology_mermaid": ["topology", "--format", "mermaid"],
+    "topology_mermaid_clients": ["topology", "--format", "mermaid", "--clients"],
+    "topology_dot": ["topology", "--format", "dot"],
+    "topology_dot_clients": ["topology", "--format", "dot", "--clients"],
     "wan": ["wan"],
     "wifi": ["wifi"],
     "wifi_all": ["wifi", "--all"],

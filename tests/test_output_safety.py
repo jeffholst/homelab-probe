@@ -132,6 +132,7 @@ COMMANDS = [
     ["firewall", "--all", "--zones", "--no-emoji"], ["firewall", "--zones"],
     ["audit", "--no-emoji"], ["audit"],
     ["topology", "--clients", "--no-emoji"], ["topology", "--clients"],
+    ["topology", "--format", "mermaid", "--clients"], ["topology", "--format", "dot", "--clients"],
     ["client", "desktop", "--no-emoji"], ["client", "desktop"],
     ["diagnose", "--no-emoji", "--show-ignored"], ["diagnose"],
     ["diagnose", "--notify", "--notify-dry-run"],

@@ -81,6 +81,7 @@ from .restore import recover as recover_restore
 from .settings import DiagnoseSettings, expired_rules, load_settings, server_settings_path
 from .snapshot import EventQuery, warn
 from .topology import render_text as render_topology
+from .topology_graph import GRAPH_RENDERERS, TOPOLOGY_FORMATS
 from .util import check_bind, parse_allowed_host, parse_forwarded_ips, printable, safe_output
 from .wan import DEFAULT_DAYS
 from .wan import render_text as render_wan
@@ -388,20 +389,34 @@ def _run_client(ctx: Context) -> int:
 def _add_topology(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--clients", action="store_true",
                         help="Also list the wired clients under each device")
+    parser.add_argument("--format", choices=TOPOLOGY_FORMATS, default="text",
+                        help="text: the tree (default); mermaid: a Mermaid flowchart; dot: a Graphviz digraph. "
+                             "The graph formats cannot be combined with --json")
     parser.add_argument("--json", action="store_true", help="Output nested JSON instead of a tree")
     parser.add_argument("--config", type=Path, metavar="FILE",
                         help="TOML file with diagnose thresholds and ignore list "
                              "(default: ./hlp.toml if present)")
     parser.add_argument("--no-emoji", action="store_true",
                         help="Use ASCII drawing and text severity labels (automatic when output is "
-                             "not a UTF-8 terminal)")
+                             "not a UTF-8 terminal); no effect on the graph formats")
+
+
+def _check_topology(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    if args.json and args.format != "text":
+        parser.error(f"--json and --format {args.format} cannot be combined: --json prints the tree as data, "
+                     "--format draws it as a graph")
 
 
 def _run_topology(ctx: Context) -> int:
     args = ctx.args
     document = topology_document(ctx.client, ctx.config.site, ctx.settings, args.clients)
     emoji = not args.no_emoji and stream_supports_emoji(sys.stdout)
-    say(document.to_json() if args.json else render_topology(document.data, emoji, args.clients))
+    if args.json:
+        say(document.to_json())
+    elif args.format == "text":
+        say(render_topology(document.data, emoji, args.clients))
+    else:
+        say(GRAPH_RENDERERS[args.format](document.data))
     return 0
 
 
@@ -1228,7 +1243,8 @@ COMMANDS: List[Command] = [
     Command("client", "Troubleshoot one client: where it attaches, link quality and related findings",
             _add_client, _run_client, wants_settings=_always),
     Command("topology", "Draw the uplink tree: gateway, switches and APs with ports, speeds and problems",
-            _add_topology, _run_topology, wants_settings=_always),
+            _add_topology, _run_topology, validate=_check_topology,
+            wants_settings=_always),
     Command("snapshot", "Save the current inventory to a local JSON file, for `diff` later", _add_snapshot,
             _run_snapshot),
     Command("diff", "What changed: compare saved snapshots, or a snapshot against the live network", _add_diff,

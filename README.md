@@ -24,7 +24,7 @@ Homelab Probe is a read-only UniFi Network probe for inventory, troubleshooting,
 | `query` | List and filter devices, clients, reservations, ports, networks and Wi-Fi networks | [details](docs/inventory.md#devices) |
 | `serve` | Run the login-protected web API (needs the `web` extra) | [details](docs/web.md#running-the-server-serve) |
 | `snapshot` | Save the current inventory to compare later | [details](docs/inventory.md#snapshots-and-diff) |
-| `topology` | Draw the uplink tree, ports, speeds, client counts and problems | [details](docs/network.md#topology) |
+| `topology` | Draw the uplink tree, ports, speeds, client counts and problems (or a Mermaid or DOT graph) | [details](docs/network.md#topology) |
 | `wan` | Show internet state, monitoring and speedtest history | [details](docs/network.md#wan) |
 | `web-user` | Manage web/API users, roles and passwords | [details](docs/web.md#managing-accounts-web-user) |
 | `wifi` | Report AP radios and nearby-channel planning | [details](docs/network.md#wi-fi) |
@@ -109,7 +109,7 @@ uv run hlp.py new-clients                          # clients in no client group
 uv run hlp.py query clients -s printer --json      # filter clients; --search is the long form
 uv run --extra web hlp.py serve                    # local web API on 127.0.0.1:8787
 uv run hlp.py snapshot                             # save inventory to ./snapshots/
-uv run hlp.py topology --clients                   # gateway, switches, APs and clients
+uv run hlp.py topology --format mermaid --clients  # a Mermaid graph (or dot) with the wired clients
 uv run hlp.py wan --days 90                        # internet health
 uv run hlp.py web-user list                        # web/API accounts
 uv run hlp.py wifi --band 2.4 --ap hall            # radios and neighboring channels
