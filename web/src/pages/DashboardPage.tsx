@@ -2,13 +2,14 @@ import { useQuery } from "@tanstack/react-query";
 import { useId, useRef, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 
-import type { DashboardAnswer, SitesAnswer } from "../api/reports";
+import type { DashboardAnswer, Site, SitesAnswer } from "../api/reports";
 import { useServices } from "../app/services";
 import { Banner, Empty, Loading } from "../components/DataStates";
 import { DataView } from "../components/DataView";
 import { Text } from "../components/Text";
 import { Icon, type IconName } from "../components/ui/Icon";
 import { formatAgo, formatDateTime } from "../lib/format";
+import { safeText } from "../lib/safeText";
 import { usePageTitle } from "../lib/usePageTitle";
 
 type Tone = "danger" | "warning" | "info" | "success";
@@ -65,7 +66,7 @@ export function DashboardPage() {
               >
                 {known.map((entry) => (
                   <option key={entry.ref} value={entry.ref}>
-                    {entry.name === "" ? entry.ref : `${entry.name} (${entry.ref})`}
+                    {siteLabel(entry)}
                   </option>
                 ))}
               </select>
@@ -100,11 +101,27 @@ export function DashboardPage() {
   );
 }
 
-/** The site to show: the one asked for, else the first listed, else `default` when the list could not be read. */
+/**
+ * The site to show, as its internal reference. A site may be asked for by reference, id or name (the API takes any of
+ * them), so a wanted value is turned into the listed site's reference: the selector, the heading and the query key
+ * then agree, and one site is never read under two keys. A value that names no listed site is passed on as it is (the
+ * server answers 404 for it). With no site asked for: the first listed, else `default` when the list could not be
+ * read. Nothing is chosen while the list is still being read, so the first request is already for the final key.
+ */
 export function chooseSite(wanted: string | null, sites: SitesAnswer | undefined, failed: boolean): string | null {
-  if (wanted !== null && wanted !== "") return wanted;
-  if (sites !== undefined) return sites.sites[0]?.ref ?? null;
-  return failed ? "default" : null;
+  const asked = wanted !== null && wanted !== "" ? wanted : null;
+  if (sites === undefined) return failed ? (asked ?? "default") : null;
+  if (asked === null) return sites.sites[0]?.ref ?? null;
+  const listed = sites.sites.find((site) => site.ref === asked) ?? sites.sites.find((site) => site.id === asked) ?? sites.sites.find((site) => site.name === asked);
+  return listed?.ref ?? asked;
+}
+
+/** "Name (ref)" for the picker. An `<option>` cannot hold a component, so the controller's strings are cleaned here
+ * exactly as `<Text>` cleans them (control, invisible and bidirectional characters removed, one line). */
+function siteLabel(site: Site): string {
+  const name = safeText(site.name);
+  const ref = safeText(site.ref);
+  return name === "" || name === ref ? ref : `${name} (${ref})`;
 }
 
 // -- the document ---------------------------------------------------------------------------------------------

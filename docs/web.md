@@ -1,6 +1,6 @@
 # Web interface
 
-The web interface is built in stages (see the roadmap in issue #160). What exists so far is the **backend**, plus the first screens of the web app (the branded login, the navigation shell with its header and footer, a home page, a profile page and the guided first-run setup and restore, built in `web/`). When a built bundle is installed, the server serves it as described in [The web app files](#the-web-app-files). The **server** (`serve`, which needs the `web` extra) provides login, roles and CSRF protection, the read-only report API under `/api/v1/unifi` and a guided first-run setup API; **accounts** are managed with `web-user` (base install only; it does not contact the controller or read your `.env`).
+The web interface is built in stages (see the roadmap in issue #160). What exists so far is the **backend**, plus the first screens of the web app (the branded login, the navigation shell with its header and footer, the dashboard, a profile page and the guided first-run setup and restore, built in `web/`). When a built bundle is installed, the server serves it as described in [The web app files](#the-web-app-files). The **server** (`serve`, which needs the `web` extra) provides login, roles and CSRF protection, the read-only report API under `/api/v1/unifi` and a guided first-run setup API; **accounts** are managed with `web-user` (base install only; it does not contact the controller or read your `.env`).
 
 ## Running the server: `serve`
 
@@ -473,7 +473,7 @@ The browser interface lives in `web/` (React, TypeScript, Vite) and talks to the
 
 - **Healthy only when it is known.** "All checks passed" appears only for `status: ok` (a complete, fresh read of a controller that answered). A partial read says which data could not be read, an older cached answer says how old it is, and a controller that cannot be reached (it answers `200` with `controller.state` of `unreachable`, `certificate` or `key_rejected`) is shown as exactly that, with no numbers.
 - **A section that was not read says so** ("Not read"), never zero; a number the server did not know (`null`) is written "Unknown". Acknowledged and snoozed findings still count in the headline.
-- **The site** is `?site=` in the address, else the first site the controller lists (a picker appears when there are several), else `default` when the list cannot be read, so the page can still say why the controller could not be.
+- **The site** is `?site=` in the address (a reference, id or name: it is turned into the listed site's reference, so the picker and the heading agree), else the first site the controller lists (a picker appears when there are several), else `default` when the list cannot be read, so the page can still say why the controller could not be.
 - **Refresh** reads the controller again (`?refresh=true`, which the server allows every 5 seconds at most); otherwise the server's cache answers. Controller names and messages are shown as text only.
 
 ### The setup screens

@@ -162,6 +162,31 @@ describe("the site", () => {
     expect(screen.getByText("Cabin", { selector: ".eyebrow *" })).toBeInTheDocument();
   });
 
+  it.each([["cabin"], ["site-2"], ["Cabin"]])("opens a site asked for by reference, id or name (%s) under its reference", async (wanted) => {
+    const fake = new FakeApi();
+    fake.sites = [
+      { name: "Default", ref: "default", id: "site-1" },
+      { name: "Cabin", ref: "cabin", id: "site-2" },
+    ];
+    await open(fake, `/?site=${wanted}`);
+    expect(await screen.findByText("Cabin", { selector: ".eyebrow *" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Site")).toHaveValue("cabin");
+    const asked = fake.calls.filter((call) => call.path.endsWith("/dashboard")).map((call) => call.path);
+    expect(asked).toEqual(["/unifi/sites/cabin/dashboard"]); // never read under the id or the name
+  });
+
+  it("cleans the controller's site names in the picker", async () => {
+    const fake = new FakeApi();
+    fake.sites = [
+      { name: "Home\u202e\u200bbase\n(fake)", ref: "default", id: "site-1" },
+      { name: "", ref: "cabin", id: "site-2" },
+    ];
+    await open(fake);
+    await screen.findByText("Gateway");
+    const labels = within(screen.getByLabelText("Site")).getAllByRole("option").map((option) => option.textContent);
+    expect(labels).toEqual(["Homebase (fake) (default)", "cabin"]);
+  });
+
   it("opens the site of a link, and says when the controller has no such site", async () => {
     await open(new FakeApi(), "/?site=nowhere");
     expect(await screen.findByText("Could not load dashboard data")).toBeInTheDocument();
@@ -185,9 +210,13 @@ describe("the site", () => {
 
   it("chooses the asked site, else the first, else default only when the list failed", () => {
     const list = { generated_at: "", warnings: [], sites: [{ name: "A", ref: "a", id: "1" }] };
-    expect(chooseSite("b", list, false)).toBe("b");
+    expect(chooseSite("b", list, false)).toBe("b"); // not listed: the server decides
+    expect(chooseSite("1", list, false)).toBe("a"); // an id
+    expect(chooseSite("A", list, false)).toBe("a"); // a name
     expect(chooseSite("", list, false)).toBe("a");
+    expect(chooseSite("b", undefined, false)).toBeNull(); // wait for the list: no request under a key that may change
     expect(chooseSite(null, undefined, false)).toBeNull();
+    expect(chooseSite("b", undefined, true)).toBe("b");
     expect(chooseSite(null, undefined, true)).toBe("default");
     expect(chooseSite(null, { ...list, sites: [] }, false)).toBeNull();
   });
