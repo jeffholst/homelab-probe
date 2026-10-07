@@ -29,6 +29,10 @@ always listed here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Corrected documentation for web API authorization, security scope, full development dependencies, CI triggers and current packaging limits; added installation choices, production UI build steps and Playwright troubleshooting.
+
 ### Added
 
 - **The dashboard in the web app (#187):** the first page after the login now shows how the network is: a status headline (healthy only for a complete, fresh read of a controller that answered; a partial, old or unreachable read says so instead), the open findings to look at first, devices, clients, the internet connection, Wi-Fi and the notable events of the last 24 hours, from the existing `GET /api/v1/unifi/sites/{site}/dashboard`. A section that was not read says so rather than showing zero, an unknown number reads "Unknown", and a site picker appears when the controller has several sites. This replaces the placeholder home page. See [docs/web.md](docs/web.md#the-dashboard-page).

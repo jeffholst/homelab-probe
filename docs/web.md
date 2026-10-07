@@ -26,16 +26,16 @@ Without the extra it exits with code 3 and says what to install. Options:
 - **`--data-dir DIR`** (default: the current directory): where the server keeps its own files (the accounts, the audit log) and, when no `--env-file` or `HLP_ENV` names one, the `.env` it reads ([first-run setup](#first-run-setup-a-server-with-no-settings)).
 - **`--config FILE`**: the `hlp.toml` with the `diagnose` thresholds and ignore rules, as for the other commands.
 
-What it answers: `/healthz` (is the process up; no data and no controller read), `/readyz` (can the controller be read: 200 or 503 and `{"ready": ...}`, the reason is in the server log), `/api/v1/meta` (version, that login is required, and whether this request came over HTTPS or from a loopback name, which is what a login page needs to decide on a warning), then, after a login, `/api/v1/platforms` and `/api/v1/openapi.json` (the API description, built into the server; the Swagger and ReDoc pages are off because they load scripts from a CDN). The report and schema routes answer only `GET`; the only `POST`s are the login and the logout (CSRF below). The reports are under `/api/v1/unifi`.
+What it answers: `/healthz` (is the process up; no data and no controller read), `/readyz` (can the controller be read: 200 or 503 and `{"ready": ...}`, the reason is in the server log), `/api/v1/meta` (version, that login is required, and whether this request came over HTTPS or from a loopback name, which is what a login page needs to decide on a warning), then, after a login, `/api/v1/platforms` and `/api/v1/openapi.json` (the API description, built into the server; the Swagger and ReDoc pages are off because they load scripts from a CDN). Report and schema reads use `GET`; application actions also use `POST`, `PUT`, `PATCH` or `DELETE`, including authentication, setup, settings, snapshots, notes, triage and backup/restore. These change local application state, not the controller. The reports are under `/api/v1/unifi`.
 
-**Every route except five, and the files of the web app, needs a login.** Only `/`, `/healthz`, `/readyz` (yes or no, nothing more), `/api/v1/meta`, the login itself and the [files of the built web app](#the-web-app-files) (the page and its scripts and styles, nothing else) answer without one, from `127.0.0.1` as well. A route nobody declared anything about needs a login too (the rule is the default of the whole application, and a test pins the list of public routes). A configured server **without an enabled administrator** starts in the limited [admin mode](#first-run-setup-a-server-with-no-settings) (or create one first: `hlp web-user add NAME --role admin`), and one with no settings at all starts the guided setup, and by default it binds only a loopback address (the options below change that on purpose). What protects it:
+**Routes require a login by default.** The public exceptions are `/`, `/healthz`, `/readyz` (yes or no, nothing more), `/api/v1/meta`, the login itself and the [files of the built web app](#the-web-app-files) (the page and its scripts and styles, nothing else), from `127.0.0.1` as well. Setup and backup endpoints marked for setup access have a separate authorization rule: while a setup mode is active and no enabled administrator exists, they require the setup token; otherwise they require an administrator's session. They are not anonymous access to reports. A route nobody declared anything about needs a login too (the rule is the default of the whole application, and tests pin the public and setup endpoints). A configured server **without an enabled administrator** starts in the limited [admin mode](#first-run-setup-a-server-with-no-settings) (or create one first: `hlp web-user add NAME --role admin`), and one with no settings at all starts the guided setup, and by default it binds only a loopback address (the options below change that on purpose). What protects it:
 
 | Protection | What it does |
 | ---------- | ------------ |
-| Login | A session cookie from `POST /api/v1/auth/login` (below) for everything but the five routes and the web app's files |
+| Login | A session cookie from `POST /api/v1/auth/login` (below) for protected routes; setup-token access is limited to the setup authorization rule above |
 | Loopback bind | By default only this machine can connect; another `--host` is your decision (below) |
 | `Host` check | A request whose `Host` header is not one of the loopback names, the bind address or an `--allowed-host` is refused with 400, so a web page cannot reach it through DNS rebinding. The list is never a wildcard: an entry such as `*` or `*.lan` is refused wherever it comes from |
-| CSRF | Every `POST`, `PUT`, `PATCH` and `DELETE` needs an `Origin` that names the server's own `Host` **and** the session's token in `X-CSRF-Token`; its body must be JSON. A script that sends neither is meant to use the command line |
+| CSRF | Every `POST`, `PUT`, `PATCH` and `DELETE` needs an `Origin` that names the server's own `Host`; a nonempty body must be JSON. Session-authenticated actions also require `X-CSRF-Token`. Login has no session token yet; setup-token requests use `X-Setup-Token` instead. Neither exception bypasses the origin check |
 | No CORS | A browser never lets another site read an answer |
 | Headers on every response | A strict content-security policy (`default-src 'none'`), `nosniff`, no referrer, no framing, `no-store`, no server banner |
 | GET only, no passthrough | No report route accepts a path to forward to the controller, and nothing writes to it |
@@ -95,6 +95,24 @@ A server whose package holds a built web app (`homelab_probe/web/`, the output o
 **The Content-Security-Policy.** Every response carries one. The API's forbids everything (`default-src 'none'`, `form-action 'none'`, and only `'self'` for scripts, styles, images and `connect`). The web app's files and page get the policy of a page that loads its own scripts, styles, images and fonts: `default-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'`. There is no `'unsafe-inline'` and no `'unsafe-eval'`: the build must not inline a script or a `<style>` block, and an HTML `style=""` attribute is blocked (setting `element.style` from a script, as React does, is not). The other headers (`nosniff`, `no-referrer`, `X-Frame-Options`, `Cross-Origin-Resource-Policy`) are on every answer, and only the web app's files change `Cache-Control` from `no-store`.
 
 **Building and packaging.** The bundle is not in git (`homelab_probe/web/` is git-ignored). Copy a build there and the checkout serves it; the wheel ships whatever is in that directory as package data (`web/**/*`), so build the web app first, then `uv build`; a release wheel that includes the app needs no step at install time. Check with `curl -i http://127.0.0.1:8787/`: the page, or the JSON notice of an API-only install. The tests use a tiny placeholder bundle (`tests/fixtures/web/`) and never the real one.
+
+### Building and serving the browser UI
+
+From the repository root, with Python, uv, Node 22+ and npm installed, build and copy the production files:
+
+```bash
+cd web
+npm ci
+npm run build
+cd ..
+mkdir -p homelab_probe/web
+cp -R web/dist/. homelab_probe/web/
+uv run --extra web hlp.py --demo serve
+```
+
+Open `http://127.0.0.1:8787` and use the demo login printed by the server. Stop it with Ctrl-C. For a real installation, omit `--demo` and use the guided setup or your configured accounts. Restart a running API-only server after copying the bundle: it selects its static routes at startup. Repeating the copy updates the page and assets but leaves old hashed assets; for a clean release build, use a fresh checkout without an old `homelab_probe/web/` directory.
+
+To package this copied bundle, run `uv build` from the root. Node is not needed to run the resulting wheel. The current release workflow does not build or copy the UI, and the Docker web stage is still a placeholder; do not assume their artifacts contain the browser app. See [Docker](docker.md) and [release procedures](../MAINTAINING.md#prepare-a-release).
 
 ### Logging in: `/api/v1/auth`
 

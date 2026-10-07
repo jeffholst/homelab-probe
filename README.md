@@ -48,6 +48,13 @@ Full feature notes are in [docs/features.md](docs/features.md).
 
 ## Installation
 
+| Path | What you get now | Instructions |
+| ---- | ---------------- | ------------ |
+| CLI from a checkout or tag | Command line; no Node required | Steps below |
+| Web UI development | Browser UI with a development proxy to the Python server; requires Node 22+ and npm | [Development](docs/development.md#the-web-interface-web) |
+| Native production web UI | Build and copy the browser bundle, then serve it with Python; Node is needed only for the build | [Build and serve](docs/web.md#building-and-serving-the-browser-ui) |
+| Docker / Compose | Locally built CLI and web API; the image does not yet include the browser UI and is not yet published | [Docker](docs/docker.md) |
+
 ```bash
 git clone https://github.com/jeffholst/homelab-probe
 cd homelab-probe
@@ -169,7 +176,7 @@ See [docs/configuration.md](docs/configuration.md#troubleshooting) for common me
 
 ## Development
 
-Run `uv run pytest`, `uv run ruff check .` and `uv run mypy`. Project layout and documentation checks are in [docs/development.md](docs/development.md#development); contributor and AI-assistant guidelines are in [CLAUDE.md](CLAUDE.md).
+Use the [routine checks](MAINTAINING.md#routine-checks) to install the locked development dependencies with both `web` and `pretty` extras and reproduce the full local checks. Project layout and documentation checks are in [docs/development.md](docs/development.md#development); contributor and AI-assistant guidelines are in [CLAUDE.md](CLAUDE.md).
 
 ## License
 

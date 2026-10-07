@@ -27,7 +27,9 @@ The latest release and `main`. The project is 0.x: a fix goes into the next rele
 - **The read-only guarantee:** any request to the controller other than a GET (the one approved exception is the read-only event-log query, see [the one POST](docs/network.md#the-one-post-and-why-it-is-safe)), or any way to make the tool change something on the controller.
 - **Output safety:** names that come from devices on your network (clients, devices, SSIDs, event text) that can break the terminal output, forge lines, or turn into a spreadsheet formula in a CSV file.
 - **Where data goes:** a notification that carries more than the finding identity, severity and text, that follows a redirect, or that is sent without verified TLS; a certificate check that is skipped without `UNIFI_VERIFY_SSL=false`.
-- **Local files:** the `.env` file lookup (current directory only), and saved snapshots and notification state, which are meant to be readable by the owner only.
+- **Web access:** authentication, session cookies, roles, CSRF and origin checks, setup-token authorization, host restrictions and proxy trust; a bypass that exposes data or permits an unauthorized action is in scope.
+- **Local files:** `.env` lookup through `--env-file`, `HLP_ENV`, the CLI's current directory or the server's data directory; settings, accounts, notes, triage, snapshots and notification state, which are meant to be readable by the owner only. Static-file serving must not expose these files or escape the browser bundle.
+- **Encrypted backups and restore:** secret disclosure, encryption failures, unsafe archive paths, unauthorized export or restore, and failures of restore validation or recovery that compromise application data. Never include a real backup or its passphrase in a report.
 - **The supply chain of this repository:** the GitHub workflows (the release workflow is the only one that can write), the dependency lockfile and what gets built and published.
 
 ## What is not in scope

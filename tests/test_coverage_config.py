@@ -69,8 +69,16 @@ def test_the_tests_that_skip_without_a_shell_say_so_and_the_job_is_where_they_ru
 
 
 def test_the_docs_give_the_commands_ci_runs():
-    for path in ("docs/development.md", "CONTRIBUTING.md", "CLAUDE.md"):
-        text = (ROOT / path).read_text(encoding="utf-8")
-        assert "uv run coverage run -m pytest" in text and "uv run coverage report" in text, path
+    claude = (ROOT / "CLAUDE.md").read_text(encoding="utf-8")
+    assert "uv run coverage run -m pytest" in claude and "uv run coverage report" in claude
+    contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+    assert "MAINTAINING.md#routine-checks" in contributing
+    assert "including coverage and browser checks" in contributing
+    maintaining = (ROOT / "MAINTAINING.md").read_text(encoding="utf-8")
+    assert "uv run --extra web --extra pretty coverage run -m pytest" in maintaining
+    assert "uv run --extra web --extra pretty coverage report" in maintaining
     development = (ROOT / "docs" / "development.md").read_text(encoding="utf-8")
+    assert "- Coverage: locally, `uv run --extra web --extra pretty coverage run -m pytest`" in development
+    assert "then `uv run --extra web --extra pretty coverage report`" in development
+    assert "uv run coverage run -m pytest -q" in development and "uv run coverage report" in development
     assert coverage_job()["name"] in development

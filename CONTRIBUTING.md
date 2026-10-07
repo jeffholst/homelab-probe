@@ -6,7 +6,7 @@ Thanks for helping. Issues and pull requests are welcome; work is tracked in [Gi
 
 - Look for an existing issue, or open one (a [bug report or feature request](https://github.com/jeffholst/homelab-probe/issues/new/choose)) and say you want to work on it. One issue per pull request.
 - A change that needs an endpoint nobody has probed yet starts with a read-only look at what that endpoint returns on a real controller. Say so in the issue instead of guessing field names; almost every endpoint this tool uses is undocumented.
-- The tool is **read-only**. Every request is a GET, with one exception: the event log can only be queried with a POST (see [the one POST](docs/network.md#the-one-post-and-why-it-is-safe)). A change that writes to the controller, or sends data anywhere except a notification destination the user configured, will not be accepted.
+- The tool is **read-only toward the controller**. Controller requests are GETs, with one exception: the event log can only be queried with a POST (see [the one POST](docs/network.md#the-one-post-and-why-it-is-safe)). The local web API also has write endpoints for application settings and state, never controller changes. A change that writes to the controller, or sends data anywhere except a notification destination the user configured, will not be accepted.
 
 ## Setting up and checking your work
 
@@ -15,13 +15,14 @@ You need Python 3.10 or newer and [uv](https://docs.astral.sh/uv/). Nothing is i
 ```bash
 git clone https://github.com/jeffholst/homelab-probe
 cd homelab-probe
-uv run pytest               # the tests never contact a controller
-uv run ruff check .         # add --fix for import order and unused imports
-uv run mypy                 # clean, and blocking in CI
+uv sync --locked --group dev --extra web --extra pretty
+uv run --extra web --extra pretty python -m pytest  # synthetic data, no real controller
+uv run --extra web --extra pretty ruff check .     # add --fix for simple fixes
+uv run --extra web --extra pretty python -m mypy   # clean, and blocking in CI
 uv lock --check             # after changing a dependency, run `uv lock` and commit uv.lock
 ```
 
-CI runs all of these on every pull request, with the tests on Python 3.10 to 3.13. Line and branch coverage is 100% and CI checks it (`uv run coverage run -m pytest`, then `uv run coverage report`), so a new branch needs a test. Write a test, then break the code it guards and watch the test fail.
+These extras are needed to exercise the server and terminal-styling tests; a base-only environment skips relevant tests. The canonical commands, including coverage and browser checks, are in [Routine Checks](MAINTAINING.md#routine-checks). CI runs on pull requests and pushes to `main`, not feature-branch pushes alone, with Python tests on 3.10 to 3.13. Line and branch coverage is 100% and CI checks it, so a new branch needs a test. Write a test, then break the code it guards and watch the test fail.
 
 ## What a good pull request has
 
