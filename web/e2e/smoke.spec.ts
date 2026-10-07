@@ -1,10 +1,8 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
-import { collectProblems, demoCredentials, expectNoAxeViolations, expectNoHorizontalOverflow, logIn, screenshot } from "./support";
+import { collectProblems, demoCredentials, expectNoAxeViolations, expectNoHorizontalOverflow, isPhone, logIn, openAccount, screenshot } from "./support";
 
 // Against the production build in front of `hlp --demo serve`: the real server, real login, real CSRF, synthetic data.
-
-const isPhone = (testInfo: { project: { name: string } }) => testInfo.project.name === "phone";
 
 test.describe("login", () => {
   test("is the first page for nobody, with no overflow and no accessibility violations", async ({ page }, testInfo) => {
@@ -20,11 +18,13 @@ test.describe("login", () => {
     expect(problems).toEqual([]);
   });
 
-  test("is accessible in the dark theme too", async ({ page }) => {
-    await page.emulateMedia({ colorScheme: "dark" });
+  test("is accessible in the light theme too", async ({ page }, testInfo) => {
     await page.goto("/login");
+    await page.getByRole("radio", { name: "Light" }).check();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
     await expect(page.getByLabel("User name")).toBeVisible();
     await expectNoAxeViolations(page);
+    await screenshot(page, testInfo, "login-light");
   });
 
   test("says why a wrong password failed, in the server's words, and stays on the page", async ({ page }) => {
@@ -127,47 +127,45 @@ test.describe("the shell", () => {
 });
 
 test.describe("themes", () => {
-  test("switches between light and dark, and the choice survives a reload", async ({ page }, testInfo) => {
-    await logIn(page);
-    if (isPhone(testInfo)) await page.getByRole("button", { name: "Menu" }).click();
-    const theme = page.getByRole("navigation", { name: "Main" }).getByLabel("Theme");
-    const background = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  const background = (page: Page) => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
 
-    await theme.selectOption("dark");
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-    const dark = await background();
-
-    await page.reload();
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-    expect(await background()).toBe(dark);
-
-    if (isPhone(testInfo)) await page.getByRole("button", { name: "Menu" }).click();
-    await expectNoAxeViolations(page); // dark, with the drawer open on a phone
-    await screenshot(page, testInfo, "shell-dark");
-    await page.getByRole("navigation", { name: "Main" }).getByLabel("Theme").selectOption("light");
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
-    expect(await background()).not.toBe(dark);
-    await page.reload();
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
-  });
-
-  test("follows the system until a choice is made", async ({ page }) => {
-    await page.emulateMedia({ colorScheme: "dark" });
+  test("is dark by default, whatever the system prefers", async ({ page }) => {
+    await page.emulateMedia({ colorScheme: "light" });
     await page.goto("/login");
     await expect(page.locator("html")).not.toHaveAttribute("data-theme", /.+/);
-    const dark = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-    await page.emulateMedia({ colorScheme: "light" });
-    expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).not.toBe(dark);
+    await expect(page.getByRole("radio", { name: "Dark" })).toBeChecked();
+    expect(await background(page)).toBe("rgb(7, 11, 22)");
   });
 
-  test("an explicit choice beats the system's", async ({ page }) => {
-    await page.emulateMedia({ colorScheme: "dark" });
-    await page.goto("/login");
-    await page.getByLabel("Theme").selectOption("light");
-    const light = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-    expect(light).toBe("rgb(245, 246, 248)");
+  test("switches to light from the account controls, and the choice survives a reload", async ({ page }, testInfo) => {
+    await logIn(page);
+    const dark = await background(page);
+    let account = await openAccount(page, testInfo);
+    await account.getByRole("radio", { name: "Light" }).check();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    expect(await background(page)).not.toBe(dark);
+    await expectNoAxeViolations(page); // light, with the sheet or the menu open
+    await screenshot(page, testInfo, "shell-light-menu");
+
     await page.reload();
-    expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe(light);
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    expect(await background(page)).toBe("rgb(244, 247, 252)");
+    account = await openAccount(page, testInfo);
+    await account.getByRole("radio", { name: "Dark" }).check();
+    await expect(page.locator("html")).not.toHaveAttribute("data-theme", /.+/);
+    expect(await background(page)).toBe(dark);
+  });
+
+  test("follows the system only when asked", async ({ page }) => {
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.goto("/login");
+    await page.getByRole("radio", { name: "System" }).check();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "system");
+    expect(await background(page)).toBe("rgb(244, 247, 252)");
+    await page.emulateMedia({ colorScheme: "dark" });
+    expect(await background(page)).toBe("rgb(7, 11, 22)");
+    await page.reload();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "system");
   });
 });
 
@@ -176,8 +174,7 @@ test.describe("sessions", () => {
     await logIn(page);
     await page.reload();
     await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
-    if (isPhone(testInfo)) await page.getByRole("button", { name: "Menu" }).click();
-    await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: "Log out" }).click();
+    await (await openAccount(page, testInfo)).getByRole("button", { name: "Log out" }).click();
     await expect(page.getByRole("heading", { name: "Log in", level: 1 })).toBeVisible();
     await page.goto("/profile");
     await expect(page).toHaveURL(/\/login\?next=%2Fprofile$/);
@@ -196,10 +193,9 @@ test.describe("sessions", () => {
         databases: (await indexedDB.databases()).length,
       }));
     expect((await read()).local).toEqual([]); // logged in, and nothing stored
-    if (isPhone(testInfo)) await page.getByRole("button", { name: "Menu" }).click();
-    await page.getByRole("navigation", { name: "Main" }).getByLabel("Theme").selectOption("dark");
+    await (await openAccount(page, testInfo)).getByRole("radio", { name: "Light" }).check();
     const stored = await read();
-    expect(stored.local).toEqual([["hlp-theme", "dark"]]);
+    expect(stored.local).toEqual([["hlp-theme", "light"]]);
     expect(stored.session).toEqual([]);
     expect(stored.cookie).toBe(""); // the session cookie is HttpOnly
     expect(stored.databases).toBe(0);
@@ -234,9 +230,9 @@ test.describe("sessions", () => {
   test("lists the platforms the server reports, read through the proxy with the real policy in force", async ({ page }) => {
     const problems = collectProblems(page);
     await logIn(page);
-    await expect(page.getByText("UniFi")).toBeVisible();
+    await expect(page.getByText("UniFi", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Refresh" }).click();
-    await expect(page.getByText("UniFi")).toBeVisible();
+    await expect(page.getByText("UniFi", { exact: true })).toBeVisible();
     expect(problems).toEqual([]);
     const credentials = await demoCredentials(page);
     expect(credentials.policy).toContain("script-src 'self'");

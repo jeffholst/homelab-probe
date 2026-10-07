@@ -1,31 +1,42 @@
 import { useId } from "react";
 
-import { THEME_CHOICES, isThemePreference, type ThemePreference } from "../theme/storage";
+import { THEME_CHOICES, type ThemePreference } from "../theme/storage";
 import { useTheme } from "../theme/ThemeProvider";
+import { Icon, type IconName } from "./ui/Icon";
 
-const LABELS: Record<ThemePreference, string> = { system: "System", light: "Light", dark: "Dark" };
+const CHOICES: Record<ThemePreference, { label: string; icon: IconName }> = {
+  dark: { label: "Dark", icon: "moon" },
+  light: { label: "Light", icon: "sun" },
+  system: { label: "System", icon: "monitor" },
+};
 
-/** Light, dark or follow the system. The choice is applied at once and remembered in this browser. */
-export function ThemeSwitch() {
+/**
+ * Dark (the brand's default), light or follow the system, as a segmented control: real radio buttons, so the keyboard
+ * (arrow keys) and screen readers work as they do for any radio group. Applied at once and remembered in this browser.
+ */
+export function ThemeSwitch({ compact = false }: { compact?: boolean }) {
   const { preference, setPreference } = useTheme();
-  const id = useId();
+  const name = useId();
   return (
-    <div className="theme-switch">
-      <label htmlFor={id}>Theme</label>
-      <select
-        id={id}
-        className="select"
-        value={preference}
-        onChange={(event) => {
-          if (isThemePreference(event.target.value)) setPreference(event.target.value);
-        }}
-      >
-        {THEME_CHOICES.map((choice) => (
-          <option key={choice} value={choice}>
-            {LABELS[choice]}
-          </option>
-        ))}
-      </select>
-    </div>
+    <fieldset className={`segmented${compact ? " segmented--compact" : ""}`}>
+      <legend className={compact ? "visually-hidden" : "segmented__legend"}>Theme</legend>
+      {THEME_CHOICES.map((choice) => (
+        <label key={choice} className="segmented__option">
+          <input
+            type="radio"
+            name={name}
+            value={choice}
+            checked={preference === choice}
+            onChange={() => {
+              setPreference(choice);
+            }}
+          />
+          <span className="segmented__face">
+            <Icon name={CHOICES[choice].icon} />
+            <span>{CHOICES[choice].label}</span>
+          </span>
+        </label>
+      ))}
+    </fieldset>
   );
 }

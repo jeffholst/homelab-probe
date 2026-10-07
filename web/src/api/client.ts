@@ -9,7 +9,10 @@
  * - **One error type.** Every failure is an `ApiError` built from the server's `{error, message}` (or, for an answer
  *   that is not that, a fixed sentence by status): the text of a response body is never shown unchecked.
  * - **401** (not logged in, or the session ended) clears the token and calls `onUnauthorized`, which sends the user
- *   to the login page. The login's own 401 (wrong password) is an ordinary error.
+ *   to the login page. The login's own 401 (wrong password) and a wrong setup token (`invalid_setup_token`, which says
+ *   nothing about a session) are ordinary errors.
+ * - **Extra headers** are for the setup token (`X-Setup-Token`) only; the caller holds it in memory, like the CSRF
+ *   token.
  */
 import { ApiError, errorFromResponse } from "./errors";
 
@@ -17,6 +20,8 @@ export const API_PREFIX = "/api/v1";
 export const CSRF_HEADER = "X-CSRF-Token";
 const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 export const LOGIN_PATH = "/auth/login";
+export const SETUP_TOKEN_HEADER = "X-Setup-Token";
+const SETUP_TOKEN_REFUSED = "invalid_setup_token";
 
 type QueryValue = string | number | boolean | undefined;
 export type Query = Readonly<Record<string, QueryValue | readonly QueryValue[]>>;
@@ -26,6 +31,8 @@ export interface RequestOptions<T> {
   /** Sent as JSON. */
   body?: unknown;
   signal?: AbortSignal | undefined;
+  /** Sent as they are (the setup token); never `Content-Type`, `Accept` or the CSRF header, which the client sets. */
+  headers?: Readonly<Record<string, string>>;
   /** Checks and converts the parsed JSON; without it the answer is taken as `T` (the report documents). */
   parse?: (value: unknown) => T;
 }
@@ -77,7 +84,8 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
   let csrfToken: string | null = null;
 
   async function request<T>(method: string, path: string, settings: RequestOptions<T> = {}): Promise<T> {
-    const headers = new Headers({ Accept: "application/json" });
+    const headers = new Headers(settings.headers);
+    headers.set("Accept", "application/json");
     const init: RequestInit = { method, headers, credentials: "include", cache: "no-store" };
     if (settings.signal) init.signal = settings.signal;
     if (settings.body !== undefined) {
@@ -97,7 +105,7 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     const body = await readBody(response);
     if (!response.ok) {
       const failure = errorFromResponse(response.status, response.headers.get("Retry-After"), body);
-      if (response.status === 401 && path !== LOGIN_PATH) {
+      if (response.status === 401 && path !== LOGIN_PATH && failure.code !== SETUP_TOKEN_REFUSED) {
         csrfToken = null;
         options.onUnauthorized?.();
       }

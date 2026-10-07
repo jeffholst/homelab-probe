@@ -11,35 +11,37 @@ import { renderWithProviders } from "../test/render";
 import { THEME_CHOICES, THEME_KEY, applyThemePreference, readThemePreference, writeThemePreference } from "./storage";
 
 describe("the theme preference", () => {
-  it("defaults to the system theme, which sets no attribute", () => {
+  it("defaults to the brand's dark theme, which sets no attribute", () => {
     renderWithProviders(<ThemeSwitch />);
-    expect(screen.getByLabelText("Theme")).toHaveValue("system");
+    expect(screen.getByRole("radio", { name: "Dark" })).toBeChecked();
+    expect(screen.getByRole("group", { name: "Theme" })).toBeInTheDocument();
     expect(document.documentElement).not.toHaveAttribute("data-theme");
   });
 
-  it("applies light and dark at once and remembers them (one word, nothing else, in storage)", async () => {
+  it("applies light and system at once and remembers them (one word, nothing else, in storage)", async () => {
     const user = userEvent.setup();
     renderWithProviders(<ThemeSwitch />);
-    await user.selectOptions(screen.getByLabelText("Theme"), "dark");
-    expect(document.documentElement).toHaveAttribute("data-theme", "dark");
-    expect(window.localStorage.getItem(THEME_KEY)).toBe("dark");
-    expect(window.localStorage.length).toBe(1);
-    await user.selectOptions(screen.getByLabelText("Theme"), "light");
+    await user.click(screen.getByRole("radio", { name: "Light" }));
     expect(document.documentElement).toHaveAttribute("data-theme", "light");
-    await user.selectOptions(screen.getByLabelText("Theme"), "system");
+    expect(window.localStorage.getItem(THEME_KEY)).toBe("light");
+    expect(window.localStorage.length).toBe(1);
+    await user.click(screen.getByRole("radio", { name: "System" }));
+    expect(document.documentElement).toHaveAttribute("data-theme", "system");
+    expect(window.localStorage.getItem(THEME_KEY)).toBe("system");
+    await user.click(screen.getByRole("radio", { name: "Dark" }));
     expect(document.documentElement).not.toHaveAttribute("data-theme");
     expect(window.localStorage.length).toBe(0);
   });
 
   it("starts from the stored choice", () => {
-    window.localStorage.setItem(THEME_KEY, "dark");
-    renderWithProviders(<ThemeSwitch />);
-    expect(screen.getByLabelText("Theme")).toHaveValue("dark");
+    window.localStorage.setItem(THEME_KEY, "light");
+    renderWithProviders(<ThemeSwitch compact />);
+    expect(screen.getByRole("radio", { name: "Light" })).toBeChecked();
   });
 
   it("ignores a stored value that is not one of the three words", () => {
     window.localStorage.setItem(THEME_KEY, "<script>");
-    expect(readThemePreference()).toBe("system");
+    expect(readThemePreference()).toBe("dark");
   });
 
   it("keeps working when storage is blocked", async () => {
@@ -51,25 +53,29 @@ describe("the theme preference", () => {
       throw new DOMException("blocked", "SecurityError");
     });
     renderWithProviders(<ThemeSwitch />);
-    expect(screen.getByLabelText("Theme")).toHaveValue("system");
-    await user.selectOptions(screen.getByLabelText("Theme"), "dark");
-    expect(document.documentElement).toHaveAttribute("data-theme", "dark");
+    expect(screen.getByRole("radio", { name: "Dark" })).toBeChecked();
+    await user.click(screen.getByRole("radio", { name: "Light" }));
+    expect(document.documentElement).toHaveAttribute("data-theme", "light");
+    vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
+      throw new DOMException("blocked", "SecurityError");
+    });
     expect(() => {
       writeThemePreference("light");
+      writeThemePreference("dark");
     }).not.toThrow();
   });
 
   it("applies to any root element", () => {
     const root = document.createElement("div");
-    applyThemePreference("dark", root);
-    expect(root.dataset["theme"]).toBe("dark");
     applyThemePreference("system", root);
+    expect(root.dataset["theme"]).toBe("system");
+    applyThemePreference("dark", root);
     expect(root.dataset["theme"]).toBeUndefined();
   });
 
   it("uses the key and the words that public/theme-init.js (which runs before the first paint) uses", () => {
     const script = readFileSync(resolve(process.cwd(), "public/theme-init.js"), "utf8");
     expect(script).toContain(`getItem("${THEME_KEY}")`);
-    for (const choice of THEME_CHOICES.filter((word) => word !== "system")) expect(script).toContain(`"${choice}"`);
+    for (const choice of THEME_CHOICES.filter((word) => word !== "dark")) expect(script).toContain(`"${choice}"`);
   });
 });

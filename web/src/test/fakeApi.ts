@@ -16,6 +16,10 @@
  * - **Sessions.** An idle timeout and an absolute one (checked on every request, counted by an injectable clock), a new
  *   login ends the one it replaces, and the cookie is only sent and kept when the request says `credentials: "include"`.
  * - **Errors** are `{error, message}` with fixed sentences.
+ * - **The setup mode** (`setupToken`, see fakeSetup.ts): while `meta.needs_setup` is true every route that is neither
+ *   public nor a setup route answers 503 `not_configured`; a setup route wants the `X-Setup-Token` while no enabled
+ *   administrator exists (401 `invalid_setup_token`, and the login's throttle under its own key) and an administrator's
+ *   session with the CSRF token once one does.
  *
  * Not copied: the report documents. A page issue adds the routes it reads with `fake.route(...)`.
  */
@@ -66,6 +70,7 @@ interface Route {
   names: string[];
   handler: Handler;
   public: boolean;
+  setup: boolean;
   role: Role;
 }
 
@@ -129,11 +134,15 @@ export class FakeApi {
   private readonly maxMs: number;
   /** Simulates a page of another site posting to this server: its Origin is not ours. */
   crossSite = false;
+  /** The setup token of a server in a setup mode (fakeSetup.ts sets it). */
+  setupToken: string | null = null;
 
   constructor(options: FakeApiOptions = {}) {
-    this.accounts = options.accounts ?? [
-      { username: "demo", password: "correct horse", role: "admin" },
-      { username: "viewer", password: "viewer pass", role: "viewer" },
+    this.accounts = [
+      ...(options.accounts ?? [
+        { username: "demo", password: "correct horse", role: "admin" },
+        { username: "viewer", password: "viewer pass", role: "viewer" },
+      ]),
     ];
     this.meta = { ...DEFAULT_META, ...options.meta };
     this.platforms = options.platforms ?? [{ id: "unifi", name: "UniFi", configured: true }];
@@ -149,7 +158,7 @@ export class FakeApi {
   }
 
   /** Registers a route, which must be in the OpenAPI snapshot. A later registration of the same route wins. */
-  route(method: string, template: string, handler: Handler, options: { public?: boolean; role?: Role } = {}): void {
+  route(method: string, template: string, handler: Handler, options: { public?: boolean; role?: Role; setup?: boolean } = {}): void {
     if (!inContract(method, template)) {
       throw new Error(`${method} ${API}${template} is not in tests/golden/openapi.json: the fake may not serve it`);
     }
@@ -161,7 +170,16 @@ export class FakeApi {
         return "([^/]+)";
       })}$`,
     );
-    this.routes.unshift({ method, template, pattern, names, handler, public: options.public ?? false, role: options.role ?? "viewer" });
+    this.routes.unshift({
+      method,
+      template,
+      pattern,
+      names,
+      handler,
+      public: options.public ?? false,
+      setup: options.setup ?? false,
+      role: options.setup === true ? "admin" : (options.role ?? "viewer"),
+    });
   }
 
   /** Answers the next `times` requests whose path starts with `prefix` with this error (a server failure to react to). */
@@ -176,6 +194,21 @@ export class FakeApi {
 
   /** Ends every session, as a restart of the server does. */
   restartServer(): void {
+    this.sessions.clear();
+  }
+
+  /** Is there an enabled administrator (the setup token stops working once there is)? */
+  hasAdministrator(): boolean {
+    return this.accounts.some((account) => account.role === "admin" && account.disabled !== true);
+  }
+
+  addAccount(account: FakeAccount): void {
+    this.accounts.push(account);
+  }
+
+  /** Replaces every account (a restore), ending every session. */
+  replaceAccounts(accounts: FakeAccount[]): void {
+    this.accounts.splice(0, this.accounts.length, ...accounts);
     this.sessions.clear();
   }
 
@@ -228,7 +261,12 @@ export class FakeApi {
     }
 
     let session: FakeSession | null = null;
-    if (!route.public) {
+    if (!route.public && !route.setup && this.meta.needs_setup) {
+      throw new ApiRefused(503, "not_configured", "The server is not set up yet: finish the setup first.");
+    }
+    if (route.setup && this.meta.needs_setup && !this.hasAdministrator()) {
+      this.checkSetupToken(headers.get("X-Setup-Token"));
+    } else if (!route.public) {
       session = withCookies ? this.currentSession() : null;
       if (session === null) throw new ApiRefused(401, "not_logged_in", "Log in first.");
       if (RANK[session.role] < RANK[route.role]) throw new ApiRefused(403, "forbidden", "Your role may not do this.");
@@ -248,6 +286,21 @@ export class FakeApi {
     }
     const result = route.handler({ method, path, params, query: url.searchParams, body, session });
     return result instanceof Response ? result : json(200, result);
+  }
+
+  private checkSetupToken(supplied: string | null): void {
+    const wait = Math.max(0, (this.failures.get("setup")?.until ?? 0) - this.clock());
+    if (wait > 0) {
+      const seconds = Math.ceil(wait / 1000);
+      throw new ApiRefused(429, "too_many_attempts", `Too many attempts. Try again in ${seconds} seconds.`, { retry_after: seconds }, {
+        "Retry-After": String(seconds),
+      });
+    }
+    if (this.setupToken === null || supplied !== this.setupToken) {
+      this.fail("setup", 300);
+      throw new ApiRefused(401, "invalid_setup_token", "The setup token is missing or wrong.");
+    }
+    this.failures.delete("setup");
   }
 
   private match(method: string, path: string): { route: Route; params: Record<string, string> } | null {

@@ -13,7 +13,10 @@ export function ProfilePage() {
 
   return (
     <>
-      <h1>Profile</h1>
+      <div className="page-head">
+        <p className="eyebrow">Account</p>
+        <h1>Profile</h1>
+      </div>
       {user && (
         <section className="card" aria-labelledby="account-heading">
           <h2 id="account-heading">Account</h2>
@@ -33,7 +36,7 @@ export function ProfilePage() {
       )}
       <section className="card" aria-labelledby="appearance-heading">
         <h2 id="appearance-heading">Appearance</h2>
-        <p className="muted">Light, dark, or follow your device. The choice is remembered in this browser only.</p>
+        <p className="muted">Dark (the default), light, or follow your device. The choice is remembered in this browser only.</p>
         <ThemeSwitch />
       </section>
       <section className="card" aria-labelledby="password-heading">

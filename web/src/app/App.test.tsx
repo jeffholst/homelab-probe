@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { safeNext } from "../auth/session";
 import { FakeApi } from "../test/fakeApi";
+import { FakeSetup } from "../test/fakeSetup";
 import { renderApp } from "../test/render";
 
 async function logIn(user: ReturnType<typeof userEvent.setup>, password = "correct horse", username = "demo") {
@@ -114,17 +115,22 @@ describe("the login page", () => {
   it("does not warn on loopback or HTTPS", async () => {
     const { unmount } = renderApp("/login", { meta: { https: false, loopback: true } });
     await screen.findByLabelText("User name");
-    await waitFor(() => { expect(screen.getByText(/Version/)).toBeInTheDocument(); });
+    await waitFor(() => { expect(screen.getByText(/Homelab Probe 0\.0\.0-test/)).toBeInTheDocument(); });
     expect(screen.queryByText("This connection is not encrypted")).toBeNull();
     unmount();
     renderApp("/login", { meta: { https: true, loopback: false } });
-    await screen.findByText(/Version/);
+    await screen.findByText(/Homelab Probe 0\.0\.0-test/);
     expect(screen.queryByText("This connection is not encrypted")).toBeNull();
   });
 
-  it("says when the server needs its setup, which this app cannot do yet", async () => {
-    renderApp("/login", { meta: { needs_setup: true, setup_mode: "first_run" } });
-    expect(await screen.findByText("This server is not set up yet")).toBeInTheDocument();
+  it("sends a server that needs its setup to the setup, from the login and from any page", async () => {
+    const fake = new FakeApi({ accounts: [] });
+    new FakeSetup(fake);
+    const first = renderApp("/login", { fake });
+    expect(await screen.findByRole("heading", { name: "Welcome to Homelab Probe" })).toBeInTheDocument();
+    first.unmount();
+    renderApp("/profile", { fake });
+    expect(await screen.findByRole("heading", { name: "Welcome to Homelab Probe" })).toBeInTheDocument();
   });
 
   it("shows a failure to reach the server with a way to retry", async () => {
@@ -193,7 +199,8 @@ describe("the shell", () => {
     await logIn(user, "pw-pw-pw-pw", evil);
     const nav = await screen.findByRole("navigation", { name: "Main" });
     expect(nav).toHaveTextContent("<img src=x onerror=alert(1)>gpj");
-    expect(document.querySelector("img")).toBeNull();
+    expect(document.querySelector('img[src="x"]')).toBeNull();
+    expect([...document.querySelectorAll("img")].every((img) => img.className.startsWith("brand"))).toBe(true);
     expect(within(nav).getByText("Viewer")).toBeInTheDocument();
   });
 

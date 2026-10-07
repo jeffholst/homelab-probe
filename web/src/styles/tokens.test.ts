@@ -18,9 +18,9 @@ function block(selector: string): Record<string, string> {
   return found;
 }
 
-const light = block(":root");
-const darkByQuery = block(':root:not([data-theme="light"])');
-const darkByAttribute = block(':root[data-theme="dark"]');
+const dark = block(":root");
+const light = block(':root[data-theme="light"]');
+const lightBySystem = block(':root[data-theme="system"]');
 
 function luminance(hex: string): number {
   const value = /^#([0-9a-f]{6})$/i.exec(hex)?.[1];
@@ -35,20 +35,27 @@ function contrast(foreground: string, background: string): number {
   return (a + 0.05) / (b + 0.05);
 }
 
-const themes = { light, dark: darkByAttribute } as const;
+const themes = { dark, light } as const;
 
 // [foreground, background, minimum ratio]: 4.5 for text, 3 for the border of a control and the focus ring.
 const PAIRS: [string, string, number][] = [
   ["--color-text", "--color-bg", 4.5],
   ["--color-text", "--color-surface", 4.5],
   ["--color-text", "--color-surface-sunken", 4.5],
+  ["--color-text", "--color-surface-raised", 4.5],
+  ["--color-text", "--color-header", 4.5],
   ["--color-text-muted", "--color-bg", 4.5],
   ["--color-text-muted", "--color-surface", 4.5],
   ["--color-text-muted", "--color-surface-sunken", 4.5],
+  ["--color-text-muted", "--color-surface-raised", 4.5],
+  ["--color-text-muted", "--color-header", 4.5],
   ["--color-link", "--color-bg", 4.5],
   ["--color-link", "--color-surface", 4.5],
+  ["--color-link", "--color-surface-raised", 4.5],
   ["--color-on-accent", "--color-accent", 4.5],
   ["--color-on-accent", "--color-accent-hover", 4.5],
+  ["--color-on-brand", "--color-brand", 4.5],
+  ["--color-on-brand", "--color-brand-hover", 4.5],
   ["--color-danger-text", "--color-danger-bg", 4.5],
   ["--color-warning-text", "--color-warning-bg", 4.5],
   ["--color-success-text", "--color-success-bg", 4.5],
@@ -58,6 +65,8 @@ const PAIRS: [string, string, number][] = [
   ["--color-focus", "--color-bg", 3],
   ["--color-focus", "--color-surface", 3],
   ["--color-accent", "--color-surface", 3],
+  ["--color-accent", "--color-bg", 3],
+  ["--color-brand", "--color-surface", 3],
 ];
 
 describe("design tokens", () => {
@@ -70,18 +79,18 @@ describe("design tokens", () => {
     });
   }
 
-  it("keeps the dark set under the media query identical to the one under the attribute", () => {
-    expect(darkByQuery).toEqual(darkByAttribute);
+  it("keeps the light set the system preference uses identical to the one the attribute chooses", () => {
+    expect(lightBySystem).toEqual(light);
   });
 
-  it("defines every colour of the light set in the dark set, and the reverse", () => {
-    expect(Object.keys(darkByAttribute).sort()).toEqual(Object.keys(light).sort());
+  it("defines every colour of the dark set in the light set, and the reverse", () => {
+    expect(Object.keys(dark).sort()).toEqual(Object.keys(light).sort());
   });
 
-  it("follows the system by default and lets the attribute choose either theme", () => {
-    expect(css).toContain("@media (prefers-color-scheme: dark)");
-    expect(css).toContain(':root[data-theme="light"]');
-    expect(css).toContain(':root[data-theme="dark"]');
+  it("is dark by default, light by attribute, and follows the system only when asked", () => {
+    expect(css).toMatch(/:root \{\s*color-scheme: dark;/);
+    expect(css).toContain("@media (prefers-color-scheme: light)");
+    expect(css).not.toContain(':root[data-theme="dark"]');
   });
 
   it("uses no colour in the stylesheet that is not a token", () => {

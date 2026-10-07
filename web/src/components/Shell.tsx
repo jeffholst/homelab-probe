@@ -1,29 +1,44 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 
-import { useLogout, useSession } from "../auth/session";
-import { DESKTOP_QUERY, useMediaQuery } from "../lib/useMediaQuery";
 import { useMeta } from "../app/meta";
+import { useLogout, useSession } from "../auth/session";
+import { safeText } from "../lib/safeText";
+import { DESKTOP_QUERY, useMediaQuery } from "../lib/useMediaQuery";
+import { BrandMark } from "./brand/Brand";
+import { SiteFooter } from "./SiteFooter";
 import { Text } from "./Text";
 import { ThemeSwitch } from "./ThemeSwitch";
+import { Icon, type IconName } from "./ui/Icon";
 
 interface NavItem {
   to: string;
   label: string;
+  icon: IconName;
   end?: boolean;
 }
 
 /** Only pages that work are listed: a page issue adds its row here when the page ships. */
 export const NAV_ITEMS: readonly NavItem[] = [
-  { to: "/", label: "Home", end: true },
-  { to: "/profile", label: "Profile" },
+  { to: "/", label: "Home", icon: "home", end: true },
+  { to: "/profile", label: "Profile", icon: "user" },
 ];
 
+function roleName(role: string): string {
+  return role === "admin" ? "Administrator" : "Viewer";
+}
+
+/** The first letter of a user name for the avatar, cleaned like any other account string ("?" when there is none). */
+function initial(username: string): string {
+  return Array.from(safeText(username))[0] ?? "?";
+}
+
 /**
- * The frame of every page after the login: a skip link, a banner, the main navigation (a drawer on a phone or tablet,
- * a sidebar from 56rem up), the page itself in `<main>` and a footer. Moving to another page moves focus to its
- * heading, so a keyboard or screen reader user starts at the top of the new page. While the drawer is open the rest of
- * the page is inert, Escape closes it and focus returns to the menu button.
+ * The frame of every page after the login: a skip link, the sticky header (the brand, the main navigation and the
+ * account menu from 56rem up; a menu button that opens a sheet with all of them below that), the page in `<main>` and
+ * the footer. Moving to another page moves focus to its heading, so a keyboard or screen reader user starts at the top
+ * of the new page. While the sheet is open the rest of the page is inert, Escape closes it and focus returns to the
+ * menu button; the account menu closes with Escape or a click elsewhere.
  */
 export function Shell() {
   const desktop = useMediaQuery(DESKTOP_QUERY);
@@ -53,8 +68,8 @@ export function Shell() {
     }
   }, [location.pathname]);
 
-  // The menu button is inert while the drawer is open, so focus goes back to it only once the page has been
-  // re-rendered without the drawer.
+  // The menu button is inert while the sheet is open, so focus goes back to it only once the page has been
+  // re-rendered without the sheet.
   const restoreFocus = useRef(false);
   function closeDrawer(returnFocus: boolean) {
     restoreFocus.current = returnFocus;
@@ -84,82 +99,120 @@ export function Shell() {
   }, [drawerOpen]);
 
   const user = session.data;
+  const demo = meta.data?.demo === true && <span className="pill pill--info">Demo data</span>;
+  const logOut = (
+    <button
+      type="button"
+      className="button button--secondary button--block"
+      disabled={logout.isPending}
+      onClick={() => {
+        logout.mutate();
+      }}
+    >
+      <Icon name="logout" />
+      Log out
+    </button>
+  );
+  const who = user && (
+    <p className="who">
+      <span className="avatar" aria-hidden="true">
+        {initial(user.username)}
+      </span>
+      <span className="who__text">
+        <span>
+          <span className="visually-hidden">Signed in as </span>
+          <strong>
+            <Text value={user.username} />
+          </strong>
+        </span>
+        <span className="muted small">{roleName(user.role)}</span>
+      </span>
+    </p>
+  );
+
   return (
     <div className="app">
       <a className="skip-link" href="#main" inert={drawerOpen}>
         Skip to main content
       </a>
-      <header className="topbar" inert={drawerOpen}>
-        <button
-          ref={menuButton}
-          type="button"
-          className="button button--secondary menu-button"
-          aria-expanded={drawerOpen}
-          aria-controls={navId}
-          onClick={() => {
-            setMenuOpen(true);
-          }}
-        >
-          Menu
-        </button>
-        <p className="brand">Homelab Probe</p>
-        {meta.data?.demo === true && <span className="pill pill--info">Demo data</span>}
-      </header>
-      <nav
-        id={navId}
-        className="nav"
-        aria-label="Main"
-        data-open={drawerOpen}
-      >
-        <div className="nav__head">
-          <button
-            ref={closeButton}
-            type="button"
-            className="button button--secondary nav__close"
-            onClick={() => {
-              closeDrawer(true);
-            }}
-          >
-            Close menu
-          </button>
-        </div>
-        <ul className="nav__list">
-          {NAV_ITEMS.map((item) => (
-            <li key={item.to}>
-              <NavLink
-                to={item.to}
-                end={item.end ?? false}
-                className="nav__link"
-                onClick={() => {
-                  closeDrawer(false);
-                }}
-              >
-                {item.label}
-              </NavLink>
-            </li>
-          ))}
-        </ul>
-        <div className="nav__account">
-          {user && (
-            <p className="nav__who">
-              Signed in as <strong><Text value={user.username} /></strong>
-              <br />
-              <span className="muted">{user.role === "admin" ? "Administrator" : "Viewer"}</span>
-            </p>
+      <header className="site-header" inert={drawerOpen}>
+        <div className="site-header__inner">
+          {!desktop && (
+            <button
+              ref={menuButton}
+              type="button"
+              className="icon-button"
+              aria-label="Menu"
+              aria-expanded={drawerOpen}
+              aria-controls={navId}
+              onClick={() => {
+                setMenuOpen(true);
+              }}
+            >
+              <Icon name="menu" />
+            </button>
           )}
-          <ThemeSwitch />
-          <button
-            type="button"
-            className="button button--secondary"
-            disabled={logout.isPending}
-            onClick={() => {
-              logout.mutate();
-            }}
-          >
-            Log out
-          </button>
+          <BrandMark to="/" />
+          {desktop && (
+            <nav className="topnav" aria-label="Main">
+              <ul className="topnav__list">
+                {NAV_ITEMS.map((item) => (
+                  <li key={item.to}>
+                    <NavLink to={item.to} end={item.end ?? false} className="topnav__link">
+                      <Icon name={item.icon} />
+                      {item.label}
+                    </NavLink>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          )}
+          <div className="site-header__end">
+            {demo}
+            {desktop && user && <AccountMenu who={who} initialLetter={initial(user.username)} username={user.username} logOut={logOut} />}
+          </div>
         </div>
-      </nav>
+      </header>
+      {!desktop && (
+        <nav id={navId} className="drawer" aria-label="Main" data-open={drawerOpen}>
+          <div className="drawer__head">
+            <BrandMark />
+            <button
+              ref={closeButton}
+              type="button"
+              className="icon-button"
+              aria-label="Close menu"
+              onClick={() => {
+                closeDrawer(true);
+              }}
+            >
+              <Icon name="close" />
+            </button>
+          </div>
+          <ul className="drawer__list">
+            {NAV_ITEMS.map((item) => (
+              <li key={item.to}>
+                <NavLink
+                  to={item.to}
+                  end={item.end ?? false}
+                  className="menu-link"
+                  onClick={() => {
+                    closeDrawer(false);
+                  }}
+                >
+                  <Icon name={item.icon} />
+                  {item.label}
+                </NavLink>
+              </li>
+            ))}
+          </ul>
+          <div className="drawer__account">
+            {who}
+            <ThemeSwitch compact />
+            {logOut}
+          </div>
+        </nav>
+      )}
       {drawerOpen && (
         <div
           className="scrim"
@@ -172,11 +225,87 @@ export function Shell() {
       <main id="main" className="main" ref={mainRef} tabIndex={-1} inert={drawerOpen}>
         <Outlet />
       </main>
-      <footer className="footer" inert={drawerOpen}>
-        <p>
-          Homelab Probe{meta.data ? ` ${meta.data.version}` : ""}. Read-only: nothing here changes your controller.
-        </p>
-      </footer>
+      <SiteFooter inert={drawerOpen} />
+    </div>
+  );
+}
+
+interface AccountMenuProps {
+  who: ReactNode;
+  initialLetter: string;
+  username: string;
+  logOut: ReactNode;
+}
+
+/** The account button of the desktop header and its panel: who is signed in, the profile, the theme, logging out. */
+function AccountMenu({ who, initialLetter, username, logOut }: AccountMenuProps) {
+  const [open, setOpen] = useState(false);
+  const panelId = useId();
+  const root = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+        button.current?.focus();
+      }
+    };
+    const onPointer = (event: PointerEvent) => {
+      if (event.target instanceof Node && !root.current?.contains(event.target)) setOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("pointerdown", onPointer);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("pointerdown", onPointer);
+    };
+  }, [open]);
+
+  return (
+    <div className="account" ref={root}>
+      <button
+        ref={button}
+        type="button"
+        className="account__button"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => {
+          setOpen((value) => !value);
+        }}
+      >
+        <span className="avatar" aria-hidden="true">
+          {initialLetter}
+        </span>
+        <span className="account__name">
+          <span className="visually-hidden">Account: </span>
+          <Text value={username} />
+        </span>
+        <Icon name="chevronDown" />
+      </button>
+      {open && (
+        <div id={panelId} className="popover">
+          {who}
+          <ul className="menu-list">
+            <li>
+              <NavLink
+                to="/profile"
+                className="menu-link"
+                onClick={() => {
+                  setOpen(false);
+                }}
+              >
+                <Icon name="user" />
+                Profile
+              </NavLink>
+            </li>
+          </ul>
+          <div className="stack">
+            <ThemeSwitch compact />
+            {logOut}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
