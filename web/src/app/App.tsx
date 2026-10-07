@@ -2,7 +2,7 @@ import { Route, Routes } from "react-router-dom";
 
 import { RequireAuth } from "../auth/RequireAuth";
 import { Shell } from "../components/Shell";
-import { HomePage } from "../pages/HomePage";
+import { DashboardPage } from "../pages/DashboardPage";
 import { LoginPage } from "../pages/LoginPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
 import { ProfilePage } from "../pages/ProfilePage";
@@ -16,7 +16,7 @@ export function App() {
       <Route path="/setup" element={<SetupPage />} />
       <Route element={<RequireAuth />}>
         <Route element={<Shell />}>
-          <Route index element={<HomePage />} />
+          <Route index element={<DashboardPage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>

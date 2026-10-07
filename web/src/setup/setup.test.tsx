@@ -147,7 +147,7 @@ describe("configuring a new installation", () => {
     await user.type(await screen.findByLabelText("User name"), "owner");
     await user.type(screen.getByLabelText("Password"), "a long enough password");
     await user.click(screen.getByRole("button", { name: "Log in" }));
-    expect(await screen.findByRole("heading", { name: "Home" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
   });
 
   it("never shows the API key again, nor keeps it anywhere but the server's draft", async () => {

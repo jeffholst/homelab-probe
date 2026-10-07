@@ -134,7 +134,7 @@ test("creates the first administrator of a server configured from its environmen
   await page.getByLabel("User name").fill(OWNER.username);
   await page.getByLabel("Password").fill(OWNER.password);
   await page.getByRole("button", { name: "Log in" }).click();
-  await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Dashboard", level: 1 })).toBeVisible();
   expect(await page.content()).not.toContain(OWNER.password);
   expect(problems.filter((problem) => !/status of (401|503)/.test(problem))).toEqual([]);
 
@@ -179,7 +179,7 @@ test("restores that backup on the fresh installation, in the dark theme, and its
   await page.getByLabel("User name").fill(OWNER.username);
   await page.getByLabel("Password").fill(OWNER.password);
   await page.getByRole("button", { name: "Log in" }).click();
-  await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Dashboard", level: 1 })).toBeVisible();
   const stored = await page.evaluate(() => JSON.stringify([Object.entries(localStorage), Object.entries(sessionStorage), document.cookie, location.href]));
   for (const secret of [BACKUP_PASSPHRASE, OWNER.password]) expect(stored).not.toContain(secret);
 });
