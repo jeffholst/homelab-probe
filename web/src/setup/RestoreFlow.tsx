@@ -70,6 +70,8 @@ export function RestoreFlow({ token, onCancel, onRestored }: { token: string | n
   }
 
   function forget() {
+    setFile(null);
+    setFileError(null);
     setArchive(null);
     setPreview(null);
     setPassphrase("");
