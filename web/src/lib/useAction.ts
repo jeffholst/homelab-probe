@@ -8,14 +8,20 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * the time the call is on its way.
  *
  * It is not for reads (use `useQuery`) and it never retries: a call that may have happened is never sent twice. A
- * second `mutate` while one is running is ignored, so a double click cannot send twice either. `onSuccess` and
- * `onError` run when the call ends even if the component has been removed meanwhile (the parent usually moves on in
- * them); the component's own state is only updated while it exists, and not after `reset`.
+ * second `mutate` while one is running is ignored, so a double click cannot send twice either.
+ *
+ * `reset` **abandons** a call that is still on its way (it cannot be cancelled): its result is ignored, none of the
+ * callbacks run for it, and a new `mutate` may start at once. A call whose component is removed meanwhile still ends
+ * normally: `onSuccess` and `onError` run (the parent usually moves on in them) and only the component's own state and
+ * per-call callbacks are skipped. With `keepResult: false` the result is passed to `onSuccess` and not kept at all
+ * (for a large secret buffer that the caller keeps itself and must be able to drop).
  */
 export interface ActionOptions<T, V> {
   mutationFn: (variables: V) => Promise<T>;
   onSuccess?: (data: T, variables: V) => unknown;
   onError?: (error: unknown, variables: V) => unknown;
+  /** Keep the result in `data` (default). `false`: hand it to `onSuccess` only. */
+  keepResult?: boolean;
 }
 
 export interface ActionCallbacks<T> {
@@ -61,25 +67,28 @@ export function useAction<T, V = void>(options: ActionOptions<T, V>): Action<T, 
     running.current = true;
     generation.current += 1;
     const mine = generation.current;
-    const current = () => mounted.current && generation.current === mine;
+    // False once `reset` (or another call) has taken over: this call's outcome is then nobody's business.
+    const live = () => generation.current === mine;
     setOutcome({ status: "pending" });
     void (async () => {
       let data: T;
       try {
         data = await latest.current.mutationFn(variables);
-        await latest.current.onSuccess?.(data, variables);
+        if (live()) await latest.current.onSuccess?.(data, variables);
       } catch (error) {
+        if (!live()) return;
         running.current = false;
         await latest.current.onError?.(error, variables);
-        if (current()) {
+        if (live() && mounted.current) {
           setOutcome({ status: "error", error });
           callbacks?.onError?.(error);
         }
         return;
       }
+      if (!live()) return;
       running.current = false;
-      if (current()) {
-        setOutcome({ status: "success", data });
+      if (mounted.current) {
+        setOutcome(latest.current.keepResult === false ? { status: "success" } : { status: "success", data });
         callbacks?.onSuccess?.(data);
       }
     })();
@@ -87,6 +96,7 @@ export function useAction<T, V = void>(options: ActionOptions<T, V>): Action<T, 
 
   const reset = useCallback(() => {
     generation.current += 1;
+    running.current = false;
     setOutcome({ status: "idle" });
   }, []);
 

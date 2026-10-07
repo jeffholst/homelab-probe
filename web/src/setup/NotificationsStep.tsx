@@ -152,6 +152,7 @@ export function NotificationsStep({ onNext, onBack }: { onNext: () => void; onBa
                 name="notify-kind"
                 value={entry.value}
                 checked={kind === entry.value}
+                disabled={save.isPending}
                 onChange={() => {
                   setKind(entry.value);
                   setValues({});

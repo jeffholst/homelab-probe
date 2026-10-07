@@ -106,6 +106,7 @@ export function CertificateStep({ onNext, onBack }: { onNext: () => void; onBack
               name="verify"
               value={option.value}
               checked={choice === option.value}
+              disabled={save.isPending}
               onChange={() => {
                 setChoice(option.value);
                 save.reset();

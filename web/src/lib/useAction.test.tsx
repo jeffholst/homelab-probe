@@ -90,23 +90,71 @@ describe("useAction", () => {
     expect(fn).toHaveBeenCalledTimes(2);
   });
 
-  it("does not show the outcome of a call that was reset meanwhile, but still runs its callbacks", async () => {
-    const pending = deferred<string>();
+  it("abandons a call that is reset meanwhile: no state, no callbacks, and a new call may start at once", async () => {
+    const old = deferred<string>();
+    const fresh = deferred<string>();
     const onSuccess = vi.fn();
-    const { result } = renderHook(() => useAction({ mutationFn: () => pending.promise, onSuccess }));
+    const onError = vi.fn();
+    const calls = [old, fresh];
+    const fn = vi.fn((value: string) => (calls.shift() as { promise: Promise<string> }).promise.then((done) => `${value}:${done}`));
+    const { result } = renderHook(() => useAction({ mutationFn: fn, onSuccess, onError }));
     act(() => {
-      result.current.mutate(undefined);
+      result.current.mutate("old");
+    });
+    act(() => {
+      result.current.reset();
+    });
+    act(() => {
+      result.current.mutate("new"); // not ignored: the old call was abandoned
+    });
+    expect(fn).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      old.resolve("stale");
+      await old.promise;
+    });
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(result.current.isPending).toBe(true); // the old result did not finish the new call
+    await act(async () => {
+      fresh.resolve("fresh");
+      await fresh.promise;
+    });
+    await waitFor(() => {
+      expect(result.current.data).toBe("new:fresh");
+    });
+    expect(onSuccess).toHaveBeenCalledTimes(1);
+    expect(onSuccess).toHaveBeenCalledWith("new:fresh", "new");
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("runs no error callback for an abandoned call that fails", async () => {
+    const old = deferred<string>();
+    const onError = vi.fn();
+    const { result } = renderHook(() => useAction({ mutationFn: (value: string) => old.promise.then(() => value), onError }));
+    act(() => {
+      result.current.mutate("old");
     });
     act(() => {
       result.current.reset();
     });
     await act(async () => {
-      pending.resolve("late");
-      await pending.promise;
+      old.reject(new Error("late failure"));
+      await old.promise.catch(() => undefined);
     });
-    expect(result.current.isSuccess).toBe(false);
+    expect(onError).not.toHaveBeenCalled();
+    expect(result.current.isError).toBe(false);
+  });
+
+  it("keeps no result when asked, but still hands it to onSuccess", async () => {
+    const onSuccess = vi.fn();
+    const { result } = renderHook(() => useAction({ mutationFn: () => Promise.resolve("BIG-SECRET-BUFFER"), onSuccess, keepResult: false }));
+    act(() => {
+      result.current.mutate(undefined);
+    });
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
     expect(result.current.data).toBeUndefined();
-    expect(onSuccess).toHaveBeenCalledWith("late", undefined);
+    expect(onSuccess).toHaveBeenCalledWith("BIG-SECRET-BUFFER", undefined);
   });
 
   it("does not touch state after the component is gone, and runs the parent's callbacks", async () => {

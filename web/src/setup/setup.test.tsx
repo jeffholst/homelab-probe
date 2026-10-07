@@ -497,6 +497,32 @@ describe("restoring a backup on a fresh installation", () => {
     expect(await screen.findByText("This is not a Homelab Probe backup.")).toBeInTheDocument();
   });
 
+  it("cannot change the file or the passphrase while the backup is being opened, and moves on with what was sent", async () => {
+    const fake = new FakeApi({ accounts: [] });
+    new FakeSetup(fake);
+    const real = fake.fetch;
+    const user = userEvent.setup();
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    (fake as { fetch: typeof fetch }).fetch = async (input, init) => {
+      if (String(typeof input === "string" ? input : (input as Request).url).includes("/backup/preview")) await gate;
+      return real(input, init);
+    };
+    renderApp("/setup", { fake });
+    await enterToken(user);
+    await user.click(await screen.findByRole("button", { name: /Restore from a backup/ }));
+    await user.upload(await screen.findByLabelText(/Choose a backup file/), backupFile());
+    await user.type(screen.getByLabelText("Passphrase of the backup"), BACKUP_PASSPHRASE);
+    await user.click(screen.getByRole("button", { name: "Open the backup" }));
+    expect(await screen.findByRole("button", { name: "Opening…" })).toBeDisabled();
+    expect(screen.getByLabelText("Passphrase of the backup")).toBeDisabled();
+    expect(screen.getByLabelText(/home\.hlpbackup/)).toBeDisabled();
+    release();
+    expect(await screen.findByRole("heading", { name: "What the restore would do" })).toBeInTheDocument();
+  });
+
   it("asks for the file and the passphrase, and refuses a file larger than the server opens", async () => {
     const { user } = setupApp();
     await enterToken(user);
