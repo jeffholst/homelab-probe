@@ -120,10 +120,11 @@ async function startServer(mode) {
   const hlp = ["run", "--project", repo, "--extra", "web", path.join(repo, "hlp.py")];
   let args = [...hlp, "--demo", "serve", "--port", String(apiPort)];
   let cwd = repo;
+  let dataDir = null;
   const setupToken = randomBytes(18).toString("base64url");
   if (SETUP_LIKE.has(mode)) {
     for (const name of Object.keys(env)) if (name.startsWith("UNIFI_") || name.startsWith("NOTIFY_") || name === "HLP_ENV") delete env[name];
-    const dataDir = mkdtempSync(path.join(os.tmpdir(), `hlp-e2e-${mode}-`));
+    dataDir = mkdtempSync(path.join(os.tmpdir(), `hlp-e2e-${mode}-`));
     directories.push(dataDir);
     env.HLP_SETUP_TOKEN = setupToken;
     if (mode === "admin") {
@@ -179,7 +180,8 @@ async function startServer(mode) {
   });
   const credentials =
     mode !== "demo"
-      ? { setupToken, ...(["stub", "fallback", "readonly"].includes(mode) ? { controller: await controllers() } : {}) }
+      ? // `dataDir` lets a test look at what the server did and did not write (the harness and the tests share a machine).
+        { setupToken, dataDir, ...(["stub", "fallback", "readonly"].includes(mode) ? { controller: await controllers() } : {}) }
       : await new Promise((resolve, reject) => {
           const timer = setTimeout(() => {
             reject(new Error(`the demo server printed no login within 120 s:\n${text}`));

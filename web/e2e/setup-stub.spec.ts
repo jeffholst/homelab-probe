@@ -1,3 +1,7 @@
+import { X509Certificate } from "node:crypto";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
+import path from "node:path";
+
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 
 import { collectProblems, expectNoAxeViolations, expectNoHorizontalOverflow, screenshot } from "./support";
@@ -19,10 +23,29 @@ const OWNER = { username: "setup-owner", password: "e2e setup owner password, lo
 
 const server = (testInfo: TestInfo, name: "stubURL" | "fallbackURL" | "readonlyURL") => String(testInfo.project.metadata[name]);
 
-async function credentials(page: Page, base: string): Promise<{ setupToken: string; controller: Controller }> {
+interface Credentials {
+  setupToken: string;
+  /** The server's data directory: where it would write what the setup saves. */
+  dataDir: string;
+  controller: Controller;
+}
+
+async function credentials(page: Page, base: string): Promise<Credentials> {
   const response = await page.request.get(`${base}/__e2e/credentials`);
   expect(response.ok()).toBe(true);
-  return (await response.json()) as { setupToken: string; controller: Controller };
+  return (await response.json()) as Credentials;
+}
+
+/** Does the server still wait for its setup? (The public `meta` says.) */
+async function needsSetup(page: Page, base: string): Promise<boolean> {
+  const meta = (await (await page.request.get(`${base}/api/v1/meta`)).json()) as { needs_setup: boolean };
+  return meta.needs_setup;
+}
+
+/** Nothing was written: no settings file and no pinned certificate in the data directory. */
+function expectNothingSaved(dataDir: string): void {
+  expect(existsSync(path.join(dataDir, ".env")), "no .env was written").toBe(false);
+  expect(existsSync(path.join(dataDir, "certs")), "no certificate was saved").toBe(false);
 }
 
 /** Opens the setup on `base`, enters the token and starts a new installation. */
@@ -63,14 +86,15 @@ async function testConnection(page: Page): Promise<void> {
 }
 
 /** From a passed connection test to the administrator step, skipping what is optional. */
-async function toAdministrator(page: Page, withPreview = false): Promise<void> {
+async function toAdministrator(page: Page, preview?: () => Promise<void>): Promise<void> {
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByRole("heading", { name: "Notifications" })).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByRole("heading", { name: "A first health check" })).toBeVisible();
-  if (withPreview) {
+  if (preview) {
     await page.getByRole("button", { name: "Run the checks" }).click();
     await expect(page.getByRole("list", { name: "What was found" })).toBeVisible();
+    await preview();
     await page.getByRole("button", { name: "Continue" }).click();
   } else {
     await page.getByRole("button", { name: "Skip" }).click();
@@ -116,7 +140,9 @@ test.describe("the whole setup, against the stub controller", () => {
     await pin(page, controller.fingerprint);
     await page.getByRole("button", { name: "Test the connection" }).click();
     await expect(page.getByText("The controller could not be used")).toBeVisible();
-    await expect(page.getByRole("list", { name: "What was checked" })).toContainText("Failed");
+    // The reason is the key (the doctor's own words for a 401), not some other failure.
+    await expect(page.getByRole("list", { name: "What was checked" })).toContainText("the controller rejected the API key (401)");
+    await expect(page.getByRole("list", { name: "What was checked" })).toContainText("Settings > Control Plane > Integrations");
     await expect(page.getByRole("button", { name: "Continue" })).toBeDisabled();
     await expectNoAxeViolations(page);
     await screenshot(page, testInfo, "stub-key-refused");
@@ -135,13 +161,27 @@ test.describe("the whole setup, against the stub controller", () => {
     await expectNoAxeViolations(page);
     await screenshot(page, testInfo, "stub-connected");
 
-    await toAdministrator(page, true);
-    await expect(page.getByText("Garage switch")).toHaveCount(0); // not a fake: the findings are the stub's own
-    await expectNoAxeViolations(page);
+    await toAdministrator(page, async () => {
+      // The first health check ran against the stub: its findings are the demo network's, not a fake answer.
+      await expect(page.getByRole("list", { name: "Findings" }).getByText("Gateway", { exact: true }).first()).toBeVisible();
+      await expectNoHorizontalOverflow(page);
+      await expectNoAxeViolations(page);
+    });
     await finish(page);
     await expect(page.getByRole("heading", { name: "You're all set", level: 1 })).toBeVisible();
 
-    // The settings were saved with the pinned certificate: the dashboard is read from the stub over verified TLS.
+    // What was saved: the settings file (owner-only) names the controller and the pinned certificate, whose
+    // fingerprint is the one that was compared; a server that is no longer waiting for its setup.
+    const { dataDir } = await credentials(page, base);
+    const settings = readFileSync(path.join(dataDir, ".env"), "utf8");
+    const pinned = path.join(realpathSync(dataDir), "certs", "controller.pem"); // the server writes the resolved path
+    expect(settings).toContain(`UNIFI_URL=${controller.url}`);
+    expect(settings).toContain(`UNIFI_VERIFY_SSL=${pinned}`);
+    expect(statSync(path.join(dataDir, ".env")).mode & 0o077, "the settings file is owner-only").toBe(0);
+    expect(new X509Certificate(readFileSync(pinned)).fingerprint256).toBe(controller.fingerprint);
+    expect(await needsSetup(page, base)).toBe(false);
+
+    // The settings work: the dashboard is read from the stub over TLS verified against that certificate.
     await page.getByRole("button", { name: "Go to the login" }).click();
     await page.getByLabel("User name").fill(OWNER.username);
     await page.getByLabel("Password").fill(OWNER.password);
@@ -157,7 +197,8 @@ test.describe("the whole setup, against the stub controller", () => {
 });
 
 test("says nothing was saved, names what overrides it, and shows files with placeholders only", async ({ page }, testInfo) => {
-  const controller = await start(page, server(testInfo, "fallbackURL"));
+  const base = server(testInfo, "fallbackURL");
+  const controller = await start(page, base);
   await controllerStep(page, controller.url, controller.key);
   await pin(page, controller.fingerprint);
   await testConnection(page);
@@ -168,11 +209,18 @@ test("says nothing was saved, names what overrides it, and shows files with plac
   await expect(page.getByText("Nothing was saved")).toBeVisible();
   await expect(page.getByText(/also set in the server's environment/)).toContainText("UNIFI_VERIFY_SSL");
   await expect(page.getByRole("figure", { name: ".env" })).toContainText("UNIFI_API_KEY=your-api-key-here");
+  await expect(page.getByRole("figure", { name: ".env" })).toContainText("UNIFI_VERIFY_SSL=/path/to/controller.pem");
+  await expect(page.getByRole("figure", { name: "compose.yaml (environment)" })).toContainText("UNIFI_API_KEY");
   await expect(page.getByRole("figure", { name: "controller.pem" })).toContainText("BEGIN CERTIFICATE");
   await expect(page.getByRole("heading", { name: "You're all set" })).toHaveCount(0);
   await expectNoHorizontalOverflow(page);
   await expectNoAxeViolations(page);
   await screenshot(page, testInfo, "stub-fallback");
+
+  // "Nothing was saved" is true: no file was written and the server still waits for its setup.
+  const { dataDir } = await credentials(page, base);
+  expectNothingSaved(dataDir);
+  expect(await needsSetup(page, base)).toBe(true);
 
   const text = await readable(page);
   for (const secret of [controller.key, OWNER.password]) expect(text).not.toContain(secret);
@@ -194,7 +242,11 @@ test("a read-only server says so up front and refuses the last step", async ({ p
   await testConnection(page);
   await toAdministrator(page);
   await finish(page);
-  await expect(page.getByText("This server is read-only").first()).toBeVisible();
+  await expect(page.getByRole("alert").filter({ hasText: "This server is read-only" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "You're all set" })).toHaveCount(0);
   await expect(page.getByLabel("Password", { exact: true })).toHaveValue(""); // the typed password is dropped
+  // The refusal is real: nothing was written and the server still waits for its setup.
+  const { dataDir } = await credentials(page, base);
+  expectNothingSaved(dataDir);
+  expect(await needsSetup(page, base)).toBe(true);
 });
