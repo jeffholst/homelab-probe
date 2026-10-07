@@ -138,6 +138,7 @@ See [web documentation](docs/web.md#running-the-server-serve) for options and ac
 
 A merge to `main` starts the CI workflow. These commands only read; add `--repo jeffholst/homelab-probe` outside the
 project folder.
+Install and authenticate GitHub CLI first if needed: `gh auth login`.
 
 ```bash
 # The latest runs on main: id, status, result, time and the commit title
