@@ -73,6 +73,7 @@ export function SetupPage() {
   }, [needsSetup, administrator, setup, attempt]);
 
   function finish(result: Done) {
+    setAccess(null);
     setDone(result);
     // Every session ended (a restore) or none existed: the next page is the login, with the server's new state.
     endSession(queryClient);
