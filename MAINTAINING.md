@@ -17,8 +17,8 @@ Update this guide in the same PR whenever a maintenance or release procedure cha
 
 Labels group the issues so open work can be found and ordered. The issue forms add only `bug` or `enhancement`,
 so add the others yourself when you create or triage an issue. Every open issue should have an area label.
-Use the labels GitHub provides (`bug`, `enhancement`, `documentation`, `accessibility`, `question`) as they are
-described there; the labels below are this project's own.
+Use the labels GitHub provides (`bug`, `enhancement`, `documentation`, `accessibility`) as they are described there
+(the project does not use `question`); the labels below are this project's own.
 
 | Label | Use it for |
 | ----- | ---------- |
@@ -32,10 +32,10 @@ described there; the labels below are this project's own.
 | `security` | Work that needs security-focused design and review: secrets, authorization, untrusted input, output safety |
 | `blocked` | Waiting on another issue. Say which one in the issue description, and remove the label when it merges |
 | `needs-approval` | Needs the owner's approval before work continues, for example a probe of the real controller |
-| `deferred` | Postponed on purpose until a stated condition is met, such as a second site existing |
+| `deferred` | An idea or task postponed on purpose: not scheduled until someone picks it up or a stated condition is met (the ideas for new commands, or `--all-sites` until a second site exists). Remove it when the work is scheduled |
 
 An issue can have several labels: an area, plus any of `tracker`, `launch`, `terminal`, `security` and one status
-(`blocked`, `needs-approval` or `deferred`). `question` on an idea means the design still needs a decision.
+(`blocked`, `needs-approval` or `deferred`).
 
 Useful searches (add `--repo jeffholst/homelab-probe` outside the project folder):
 
