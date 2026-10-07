@@ -1,3 +1,7 @@
+import { readFileSync, readdirSync } from "node:fs";
+import { resolve } from "node:path";
+
+import type { QueryClient } from "@tanstack/react-query";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
@@ -223,6 +227,18 @@ describe("configuring a new installation", () => {
     expect(setup.bodies.at(-1)?.body).toEqual({ verify: "true" });
   });
 
+  it("says when a connection test passed with warnings, and still lets the setup go on", async () => {
+    const { user } = setupApp({ connectionWarning: true });
+    await startConfigure(user);
+    await controller(user);
+    await pin(user);
+    await user.click(await screen.findByRole("button", { name: "Test the connection" }));
+    expect(await screen.findByText("Connected, with warnings")).toBeInTheDocument();
+    expect(screen.queryByText("Connected")).toBeNull();
+    expect(screen.getByRole("list", { name: "What was checked" })).toHaveTextContent("Warning: Client history");
+    expect(screen.getByRole("button", { name: "Continue" })).toBeEnabled();
+  });
+
   it("shows a failed connection test and does not go on", async () => {
     const { user } = setupApp({ connectionOk: false });
     await startConfigure(user);
@@ -363,6 +379,23 @@ describe("the other ways in", () => {
     await user.click(screen.getByRole("button", { name: /Set up a new installation/ }));
     await controller(user);
     expect(setup.draft.url).toBe("https://192.168.1.1"); // with the session and its CSRF token, no setup token
+  });
+
+  it("says up front that a read-only server cannot save a setup or restore a backup", async () => {
+    const fake = new FakeApi({ accounts: [], meta: { read_only: true } });
+    new FakeSetup(fake);
+    const user = userEvent.setup();
+    renderApp("/setup", { fake });
+    await enterToken(user);
+    expect(await screen.findByText("This server is read-only")).toBeInTheDocument();
+    expect(screen.getByText(/it cannot save a setup or restore a backup/)).toBeInTheDocument();
+  });
+
+  it("shows no read-only notice on a normal server", async () => {
+    const { user } = setupApp();
+    await enterToken(user);
+    await screen.findByRole("heading", { name: "How would you like to start?" });
+    expect(screen.queryByText("This server is read-only")).toBeNull();
   });
 
   it("says when the server is set up already", async () => {
@@ -621,5 +654,75 @@ describe("restore failures", () => {
     expect(screen.getByText(/keeps winning over the restored file/)).toBeInTheDocument();
     expect(screen.getByText(/never your UniFi controller's configuration/)).toBeInTheDocument();
     expect(screen.getByText(/also for devices and clients that are gone/)).toBeInTheDocument();
+  });
+});
+
+describe("secrets are not left in the query client", () => {
+  const KEY = "POISON-API-KEY-93f1";
+  const ADMIN_PASSWORD = "POISON-admin-password-93f1";
+  const NOTIFY_TOKEN = "POISON-notify-token-93f1";
+  const PASSPHRASE = BACKUP_PASSPHRASE;
+  const RECOVERY = "POISON-recovery-passphrase-93f1";
+
+  /** Everything the query client holds: its mutations (with their variables) and every query's key and data. */
+  function held(services: { queryClient: QueryClient }): string {
+    const cache = services.queryClient;
+    return JSON.stringify({
+      mutations: cache.getMutationCache().getAll().map((mutation) => ({ variables: mutation.state.variables, data: mutation.state.data })),
+      queries: cache.getQueryCache().getAll().map((query) => ({ key: query.queryKey, data: query.state.data })),
+    });
+  }
+
+  it("holds neither the API key, the notification token nor the administrator's password after the setup", async () => {
+    const { user, services } = setupApp();
+    await startConfigure(user);
+    await controller(user, "https://192.168.1.1", KEY);
+    await pin(user);
+    expect(held(services)).not.toContain(KEY);
+    await testConnection(user);
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", { name: "Notifications" });
+    await user.click(screen.getByRole("radio", { name: /^ntfy/ }));
+    await user.type(screen.getByLabelText("Topic address"), "https://ntfy.example/alerts");
+    await user.type(screen.getByLabelText("Access token (optional)"), NOTIFY_TOKEN);
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await screen.findByText("Saved on the server");
+    expect(held(services)).not.toContain(NOTIFY_TOKEN);
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await user.click(await screen.findByRole("button", { name: "Skip" }));
+    await user.type(await screen.findByLabelText("User name"), "owner");
+    await user.type(screen.getByLabelText("Password"), ADMIN_PASSWORD);
+    await user.type(screen.getByLabelText("Password again"), ADMIN_PASSWORD);
+    await user.click(screen.getByRole("button", { name: "Finish setup" }));
+    await screen.findByRole("heading", { name: "You're all set" });
+    expect(held(services)).not.toContain(ADMIN_PASSWORD);
+    expect(held(services)).not.toContain(KEY);
+    expect(services.queryClient.getMutationCache().getAll()).toEqual([]);
+  });
+
+  it("holds neither the backup file, its passphrase nor the recovery passphrase after a restore", async () => {
+    const { user, services } = setupApp({ recoveryRequired: true });
+    await enterToken(user);
+    await user.click(await screen.findByRole("button", { name: /Restore from a backup/ }));
+    await user.upload(await screen.findByLabelText(/Choose a backup file/), new File([BACKUP_CONTENT], "home.hlpbackup"));
+    await user.type(screen.getByLabelText("Passphrase of the backup"), PASSPHRASE);
+    await user.click(screen.getByRole("button", { name: "Open the backup" }));
+    await user.click(await screen.findByRole("button", { name: "Continue" }));
+    await user.click(await screen.findByLabelText(/I understand that the accounts and passwords/));
+    await user.type(screen.getByLabelText("Passphrase for the recovery backup"), RECOVERY);
+    await user.type(screen.getByLabelText("Passphrase again"), RECOVERY);
+    await user.click(screen.getByRole("button", { name: "Restore now" }));
+    await screen.findByRole("heading", { name: "Backup restored" });
+    const text = held(services);
+    for (const secret of [PASSPHRASE, RECOVERY, btoa(BACKUP_CONTENT)]) expect(text).not.toContain(secret);
+    expect(services.queryClient.getMutationCache().getAll()).toEqual([]);
+  });
+
+  it("does not use TanStack mutations on any setup screen (they would keep the variables)", () => {
+    const directory = resolve(process.cwd(), "src/setup");
+    const offenders = readdirSync(directory)
+      .filter((name) => /\.tsx?$/.test(name) && !name.endsWith(".test.tsx"))
+      .filter((name) => /\buseMutation\b/.test(readFileSync(resolve(directory, name), "utf8")));
+    expect(offenders).toEqual([]);
   });
 });

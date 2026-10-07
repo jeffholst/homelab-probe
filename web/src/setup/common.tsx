@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient, type UseMutationOptions } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
@@ -9,6 +9,7 @@ import { endSession } from "../app/services";
 import { Banner } from "../components/DataStates";
 import { Text } from "../components/Text";
 import { Icon, type IconName } from "../components/ui/Icon";
+import { useAction, type ActionOptions } from "../lib/useAction";
 
 /** What every step of the setup shares: the token (memory only; null when an administrator's session is used) and the
  * last status the server gave. */
@@ -29,16 +30,18 @@ export function useSetup(): SetupContextValue {
   return value;
 }
 
-/** `useMutation` for a setup call: its failure also goes to `lost`. Never retried: a finish or a restore that may have
- * happened must not be sent twice. */
-export function useSetupMutation<T, V = void>(options: UseMutationOptions<T, unknown, V>) {
+/**
+ * A setup call (see `useAction`: **no mutation cache**, so the API key, passwords, passphrases and the backup file are
+ * not left in the query client). A failure also goes to `lost`. Never retried: a finish or a restore that may have
+ * happened must not be sent twice.
+ */
+export function useSetupMutation<T, V = void>(options: ActionOptions<T, V>) {
   const { lost } = useSetup();
-  return useMutation<T, unknown, V>({
+  return useAction<T, V>({
     ...options,
-    retry: false,
-    onError: (...args) => {
-      lost(args[0]);
-      return options.onError?.(...args);
+    onError: (error, variables) => {
+      lost(error);
+      return options.onError?.(error, variables);
     },
   });
 }

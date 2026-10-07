@@ -163,6 +163,9 @@ test("restores that backup on the fresh installation, in the dark theme, and its
 
   await expect(page.getByRole("heading", { name: "What the restore would do" })).toBeVisible();
   await expect(page.getByText(OWNER.username, { exact: true })).toBeVisible();
+  // The note of a device that is in no inventory is part of the backup, and is not matched or pruned.
+  await expect(page.getByText("1 notes, 0 triage entries, 1 site")).toBeVisible();
+  await expect(page.getByText(/also for devices and clients that are gone/)).toBeVisible();
   await expectNoHorizontalOverflow(page);
   await expectNoAxeViolations(page);
   await screenshot(page, testInfo, "setup-restore-review");
@@ -180,6 +183,11 @@ test("restores that backup on the fresh installation, in the dark theme, and its
   await page.getByLabel("Password").fill(OWNER.password);
   await page.getByRole("button", { name: "Log in" }).click();
   await expect(page.getByRole("heading", { name: "Dashboard", level: 1 })).toBeVisible();
+  // The restored server still has the note, read from its data directory without asking the controller.
+  const subjects = await page.request.get("/api/v1/unifi/sites/e2e-site/notes/subjects");
+  expect(subjects.status()).toBe(200);
+  const kept = (await subjects.json()) as { items: { subject: string; note_count: number }[] };
+  expect(kept.items.map((item) => [item.subject, item.note_count])).toEqual([["device:AA:BB:CC:DD:EE:01", 1]]);
   const stored = await page.evaluate(() => JSON.stringify([Object.entries(localStorage), Object.entries(sessionStorage), document.cookie, location.href]));
   for (const secret of [BACKUP_PASSPHRASE, OWNER.password]) expect(stored).not.toContain(secret);
 });

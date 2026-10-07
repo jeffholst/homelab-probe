@@ -81,6 +81,19 @@ describe("the route guard", () => {
     expect(screen.queryByText("Office Switch")).toBeNull();
   });
 
+  it("leaves the typed password in no cache of the query client", async () => {
+    const fake = new FakeApi();
+    const user = userEvent.setup();
+    const { services } = renderApp("/", { fake });
+    await logIn(user, "correct horse");
+    await screen.findByRole("heading", { name: "Dashboard", level: 1 });
+    const text = JSON.stringify({
+      mutations: services.queryClient.getMutationCache().getAll().map((mutation) => mutation.state.variables),
+      queries: services.queryClient.getQueryCache().getAll().map((query) => [query.queryKey, query.state.data]),
+    });
+    expect(text).not.toContain("correct horse");
+  });
+
   it("does not follow a next= that leaves the app", () => {
     for (const hostile of ["//evil.example", "https://evil.example/", "/\\evil.example", "javascript:alert(1)", "/a\u0000b", "", null, "/login"]) {
       expect(safeNext(hostile)).toBe("/");

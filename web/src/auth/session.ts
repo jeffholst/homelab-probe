@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { type Session } from "../api/types";
 import { SESSION_KEY, endSession, useApi, useServices } from "../app/services";
+import { useAction } from "../lib/useAction";
 
 /** Who is logged in: a `Session`, `null` for nobody, `undefined` while the first answer is on its way. */
 export function useSession() {
@@ -17,7 +18,8 @@ export function useSession() {
 export function useLogin() {
   const api = useApi();
   const queryClient = useQueryClient();
-  return useMutation({
+  // Not `useMutation`: its cache would keep the typed password for minutes (see `useAction`).
+  return useAction({
     mutationFn: ({ username, password }: { username: string; password: string }) => api.login(username, password),
     onSuccess: (session: Session) => {
       queryClient.setQueryData(SESSION_KEY, session);

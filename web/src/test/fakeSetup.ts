@@ -35,6 +35,8 @@ export interface FakeSetupOptions {
   certificateProblem?: string;
   /** Whether the connection test passes. */
   connectionOk?: boolean;
+  /** A passing test that has a warning among its checks (a partial result). */
+  connectionWarning?: boolean;
   sites?: { name: string; ref: string; id: string }[];
   /** Answer `finish` with the fallback for this reason instead of saving. */
   fallback?: "environment" | "env_file_named" | "not_writable";
@@ -80,6 +82,7 @@ export class FakeSetup {
       mode: "setup",
       certificateProblem: "",
       connectionOk: true,
+      connectionWarning: false,
       sites: [
         { name: "Default", ref: "default", id: "site-1" },
         { name: "Cabin", ref: "cabin", id: "site-2" },
@@ -225,7 +228,11 @@ export class FakeSetup {
       ok,
       sites: ok ? this.options.sites : [],
       checks: ok
-        ? [check("controller.reachable", "ok", "Controller", "answered"), check("controller.api_key", "ok", "API key", "accepted")]
+        ? [
+            check("controller.reachable", "ok", "Controller", "answered"),
+            check("controller.api_key", "ok", "API key", "accepted"),
+            ...(this.options.connectionWarning ? [check("endpoint.stat_alluser", "warn", "Client history", "could not be read", "Check the key's permissions.")] : []),
+          ]
         : [check("controller.reachable", "ok", "Controller", "answered"), check("controller.api_key", "fail", "API key", "refused", "Create a new key and paste it again.")],
     };
   }
