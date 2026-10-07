@@ -101,6 +101,24 @@ succeed. The default tests use synthetic data; live tests need the controller ow
 CI also checks 100% line and branch coverage; some shell tests skip on a Mac when tools are unavailable.
 See [development documentation](docs/development.md#development) for coverage and fixture details.
 
+The web app in `web/` has its own checks (Node 22 or newer and npm; nothing here is needed to use or test the
+command line). Run them from that folder:
+
+```bash
+cd web
+# Install exactly what package-lock.json pins
+npm ci
+# Generated types are current, lint, strict TypeScript, unit tests (Vitest) and the production build
+npm run check
+# Browser tests (Playwright); the first time only, download the browser
+npx playwright install chromium
+npx playwright test
+```
+
+The browser tests build the app and start real servers on free ports: the demo network, and servers in their setup
+and admin modes, each in a temporary folder. They never contact a controller or send a notification. See
+[web interface development](docs/development.md#the-web-interface-web) for the layout, the fake API and screenshots.
+
 Run the synthetic network without credentials or a controller:
 
 ```bash
@@ -116,12 +134,37 @@ uv run --extra web hlp.py serve
 It prints its local address, normally `http://127.0.0.1:8787`.
 See [web documentation](docs/web.md#running-the-server-serve) for options and access restrictions.
 
+### Check CI on main
+
+A merge to `main` starts the CI workflow. These commands only read; add `--repo jeffholst/homelab-probe` outside the
+project folder.
+
+```bash
+# The latest runs on main: id, status, result, time and the commit title
+gh run list --branch main --limit 5 \
+  --json databaseId,displayTitle,status,conclusion,createdAt \
+  -q '.[] | "\(.databaseId)  \(.status)/\(.conclusion)  \(.createdAt)  \(.displayTitle)"'
+# Follow a run that is still going; the exit status says whether it passed
+gh run watch RUN_ID --exit-status
+# Each job of a run and its result
+gh run view RUN_ID --json jobs -q '.jobs[] | "\(.conclusion)  \(.name)"'
+# Only the failing steps, when something failed
+gh run view RUN_ID --log-failed | tail -80
+```
+
+Replace `RUN_ID` with the number from the first command. A run is green only when **every** job passed:
+the Python tests on each supported version, the tests without extras (command line only), the 100% coverage job, ruff,
+mypy, the web app job (the checks above plus Playwright) and the Docker image job (it builds and tests the image and
+publishes nothing). Do not prepare a release while the latest run on `main` is red or still running.
+The same page is at <https://github.com/jeffholst/homelab-probe/actions>.
+
 ## Prepare a Release
 
 The owner decides when to release. Assistants can prepare a release PR; the owner creates and pushes the tag.
 Choose a release when the intended features are complete and checks pass, rather than after every merged PR.
 
-1. Review `Unreleased`, open PRs, and the latest CI result on `main`. Make sure no unfinished PR belongs to the
+1. Review `Unreleased`, open PRs, and the latest CI result on `main` (see
+   [Check CI on main](#check-ci-on-main)). Make sure no unfinished PR belongs to the
    release. Choose the version using the table above.
 2. Start from an up-to-date `main` with a clean working tree. Create a release branch.
 3. Update `__version__` in `homelab_probe/__init__.py`. In `CHANGELOG.md`, give the changes a heading such as
