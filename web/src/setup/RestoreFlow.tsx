@@ -1,7 +1,7 @@
-import { useMutation } from "@tanstack/react-query";
 import { useId, useState, type DragEvent } from "react";
 
 import { MAX_BACKUP_BYTES, MIN_PASSPHRASE, fileToBase64, type BackupPreview, type RestoreResult } from "../api/backup";
+import { isApiError } from "../api/errors";
 import { useServices } from "../app/services";
 import { Banner } from "../components/DataStates";
 import { Text } from "../components/Text";
@@ -9,7 +9,7 @@ import { Icon } from "../components/ui/Icon";
 import { SecretInput } from "../components/ui/SecretInput";
 import { Stepper } from "../components/ui/Stepper";
 import { formatDateTime } from "../lib/format";
-import { ErrorBanner, FieldError, StepFrame, codeOf, messageOf } from "./common";
+import { ErrorBanner, FieldError, InsecureNotice, StepFrame, UncertainOutcome, codeOf, isUncertain, messageOf, useSetupMutation } from "./common";
 
 const STEPS = ["Backup file", "Review", "Restore"] as const;
 
@@ -43,7 +43,7 @@ export function RestoreFlow({ token, onCancel, onRestored }: { token: string | n
   const [step, setStep] = useState(0);
   const [passphraseMissing, setPassphraseMissing] = useState(false);
 
-  const open = useMutation({
+  const open = useSetupMutation({
     mutationFn: async () => {
       if (file === null) throw new Error("no file");
       const encoded = await fileToBase64(file);
@@ -86,6 +86,7 @@ export function RestoreFlow({ token, onCancel, onRestored }: { token: string | n
         <h1>Restore from a backup</h1>
         <p>Bring back the settings, accounts, notes and history of an installation from its encrypted backup file.</p>
       </div>
+      <InsecureNotice />
       <Stepper steps={STEPS} current={step} label="Restore progress" />
       {step === 0 && (
         <StepFrame
@@ -208,7 +209,7 @@ function ReviewStep({ preview, onBack, onNext }: { preview: BackupPreview; onBac
     <StepFrame
       title="What the restore would do"
       icon="eye"
-      lede="Read this before you restore. Nothing has changed yet."
+      lede="Read this before you restore. Nothing has changed yet. This restores Homelab Probe's own files, never your UniFi controller's configuration."
       onBack={onBack}
       onSubmit={onNext}
       primary={{ label: "Continue" }}
@@ -224,7 +225,18 @@ function ReviewStep({ preview, onBack, onNext }: { preview: BackupPreview; onBac
         <dt>Contents</dt>
         <dd>
           {preview.notes} notes, {preview.triage} triage entries, {preview.sites} {preview.sites === 1 ? "site" : "sites"}
+          <span className="hint">
+            Notes and triage are restored as they are, also for devices and clients that are gone; nothing is matched again by name or address.
+          </span>
         </dd>
+        {preview.environment_overrides.length > 0 && (
+          <>
+            <dt>Kept from the environment</dt>
+            <dd>
+              <Text value={preview.environment_overrides.join(", ")} />
+            </dd>
+          </>
+        )}
       </dl>
       {preview.warnings.map((warning) => (
         <Banner key={warning.code} tone="warning" title="Note">
@@ -280,6 +292,38 @@ function ReviewStep({ preview, onBack, onNext }: { preview: BackupPreview; onBac
   );
 }
 
+const FAILURES: Record<string, { title: string; restart?: boolean; tone?: "warning" }> = {
+  backup_busy: { title: "The server is busy" },
+  restore_in_progress: { title: "A restore is already running" },
+  read_only: { title: "This server does not restore backups" },
+  demo: { title: "This server does not restore backups" },
+  backup_recovery_failed: { title: "Nothing was changed" },
+  backup_restore_failed: { title: "The backup was not restored" },
+  backup_restore_pending: { title: "The restore did not complete", restart: true },
+  backup_journal_damaged: { title: "The restore did not complete", restart: true },
+  reload_failed: { title: "Restored, but the server needs a restart", restart: true, tone: "warning" },
+};
+
+/**
+ * Why a restore failed, in the server's words, told apart by its fixed code: refused before anything changed, put
+ * back, left for the next start, restored but not loaded. An answer that never arrived is not a failure: it may have
+ * happened, and the page says so instead of guessing.
+ */
+function RestoreFailure({ error }: { error: unknown }) {
+  const code = codeOf(error) ?? "";
+  const known = FAILURES[code];
+  if (known === undefined && (isUncertain(error) || (isApiError(error) && error.status >= 500))) return <UncertainOutcome what="restore" />;
+  if (known === undefined) return <ErrorBanner error={error} title="The backup was not restored" />;
+  return (
+    <Banner tone={known.tone ?? "danger"} role="alert" title={known.title}>
+      <p className="banner__text">
+        <Text value={messageOf(error)} />
+      </p>
+      {known.restart === true && <p className="banner__text">Restart the server, then open this page again.</p>}
+    </Banner>
+  );
+}
+
 function ConfirmStep({
   token,
   preview,
@@ -300,7 +344,7 @@ function ConfirmStep({
   const [recovery, setRecovery] = useState("");
   const [recoveryAgain, setRecoveryAgain] = useState("");
   const [problem, setProblem] = useState<{ field: "understood" | "recovery" | "repeat"; message: string } | null>(null);
-  const restore = useMutation({
+  const restore = useSetupMutation({
     mutationFn: () =>
       backup.restore(token, {
         archive,
@@ -349,9 +393,7 @@ function ConfirmStep({
       onSubmit={submit}
       primary={{ label: restore.isPending ? "Restoring…" : "Restore now", busy: restore.isPending, brand: true }}
     >
-      {restore.isError && recoveryServerError === null && repeatServerError === null && (
-        <ErrorBanner error={restore.error} title="The backup was not restored" />
-      )}
+      {restore.isError && recoveryServerError === null && repeatServerError === null && <RestoreFailure error={restore.error} />}
       {preview.recovery.required && (
         <>
           <Banner tone="info" title="A recovery backup comes first">

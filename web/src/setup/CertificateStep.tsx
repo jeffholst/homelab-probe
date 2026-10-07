@@ -1,4 +1,3 @@
-import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 
 import type { DraftChange, Verify } from "../api/setup";
@@ -6,7 +5,7 @@ import { useServices } from "../app/services";
 import { Banner } from "../components/DataStates";
 import { Text } from "../components/Text";
 import { Icon } from "../components/ui/Icon";
-import { ErrorBanner, FieldError, StepFrame, codeOf, messageOf, useSetup } from "./common";
+import { ErrorBanner, FieldError, StepFrame, codeOf, messageOf, useSetup, useSetupMutation } from "./common";
 
 const CHOICES: { value: Verify; title: string; text: string }[] = [
   {
@@ -48,14 +47,14 @@ export function CertificateStep({ onNext, onBack }: { onNext: () => void; onBack
   const [confirm, setConfirm] = useState("");
   const [comparedMissing, setComparedMissing] = useState(false);
 
-  const fetchCertificate = useMutation({
+  const fetchCertificate = useSetupMutation({
     mutationFn: () => setup.certificate(token),
     onSuccess: (next) => {
       setStatus(next);
       setCompared(false);
     },
   });
-  const save = useMutation({
+  const save = useSetupMutation({
     mutationFn: (change: DraftChange) => setup.draft(token, change),
     onSuccess: (next) => {
       setConfirm("");

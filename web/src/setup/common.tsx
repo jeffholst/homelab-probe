@@ -1,7 +1,11 @@
-import { createContext, useContext, useEffect, useRef, type FormEvent, type ReactNode } from "react";
+import { useMutation, useQueryClient, type UseMutationOptions } from "@tanstack/react-query";
+import { createContext, useContext, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 
 import { isApiError } from "../api/errors";
 import type { SetupStatus } from "../api/setup";
+import { useMeta } from "../app/meta";
+import { endSession } from "../app/services";
 import { Banner } from "../components/DataStates";
 import { Text } from "../components/Text";
 import { Icon, type IconName } from "../components/ui/Icon";
@@ -12,6 +16,9 @@ export interface SetupContextValue {
   token: string | null;
   status: SetupStatus;
   setStatus: (status: SetupStatus) => void;
+  /** Called with every failed setup call: a token that stopped working (a restart makes a new one) or a session that
+   * ended sends the page back to the token or the login, instead of failing every step that follows. */
+  lost: (error: unknown) => void;
 }
 
 export const SetupContext = createContext<SetupContextValue | null>(null);
@@ -20,6 +27,76 @@ export function useSetup(): SetupContextValue {
   const value = useContext(SetupContext);
   if (value === null) throw new Error("useSetup needs the SetupContext");
   return value;
+}
+
+/** `useMutation` for a setup call: its failure also goes to `lost`. Never retried: a finish or a restore that may have
+ * happened must not be sent twice. */
+export function useSetupMutation<T, V = void>(options: UseMutationOptions<T, unknown, V>) {
+  const { lost } = useSetup();
+  return useMutation<T, unknown, V>({
+    ...options,
+    retry: false,
+    onError: (...args) => {
+      lost(args[0]);
+      return options.onError?.(...args);
+    },
+  });
+}
+
+/** An answer that does not say whether the server did it: no answer at all, a proxy's error, a timeout. */
+export function isUncertain(error: unknown): boolean {
+  return !isApiError(error) || error.status === 0 || error.status === 502 || error.status === 504 || error.code === "bad_response";
+}
+
+/**
+ * What to show when a finish or a restore got no clear answer: it may have happened. The page does not try again by
+ * itself; it offers to ask the server whether it is still waiting for its setup (the public `meta`), and says what
+ * that answer means.
+ */
+export function UncertainOutcome({ what }: { what: "setup" | "restore" }) {
+  const meta = useMeta();
+  const queryClient = useQueryClient();
+  const [answer, setAnswer] = useState<"set_up" | "waiting" | "unknown" | null>(null);
+  async function check() {
+    const result = await meta.refetch();
+    if (result.data === undefined) setAnswer("unknown");
+    else if (result.data.needs_setup) setAnswer("waiting");
+    else {
+      endSession(queryClient);
+      setAnswer("set_up");
+    }
+  }
+  return (
+    <Banner tone="warning" role="alert" title={`It is not known whether the ${what} finished`}>
+      <p className="banner__text">
+        The server&apos;s answer did not arrive. Do not try again before checking: the {what} may have finished.
+      </p>
+      {answer === "set_up" && (
+        <p className="banner__text">
+          The server is set up now, so the {what} most likely finished. <Link to="/login">Go to the login</Link>.
+        </p>
+      )}
+      {answer === "waiting" && <p className="banner__text">The server is still waiting for its setup: nothing shows that the {what} finished. You can try again.</p>}
+      {answer === "unknown" && <p className="banner__text">The server did not answer. Check that it is running, then check again.</p>}
+      <button type="button" className="button button--secondary button--small" onClick={() => void check()}>
+        Check the server
+      </button>
+    </Banner>
+  );
+}
+
+/** A warning that what is typed here (the token, the API key, passwords) would cross the network unencrypted. */
+export function InsecureNotice() {
+  const meta = useMeta();
+  if (meta.data === undefined || meta.data.https || meta.data.loopback) return null;
+  return (
+    <Banner tone="warning" title="This connection is not encrypted">
+      <p className="banner__text">
+        The setup token, the API key and the passwords you type here would travel in clear text. Use an SSH tunnel or an HTTPS reverse proxy to
+        reach this server.
+      </p>
+    </Banner>
+  );
 }
 
 /** The server's fixed sentence for a failed call, or a generic one for anything else. */

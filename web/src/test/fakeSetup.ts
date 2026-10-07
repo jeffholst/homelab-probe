@@ -42,6 +42,8 @@ export interface FakeSetupOptions {
   recoveryRequired?: boolean;
   /** The accounts the fake backup holds. */
   backupAccounts?: FakeAccount[];
+  /** Settings of the backup that this server's environment keeps overriding (names only). */
+  environmentOverrides?: string[];
 }
 
 interface Draft {
@@ -84,6 +86,7 @@ export class FakeSetup {
       ],
       recoveryRequired: false,
       backupAccounts: [{ username: "restored", password: "restored password", role: "admin" }],
+      environmentOverrides: [],
       ...options,
     };
     fake.setupToken = SETUP_TOKEN;
@@ -331,8 +334,16 @@ export class FakeSetup {
       notes: 3,
       triage: 2,
       sites: 1,
-      environment_overrides: [],
-      warnings: [],
+      environment_overrides: this.options.environmentOverrides,
+      warnings:
+        this.options.environmentOverrides.length === 0
+          ? []
+          : [
+              {
+                code: "environment_overrides",
+                message: `These settings are also set in the environment, which keeps winning over the restored file: ${this.options.environmentOverrides.join(", ")}.`,
+              },
+            ],
       recovery: { required: this.options.recoveryRequired, keep: 3, folder: "recovery" },
     };
   }

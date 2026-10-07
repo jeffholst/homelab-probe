@@ -1,10 +1,9 @@
-import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 
 import type { DraftChange } from "../api/setup";
 import { useServices } from "../app/services";
 import { SecretInput } from "../components/ui/SecretInput";
-import { ErrorBanner, FieldError, StepFrame, messageOf, settingOf, useSetup } from "./common";
+import { ErrorBanner, FieldError, StepFrame, messageOf, settingOf, useSetup, useSetupMutation } from "./common";
 
 /**
  * The controller's address and the API key. The key is sent once and kept on the server; the field is emptied as soon
@@ -16,7 +15,7 @@ export function ControllerStep({ onNext, onBack }: { onNext: () => void; onBack:
   const [url, setUrl] = useState(status.draft.url);
   const [apiKey, setApiKey] = useState("");
   const keySet = status.draft.api_key_set;
-  const save = useMutation({
+  const save = useSetupMutation({
     mutationFn: (change: DraftChange) => setup.draft(token, change),
     onSuccess: (next) => {
       setApiKey("");

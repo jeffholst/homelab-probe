@@ -15,7 +15,7 @@ import {
 import { renderApp } from "../test/render";
 
 type User = ReturnType<typeof userEvent.setup>;
-const API_KEY = "a-very-secret-api-key-123";
+const TYPED_KEY = "a-very-secret-api-key-123";
 
 function setupApp(options: FakeSetupOptions & { accounts?: FakeAccount[]; route?: string } = {}) {
   const fake = new FakeApi({ accounts: options.accounts ?? [] });
@@ -35,7 +35,7 @@ async function startConfigure(user: User) {
   await user.click(await screen.findByRole("button", { name: /Set up a new installation/ }));
 }
 
-async function controller(user: User, url = "https://192.168.1.1", key = API_KEY) {
+async function controller(user: User, url = "https://192.168.1.1", key = TYPED_KEY) {
   await user.type(await screen.findByLabelText("Controller address"), url);
   if (key !== "") await user.type(screen.getByLabelText("API key"), key);
   await user.click(screen.getByRole("button", { name: "Continue" }));
@@ -104,7 +104,7 @@ describe("configuring a new installation", () => {
     expect(screen.getByRole("list", { name: "Setup progress" })).toBeInTheDocument();
 
     await controller(user);
-    expect(setup.draft.apiKey).toBe(API_KEY);
+    expect(setup.draft.apiKey).toBe(TYPED_KEY);
     await pin(user);
     expect(setup.draft.verify).toBe("pin");
 
@@ -159,8 +159,8 @@ describe("configuring a new installation", () => {
     const key = await screen.findByLabelText("API key");
     expect(key).toHaveValue("");
     expect(screen.getByText(/A key is saved on the server already/)).toBeInTheDocument();
-    expect(document.body.innerHTML).not.toContain(API_KEY);
-    expect(stored()).not.toContain(API_KEY);
+    expect(document.body.innerHTML).not.toContain(TYPED_KEY);
+    expect(stored()).not.toContain(TYPED_KEY);
   });
 
   it("puts the server's refusal of a value under its field, and asks for what is missing", async () => {
@@ -170,7 +170,7 @@ describe("configuring a new installation", () => {
     expect(screen.getByText("Enter the controller's address.")).toBeInTheDocument();
     await controller(user, "ftp://controller", "");
     expect(screen.getByText("Paste the API key.")).toBeInTheDocument();
-    await user.type(screen.getByLabelText("API key"), API_KEY);
+    await user.type(screen.getByLabelText("API key"), TYPED_KEY);
     await user.click(screen.getByRole("button", { name: "Continue" }));
     expect(await screen.findByText("UNIFI_URL must be an https:// address.")).toBeInTheDocument();
     expect(screen.getByLabelText("Controller address")).toHaveAttribute("aria-invalid", "true");
@@ -238,7 +238,7 @@ describe("configuring a new installation", () => {
 
   it("removes a notification destination again", async () => {
     const { user, setup } = setupApp();
-    setup.draft = { ...setup.draft, url: "https://192.168.1.1", apiKey: API_KEY, connectionOk: true, notify: { NOTIFY_NTFY_URL: "https://ntfy.example/x" } };
+    setup.draft = { ...setup.draft, url: "https://192.168.1.1", apiKey: TYPED_KEY, connectionOk: true, notify: { NOTIFY_NTFY_URL: "https://ntfy.example/x" } };
     await startConfigure(user);
     for (const step of ["Continue", "Save and continue"]) {
       await user.click(await screen.findByRole("button", { name: step }));
@@ -279,7 +279,7 @@ describe("configuring a new installation", () => {
 
   it("checks the administrator before sending it, and shows the server's refusal under the name", async () => {
     const { user, setup } = setupApp();
-    setup.draft = { ...setup.draft, url: "https://192.168.1.1", apiKey: API_KEY, connectionOk: true };
+    setup.draft = { ...setup.draft, url: "https://192.168.1.1", apiKey: TYPED_KEY, connectionOk: true };
     await startConfigure(user);
     // Straight to the last step: Continue through the steps that are already done.
     await user.click(await screen.findByRole("button", { name: "Continue" }));
@@ -327,7 +327,7 @@ describe("configuring a new installation", () => {
     expect(screen.getByText(/also set in the server's environment/)).toHaveTextContent("UNIFI_URL");
     expect(screen.getByRole("figure", { name: ".env" })).toHaveTextContent("UNIFI_API_KEY=your-api-key-here");
     expect(screen.getByRole("figure", { name: "controller.pem" })).toBeInTheDocument();
-    expect(document.body.innerHTML).not.toContain(API_KEY);
+    expect(document.body.innerHTML).not.toContain(TYPED_KEY);
     expect(document.body.innerHTML).not.toContain("a long enough password");
   });
 });
@@ -484,5 +484,142 @@ describe("restoring a backup on a fresh installation", () => {
     expect(await screen.findByLabelText("Passphrase of the backup")).toHaveValue("");
     await user.click(screen.getByRole("button", { name: "Back" }));
     expect(await screen.findByRole("heading", { name: "How would you like to start?" })).toBeInTheDocument();
+  });
+});
+
+describe("when the server changes under the page", () => {
+  it("asks for the token again when the server stops accepting it (a restart makes a new one)", async () => {
+    const { user, fake } = setupApp();
+    await startConfigure(user);
+    fake.setupToken = "a-new-token-after-a-restart-000";
+    await controller(user);
+    expect(await screen.findByText("Enter the setup token again")).toBeInTheDocument();
+    expect(screen.getByText(/the server may have restarted/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Setup token")).toHaveValue("");
+    await enterToken(user, "a-new-token-after-a-restart-000");
+    expect(await screen.findByRole("heading", { name: "How would you like to start?" })).toBeInTheDocument();
+  });
+
+  it("sends the page to the login when an administrator was created elsewhere meanwhile", async () => {
+    const { user, fake } = setupApp();
+    await startConfigure(user);
+    fake.addAccount({ username: "elsewhere", password: "elsewhere password", role: "admin" });
+    await controller(user);
+    expect(await screen.findByRole("heading", { name: "Log in to continue the setup" })).toBeInTheDocument();
+  });
+
+  it("warns that the token, key and passwords would cross the network unencrypted", async () => {
+    const fake = new FakeApi({ accounts: [], meta: { https: false, loopback: false } });
+    new FakeSetup(fake);
+    renderApp("/setup", { fake });
+    expect(await screen.findByText("This connection is not encrypted")).toBeInTheDocument();
+    expect(screen.getByText(/The setup token, the API key and the passwords/)).toBeInTheDocument();
+  });
+
+  it("says a finish without an answer may have happened, and checks the server instead of trying again", async () => {
+    const { user, fake, setup } = setupApp({ mode: "admin" });
+    await enterToken(user);
+    await user.click(await screen.findByRole("button", { name: /Create the first administrator/ }));
+    await user.type(await screen.findByLabelText("User name"), "owner");
+    await user.type(screen.getByLabelText("Password"), "a long enough password");
+    await user.type(screen.getByLabelText("Password again"), "a long enough password");
+    fake.failWith("/setup/finish", 504, "bad_gateway", "The proxy timed out.");
+    await user.click(screen.getByRole("button", { name: "Finish setup" }));
+    expect(await screen.findByText("It is not known whether the setup finished")).toBeInTheDocument();
+    expect(setup.bodies.filter((entry) => entry.path === "/setup/finish")).toHaveLength(0); // refused before the route
+    await user.click(screen.getByRole("button", { name: "Check the server" }));
+    expect(await screen.findByText(/still waiting for its setup/)).toBeInTheDocument();
+    fake.meta.needs_setup = false;
+    await user.click(screen.getByRole("button", { name: "Check the server" }));
+    expect(await screen.findByText(/most likely finished/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Go to the login" })).toHaveAttribute("href", "/login");
+  });
+
+  it("says plainly that a read-only server does not save the setup", async () => {
+    const { user, fake } = setupApp({ mode: "admin" });
+    await enterToken(user);
+    await user.click(await screen.findByRole("button", { name: /Create the first administrator/ }));
+    await user.type(await screen.findByLabelText("User name"), "owner");
+    await user.type(screen.getByLabelText("Password"), "a long enough password");
+    await user.type(screen.getByLabelText("Password again"), "a long enough password");
+    fake.failWith("/setup/finish", 403, "read_only", "This server is read-only: it writes no file.");
+    await user.click(screen.getByRole("button", { name: "Finish setup" }));
+    expect(await screen.findByText("This server is read-only")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "You're all set" })).toBeNull();
+  });
+});
+
+describe("restore failures", () => {
+  const file = () => new File([BACKUP_CONTENT], "home.hlpbackup");
+
+  async function reachConfirm(user: User) {
+    await enterToken(user);
+    await user.click(await screen.findByRole("button", { name: /Restore from a backup/ }));
+    await user.upload(await screen.findByLabelText(/Choose a backup file/), file());
+    await user.type(screen.getByLabelText("Passphrase of the backup"), BACKUP_PASSPHRASE);
+    await user.click(screen.getByRole("button", { name: "Open the backup" }));
+    await user.click(await screen.findByRole("button", { name: "Continue" }));
+    await user.click(await screen.findByLabelText(/I understand that the accounts and passwords/));
+  }
+
+  it.each([
+    [503, "backup_busy", "Another backup is being made or read; try again in a moment.", "The server is busy", false],
+    [403, "read_only", "This server is read-only: it writes no file.", "This server does not restore backups", false],
+    [403, "demo", "A demo does not restore backups.", "This server does not restore backups", false],
+    [500, "backup_recovery_failed", "The recovery backup of the present state could not be made, so nothing was changed.", "Nothing was changed", false],
+    [500, "backup_restore_failed", "The restore did not complete; the previous state was put back.", "The backup was not restored", false],
+    [500, "backup_restore_pending", "The restore did not complete and could not be undone yet.", "The restore did not complete", true],
+    [500, "reload_failed", "The backup was restored but its settings could not be loaded: restart the server.", "Restored, but the server needs a restart", true],
+  ])("tells %s %s apart, in the server's words", async (status, code, message, title, restart) => {
+    const { user, fake } = setupApp();
+    await reachConfirm(user);
+    fake.failWith("/backup/restore", status, code, message);
+    await user.click(screen.getByRole("button", { name: "Restore now" }));
+    expect(await screen.findByText(title)).toBeInTheDocument();
+    expect(screen.getByText(message)).toBeInTheDocument();
+    expect(screen.queryByText("Restart the server, then open this page again.") !== null).toBe(restart);
+    expect(screen.queryByText(/It is not known whether/)).toBeNull();
+  });
+
+  it("does not call an unanswered restore a failure, and finds out from the server", async () => {
+    const { user, fake } = setupApp();
+    await reachConfirm(user);
+    fake.failWith("/backup/restore", 502, "bad_gateway", "The proxy could not reach the server.");
+    await user.click(screen.getByRole("button", { name: "Restore now" }));
+    expect(await screen.findByText("It is not known whether the restore finished")).toBeInTheDocument();
+    fake.meta.needs_setup = false;
+    await user.click(screen.getByRole("button", { name: "Check the server" }));
+    expect(await screen.findByText(/the restore most likely finished/)).toBeInTheDocument();
+  });
+
+  it.each([
+    ["backup_no_administrator", "The backup has no enabled administrator, so restoring it would lock everybody out."],
+    ["backup_unsupported_data_format", "This backup holds data of a version this version cannot restore."],
+    ["backup_too_large", "The backup is larger than this version restores."],
+    ["backup_mismatch", "A file in the backup does not match its manifest."],
+  ])("shows a backup the server refuses to open (%s)", async (code, message) => {
+    const { user, fake } = setupApp();
+    await enterToken(user);
+    await user.click(await screen.findByRole("button", { name: /Restore from a backup/ }));
+    await user.upload(await screen.findByLabelText(/Choose a backup file/), file());
+    await user.type(screen.getByLabelText("Passphrase of the backup"), BACKUP_PASSPHRASE);
+    fake.failWith("/backup/preview", 422, code, message);
+    await user.click(screen.getByRole("button", { name: "Open the backup" }));
+    expect(await screen.findByText("The backup could not be opened")).toBeInTheDocument();
+    expect(screen.getByText(message)).toBeInTheDocument();
+  });
+
+  it("names the settings the environment keeps overriding, and says what a restore is not", async () => {
+    const { user } = setupApp({ environmentOverrides: ["UNIFI_URL", "UNIFI_API_KEY"] });
+    await enterToken(user);
+    await user.click(await screen.findByRole("button", { name: /Restore from a backup/ }));
+    await user.upload(await screen.findByLabelText(/Choose a backup file/), file());
+    await user.type(screen.getByLabelText("Passphrase of the backup"), BACKUP_PASSPHRASE);
+    await user.click(screen.getByRole("button", { name: "Open the backup" }));
+    expect(await screen.findByText("Kept from the environment")).toBeInTheDocument();
+    expect(screen.getByText("UNIFI_URL, UNIFI_API_KEY")).toBeInTheDocument();
+    expect(screen.getByText(/keeps winning over the restored file/)).toBeInTheDocument();
+    expect(screen.getByText(/never your UniFi controller's configuration/)).toBeInTheDocument();
+    expect(screen.getByText(/also for devices and clients that are gone/)).toBeInTheDocument();
   });
 });

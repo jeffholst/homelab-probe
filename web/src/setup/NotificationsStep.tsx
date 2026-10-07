@@ -1,4 +1,3 @@
-import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { type NOTIFY_SETTINGS, type Check } from "../api/setup";
@@ -7,7 +6,7 @@ import { Banner } from "../components/DataStates";
 import { ChecksList } from "../components/ui/ChecksList";
 import { Icon } from "../components/ui/Icon";
 import { SecretInput } from "../components/ui/SecretInput";
-import { ErrorBanner, StepFrame, useSetup } from "./common";
+import { ErrorBanner, StepFrame, useSetup, useSetupMutation } from "./common";
 
 type Kind = "none" | "ntfy" | "webhook" | "email";
 
@@ -77,7 +76,7 @@ export function NotificationsStep({ onNext, onBack }: { onNext: () => void; onBa
   const [values, setValues] = useState<Record<string, string>>({});
   const [checks, setChecks] = useState<Check[] | null>(null);
 
-  const save = useMutation({
+  const save = useSetupMutation({
     mutationFn: (notify: Record<string, string | null>) => setup.draft(token, { notify }),
     onSuccess: (next) => {
       setValues({});
@@ -85,7 +84,7 @@ export function NotificationsStep({ onNext, onBack }: { onNext: () => void; onBa
       setStatus(next);
     },
   });
-  const dryRun = useMutation({
+  const dryRun = useSetupMutation({
     mutationFn: () => setup.notifications(token),
     onSuccess: setChecks,
   });

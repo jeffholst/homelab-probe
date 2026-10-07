@@ -1,9 +1,18 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page, type TestInfo } from "@playwright/test";
 
 import { collectProblems, demoCredentials, expectNoAxeViolations, expectNoHorizontalOverflow, screenshot } from "./support";
 
-// Against `hlp serve` with no settings at all: the real setup mode, its token and its draft. Nothing here makes the
-// server contact a controller (no certificate fetch, no connection test): those are covered with the fake API.
+// Against real servers: `hlp serve` with no settings at all (the setup mode, its token and its draft; the baseURL) and
+// one with settings but no administrator (the admin mode; `metadata.adminURL`). Nothing here makes a server contact a
+// controller (no certificate fetch, no connection test: those are covered with the fake API) or send a notification.
+// The tests of this file run in order and change their servers: the first administrator is created on the admin
+// server, a backup of it is exported through the API and restored on the setup server, which leaves the setup mode.
+
+const OWNER = { username: "owner", password: "e2e owner password, long enough" };
+const BACKUP_PASSPHRASE = "e2e backup passphrase";
+let backup: Buffer | null = null;
+
+const adminURL = (testInfo: TestInfo) => String(testInfo.project.metadata["adminURL"]);
 
 /** A wrong setup token is throttled per address: only one test sends one, and the next good one resets the count. */
 async function enterToken(page: Page, token?: string): Promise<void> {
@@ -97,4 +106,80 @@ test("puts the token nowhere a script or a later visitor could read it", async (
   expect(stored).not.toContain(credentials.setupToken);
   await page.reload();
   await expect(page.getByLabel("Setup token")).toHaveValue("");
+});
+
+test("creates the first administrator of a server configured from its environment, in the light theme", async ({ page }, testInfo) => {
+  const problems = collectProblems(page);
+  const base = adminURL(testInfo);
+  await page.goto(`${base}/login`);
+  await expect(page).toHaveURL(/\/setup$/);
+  await page.getByRole("radio", { name: "Light" }).check();
+  const token = ((await (await page.request.get(`${base}/__e2e/credentials`)).json()) as { setupToken: string }).setupToken;
+  await page.getByLabel("Setup token").fill(token);
+  await page.getByRole("button", { name: "Start the setup" }).click();
+  await expect(page.getByRole("heading", { name: "One step left", level: 1 })).toBeVisible();
+  await page.getByRole("button", { name: /Create the first administrator/ }).click();
+  await page.getByLabel("User name").fill(OWNER.username);
+  await page.getByLabel("Password", { exact: true }).fill(OWNER.password);
+  await page.getByLabel("Password again").fill(OWNER.password);
+  await expectNoHorizontalOverflow(page);
+  await expectNoAxeViolations(page);
+  await screenshot(page, testInfo, "setup-admin-light");
+  await page.getByRole("button", { name: "Finish setup" }).click();
+  await expect(page.getByRole("heading", { name: "You're all set", level: 1 })).toBeVisible();
+  await expectNoAxeViolations(page);
+  await screenshot(page, testInfo, "setup-done-light");
+
+  await page.getByRole("button", { name: "Go to the login" }).click();
+  await page.getByLabel("User name").fill(OWNER.username);
+  await page.getByLabel("Password").fill(OWNER.password);
+  await page.getByRole("button", { name: "Log in" }).click();
+  await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
+  expect(await page.content()).not.toContain(OWNER.password);
+  expect(problems.filter((problem) => !/status of (401|503)/.test(problem))).toEqual([]);
+
+  // A backup of this installation, made through the API with the new administrator's session, for the restore below.
+  const me = (await (await page.request.get(`${base}/api/v1/auth/me`)).json()) as { csrf_token: string };
+  const exported = await page.request.post(`${base}/api/v1/backup`, {
+    headers: { Origin: base, "X-CSRF-Token": me.csrf_token },
+    data: { passphrase: BACKUP_PASSPHRASE, confirm: BACKUP_PASSPHRASE, include: [] },
+  });
+  expect(exported.status()).toBe(200);
+  backup = await exported.body();
+});
+
+test("restores that backup on the fresh installation, in the dark theme, and its administrator logs in", async ({ page }, testInfo) => {
+  expect(backup, "the backup made by the test before").not.toBeNull();
+  await page.goto("/setup");
+  await expect(page.getByRole("radio", { name: "Dark" })).toBeChecked();
+  await enterToken(page);
+  await page.getByRole("button", { name: /Restore from a backup/ }).click();
+  await page.getByLabel(/Choose a backup file/).setInputFiles({ name: "home.hlpbackup", mimeType: "application/octet-stream", buffer: backup ?? Buffer.from("") });
+  await page.getByLabel("Passphrase of the backup").fill("not the passphrase of it");
+  await page.getByRole("button", { name: "Open the backup" }).click();
+  await expect(page.getByText("The passphrase is wrong, or the backup was modified or damaged.")).toBeVisible();
+  await page.getByLabel("Passphrase of the backup").fill(BACKUP_PASSPHRASE);
+  await page.getByRole("button", { name: "Open the backup" }).click();
+
+  await expect(page.getByRole("heading", { name: "What the restore would do" })).toBeVisible();
+  await expect(page.getByText(OWNER.username, { exact: true })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await expectNoAxeViolations(page);
+  await screenshot(page, testInfo, "setup-restore-review");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByText("A recovery backup comes first")).toHaveCount(0); // an empty installation has nothing to keep
+  await page.getByLabel(/I understand that the accounts and passwords/).check();
+  await expectNoAxeViolations(page);
+  await screenshot(page, testInfo, "setup-restore-confirm");
+  await page.getByRole("button", { name: "Restore now" }).click();
+  await expect(page.getByRole("heading", { name: "Backup restored", level: 1 })).toBeVisible();
+  await expectNoAxeViolations(page);
+
+  await page.getByRole("button", { name: "Go to the login" }).click();
+  await page.getByLabel("User name").fill(OWNER.username);
+  await page.getByLabel("Password").fill(OWNER.password);
+  await page.getByRole("button", { name: "Log in" }).click();
+  await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
+  const stored = await page.evaluate(() => JSON.stringify([Object.entries(localStorage), Object.entries(sessionStorage), document.cookie, location.href]));
+  for (const secret of [BACKUP_PASSPHRASE, OWNER.password]) expect(stored).not.toContain(secret);
 });

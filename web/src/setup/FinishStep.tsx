@@ -1,4 +1,3 @@
-import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 
 import type { FinishResult } from "../api/setup";
@@ -7,7 +6,7 @@ import { Banner } from "../components/DataStates";
 import { Text } from "../components/Text";
 import { CodeBlock } from "../components/ui/CodeBlock";
 import { SecretInput } from "../components/ui/SecretInput";
-import { ErrorBanner, FieldError, StepFrame, codeOf, messageOf, useSetup } from "./common";
+import { ErrorBanner, FieldError, StepFrame, UncertainOutcome, codeOf, isUncertain, messageOf, useSetup, useSetupMutation } from "./common";
 
 /** The server's account rules (`accounts.check_username`, `check_password_policy`), checked here first for a quick answer. */
 export const MIN_PASSWORD = 12;
@@ -40,7 +39,7 @@ export function FinishStep({
   const [problem, setProblem] = useState<{ field: "username" | "password" | "repeat"; message: string } | null>(null);
   const [fallback, setFallback] = useState<Fallback | null>(null);
 
-  const finish = useMutation({
+  const finish = useSetupMutation({
     mutationFn: () => setup.finish(token, needsAdmin ? { username: username.trim(), password } : null),
     onSuccess: (result) => {
       setPassword("");
@@ -99,7 +98,11 @@ export function FinishStep({
     >
       {finish.isError && adminError === null && (
         <div className="stack">
-          <ErrorBanner error={finish.error} title="The setup could not be finished" />
+          {isUncertain(finish.error) ? (
+            <UncertainOutcome what="setup" />
+          ) : (
+            <ErrorBanner error={finish.error} title={code === "read_only" ? "This server is read-only" : "The setup could not be finished"} />
+          )}
           {code === "not_tested" && onRetest !== undefined && (
             <p>
               <button type="button" className="button button--secondary" onClick={onRetest}>

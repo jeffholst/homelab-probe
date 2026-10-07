@@ -1,21 +1,25 @@
-// The web servers of the Playwright tests: the production build in front of the real server, on free ports.
+// The web servers of the Playwright tests: the production build in front of real servers, on free ports.
 //
-//   1. starts the real server on a free port, twice:
-//      - `uv run --extra web hlp.py --demo serve` (synthetic data: no controller, no `.env`), reading the demo login it
-//        prints on stderr, behind E2E_PORT;
-//      - when E2E_SETUP_PORT is set, `hlp serve` with no settings at all, in an empty temporary data directory and with
-//        no UNIFI_*, NOTIFY_* or HLP_ENV variable, so it starts in the setup mode with a setup token chosen here
-//        (HLP_SETUP_TOKEN), behind E2E_SETUP_PORT. The setup tests never let it contact a controller;
-//   2. serves web/dist for each with `vite preview`, forwarding /api, /healthz and /readyz to it (vite.config.ts), with
-//      the content-security policy the real server sends on every response, so a script or style it forbids fails the
-//      tests instead of failing for the first user;
+// E2E_SERVERS lists them as `mode:port,...` (the default is `demo:$E2E_PORT`). For each one this script
+//   1. starts the real server on a free port of its own, in a temporary data directory where it needs one:
+//      - `demo`: `uv run --extra web hlp.py --demo serve` (synthetic data: no controller, no `.env`), reading the demo
+//        login it prints on stderr;
+//      - `setup`: `hlp serve` with no settings at all (no UNIFI_*, NOTIFY_* or HLP_ENV variable, an empty data
+//        directory), so it starts in the setup mode;
+//      - `admin`: `hlp serve` with settings (UNIFI_URL and UNIFI_API_KEY in the environment and in the data directory's
+//        `.env`, for an address that does not exist) and no account, so it starts in the admin mode;
+//      `setup` and `admin` get a setup token chosen here (HLP_SETUP_TOKEN). The tests never let them contact a
+//      controller, and nothing they do sends a notification;
+//   2. serves web/dist on the port given with `vite preview`, forwarding /api, /healthz and /readyz to that server
+//      (vite.config.ts), with the content-security policy the real server sends on every response, so a script or
+//      style it forbids fails the tests instead of failing for the first user;
 //   3. answers GET /__e2e/credentials with the demo login (the password is random per run) or the setup token.
 //
-// The setup server is started first, so the demo port answering (what Playwright waits for) means both are ready.
-// Usage: node e2e/serve.mjs   (`npm run build` must have run.)
+// The previews start in the order given and the demo one is last, so the port Playwright waits for (E2E_PORT, the
+// demo) answering means every server is ready. Usage: node e2e/serve.mjs   (`npm run build` must have run.)
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -68,13 +72,21 @@ async function startServer(mode) {
   let args = [...hlp, "--demo", "serve", "--port", String(apiPort)];
   let cwd = repo;
   const setupToken = randomBytes(18).toString("base64url");
-  if (mode === "setup") {
+  if (mode === "setup" || mode === "admin") {
     for (const name of Object.keys(env)) if (name.startsWith("UNIFI_") || name.startsWith("NOTIFY_") || name === "HLP_ENV") delete env[name];
-    const dataDir = mkdtempSync(path.join(os.tmpdir(), "hlp-e2e-setup-"));
+    const dataDir = mkdtempSync(path.join(os.tmpdir(), `hlp-e2e-${mode}-`));
     directories.push(dataDir);
     env.HLP_SETUP_TOKEN = setupToken;
+    if (mode === "admin") {
+      // An address that cannot exist (.invalid) and a key that is not one: the server never needs either here.
+      const settings = { UNIFI_URL: "https://controller.invalid", UNIFI_API_KEY: "e2e-placeholder-key-not-a-real-one" };
+      Object.assign(env, settings);
+      const file = path.join(dataDir, ".env");
+      writeFileSync(file, Object.entries(settings).map(([name, value]) => `${name}=${value}\n`).join(""));
+      chmodSync(file, 0o600);
+    }
     args = [...hlp, "serve", "--port", String(apiPort), "--data-dir", dataDir];
-    cwd = dataDir; // ./hlp.toml and ./.env are looked for here: there are none
+    cwd = dataDir; // ./hlp.toml is looked for here: there is none
   }
   const server = spawn("uv", args, { cwd, env, stdio: ["ignore", "inherit", "pipe"] });
   children.push(server);
@@ -91,7 +103,7 @@ async function startServer(mode) {
     text += chunk.toString();
   });
   const credentials =
-    mode === "setup"
+    mode !== "demo"
       ? { setupToken }
       : await new Promise((resolve, reject) => {
           const timer = setTimeout(() => {
@@ -150,8 +162,12 @@ async function servePreview(port, server) {
   app.printUrls();
 }
 
-const setupPort = process.env.E2E_SETUP_PORT ? portOf("E2E_SETUP_PORT") : null;
-const demoPort = portOf("E2E_PORT");
-const [setupServer, demoServer] = await Promise.all([setupPort === null ? null : startServer("setup"), startServer("demo")]);
-if (setupPort !== null && setupServer !== null) await servePreview(setupPort, setupServer);
-await servePreview(demoPort, demoServer);
+const wanted = (process.env.E2E_SERVERS ?? `demo:${portOf("E2E_PORT")}`).split(",").map((entry) => {
+  const [mode, port] = entry.split(":");
+  if (!["demo", "setup", "admin"].includes(mode)) throw new Error(`E2E_SERVERS: unknown mode ${mode}`);
+  if (!Number.isInteger(Number(port)) || Number(port) <= 0) throw new Error(`E2E_SERVERS: bad port in ${entry}`);
+  return { mode, port: Number(port) };
+});
+wanted.sort((a, b) => Number(a.mode === "demo") - Number(b.mode === "demo"));
+const servers = await Promise.all(wanted.map(({ mode }) => startServer(mode)));
+for (const [index, { port }] of wanted.entries()) await servePreview(port, servers[index]);

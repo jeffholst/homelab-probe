@@ -1,10 +1,9 @@
-import { useMutation } from "@tanstack/react-query";
 
 import { useServices } from "../app/services";
 import { Banner } from "../components/DataStates";
 import { Text } from "../components/Text";
 import { Icon } from "../components/ui/Icon";
-import { ErrorBanner, StepFrame, useSetup } from "./common";
+import { ErrorBanner, StepFrame, useSetup, useSetupMutation } from "./common";
 
 const LABELS: Record<string, string> = { critical: "Critical", warning: "Warning", info: "Info" };
 
@@ -15,7 +14,7 @@ const LABELS: Record<string, string> = { critical: "Critical", warning: "Warning
 export function PreviewStep({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
   const { token } = useSetup();
   const { setup } = useServices();
-  const run = useMutation({ mutationFn: () => setup.preview(token) });
+  const run = useSetupMutation({ mutationFn: () => setup.preview(token) });
   const result = run.data;
 
   return (

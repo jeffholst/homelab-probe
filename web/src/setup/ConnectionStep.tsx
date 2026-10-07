@@ -1,4 +1,3 @@
-import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 
 import type { ConnectionResult } from "../api/setup";
@@ -7,7 +6,7 @@ import { Banner } from "../components/DataStates";
 import { Text } from "../components/Text";
 import { ChecksList } from "../components/ui/ChecksList";
 import { Icon } from "../components/ui/Icon";
-import { ErrorBanner, StepFrame, useSetup } from "./common";
+import { ErrorBanner, StepFrame, useSetup, useSetupMutation } from "./common";
 
 /**
  * The connection test (the controller checks of `hlp doctor`, run by the server on the draft) and, when it passes, the
@@ -18,14 +17,14 @@ export function ConnectionStep({ onNext, onBack }: { onNext: () => void; onBack:
   const { token, status, setStatus } = useSetup();
   const { setup } = useServices();
   const [result, setResult] = useState<ConnectionResult | null>(null);
-  const test = useMutation({
+  const test = useSetupMutation({
     mutationFn: () => setup.connection(token),
     onSuccess: async (answer) => {
       setResult(answer);
       setStatus(await setup.status(token));
     },
   });
-  const chooseSite = useMutation({
+  const chooseSite = useSetupMutation({
     mutationFn: (site: string) => setup.draft(token, { site }),
     onSuccess: (next) => {
       setStatus(next);

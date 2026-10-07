@@ -17,7 +17,7 @@ import { AuthLayout } from "../layouts/AuthLayout";
 import { useCountdown } from "../lib/useCountdown";
 import { usePageTitle } from "../lib/usePageTitle";
 import { CertificateStep } from "./CertificateStep";
-import { SetupContext, messageOf, useSetup } from "./common";
+import { InsecureNotice, SetupContext, messageOf, useSetup } from "./common";
 import { ConnectionStep } from "./ConnectionStep";
 import { ControllerStep } from "./ControllerStep";
 import { FinishStep } from "./FinishStep";
@@ -52,6 +52,7 @@ export function SetupPage() {
   const [decided, setAccess] = useState<Access | null>(null);
   const [path, setPath] = useState<"choose" | "configure" | "restore">("choose");
   const [done, setDone] = useState<Done | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const needsSetup = meta.data?.needs_setup === true;
   const [attempt, setAttempt] = useState(0);
   // Only an administrator who logged in on this page can use the setup without the token. Anybody else is asked for
@@ -95,7 +96,9 @@ export function SetupPage() {
       </AuthLayout>
     );
   }
-  if (!needsSetup) {
+  // An open flow stays on screen when the server's state changes under it (a finish or a restore whose answer was lost
+  // asks the server itself, and says what the answer means).
+  if (!needsSetup && access.kind !== "ready") {
     return (
       <AuthLayout>
         <div className="auth__intro">
@@ -150,7 +153,9 @@ export function SetupPage() {
   if (access.kind === "token") {
     return (
       <TokenScreen
+        notice={notice}
         onAccepted={(token, status) => {
+          setNotice(null);
           setAccess({ kind: "ready", token, status });
         }}
         onLoginNeeded={() => {
@@ -166,6 +171,19 @@ export function SetupPage() {
     status,
     setStatus: (next: SetupStatus) => {
       setAccess({ kind: "ready", token, status: next });
+    },
+    lost: (error: unknown) => {
+      if (!isApiError(error)) return;
+      if (error.code === "invalid_setup_token") {
+        setNotice("The setup token is no longer accepted: the server may have restarted with a new one. Enter the token it shows now.");
+        setPath("choose");
+        setAccess({ kind: "token" });
+      } else if (error.code === "not_logged_in") {
+        setPath("choose");
+        setAccess({ kind: "login" });
+      } else if (error.code === "already_set_up" || error.code === "not_configured" || error.code === "step_unavailable") {
+        void meta.refetch();
+      }
     },
   };
   return (
@@ -209,7 +227,15 @@ export function SetupPage() {
 }
 
 /** The setup token, asked for once and kept in memory; a wrong one is slowed down by the server like a password. */
-function TokenScreen({ onAccepted, onLoginNeeded }: { onAccepted: (token: string, status: SetupStatus) => void; onLoginNeeded: () => void }) {
+function TokenScreen({
+  notice,
+  onAccepted,
+  onLoginNeeded,
+}: {
+  notice: string | null;
+  onAccepted: (token: string, status: SetupStatus) => void;
+  onLoginNeeded: () => void;
+}) {
   const { setup } = useServices();
   const [token, setToken] = useState("");
   const [busy, setBusy] = useState(false);
@@ -250,7 +276,13 @@ function TokenScreen({ onAccepted, onLoginNeeded }: { onAccepted: (token: string
         <h1>Welcome to Homelab Probe</h1>
         <p>This server has no settings yet. A few steps connect it to your UniFi controller.</p>
       </div>
+      <InsecureNotice />
       <form className="card card--glass" onSubmit={submit} noValidate>
+        {notice !== null && error === null && (
+          <Banner tone="info" role="alert" title="Enter the setup token again">
+            <p className="banner__text">{notice}</p>
+          </Banner>
+        )}
         {error !== null && !wrong && (
           <Banner tone="danger" role="alert" title={isApiError(error) && error.status === 429 ? "Too many attempts" : "Could not check the token"}>
             <p className="banner__text">
@@ -367,6 +399,7 @@ function ConfigureWizard({ needsAdmin, onCancel, onFinished }: { needsAdmin: boo
           </p>
           <h1>The first administrator</h1>
         </div>
+        <InsecureNotice />
         <FinishStep needsAdmin onBack={onCancel} onFinished={onFinished} />
       </>
     );
@@ -379,6 +412,7 @@ function ConfigureWizard({ needsAdmin, onCancel, onFinished }: { needsAdmin: boo
         </p>
         <h1>Connect your controller</h1>
       </div>
+      <InsecureNotice />
       <Stepper steps={CONFIGURE_STEPS} current={step} label="Setup progress" />
       {step === 0 && <ControllerStep onNext={next} onBack={onCancel} />}
       {step === 1 && <CertificateStep onNext={next} onBack={back} />}

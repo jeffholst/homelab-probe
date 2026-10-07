@@ -1727,3 +1727,9 @@ legend {
 .auth__brand {
   min-height: var(--target-size);
 }
+
+.facts .hint {
+  display: block;
+  margin-top: var(--space-1);
+  font-weight: 400;
+}
