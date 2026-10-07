@@ -104,7 +104,7 @@ pip install git+https://github.com/jeffholst/homelab-probe@vX.Y.Z
 uv tool install 'homelab-probe[web,pretty] @ git+https://github.com/jeffholst/homelab-probe@vX.Y.Z'
 ```
 
-The web app is not in git, so an install from a checkout serves the API only until a build is copied into the package ([how](docs/web.md#the-web-app-files)).
+The built web app is not in git, so an install from a checkout serves the API only until a build is copied into the package ([how](docs/web.md#the-web-app-files)).
 
 ### Docker
 
