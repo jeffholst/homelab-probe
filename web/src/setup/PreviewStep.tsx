@@ -51,9 +51,8 @@ export function PreviewStep({ onNext, onBack }: { onNext: () => void; onBack: ()
                 </li>
               ))}
             </ul>
-            {result.total === 0 && (
+{result.total === 0 && result.warnings.length === 0 && (
               <Banner tone="success" title="Nothing to report">
-                <p className="banner__text">Every check that ran found the network healthy.</p>
               </Banner>
             )}
             {result.warnings.length > 0 && (
