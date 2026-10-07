@@ -8,8 +8,14 @@
 //        directory), so it starts in the setup mode;
 //      - `admin`: `hlp serve` with settings (UNIFI_URL and UNIFI_API_KEY in the environment and in the data directory's
 //        `.env`, for an address that does not exist) and no account, so it starts in the admin mode;
-//      `setup` and `admin` get a setup token chosen here (HLP_SETUP_TOKEN). The tests never let them contact a
-//      controller, and nothing they do sends a notification;
+//      - `stub`, `fallback`, `readonly`: like `setup`, for the tests that need a controller to talk to (#281): a
+//        server to run the whole setup on, one whose environment sets UNIFI_VERIFY_SSL so that finishing returns the
+//        "nothing was saved" files, and one started with --read-only. Their credentials also name the stub
+//        controller (see below);
+//      all but `demo` get a setup token chosen here (HLP_SETUP_TOKEN). Nothing they do reaches a real controller or
+//      sends a notification;
+//      The stub controllers (`e2e/stub_controller.py`) are two HTTPS servers on 127.0.0.1 with the synthetic demo
+//      network: one shows a certificate that can be pinned, the other one that cannot; both accept one random key;
 //   2. serves web/dist on the port given with `vite preview`, forwarding /api, /healthz and /readyz to that server
 //      (vite.config.ts), with the content-security policy the real server sends on every response, so a script or
 //      style it forbids fails the tests instead of failing for the first user;
@@ -63,6 +69,49 @@ for (const signal of ["SIGINT", "SIGTERM"]) {
 }
 process.on("exit", stopAll);
 
+/** Starts a stub controller (see stub_controller.py) and resolves with its address, fingerprint and key. */
+function startStub(cert, key) {
+  const child = spawn("uv", ["run", "--project", repo, "python", path.join(web, "e2e", "stub_controller.py"), "--key", key, "--cert", cert], {
+    cwd: repo,
+    env: { ...process.env, VIRTUAL_ENV: undefined },
+    stdio: ["ignore", "pipe", "inherit"],
+  });
+  children.push(child);
+  return new Promise((resolve, reject) => {
+    let text = "";
+    const timer = setTimeout(() => {
+      reject(new Error(`the ${cert} stub controller printed nothing within 120 s:\n${text}`));
+    }, 120_000);
+    child.on("exit", (code) => {
+      if (code !== 0 && code !== null) {
+        console.error(`the ${cert} stub controller exited with code ${code}`);
+        process.exit(1);
+      }
+    });
+    child.stdout.on("data", (chunk) => {
+      text += chunk.toString();
+      const line = text.split("\n")[0];
+      if (!text.includes("\n")) return;
+      clearTimeout(timer);
+      const { port, fingerprint } = JSON.parse(line);
+      resolve({ url: `https://127.0.0.1:${port}`, fingerprint, key });
+    });
+  });
+}
+
+let stubs = null;
+/** The two stub controllers, started on first use: what a test types into the setup to reach them. */
+function controllers() {
+  stubs ??= (async () => {
+    const key = randomBytes(18).toString("base64url");
+    const [good, other] = await Promise.all([startStub("good", key), startStub("other", key)]);
+    return { url: good.url, key, fingerprint: good.fingerprint, otherUrl: other.url, otherFingerprint: other.fingerprint };
+  })();
+  return stubs;
+}
+
+const SETUP_LIKE = new Set(["setup", "admin", "stub", "fallback", "readonly"]);
+
 /** Starts the real server (demo or setup) and resolves with its address and what the tests need to log in. */
 async function startServer(mode) {
   const apiPort = await freePort();
@@ -71,10 +120,11 @@ async function startServer(mode) {
   const hlp = ["run", "--project", repo, "--extra", "web", path.join(repo, "hlp.py")];
   let args = [...hlp, "--demo", "serve", "--port", String(apiPort)];
   let cwd = repo;
+  let dataDir = null;
   const setupToken = randomBytes(18).toString("base64url");
-  if (mode === "setup" || mode === "admin") {
+  if (SETUP_LIKE.has(mode)) {
     for (const name of Object.keys(env)) if (name.startsWith("UNIFI_") || name.startsWith("NOTIFY_") || name === "HLP_ENV") delete env[name];
-    const dataDir = mkdtempSync(path.join(os.tmpdir(), `hlp-e2e-${mode}-`));
+    dataDir = mkdtempSync(path.join(os.tmpdir(), `hlp-e2e-${mode}-`));
     directories.push(dataDir);
     env.HLP_SETUP_TOKEN = setupToken;
     if (mode === "admin") {
@@ -108,7 +158,10 @@ async function startServer(mode) {
         { mode: 0o600 },
       );
     }
-    args = [...hlp, "serve", "--port", String(apiPort), "--data-dir", dataDir];
+    // The setting that makes `finish` return the files instead of saving: the environment would win over the saved file
+    // (it only matters when the controller's certificate is pinned, which changes UNIFI_VERIFY_SSL).
+    if (mode === "fallback") env.UNIFI_VERIFY_SSL = "true";
+    args = [...hlp, "serve", "--port", String(apiPort), "--data-dir", dataDir, ...(mode === "readonly" ? ["--read-only"] : [])];
     cwd = dataDir; // ./hlp.toml is looked for here: there is none
   }
   const server = spawn("uv", args, { cwd, env, stdio: ["ignore", "inherit", "pipe"] });
@@ -127,7 +180,8 @@ async function startServer(mode) {
   });
   const credentials =
     mode !== "demo"
-      ? { setupToken }
+      ? // `dataDir` lets a test look at what the server did and did not write (the harness and the tests share a machine).
+        { setupToken, dataDir, ...(["stub", "fallback", "readonly"].includes(mode) ? { controller: await controllers() } : {}) }
       : await new Promise((resolve, reject) => {
           const timer = setTimeout(() => {
             reject(new Error(`the demo server printed no login within 120 s:\n${text}`));
@@ -187,7 +241,7 @@ async function servePreview(port, server) {
 
 const wanted = (process.env.E2E_SERVERS ?? `demo:${portOf("E2E_PORT")}`).split(",").map((entry) => {
   const [mode, port] = entry.split(":");
-  if (!["demo", "setup", "admin"].includes(mode)) throw new Error(`E2E_SERVERS: unknown mode ${mode}`);
+  if (!["demo", "setup", "admin", "stub", "fallback", "readonly"].includes(mode)) throw new Error(`E2E_SERVERS: unknown mode ${mode}`);
   if (!Number.isInteger(Number(port)) || Number(port) <= 0) throw new Error(`E2E_SERVERS: bad port in ${entry}`);
   return { mode, port: Number(port) };
 });
