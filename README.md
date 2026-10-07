@@ -86,10 +86,25 @@ pip install .
 
 This installs `hlp`. `hlp serve` also needs the web extra: `pip install '.[web]'` (or `uv run --extra web hlp.py serve`). The optional `pretty` extra (`pip install '.[pretty]'`) enables compact site headings, progress, grouped findings and responsive inventory tables; `--color`, `--no-progress` and `--plain` control it ([details](docs/configuration.md#terminal-styling---color---plain-and---no-progress)). Findings stay plain with `--no-emoji` or `diagnose --watch`. A tagged release can be installed without a clone; check the [releases page](https://github.com/jeffholst/homelab-probe/releases) and [changelog](CHANGELOG.md), then replace `vX.Y.Z`:
 
+With `uv tool`, which puts `hlp` on your PATH in its own environment (leave out the extras you do not want):
+
+```bash
+uv tool install '.[web,pretty]'                          # from a checkout
+uv tool install --editable '.[web,pretty]'               # the same, and code changes take effect at once
+uv tool install --force --reinstall '.[web,pretty]'      # pick up changes to a normal install
+uv tool update-shell                                     # if hlp is not found: add uv's tool folder to PATH
+uv tool uninstall homelab-probe
+```
+
+From a release tag (add the extras with the second form):
+
 ```bash
 uv tool install git+https://github.com/jeffholst/homelab-probe@vX.Y.Z
 pip install git+https://github.com/jeffholst/homelab-probe@vX.Y.Z
+uv tool install 'homelab-probe[web,pretty] @ git+https://github.com/jeffholst/homelab-probe@vX.Y.Z'
 ```
+
+The web app is not in git, so an install from a checkout serves the API only until a build is copied into the package ([how](docs/web.md#the-web-app-files)).
 
 ### Docker
 
