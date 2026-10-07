@@ -96,7 +96,7 @@ uv tool update-shell                                     # if hlp is not found: 
 uv tool uninstall homelab-probe
 ```
 
-From a release tag (add the extras with the second form):
+From a release tag (add the extras with the last form):
 
 ```bash
 uv tool install git+https://github.com/jeffholst/homelab-probe@vX.Y.Z
