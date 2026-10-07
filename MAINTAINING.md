@@ -13,6 +13,45 @@ Update this guide in the same PR whenever a maintenance or release procedure cha
   Keep temporary tasks in [issues](https://github.com/jeffholst/homelab-probe/issues).
 - This repository is a fork. Explicitly target `jeffholst/homelab-probe` when creating a PR with GitHub CLI.
 
+## Issue Labels
+
+Labels group the issues so open work can be found and ordered. The issue forms add only `bug` or `enhancement`,
+so add the others yourself when you create or triage an issue. Every open issue should have an area label.
+Use the labels GitHub provides (`bug`, `enhancement`, `documentation`, `accessibility`, `question`) as they are
+described there; the labels below are this project's own.
+
+| Label | Use it for |
+| ----- | ---------- |
+| `area: web` | The React app and browser UI (`web/`) |
+| `area: api` | The server and HTTP API (`hlp serve`, `homelab_probe/server/`) |
+| `area: cli` | The command line and the code behind it |
+| `area: docker` | The container image, Compose file and release workflow |
+| `tracker` | An issue that tracks child issues and closes when they are done, such as #160 and #187 |
+| `launch` | Work required for the first usable public web release (see #187) |
+| `terminal` | The web terminal feature group: #269, #270 and their sub-issues |
+| `security` | Work that needs security-focused design and review: secrets, authorization, untrusted input, output safety |
+| `blocked` | Waiting on another issue. Say which one in the issue description, and remove the label when it merges |
+| `needs-approval` | Needs the owner's approval before work continues, for example a probe of the real controller |
+| `deferred` | Postponed on purpose until a stated condition is met, such as a second site existing |
+
+An issue can have several labels: an area, plus any of `tracker`, `launch`, `terminal`, `security` and one status
+(`blocked`, `needs-approval` or `deferred`). `question` on an idea means the design still needs a decision.
+
+Useful searches (add `--repo jeffholst/homelab-probe` outside the project folder):
+
+```bash
+# What can be started now in the web app: open, area web, not blocked
+gh issue list --label "area: web" --search "-label:blocked"
+# What the first public web release still needs
+gh issue list --label launch
+# Everything waiting on a decision from the owner
+gh issue list --label needs-approval
+```
+
+Change a label's wording, color or purpose here and on GitHub together. To recreate one (for example in a copy of
+the repository), run `gh label create "area: web" --color 1d76db --description "The React app and browser UI"`;
+add `--force` to update an existing label.
+
 ## Version Numbers
 
 The app version is stored in [homelab_probe/__init__.py](homelab_probe/__init__.py), as `__version__`.
