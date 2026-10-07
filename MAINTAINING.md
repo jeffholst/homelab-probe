@@ -150,7 +150,7 @@ gh run watch RUN_ID --exit-status
 # Each job of a run and its result
 gh run view RUN_ID --json jobs -q '.jobs[] | "\(.conclusion)  \(.name)"'
 # Only the failing steps, when something failed
-gh run view RUN_ID --log-failed | tail -80
+gh run view RUN_ID --log-failed
 ```
 
 Replace `RUN_ID` with the number from the first command. A run is green only when **every** job passed:
