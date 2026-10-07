@@ -50,6 +50,8 @@ export function RestoreFlow({ token, onCancel, onRestored }: { token: string | n
       const shown = await backup.preview(token, encoded, passphrase);
       return { encoded, shown };
     },
+    // The archive is kept in `archive` (and dropped by `forget`); the action must not keep a second reference to it.
+    keepResult: false,
     onSuccess: ({ encoded, shown }) => {
       setArchive(encoded);
       setPreview(shown);
@@ -104,12 +106,13 @@ export function RestoreFlow({ token, onCancel, onRestored }: { token: string | n
           primary={{ label: open.isPending ? "Opening…" : "Open the backup", busy: open.isPending }}
         >
           {open.isError && codeOf(open.error) !== "backup_decrypt" && <ErrorBanner error={open.error} title="The backup could not be opened" />}
-          <FileDrop file={file} error={fileError} onChoose={choose} />
+          <FileDrop file={file} error={fileError} disabled={open.isPending} onChoose={choose} />
           <div className="field">
             <label htmlFor="restore-passphrase">Passphrase of the backup</label>
             <SecretInput
               id="restore-passphrase"
               autoComplete="off"
+              disabled={open.isPending}
               value={passphrase}
               aria-invalid={passphraseError !== null}
               aria-describedby={passphraseError !== null ? "restore-passphrase-error" : undefined}
@@ -152,13 +155,13 @@ export function RestoreFlow({ token, onCancel, onRestored }: { token: string | n
   );
 }
 
-function FileDrop({ file, error, onChoose }: { file: File | null; error: string | null; onChoose: (file: File | undefined) => void }) {
+function FileDrop({ file, error, disabled, onChoose }: { file: File | null; error: string | null; disabled: boolean; onChoose: (file: File | undefined) => void }) {
   const id = useId();
   const [dragging, setDragging] = useState(false);
   function drop(event: DragEvent<HTMLLabelElement>) {
     event.preventDefault();
     setDragging(false);
-    onChoose(event.dataTransfer.files[0]);
+    if (!disabled) onChoose(event.dataTransfer.files[0]);
   }
   return (
     <div className="field">
@@ -192,6 +195,7 @@ function FileDrop({ file, error, onChoose }: { file: File | null; error: string 
         <input
           id={id}
           type="file"
+          disabled={disabled}
           accept=".hlpbackup,application/octet-stream"
           aria-describedby={error !== null ? `${id}-error` : undefined}
           onChange={(event) => {

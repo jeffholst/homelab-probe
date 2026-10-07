@@ -48,7 +48,12 @@ function shouldRetry(failureCount: number, error: unknown): boolean {
  */
 export function createServices(options: { fetch?: typeof fetch } = {}): Services {
   const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: shouldRetry, staleTime: 15_000, refetchOnWindowFocus: true } },
+    defaultOptions: {
+      queries: { retry: shouldRetry, staleTime: 15_000, refetchOnWindowFocus: true },
+      // A mutation's variables stay in the cache for `gcTime` after nothing watches it (5 minutes by default). Nothing
+      // here needs them later, and a call with a secret uses `useAction` instead, so drop any mutation at once.
+      mutations: { gcTime: 0 },
+    },
   });
   const client = createApiClient({
     ...(options.fetch ? { fetch: options.fetch } : {}),

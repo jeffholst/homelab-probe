@@ -33,6 +33,7 @@ export function ConnectionStep({ onNext, onBack }: { onNext: () => void; onBack:
 
   const draft = status.draft;
   const passed = draft.connection_ok === true;
+  const warned = result?.checks.some((check) => check.status === "warn") ?? false;
   const sites = result?.sites ?? [];
   const current = sites.find((site) => site.ref === draft.site || site.id === draft.site || site.name === draft.site);
 
@@ -61,9 +62,16 @@ export function ConnectionStep({ onNext, onBack }: { onNext: () => void; onBack:
       <div aria-live="polite" className="stack">
         {test.isError && <ErrorBanner error={test.error} title="The test could not run" />}
         {result !== null && !test.isPending && (
-          <Banner tone={result.ok ? "success" : "danger"} title={result.ok ? "Connected" : "The controller could not be used"}>
+          <Banner
+            tone={!result.ok ? "danger" : warned ? "warning" : "success"}
+            title={!result.ok ? "The controller could not be used" : warned ? "Connected, with warnings" : "Connected"}
+          >
             <p className="banner__text">
-              {result.ok ? "The controller answered and accepted the key." : "See what failed below, change the settings and test again."}
+              {!result.ok
+                ? "See what failed below, change the settings and test again."
+                : warned
+                  ? "The controller answered and accepted the key, but some checks need a look (below). You can continue; the data they cover may be incomplete."
+                  : "The controller answered and accepted the key."}
             </p>
           </Banner>
         )}

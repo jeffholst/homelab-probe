@@ -345,6 +345,7 @@ function ChooseScreen({ mode, onChoose }: { mode: SetupStatus["mode"]; onChoose:
     heading.current?.focus();
   }, []);
   const admin = mode === "admin";
+  const meta = useMeta();
   return (
     <AuthLayout wide>
       <div className="auth__intro">
@@ -353,6 +354,14 @@ function ChooseScreen({ mode, onChoose }: { mode: SetupStatus["mode"]; onChoose:
         </h1>
         <p>{admin ? "This server has its settings; it needs its first administrator." : "Set up a new installation, or bring back one you backed up."}</p>
       </div>
+      {meta.data?.read_only === true && (
+        <Banner tone="warning" title="This server is read-only">
+          <p className="banner__text">
+            It was started with <code>--read-only</code>, so it writes no files: it cannot save a setup or restore a backup, and the last step will be
+            refused. Restart it without <code>--read-only</code> to continue.
+          </p>
+        </Banner>
+      )}
       <div className="choices">
         <ChoiceButton
           icon={admin ? "user" : "server"}

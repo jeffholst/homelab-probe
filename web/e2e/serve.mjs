@@ -19,7 +19,7 @@
 // demo) answering means every server is ready. Usage: node e2e/serve.mjs   (`npm run build` must have run.)
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -84,6 +84,29 @@ async function startServer(mode) {
       const file = path.join(dataDir, ".env");
       writeFileSync(file, Object.entries(settings).map(([name, value]) => `${name}=${value}\n`).join(""));
       chmodSync(file, 0o600);
+      // A note about a device that is not in any inventory (the controller here does not exist), as the notes store
+      // writes it: a backup of this server must carry it, and a restore must bring it back.
+      const notes = path.join(dataDir, "snapshots", "e2e-site");
+      mkdirSync(notes, { recursive: true, mode: 0o700 });
+      writeFileSync(
+        path.join(notes, "notes.json"),
+        JSON.stringify({
+          version: 1,
+          site: "e2e-site",
+          entries: {
+            "95b16d11cf12c305": {
+              author: "e2e",
+              context: { at: 1790000000, name: "Old switch" },
+              created_at: 1790000000,
+              modified_at: 1790000000,
+              modified_by: "e2e",
+              subject: "device:AA:BB:CC:DD:EE:01",
+              text: "A note kept for a device that is gone.",
+            },
+          },
+        }),
+        { mode: 0o600 },
+      );
     }
     args = [...hlp, "serve", "--port", String(apiPort), "--data-dir", dataDir];
     cwd = dataDir; // ./hlp.toml is looked for here: there is none

@@ -64,7 +64,7 @@ export function LoginPage() {
         )}
         {meta.isPending && <Loading label="the server's details" />}
         {meta.isError && <ErrorState error={meta.error} label="the server's details" onRetry={() => void meta.refetch()} />}
-        {error && (
+        {login.isError && (
           <Banner tone="danger" role="alert" title={isApiError(error) && error.status === 429 ? "Too many attempts" : "Could not log in"}>
             <p className="banner__text">
               <Text value={isApiError(error) ? error.message : "Something went wrong."} />
