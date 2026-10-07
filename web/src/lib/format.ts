@@ -22,3 +22,23 @@ export function formatDuration(seconds: number): string {
   }
   return parts.length > 0 ? parts.join(" ") : "0 seconds";
 }
+
+/**
+ * How long ago `ms` (since the epoch) was, for a person: "just now", "5 minutes ago", "3 hours ago", "2 days ago"
+ * (the largest unit only). A moment in the future (clock skew) is "just now"; an unknown one is "".
+ */
+export function formatAgo(ms: number | null | undefined, now: number = Date.now()): string {
+  if (ms === null || ms === undefined || !Number.isFinite(ms) || ms <= 0) return "";
+  const seconds = Math.floor((now - ms) / 1000);
+  if (seconds < 60) return "just now";
+  const units: [string, number][] = [
+    ["day", 86_400],
+    ["hour", 3_600],
+    ["minute", 60],
+  ];
+  for (const [name, size] of units) {
+    const count = Math.floor(seconds / size);
+    if (count > 0) return `${count} ${name}${count === 1 ? "" : "s"} ago`;
+  }
+  return "just now";
+}

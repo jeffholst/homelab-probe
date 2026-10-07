@@ -21,10 +21,13 @@
  *   administrator exists (401 `invalid_setup_token`, and the login's throttle under its own key) and an administrator's
  *   session with the CSRF token once one does.
  *
- * Not copied: the report documents. A page issue adds the routes it reads with `fake.route(...)`.
+ * The report documents are synthetic (fakeReports.ts): the site list and the dashboard are served by default
+ * (`sites`, `dashboard`, `reportWarnings`); a page issue adds the other routes it reads with `fake.route(...)`.
  */
 import golden from "../../../tests/golden/openapi.json";
+import type { Dashboard } from "../api/reports";
 import type { Meta, Platform, Role } from "../api/types";
+import { FAKE_SITES, dashboardFixture } from "./fakeReports";
 
 export interface FakeAccount {
   username: string;
@@ -134,6 +137,13 @@ export class FakeApi {
   private readonly maxMs: number;
   /** Simulates a page of another site posting to this server: its Origin is not ours. */
   crossSite = false;
+  /** The controller's sites and the dashboard each site answers (a site not in `sites` is a 404). */
+  sites: { name: string; ref: string; id: string }[] = FAKE_SITES.map((site) => ({ ...site }));
+  dashboard: Dashboard = dashboardFixture();
+  /** The `warnings` of every report answer. */
+  reportWarnings: string[] = [];
+  /** The `refresh` parameter of every dashboard request, in order. */
+  readonly dashboardRefresh: boolean[] = [];
   /** The setup token of a server in a setup mode (fakeSetup.ts sets it). */
   setupToken: string | null = null;
 
@@ -155,6 +165,14 @@ export class FakeApi {
     this.route("POST", "/auth/logout", (request) => this.logout(request));
     this.route("GET", "/auth/me", (request) => this.me(request.session));
     this.route("GET", "/platforms", () => this.platforms);
+    this.route("GET", "/unifi/sites", () => ({ application: { applicationVersion: "10.0.0" }, sites: this.sites, ...this.envelope() }));
+    this.route("GET", "/unifi/sites/{site}/dashboard", (request) => {
+      if (!this.sites.some((site) => site.ref === request.params["site"] || site.id === request.params["site"])) {
+        throw new ApiRefused(404, "site_not_found", "The controller has no such site.");
+      }
+      this.dashboardRefresh.push(request.query.get("refresh") === "true");
+      return { ...this.dashboard, ...this.envelope() };
+    });
   }
 
   /** Registers a route, which must be in the OpenAPI snapshot. A later registration of the same route wins. */
@@ -180,6 +198,10 @@ export class FakeApi {
       setup: options.setup ?? false,
       role: options.setup === true ? "admin" : (options.role ?? "viewer"),
     });
+  }
+
+  private envelope(): { generated_at: string; warnings: string[] } {
+    return { generated_at: new Date(this.clock()).toISOString().replace(/\.\d{3}Z$/, "Z"), warnings: [...this.reportWarnings] };
   }
 
   /** Answers the next `times` requests whose path starts with `prefix` with this error (a server failure to react to). */

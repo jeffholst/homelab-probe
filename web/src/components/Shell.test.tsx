@@ -21,7 +21,7 @@ async function logIn() {
   await user.type(await screen.findByLabelText("User name"), "demo");
   await user.type(screen.getByLabelText("Password"), "correct horse");
   await user.click(screen.getByRole("button", { name: "Log in" }));
-  await screen.findByRole("heading", { name: "Home" });
+  await screen.findByRole("heading", { name: "Dashboard" });
   return { user, ...rendered };
 }
 
@@ -35,7 +35,7 @@ describe("the shell on a wide screen", () => {
     await logIn();
     const header = screen.getByRole("banner");
     const nav = within(header).getByRole("navigation", { name: "Main" });
-    expect(within(nav).getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
+    expect(within(nav).getByRole("link", { name: "Dashboard" })).toHaveAttribute("aria-current", "page");
     expect(screen.queryByRole("button", { name: "Menu" })).toBeNull();
     expect(screen.getAllByRole("navigation", { name: "Main" })).toHaveLength(1);
     expect(within(header).getByRole("link", { name: "Homelab Probe, home" })).toHaveAttribute("href", "/");
@@ -58,7 +58,7 @@ describe("the shell on a wide screen", () => {
     const { user } = await logIn();
     const button = screen.getByRole("button", { name: /Account:\s*demo/ });
     await user.click(button);
-    await user.click(screen.getByRole("heading", { name: "Home" }));
+    await user.click(screen.getByRole("heading", { name: "Dashboard" }));
     expect(button).toHaveAttribute("aria-expanded", "false");
     await user.click(button);
     const panel = document.getElementById(button.getAttribute("aria-controls") ?? "");

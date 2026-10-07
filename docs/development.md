@@ -64,7 +64,7 @@ tests/
 docs/                    the detail behind the README: one page per group of commands, settings, notifications, examples
   schemas.md, schemas/   a versioned JSON Schema for every --json output, the snapshot file and the webhook payload
 web/                     the web interface (React, TypeScript, Vite): its own npm project, not part of the Python package
-  src/api/               typed fetch client (same origin, CSRF header from memory), the one ApiError, the server's own answers, the setup and backup calls
+  src/api/               typed fetch client (same origin, CSRF header from memory), the one ApiError, the server's own answers, the report, setup and backup calls
   src/generated/         types generated from docs/schemas (committed; CI regenerates and fails on a difference)
   src/components/, pages/  the shell (header, menu sheet, account menu) and footer, the brand mark, the data-state components (Loading, Refreshing, Empty, Error, stale and partial banners), Text, the small UI pieces (icons, stepper, secret field, check list, code block), pages
   src/layouts/           the frame of the screens before a login (the login, the setup)
@@ -72,7 +72,7 @@ web/                     the web interface (React, TypeScript, Vite): its own np
   src/assets/brand/      the ant mascot and the logo (WebP, bundled with hashed names)
   src/lib/safeText.ts    port of util.printable (control, invisible and bidirectional characters), checked against shared vectors
   src/styles/, theme/    design tokens (dark by default, light, system) and the theme preference (the only thing put in browser storage)
-  src/test/fakeApi.ts    a fake of the server's API for Vitest, held to tests/golden/openapi.json (fakeSetup.ts adds the setup and restore)
+  src/test/fakeApi.ts    a fake of the server's API for Vitest, held to tests/golden/openapi.json (fakeSetup.ts adds the setup and restore, fakeReports.ts the synthetic site list and dashboard)
   e2e/                   the Playwright tests and the script that serves the build in front of `hlp --demo serve` and of a server in its setup mode
 Dockerfile, compose.yaml, .dockerignore   the container image (a placeholder web build stage, the wheels, the non-root runtime) and its compose example
 tools/                   development scripts, not part of the package

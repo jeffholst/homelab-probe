@@ -20,7 +20,7 @@ interface NavItem {
 
 /** Only pages that work are listed: a page issue adds its row here when the page ships. */
 export const NAV_ITEMS: readonly NavItem[] = [
-  { to: "/", label: "Home", icon: "home", end: true },
+  { to: "/", label: "Dashboard", icon: "home", end: true },
   { to: "/profile", label: "Profile", icon: "user" },
 ];
 

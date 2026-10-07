@@ -5,6 +5,7 @@ import { createApi, type Api } from "../api/endpoints";
 import { createApiClient, type ApiClient } from "../api/client";
 import { createBackupApi, type BackupApi } from "../api/backup";
 import { isApiError } from "../api/errors";
+import { createReportsApi, type ReportsApi } from "../api/reports";
 import { createSetupApi, type SetupApi } from "../api/setup";
 import { ThemeProvider } from "../theme/ThemeProvider";
 
@@ -30,6 +31,8 @@ export interface Services {
   /** The guided setup and the restore of a backup (the setup token is given to each call). */
   setup: SetupApi;
   backup: BackupApi;
+  /** The report routes (`/api/v1/unifi/...`). */
+  reports: ReportsApi;
   queryClient: QueryClient;
 }
 
@@ -53,7 +56,7 @@ export function createServices(options: { fetch?: typeof fetch } = {}): Services
       endSession(queryClient);
     },
   });
-  return { client, api: createApi(client), setup: createSetupApi(client), backup: createBackupApi(client), queryClient };
+  return { client, api: createApi(client), setup: createSetupApi(client), backup: createBackupApi(client), reports: createReportsApi(client), queryClient };
 }
 
 const ServicesContext = createContext<Services | null>(null);

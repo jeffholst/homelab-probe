@@ -45,7 +45,7 @@ test.describe("login", () => {
 
   test("does not follow a next= that leaves the site", async ({ page }) => {
     await logIn(page, "/login?next=https%3A%2F%2Fevil.example%2F");
-    await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Dashboard", level: 1 })).toBeVisible();
     expect(new URL(page.url()).origin).toBe(new URL(test.info().project.use.baseURL ?? page.url()).origin);
   });
 });
@@ -54,7 +54,7 @@ test.describe("the shell", () => {
   test("has the landmarks and the navigation of its size, and passes the accessibility check", async ({ page }, testInfo) => {
     const problems = collectProblems(page);
     await logIn(page);
-    await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Dashboard", level: 1 })).toBeVisible();
     await expect(page.getByRole("banner")).toBeVisible();
     await expect(page.getByRole("main")).toBeVisible();
     await expect(page.getByRole("contentinfo")).toBeVisible();
@@ -76,7 +76,7 @@ test.describe("the shell", () => {
     } else {
       await expect(menu).toBeHidden();
       await expect(nav).toBeVisible(); // a sidebar
-      await expect(nav.getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
+      await expect(nav.getByRole("link", { name: "Dashboard" })).toHaveAttribute("aria-current", "page");
     }
 
     await expectNoHorizontalOverflow(page);
@@ -173,7 +173,7 @@ test.describe("sessions", () => {
   test("keeps the person logged in across a reload and still logs them out (the CSRF token comes back with /auth/me)", async ({ page }, testInfo) => {
     await logIn(page);
     await page.reload();
-    await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Dashboard", level: 1 })).toBeVisible();
     await (await openAccount(page, testInfo)).getByRole("button", { name: "Log out" }).click();
     await expect(page.getByRole("heading", { name: "Log in", level: 1 })).toBeVisible();
     await page.goto("/profile");
@@ -184,7 +184,7 @@ test.describe("sessions", () => {
 
   test("puts nothing but the theme word in browser storage, and no secret anywhere script can reach", async ({ page }, testInfo) => {
     const credentials = await logIn(page);
-    await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Dashboard", level: 1 })).toBeVisible();
     const read = () =>
       page.evaluate(async () => ({
         local: Object.entries(window.localStorage),
@@ -227,14 +227,31 @@ test.describe("sessions", () => {
     expect(Object.keys(platforms[0] ?? {}).sort()).toEqual(["configured", "id", "name"]);
   });
 
-  test("lists the platforms the server reports, read through the proxy with the real policy in force", async ({ page }) => {
+  test("shows the dashboard of the demo network, read through the proxy with the real policy in force", async ({ page }, testInfo) => {
     const problems = collectProblems(page);
     await logIn(page);
-    await expect(page.getByText("UniFi", { exact: true })).toBeVisible();
+    // The demo network has an overheating gateway: the real document, from the real server.
+    await expect(page.getByRole("heading", { name: "Critical problems found" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Needs attention" }).getByText("Gateway", { exact: true })).toBeVisible();
+    for (const name of ["Devices", "Clients", "Internet", "Wi-Fi"]) await expect(page.getByRole("region", { name })).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+    await expectNoAxeViolations(page);
+    await screenshot(page, testInfo, "dashboard");
+    const response = page.waitForResponse((answer) => answer.url().includes("/dashboard?refresh=true"));
     await page.getByRole("button", { name: "Refresh" }).click();
-    await expect(page.getByText("UniFi", { exact: true })).toBeVisible();
+    expect((await response).status()).toBe(200);
+    await expect(page.getByRole("heading", { name: "Critical problems found" })).toBeVisible();
     expect(problems).toEqual([]);
     const credentials = await demoCredentials(page);
     expect(credentials.policy).toContain("script-src 'self'");
+  });
+
+  test("shows the dashboard in the light theme without accessibility problems", async ({ page }, testInfo) => {
+    await logIn(page);
+    await (await openAccount(page, testInfo)).getByRole("radio", { name: "Light" }).check();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("heading", { name: "Critical problems found" })).toBeVisible();
+    await expectNoAxeViolations(page);
+    await screenshot(page, testInfo, "dashboard-light");
   });
 });

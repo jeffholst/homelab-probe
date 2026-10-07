@@ -4,7 +4,10 @@ import { describe, expect, it } from "vitest";
 
 import { safeNext } from "../auth/session";
 import { FakeApi } from "../test/fakeApi";
+import { dashboardFixture, dashboardWith } from "../test/fakeReports";
 import { FakeSetup } from "../test/fakeSetup";
+
+const DASHBOARD = ["dashboard", "default"];
 import { renderApp } from "../test/render";
 
 async function logIn(user: ReturnType<typeof userEvent.setup>, password = "correct horse", username = "demo") {
@@ -27,7 +30,7 @@ describe("the route guard", () => {
     const user = userEvent.setup();
     const first = renderApp("/", { fake });
     await logIn(user);
-    await screen.findByRole("heading", { name: "Home" });
+    await screen.findByRole("heading", { name: "Dashboard" });
     first.unmount();
     renderApp("/profile", { fake }); // a reload: no token in memory, the cookie is still there
     expect(await screen.findByRole("heading", { name: "Profile" })).toBeInTheDocument();
@@ -46,10 +49,10 @@ describe("the route guard", () => {
     const user = userEvent.setup();
     const { services } = renderApp("/", { fake });
     await logIn(user);
-    await screen.findByRole("heading", { name: "Home" });
+    await screen.findByRole("heading", { name: "Dashboard" });
     fake.restartServer();
     await act(async () => {
-      await services.queryClient.refetchQueries({ queryKey: ["platforms"] });
+      await services.queryClient.refetchQueries({ queryKey: DASHBOARD });
     });
     expect(await screen.findByRole("heading", { name: "Log in" })).toBeInTheDocument();
   });
@@ -59,20 +62,23 @@ describe("the route guard", () => {
     const user = userEvent.setup();
     const { services } = renderApp("/", { fake });
     await logIn(user);
-    expect(await screen.findByText("UniFi")).toBeInTheDocument();
-    expect(services.queryClient.getQueryData(["platforms"])).toBeDefined();
+    expect(await screen.findByText("Office Switch")).toBeInTheDocument();
+    expect(services.queryClient.getQueryData(DASHBOARD)).toBeDefined();
 
     fake.restartServer(); // the session ends; the next request is a 401
-    fake.platforms = [{ id: "other", name: "Other platform", configured: true }];
+    const findings = dashboardFixture().findings;
+    fake.dashboard = dashboardWith({
+      findings: { ...findings, attention: [{ id: "x", rank: 1, severity: "warning", code: "device.offline", subject: "Other subject", message: "is offline" }] },
+    });
     await act(async () => {
-      await services.queryClient.refetchQueries({ queryKey: ["platforms"] }).catch(() => undefined);
+      await services.queryClient.refetchQueries({ queryKey: DASHBOARD }).catch(() => undefined);
     });
     expect(await screen.findByRole("heading", { name: "Log in" })).toBeInTheDocument();
-    expect(services.queryClient.getQueryData(["platforms"])).toBeUndefined();
+    expect(services.queryClient.getQueryData(DASHBOARD)).toBeUndefined();
 
     await logIn(user, "viewer pass", "viewer");
-    expect(await screen.findByText("Other platform")).toBeInTheDocument();
-    expect(screen.queryByText("UniFi")).toBeNull();
+    expect(await screen.findByText("Other subject")).toBeInTheDocument();
+    expect(screen.queryByText("Office Switch")).toBeNull();
   });
 
   it("does not follow a next= that leaves the app", () => {
@@ -146,7 +152,7 @@ describe("the shell", () => {
     const user = userEvent.setup();
     const rendered = renderApp("/", options);
     await logIn(user);
-    await screen.findByRole("heading", { name: "Home" });
+    await screen.findByRole("heading", { name: "Dashboard" });
     return { user, ...rendered };
   }
 
@@ -164,7 +170,7 @@ describe("the shell", () => {
   it("marks the current page in the navigation and moves focus to the new page's heading when it changes", async () => {
     const { user } = await shell();
     const nav = screen.getByRole("navigation", { name: "Main" });
-    expect(within(nav).getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
+    expect(within(nav).getByRole("link", { name: "Dashboard" })).toHaveAttribute("aria-current", "page");
     await user.click(within(nav).getByRole("link", { name: "Profile" }));
     expect(await screen.findByRole("heading", { name: "Profile" })).toHaveFocus();
     expect(within(nav).getByRole("link", { name: "Profile" })).toHaveAttribute("aria-current", "page");
@@ -220,16 +226,16 @@ describe("the shell", () => {
 });
 
 describe("the pages", () => {
-  it("lists the platforms on the home page and keeps them when a refresh fails", async () => {
+  it("keeps the dashboard on screen when a refresh fails, and says so", async () => {
     const fake = new FakeApi();
     const user = userEvent.setup();
     renderApp("/", { fake });
     await logIn(user);
-    expect(await screen.findByText("UniFi")).toBeInTheDocument();
-    fake.failWith("/platforms", 502, "controller_error", "The controller's answer could not be used.");
+    expect(await screen.findByText("Office Switch")).toBeInTheDocument();
+    fake.failWith("/unifi/sites/default/dashboard", 502, "controller_error", "The controller's answer could not be used.");
     await user.click(screen.getByRole("button", { name: "Refresh" }));
-    expect(await screen.findByText("Showing older platforms")).toBeInTheDocument();
-    expect(screen.getByText("UniFi")).toBeInTheDocument();
+    expect(await screen.findByText("Showing older dashboard data")).toBeInTheDocument();
+    expect(screen.getByText("Office Switch")).toBeInTheDocument();
   });
 
   it("shows the profile with the session limits and says the password change is not available yet", async () => {
