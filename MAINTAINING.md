@@ -255,6 +255,71 @@ data files or undo a published release.
 
 ## Common Recovery Steps
 
+### Refresh the Web UI and Start Fresh
+
+For a **local checkout on macOS or Linux**, this workflow rebuilds the browser UI and starts first-run setup in a
+new data folder. It does not delete or overwrite the previous installation's configuration, accounts, snapshots,
+notes or triage state, and it does not change anything on the UniFi controller. The browser build is shared by
+servers running from this checkout; only the new server's application data is isolated. This is not a Docker
+volume reset or a command to upgrade your checkout to the latest release.
+
+You need Python 3.10+, uv, Node 22+ and npm. Run these commands from the repository root.
+
+1. Stop the running web server with Ctrl-C in its terminal. If it runs as a service, stop that service first.
+2. Install the locked browser dependencies, rebuild the UI and copy the output into the Python package:
+
+   ```bash
+   cd web
+   npm ci
+   npm run build
+   cd ..
+   mkdir -p homelab_probe/web
+   cp -R web/dist/. homelab_probe/web/
+   ```
+
+   Stop if a command fails; do not serve a failed build. The copy replaces the page and current assets but may
+   leave old hashed assets. For clean release artifacts, build from a fresh checkout instead.
+3. Create a unique, owner-only data folder under your home directory and record its printed path:
+
+   ```bash
+   NEW_DATA=$(mktemp -d "$HOME/hlp-fresh.XXXXXX")
+   echo "New installation folder: $NEW_DATA"
+   ```
+
+   If folder creation fails or the printed path is empty, stop here. Keep this folder; it is the new installation's
+   persistent data, not disposable test data. Do not copy the old `.env` or accounts into it if you want first-run setup.
+4. Start the server with only `HOME` and `PATH` inherited, on a loopback address and a separate port:
+
+   ```bash
+   env -i HOME="$HOME" PATH="$PATH" \
+     uv run --extra web hlp.py serve \
+     --data-dir "$NEW_DATA" --port 8788
+   ```
+
+   The clean environment removes inherited `UNIFI_*`, `NOTIFY_*`, `HLP_ENV` and setup-token overrides, so existing
+   controller settings cannot bypass the wizard or defeat saving its settings. The server reads `.env` from the
+   new data folder, not the checkout. This also removes proxy and custom certificate environment variables; if uv
+   needs them to download dependencies, install the `web` extra before this step in your normal environment.
+   If port 8788 is already occupied, choose another unused port and use it in the browser address below.
+5. Open `http://127.0.0.1:8788/setup` in a private browser window to avoid an old session cookie. Enter the setup
+   token printed by this server in its terminal; treat it as a secret. Complete controller connection and
+   certificate checks, optional notifications and first-administrator creation, then log in. Stop with Ctrl-C.
+
+To restart the **same new installation**, reuse its data folder rather than creating another one. In a new
+terminal, from the repository root, replace the example path with the path recorded in step 3:
+
+```bash
+NEW_DATA="$HOME/hlp-fresh.REPLACE_WITH_YOUR_FOLDER"
+env -i HOME="$HOME" PATH="$PATH" \
+  uv run --extra web hlp.py serve \
+  --data-dir "$NEW_DATA" --port 8788
+```
+
+The saved settings and accounts then load normally. The previous installation remains available by restarting
+its original command with its original data folder and environment; do not delete that folder, especially notes
+about devices that have disappeared. To bring existing application data into the new installation instead of
+reconfiguring it, use an encrypted [application backup and restore](docs/web.md#backup-apiv1backup).
+
 ### Missing pip or Web Dependencies
 
 Use `uv run --extra web hlp.py serve` from the checkout. There is no need for a separate pip executable.
