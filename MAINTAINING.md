@@ -94,6 +94,9 @@ uv run --extra web --extra pretty ruff check .
 uv run --extra web --extra pretty python -m mypy
 # Fail if pyproject.toml and uv.lock disagree (after changing a dependency, run `uv lock` and commit the result)
 uv lock --check
+# Coverage: the report fails below 100% of lines and branches
+uv run --extra web --extra pretty coverage run -m pytest
+uv run --extra web --extra pretty coverage report
 ```
 
 Tests should pass, Ruff should report no findings, mypy should report no issues, and the lockfile check should
@@ -116,7 +119,7 @@ npx playwright test
 ```
 
 The browser tests build the app and start real servers on free ports: the demo network, and servers in their setup
-and admin modes, each in a temporary folder. They never contact a controller or send a notification. See
+and admin modes, each in a temporary folder. They contact only synthetic local stub controllers, never a real controller, and send no notifications. See
 [web interface development](docs/development.md#the-web-interface-web) for the layout, the fake API and screenshots.
 
 Run the synthetic network without credentials or a controller:
@@ -172,7 +175,7 @@ Choose a release when the intended features are complete and checks pass, rather
    `## [0.3.0] - YYYY-MM-DD`, replacing the example version and date with the chosen version and actual release
    date. Leave a fresh `## [Unreleased]` section above it. Run `uv lock` to refresh package metadata if needed,
    and include any resulting lockfile change. The OpenAPI golden file records the version too, so regenerate it:
-   `UPDATE_GOLDEN=1 uv run pytest tests/test_server_routes.py`.
+   `UPDATE_GOLDEN=1 uv run --extra web --extra pretty python -m pytest tests/test_server_routes.py`.
 4. Run the routine checks and the release-notes check below. It should print the intended release notes;
    it stops with an error if the tag, package version, or dated changelog entry does not agree.
 5. Commit the release preparation, open a PR against `main` in `jeffholst/homelab-probe`, and finish review.

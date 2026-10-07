@@ -238,8 +238,16 @@ def test_the_commands_contributing_names_are_the_ones_ci_runs():
     contributing, ci = read(CONTRIBUTING), read(ROOT / ".github" / "workflows" / "ci.yml")
     block = contributing.split("```bash", 1)[1].split("```", 1)[0]
     commands = [line.split("#", 1)[0].strip() for line in block.splitlines() if line.startswith("uv ")]
-    assert commands == ["uv run pytest", "uv run ruff check .", "uv run mypy", "uv lock --check"]
-    for command in commands:
+    assert commands == [
+        "uv sync --locked --group dev --extra web --extra pretty",
+        "uv run --extra web --extra pretty python -m pytest",
+        "uv run --extra web --extra pretty ruff check .",
+        "uv run --extra web --extra pretty python -m mypy",
+        "uv lock --check",
+    ]
+    # CI installs the same extras first; local commands keep them explicit on every run.
+    for command in ("uv sync --locked --extra web --extra pretty", "uv run pytest",
+                    "uv run ruff check .", "uv run mypy", "uv lock --check"):
         assert command in ci, f"CI does not run {command!r}"
 
 
