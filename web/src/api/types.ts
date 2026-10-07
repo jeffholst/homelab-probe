@@ -40,28 +40,28 @@ export interface Platform {
   configured: boolean;
 }
 
-function bad(what: string): ApiError {
+export function bad(what: string): ApiError {
   return new ApiError(0, "bad_response", `The server's answer for ${what} was not what this app expects.`);
 }
 
-function record(value: unknown, what: string): Record<string, unknown> {
+export function record(value: unknown, what: string): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw bad(what);
   return value as Record<string, unknown>;
 }
 
-function text(fields: Record<string, unknown>, key: string, what: string): string {
+export function text(fields: Record<string, unknown>, key: string, what: string): string {
   const value = fields[key];
   if (typeof value !== "string") throw bad(what);
   return value;
 }
 
-function flag(fields: Record<string, unknown>, key: string, what: string): boolean {
+export function flag(fields: Record<string, unknown>, key: string, what: string): boolean {
   const value = fields[key];
   if (typeof value !== "boolean") throw bad(what);
   return value;
 }
 
-function seconds(fields: Record<string, unknown>, key: string, what: string): number {
+export function seconds(fields: Record<string, unknown>, key: string, what: string): number {
   const value = fields[key];
   if (typeof value !== "number" || !Number.isFinite(value)) throw bad(what);
   return value;

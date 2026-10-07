@@ -1,5 +1,6 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 
+import { useMeta } from "../app/meta";
 import { ErrorState, Loading } from "../components/DataStates";
 import { useSession } from "./session";
 
@@ -11,8 +12,11 @@ import { useSession } from "./session";
 export function RequireAuth() {
   const session = useSession();
   const location = useLocation();
+  const meta = useMeta();
 
-  if (session.isPending) {
+  // A server waiting for its setup answers every page's data with 503: the setup is where to go.
+  if (meta.data?.needs_setup === true) return <Navigate to="/setup" replace />;
+  if (session.isPending || (meta.isPending && !session.data)) {
     return (
       <main className="main">
         <Loading label="your session" />

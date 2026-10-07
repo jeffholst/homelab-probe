@@ -3,7 +3,9 @@ import { createContext, useContext, type ReactNode } from "react";
 
 import { createApi, type Api } from "../api/endpoints";
 import { createApiClient, type ApiClient } from "../api/client";
+import { createBackupApi, type BackupApi } from "../api/backup";
 import { isApiError } from "../api/errors";
+import { createSetupApi, type SetupApi } from "../api/setup";
 import { ThemeProvider } from "../theme/ThemeProvider";
 
 /** Query key of the logged-in user (a `Session`, or null when nobody is logged in). */
@@ -25,6 +27,9 @@ export function endSession(queryClient: QueryClient): void {
 export interface Services {
   client: ApiClient;
   api: Api;
+  /** The guided setup and the restore of a backup (the setup token is given to each call). */
+  setup: SetupApi;
+  backup: BackupApi;
   queryClient: QueryClient;
 }
 
@@ -48,7 +53,7 @@ export function createServices(options: { fetch?: typeof fetch } = {}): Services
       endSession(queryClient);
     },
   });
-  return { client, api: createApi(client), queryClient };
+  return { client, api: createApi(client), setup: createSetupApi(client), backup: createBackupApi(client), queryClient };
 }
 
 const ServicesContext = createContext<Services | null>(null);

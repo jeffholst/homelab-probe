@@ -2,11 +2,13 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 
 import AxeBuilder from "@axe-core/playwright";
-import { expect, type Page, type TestInfo } from "@playwright/test";
+import { expect, type Locator, type Page, type TestInfo } from "@playwright/test";
 
 export interface Credentials {
   username: string;
   password: string;
+  /** The setup token of the server in its setup mode (the setup projects only). */
+  setupToken?: string;
   /** The content-security policy of the real server, which the preview server repeats on every page. */
   policy: string;
 }
@@ -70,4 +72,16 @@ export async function screenshot(page: Page, testInfo: TestInfo, name: string): 
   await settle(page);
   mkdirSync(directory, { recursive: true });
   await page.screenshot({ path: path.join(directory, `${testInfo.project.name}-${name}.png`) });
+}
+
+export const isPhone = (testInfo: { project: { name: string } }) => testInfo.project.name.includes("phone");
+
+/** Opens what holds the account controls (theme, log out): the menu sheet on a phone, the account menu on a desktop. */
+export async function openAccount(page: Page, testInfo: TestInfo): Promise<Locator> {
+  if (isPhone(testInfo)) {
+    await page.getByRole("button", { name: "Menu" }).click();
+    return page.getByRole("navigation", { name: "Main" });
+  }
+  await page.getByRole("button", { name: /^Account:/ }).click();
+  return page.locator(".popover");
 }

@@ -18,7 +18,11 @@ async function freePort(): Promise<number> {
 }
 
 process.env["E2E_PORT"] ??= String(await freePort());
+process.env["E2E_SETUP_PORT"] ??= String(await freePort());
 const port = process.env["E2E_PORT"];
+const setupPort = process.env["E2E_SETUP_PORT"];
+const phone = { browserName: "chromium", viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 } as const;
+const desktop = { browserName: "chromium", viewport: { width: 1280, height: 800 } } as const;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -32,22 +36,26 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   projects: [
+    // Against `hlp --demo serve`.
+    { name: "phone", testIgnore: "**/setup.spec.ts", use: phone },
+    { name: "desktop", testIgnore: "**/setup.spec.ts", use: desktop },
+    // Against a server with no settings, in its setup mode. Its draft lives on the server, so the two sizes take turns.
+    { name: "setup-phone", testMatch: "**/setup.spec.ts", use: { ...phone, baseURL: `http://127.0.0.1:${setupPort}` } },
     {
-      name: "phone",
-      use: { browserName: "chromium", viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 },
-    },
-    {
-      name: "desktop",
-      use: { browserName: "chromium", viewport: { width: 1280, height: 800 } },
+      name: "setup-desktop",
+      testMatch: "**/setup.spec.ts",
+      dependencies: ["setup-phone"],
+      use: { ...desktop, baseURL: `http://127.0.0.1:${setupPort}` },
     },
   ],
   webServer: {
-    // The production build, served in front of the real server's demo mode (e2e/serve.mjs).
+    // The production build, served in front of the real server's demo mode and of one in its setup mode (e2e/serve.mjs,
+    // which starts the setup one first: the demo port answering means both are ready).
     command: "npm run build && node e2e/serve.mjs",
     url: `http://127.0.0.1:${port}/`,
     reuseExistingServer: false,
     timeout: 180_000,
-    env: { E2E_PORT: port },
+    env: { E2E_PORT: port, E2E_SETUP_PORT: setupPort },
     stderr: "pipe",
   },
 });

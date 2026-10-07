@@ -3,6 +3,7 @@ import { type ReactNode } from "react";
 import { isApiError } from "../api/errors";
 import { formatDateTime } from "../lib/format";
 import { Text } from "./Text";
+import { Icon, type IconName } from "./ui/Icon";
 
 /**
  * The states every page shows while it reads the server: Loading, Refreshing, Empty, Error, and the Stale and Partial
@@ -12,7 +13,9 @@ import { Text } from "./Text";
  * the data is current or complete. A message that came from the server is shown through `<Text>`.
  */
 
-type Tone = "danger" | "warning" | "info" | "success";
+export type Tone = "danger" | "warning" | "info" | "success";
+
+const TONE_ICONS: Record<Tone, IconName> = { danger: "xCircle", warning: "alert", info: "info", success: "checkCircle" };
 
 interface BannerProps {
   tone: Tone;
@@ -27,6 +30,7 @@ interface BannerProps {
 export function Banner({ tone, title, children, role = "status", action }: BannerProps) {
   return (
     <div className={`banner banner--${tone}`} role={role}>
+      <Icon name={TONE_ICONS[tone]} className="banner__icon" />
       <div className="banner__body">
         <p className="banner__title">{title}</p>
         {children}
