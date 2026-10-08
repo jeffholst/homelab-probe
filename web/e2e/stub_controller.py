@@ -9,7 +9,7 @@ synthetic demo network (`homelab_probe.demo`), so no real controller is ever inv
   controller that refuses a key;
 * it prints one JSON line, `{"port": ..., "fingerprint": ...}`, when it is ready, and serves until it is stopped.
 
-Run by `e2e/serve.mjs`: `uv run --project <repo> python web/e2e/stub_controller.py --key KEY --cert good`.
+Run by `e2e/serve.mjs`: `uv run --project <repo> python web/e2e/stub_controller.py --key=KEY --cert good`.
 """
 
 import argparse
