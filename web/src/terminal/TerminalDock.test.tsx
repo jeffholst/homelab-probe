@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PANEL_HEIGHT_KEY } from "../theme/storage";
 import type { ExecuteOutcome, TerminalBackend } from "./backend";
 import { MOCK_CAPABILITIES } from "./mock";
+import { engine } from "./engine";
+import type { EngineApi } from "./engine/types";
 import { miniEngine } from "./testing/miniEngine";
 import { TerminalDock, type DockMode } from "./TerminalDock";
 
@@ -42,17 +44,24 @@ function backend(options: { fail?: boolean } = {}): Controls {
   return controls;
 }
 
+// The same behaviour is required of the stand-in and of the real engine (#275): the panel must not depend on which one it has.
+let engineUnderTest: EngineApi = miniEngine;
+
 function Host({ controls, initial = "open" }: { controls: Controls; initial?: DockMode }) {
   const [mode, setMode] = useState(initial);
   return (
     <>
       <button type="button" onClick={() => { setMode("open"); }}>reopen</button>
-      <TerminalDock services={{ engine: miniEngine, backend: controls.backend }} mode={mode} onMode={setMode} />
+      <TerminalDock services={{ engine: engineUnderTest, backend: controls.backend }} mode={mode} onMode={setMode} />
     </>
   );
 }
 
 beforeEach(() => { loads.count = 0; });
+
+describe.each([["stand-in", miniEngine], ["real", engine]] as const)("with the %s engine", (_name, current) => {
+  beforeEach(() => { engineUnderTest = current; });
+
 
 const click = (name: string) => userEvent.click(screen.getByRole("button", { name }));
 
@@ -68,7 +77,8 @@ describe("the panel", () => {
     render(<StrictMode><Host controls={controls} initial="closed" /></StrictMode>);
     await click("reopen");
     expect(await screen.findByTestId("surface")).toBeInTheDocument();
-    expect(loads.count).toBe(1);
+    // The module is imported once per file, so only the first run of this test sees the load.
+    if (current === miniEngine) expect(loads.count).toBe(1);
     await waitFor(() => { expect(screen.getByText("Ready")).toBeInTheDocument(); });
     expect(controls.loaded).toBe(1);
   });
@@ -243,4 +253,5 @@ describe("running commands", () => {
     await click("escape");
     expect(screen.getByRole("region", { name: "Terminal" })).toHaveFocus();
   });
+});
 });
