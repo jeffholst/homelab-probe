@@ -33,6 +33,7 @@ from . import (
     snapshots_api,
     static,
     status_api,
+    terminal_api,
     users_api,
     wizard,
 )
@@ -109,6 +110,7 @@ def create_app(config: Config, settings_path: Optional[Path] = None, state_dir: 
         finally:
             if running is not None:
                 running.stop()
+            application.state.terminal.pool.shutdown(wait=False)
 
     app = FastAPI(
         lifespan=lifespan,
@@ -116,10 +118,12 @@ def create_app(config: Config, settings_path: Optional[Path] = None, state_dir: 
         openapi_url=None,                      # served below, behind the login
         dependencies=[Depends(guard)],         # every route needs a login unless it is marked public
         middleware=[Middleware(SecurityHeaders), Middleware(RequestLog),
+                    Middleware(terminal_api.TerminalBoundary),
                     Middleware(TrustedHostMiddleware, allowed_hosts=hosts or ["localhost", "127.0.0.1", "[::1]"]),
                     Middleware(OriginGuard)],
     )
     app.state.config, app.state.settings_path, app.state.state_dir = config, settings_path, state_dir
+    app.state.terminal = terminal_api.TerminalState()
     app.state.read_only = read_only
     app.state.maintenance = Maintenance()
     app.state.reload = reload
@@ -146,6 +150,7 @@ def create_app(config: Config, settings_path: Optional[Path] = None, state_dir: 
     app.include_router(search_api.router())
     app.include_router(backup_api.router())
     app.include_router(restore_api.router())
+    app.include_router(terminal_api.router())
     app.include_router(public_router())
     app.include_router(session_router())
     app.include_router(profile_api.router())

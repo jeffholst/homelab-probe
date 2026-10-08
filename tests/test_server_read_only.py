@@ -27,7 +27,7 @@ from homelab_probe.server.wizard import MODE_SETUP, SetupState  # noqa: E402
 # The unsafe (non-GET) routes that write no file of this machine: the login and logout keep sessions in memory, and
 # the setup steps before `finish` keep the draft in memory and talk to the controller.
 WRITES_NOTHING = {"login", "logout", "setup_draft", "setup_certificate", "setup_connection", "setup_preview",
-                  "setup_notifications", "notifications_test", "backup_export", "backup_preview"}
+                  "setup_notifications", "notifications_test", "backup_export", "backup_preview", "terminal_execute"}
 SAFE_METHODS = {"get", "head", "options"}
 TOKEN = "setup-token-0123456789abcdef"
 STANDIN = Config(controller_url="https://unconfigured.invalid", api_key="unconfigured")

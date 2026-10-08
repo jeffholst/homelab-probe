@@ -1,0 +1,50 @@
+{
+  "$id": "urn:homelab-probe:terminal-execute-result.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "correlationId": {
+      "title": "Correlationid",
+      "type": "string"
+    },
+    "operation": {
+      "title": "Operation",
+      "type": "string"
+    },
+    "output": {
+      "title": "Output",
+      "type": "string"
+    },
+    "requestId": {
+      "title": "Requestid",
+      "type": "string"
+    },
+    "status": {
+      "const": "completed",
+      "title": "Status",
+      "type": "string"
+    },
+    "truncated": {
+      "title": "Truncated",
+      "type": "boolean"
+    },
+    "warnings": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "correlationId",
+    "requestId",
+    "operation",
+    "status",
+    "output",
+    "warnings",
+    "truncated"
+  ],
+  "title": "ExecuteResult",
+  "type": "object"
+}
