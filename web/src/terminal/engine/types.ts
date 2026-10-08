@@ -171,6 +171,7 @@ export type EngineAction =
   | { readonly type: 'setCapabilities'; readonly capabilities: Capabilities | null }
   | { readonly type: 'submit' }
   | { readonly type: 'interrupt' } // Ctrl+C
+  | { readonly type: 'clearOutput' } // Ctrl+L: clear/redraw the transcript, preserving the editable line
   /** Echo the execute effect's seq; ignore it unless it equals state.activeExecution. The caller must
    * separately drop old-session output/errors and must not reconstruct state with initialState on logout. */
   | { readonly type: 'executionFinished'; readonly seq: number }
@@ -188,7 +189,8 @@ export type Effect =
       readonly tokenIndex: number; readonly cursor: number }
   /** Ctrl+C. `running` tells the UI which message to show; while running the UI may only say that WAITING
    * stopped, never that the backend was cancelled. The line is cleared only when idle. */
-  | { readonly type: 'interrupted'; readonly running: boolean };
+  | { readonly type: 'interrupted'; readonly running: boolean }
+  | { readonly type: 'clearOutput' };
 
 export interface StepResult {
   readonly state: EngineState;

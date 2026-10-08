@@ -71,6 +71,7 @@ web/                     the web interface (React, TypeScript, Vite): its own np
   src/components/, pages/  the shell (header, menu sheet, account menu) and footer, the brand mark, the data-state components (Loading, Refreshing, Empty, Error, stale and partial banners), Text, the small UI pieces (icons, stepper, secret field, check list, code block), pages
   src/layouts/           the frame of the screens before a login (the login, the setup)
   src/setup/             the guided first-run setup and the restore of a backup on a fresh installation
+  src/terminal/engine/   pure command-line model: immutable transitions, tokenization, suggestions, streaming input decoding and cell-width wrapping; no DOM, xterm or API calls
   src/assets/brand/      the ant mascot and the logo (WebP, bundled with hashed names)
   src/terminal/          the terminal panel (#276): the engine contract (`engine/types.ts`, #275 implements it), the xterm.js surface, the dock, the session hook, the mock backend and a stand-in engine for tests
   src/lib/safeText.ts    port of util.printable (control, invisible and bidirectional characters), checked against shared vectors
