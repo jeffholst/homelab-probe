@@ -111,8 +111,11 @@ export interface SuggestionState {
 export interface EngineState {
   readonly options: Required<EngineOptions>;
   readonly line: LineState;
-  /** Incremented by every change of `line.text`; stale suggestion results are recognised by it. */
+  /** Incremented on text, cursor, metadata and session changes; invalidates completion context. */
   readonly revision: number;
+  /** Monotonic across reset; never reuse a request identity for a later session. */
+  readonly completionSeq: number;
+  readonly completionPending: { readonly seq: number; readonly revision: number } | null;
   readonly tokenized: Tokenized;
   readonly history: HistoryState;
   readonly pendingPaste: PendingPaste | null;
@@ -145,6 +148,7 @@ export type EngineAction =
   | { readonly type: 'historyPrevious' | 'historyNext' | 'clearHistory' }
   // paste
   | { readonly type: 'paste'; readonly text: string }
+  | { readonly type: 'inputRejected'; readonly reason: PasteRefusal }
   | { readonly type: 'confirmPaste' | 'cancelPaste' }
   // suggestions
   | { readonly type: 'tab' } // complete the unique candidate, else show candidates; may emit a `complete` effect
@@ -161,6 +165,7 @@ export type EngineAction =
   | { readonly type: 'setCapabilities'; readonly capabilities: Capabilities | null }
   | { readonly type: 'submit' }
   | { readonly type: 'interrupt' } // Ctrl+C
+  | { readonly type: 'clearOutput' } // Ctrl+L: clear/redraw the transcript, preserving the editable line
   | { readonly type: 'executionFinished' }
   | { readonly type: 'reset' }; // session ended: forget the line, history, drafts, suggestions and capabilities
 
@@ -175,7 +180,8 @@ export type Effect =
       readonly tokenIndex: number; readonly cursor: number }
   /** Ctrl+C. `running` tells the UI which message to show; while running the UI may only say that WAITING
    * stopped, never that the backend was cancelled. The line is cleared only when idle. */
-  | { readonly type: 'interrupted'; readonly running: boolean };
+  | { readonly type: 'interrupted'; readonly running: boolean }
+  | { readonly type: 'clearOutput' };
 
 export interface StepResult {
   readonly state: EngineState;
@@ -198,6 +204,19 @@ export interface WrappedLine {
   readonly cursor: { readonly row: number; readonly column: number };
 }
 
+/** Caller-owned streaming state. Clear it on session change/disposal along with EngineState. */
+export interface InputState {
+  readonly buffer: string;
+  readonly paste: string | null;
+  readonly overflow: boolean;
+  readonly discardingCsi: boolean;
+}
+
+export interface DecodedInput {
+  readonly state: InputState;
+  readonly actions: readonly EngineAction[];
+}
+
 export interface EngineApi {
   initialState(options?: EngineOptions): EngineState;
   /** The one transition function. Unknown or impossible actions return the same state and no effects. */
@@ -213,9 +232,13 @@ export interface EngineApi {
    * value or a choice, positional choices, comma lists. Bounded by `suggestionLimit`. */
   suggestionsFor(state: EngineState): { readonly items: readonly Candidate[]; readonly truncated: boolean };
   wrapLine(line: LineState, columns: number, promptWidth: number): WrappedLine;
+  /** Empty decoder state; recreate on session change or disposal. */
+  initialInputState(): InputState;
   /** Translate what xterm.js delivers in `onData` (one chunk) into actions: printable text, DEL/Backspace,
    * arrows, Home/End, Delete, Ctrl+A/E/B/F/K/U/W/L/C, Alt+B/F (word moves), Tab, Enter, and bracketed paste
    * (ESC[200~ ... ESC[201~) as a single `paste` action. Unknown escape sequences are DROPPED, never inserted.
-   * Enter inside a paste is part of the paste, never a `submit`. */
-  decodeInput(data: string): readonly EngineAction[];
+   * Enter inside a paste is part of the paste, never a `submit`.
+   * Carries partial escape/paste sequences across chunks. Paste buffering is capped at maxLength;
+   * oversized pastes are drained through their closing marker, never reinterpreted as keystrokes. */
+  decodeInput(data: string, state: InputState, maxLength?: number): DecodedInput;
 }
