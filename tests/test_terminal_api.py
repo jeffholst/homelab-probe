@@ -315,6 +315,39 @@ def test_static_help_survives_grammar_drift(app, client, monkeypatch):
     assert execute(client, ["query"]).status_code == 422
 
 
+@pytest.mark.parametrize("parameter,value,message", [
+    ("only", "private-review-marker", "The diagnose area selection is not valid."),
+    ("skip", "private-review-marker", "The diagnose area selection is not valid."),
+    ("since", "private-123", "The duration is not valid; use 90m, 24h, 7d or 2w."),
+])
+def test_shared_report_validation_never_echoes_rejected_values(app, client, parameter, value, message):
+    refuse_service(app)
+    report = client.get("/api/v1/unifi/sites/default/diagnose", params={parameter: value})
+    assert report.status_code == 422
+    assert report.json() == {"error": "invalid_parameter", "message": message}
+    terminal = execute(client, ["diagnose", "--" + parameter, value])
+    assert terminal.status_code == 422
+    assert value not in terminal.text
+    assert terminal.json()["message"] == "The command arguments are not valid."
+
+
+def test_capabilities_503_contract_matches_runtime_failure(app, client, monkeypatch):
+    from fastapi.encoders import jsonable_encoder
+    from jsonschema import Draft202012Validator
+
+    refuse_service(app)
+    contract = client.get("/api/v1/openapi.json").json()["paths"][AT + "/capabilities"]["get"]["responses"]["503"]
+    assert contract["content"]["application/json"]["schema"] == jsonable_encoder(
+        api.TerminalError.model_json_schema(), exclude_none=True)
+    monkeypatch.setattr(policy, "compatibility_errors", lambda _: ("changed",))
+    response = client.get(AT + "/capabilities")
+    assert response.status_code == 503
+    assert response.json() == {"error": "terminal_unreviewed",
+                               "message": "The CLI grammar needs review before terminal use."}
+    assert response.headers["cache-control"] == "no-store"
+    Draft202012Validator(contract["content"]["application/json"]["schema"]).validate(response.json())
+
+
 def test_terminal_contracts_match_models_and_validate_responses(client):
     from jsonschema import Draft202012Validator
 

@@ -320,7 +320,9 @@ async def read_body(request: Request) -> ExecuteBody:
 def router() -> APIRouter:
     api = APIRouter(prefix=API, tags=["terminal"])
 
-    @api.get("/capabilities", response_model=CapabilitiesResult, summary="Reviewed browser terminal capabilities")
+    @api.get("/capabilities", response_model=CapabilitiesResult, summary="Reviewed browser terminal capabilities",
+             responses={503: {"description": "The CLI grammar needs policy review before terminal use",
+                              "content": {"application/json": {"schema": TerminalError.model_json_schema()}}}})
     def terminal_capabilities(request: Request) -> Dict[str, Any]:
         return capabilities(request.state.session.role)
 

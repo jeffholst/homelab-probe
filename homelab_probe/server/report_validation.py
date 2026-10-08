@@ -20,8 +20,8 @@ def checked_site(site: str) -> str:
 def duration(text: str) -> int:
     try:
         return parse_duration(text)
-    except ValueError as error:
-        raise ApiError(422, "invalid_parameter", str(error)) from None
+    except ValueError:
+        raise ApiError(422, "invalid_parameter", "The duration is not valid; use 90m, 24h, 7d or 2w.") from None
 
 
 def event_query(since: str, category: Optional[List[str]], severity: Optional[List[str]], search: str) -> EventQuery:
@@ -34,5 +34,5 @@ def event_query(since: str, category: Optional[List[str]], severity: Optional[Li
 def areas(only: Optional[List[str]], skip: Optional[List[str]], no_events: bool) -> Optional[List[str]]:
     try:
         return diagnose_areas(argparse.Namespace(only=only or [], skip=skip or [], no_events=no_events))
-    except ValueError as error:
-        raise ApiError(422, "invalid_parameter", str(error)) from None
+    except ValueError:
+        raise ApiError(422, "invalid_parameter", "The diagnose area selection is not valid.") from None

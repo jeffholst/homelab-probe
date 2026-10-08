@@ -495,6 +495,8 @@ A successful envelope has `correlationId` (the server-generated `X-Request-ID`),
 
 Execution errors have fixed `error`/`message`, `correlationId` and `executionStatus`: `did_not_run` for rejected input/admission, `failed` for a report failure, or `outcome_unknown` after an HTTP deadline or unexpected execution failure. Authentication/origin refusals retain the existing auth error shape and the `X-Request-ID` header. There is no automatic dispatch retry.
 
+Shared report validation also uses fixed error messages for rejected durations and diagnose area selections, never the rejected values. The capabilities endpoint's 503 grammar-review refusal is included in OpenAPI using the terminal-error schema.
+
 | HTTP | Stable code or condition |
 | --- | --- |
 | 401 / 403 | Existing session, origin, CSRF or role refusal; no dispatch |

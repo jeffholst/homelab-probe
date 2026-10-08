@@ -2237,6 +2237,86 @@
               }
             },
             "description": "Successful Response"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "candidates": {
+                      "anyOf": [
+                        {
+                          "items": {
+                            "additionalProperties": {
+                              "type": "string"
+                            },
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Candidates"
+                    },
+                    "correlationId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Correlationid"
+                    },
+                    "error": {
+                      "title": "Error",
+                      "type": "string"
+                    },
+                    "executionStatus": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "did_not_run",
+                            "failed",
+                            "outcome_unknown"
+                          ],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Executionstatus"
+                    },
+                    "message": {
+                      "title": "Message",
+                      "type": "string"
+                    },
+                    "retry_after": {
+                      "anyOf": [
+                        {
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Retry After"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "title": "TerminalError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The CLI grammar needs policy review before terminal use"
           }
         },
         "summary": "Reviewed browser terminal capabilities",
