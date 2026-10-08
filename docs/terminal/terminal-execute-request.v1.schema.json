@@ -1,0 +1,31 @@
+{
+  "$id": "urn:homelab-probe:terminal-execute-request.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "argv": {
+      "items": {
+        "maxLength": 256,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "title": "Argv",
+      "type": "array"
+    },
+    "requestId": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+      "title": "Requestid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "argv",
+    "requestId"
+  ],
+  "title": "ExecuteBody",
+  "type": "object"
+}

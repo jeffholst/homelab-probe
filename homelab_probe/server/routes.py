@@ -5,7 +5,6 @@ the document function the command calls (through ``ControllerService``, so the r
 document with ``generated_at`` and ``warnings``. No route takes a path to forward, and none writes anything.
 """
 
-import argparse
 import logging
 from typing import Annotated, Any, Callable, Dict, List, Optional
 
@@ -15,8 +14,7 @@ from fastapi.responses import JSONResponse
 from .. import logs
 from ..client import UniFiAPIError
 from ..client_view import candidate_rows
-from ..commands import diagnose_areas
-from ..config import ConfigError, validate_site
+from ..config import ConfigError
 from ..documents import (
     Document,
     audit_document,
@@ -31,14 +29,16 @@ from ..documents import (
     wan_document,
     wifi_document,
 )
-from ..events import DEFAULT_LIMIT, SEVERITIES, parse_duration
+from ..events import DEFAULT_LIMIT
 from ..settings import DiagnoseSettings
-from ..snapshot import EventQuery
 from ..util import normalize_mac
 from ..wan import DEFAULT_DAYS
 from ..wifi import DEFAULT_MIN_SIGNAL, parse_band
 from . import apischema
 from .errors import ERROR_SCHEMA, ApiError, from_controller
+from .report_validation import areas, checked_site
+from .report_validation import duration as _duration
+from .report_validation import event_query as _event_query
 from .service import Built
 from .settings_api import load_effective, settings_file
 
@@ -100,13 +100,6 @@ def _ok(schema: Dict[str, Any], *, settings: bool = False,
     return responses
 
 
-def checked_site(site: str) -> str:
-    try:
-        return validate_site(site)
-    except ConfigError:
-        raise ApiError(422, "invalid_parameter", "The site name is not valid.") from None
-
-
 def _name(value: Optional[str], what: str, required: bool = False) -> str:
     text = (value or "").strip()
     if required and not text:
@@ -144,20 +137,6 @@ def respond(request: Request, make: Callable[[Any], Document], *, refresh: bool 
     return JSONResponse(body)
 
 
-def _duration(text: str) -> int:
-    try:
-        return parse_duration(text)
-    except ValueError as error:
-        raise ApiError(422, "invalid_parameter", str(error)) from None
-
-
-def _event_query(since: str, category: Optional[List[str]], severity: Optional[List[str]], search: str) -> EventQuery:
-    categories, severities = category or [], [s.lower() for s in severity or []]
-    if any(len(c) > 64 for c in categories) or any(s not in SEVERITIES for s in severities):
-        raise ApiError(422, "invalid_parameter", f"severity must be one of {', '.join(SEVERITIES)}.")
-    return EventQuery(_duration(since), tuple(categories), tuple(severities), search)
-
-
 def _client_found(document: Document) -> None:
     matches = document.meta["matches"]
     if not document.data:
@@ -182,12 +161,9 @@ def build_router() -> APIRouter:
     def diagnose(request: Request, site: SiteP, only: ListQ = None, skip: ListQ = None, since: SinceQ = "24h",
                  no_events: bool = False, show_ignored: bool = False, refresh: RefreshQ = False) -> JSONResponse:
         seconds = _duration(since)
-        try:
-            areas = diagnose_areas(argparse.Namespace(only=only or [], skip=skip or [], no_events=no_events))
-        except ValueError as error:
-            raise ApiError(422, "invalid_parameter", str(error)) from None
+        selected = areas(only, skip, no_events)
         settings, name = effective_settings(request), checked_site(site)
-        return respond(request, lambda client: diagnose_document(client, name, settings, areas, seconds,
+        return respond(request, lambda client: diagnose_document(client, name, settings, selected, seconds,
                                                                    show_ignored, echo=False), refresh=refresh)
 
     @router.get(f"{at}/audit", responses=schema("audit", settings=True), summary="Configuration audit")

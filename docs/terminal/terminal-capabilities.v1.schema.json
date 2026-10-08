@@ -1,0 +1,207 @@
+{
+  "$defs": {
+    "CommandMetadata": {
+      "properties": {
+        "choices": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Choices",
+          "type": "array"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "options": {
+          "items": {
+            "$ref": "#/$defs/OptionMetadata"
+          },
+          "title": "Options",
+          "type": "array"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "supported",
+            "restricted",
+            "unavailable"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "description",
+        "status",
+        "reason",
+        "choices",
+        "options"
+      ],
+      "title": "CommandMetadata",
+      "type": "object"
+    },
+    "OptionMetadata": {
+      "properties": {
+        "choices": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Choices",
+          "type": "array"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "flags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Flags",
+          "type": "array"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "supported",
+            "restricted",
+            "unavailable"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "takesValue": {
+          "title": "Takesvalue",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "flags",
+        "description",
+        "takesValue",
+        "status",
+        "reason",
+        "choices"
+      ],
+      "title": "OptionMetadata",
+      "type": "object"
+    },
+    "TerminalLimits": {
+      "properties": {
+        "bodyBytes": {
+          "title": "Bodybytes",
+          "type": "integer"
+        },
+        "eventRows": {
+          "title": "Eventrows",
+          "type": "integer"
+        },
+        "eventWindowSeconds": {
+          "title": "Eventwindowseconds",
+          "type": "integer"
+        },
+        "globalConcurrency": {
+          "title": "Globalconcurrency",
+          "type": "integer"
+        },
+        "outputBytes": {
+          "title": "Outputbytes",
+          "type": "integer"
+        },
+        "perUserConcurrency": {
+          "title": "Peruserconcurrency",
+          "type": "integer"
+        },
+        "perUserPerMinute": {
+          "title": "Peruserperminute",
+          "type": "integer"
+        },
+        "tokenChars": {
+          "title": "Tokenchars",
+          "type": "integer"
+        },
+        "tokenCount": {
+          "title": "Tokencount",
+          "type": "integer"
+        },
+        "wanDays": {
+          "title": "Wandays",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "bodyBytes",
+        "tokenCount",
+        "tokenChars",
+        "outputBytes",
+        "perUserConcurrency",
+        "perUserPerMinute",
+        "globalConcurrency",
+        "eventRows",
+        "eventWindowSeconds",
+        "wanDays"
+      ],
+      "title": "TerminalLimits",
+      "type": "object"
+    }
+  },
+  "$id": "urn:homelab-probe:terminal-capabilities.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "cancellation": {
+      "title": "Cancellation",
+      "type": "string"
+    },
+    "commands": {
+      "items": {
+        "$ref": "#/$defs/CommandMetadata"
+      },
+      "title": "Commands",
+      "type": "array"
+    },
+    "globalOptions": {
+      "items": {
+        "$ref": "#/$defs/OptionMetadata"
+      },
+      "title": "Globaloptions",
+      "type": "array"
+    },
+    "limits": {
+      "$ref": "#/$defs/TerminalLimits"
+    },
+    "staticOperations": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Staticoperations",
+      "type": "array"
+    },
+    "version": {
+      "const": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "version",
+    "commands",
+    "globalOptions",
+    "staticOperations",
+    "limits",
+    "cancellation"
+  ],
+  "title": "CapabilitiesResult",
+  "type": "object"
+}

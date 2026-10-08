@@ -1,4 +1,4 @@
-// Generates src/generated/*.ts from the JSON Schemas of the command line's `--json` documents (docs/schemas).
+// Generates src/generated/*.ts from report (docs/schemas) and terminal API (docs/terminal) JSON Schemas.
 //
 // The output is committed and checked in CI: `npm run check:types` regenerates it and fails on any difference, so a
 // schema change that was not followed by `npm run generate:types` cannot be merged. Nothing here depends on the clock
@@ -11,6 +11,7 @@ import { compile } from "json-schema-to-typescript";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const schemaDir = path.resolve(root, "..", "docs", "schemas");
+const terminalSchemaDir = path.resolve(root, "..", "docs", "terminal");
 const outDir = path.resolve(root, "src", "generated");
 
 const banner =
@@ -29,18 +30,20 @@ function namespaceOf(stem) {
     .join("");
 }
 
-const files = (await readdir(schemaDir)).filter((name) => name.endsWith(".schema.json")).sort();
+const files = (await Promise.all([schemaDir, terminalSchemaDir].map(async (directory) =>
+  (await readdir(directory)).filter((name) => name.endsWith(".schema.json")).map((name) => ({ name, directory }))
+))).flat().sort((a, b) => a.name.localeCompare(b.name, "en"));
 if (files.length === 0) throw new Error(`no schemas found in ${schemaDir}`);
 
 await rm(outDir, { recursive: true, force: true });
 await mkdir(outDir, { recursive: true });
 
 const exports = [];
-for (const file of files) {
+for (const { name: file, directory } of files) {
   const stem = file.replace(/\.schema\.json$/, "");
-  const schema = JSON.parse(await readFile(path.join(schemaDir, file), "utf8"));
+  const schema = JSON.parse(await readFile(path.join(directory, file), "utf8"));
   const source = await compile(schema, stem, {
-    bannerComment: banner,
+    bannerComment: directory === terminalSchemaDir ? banner.replace("docs/schemas", "docs/terminal") : banner,
     cwd: schemaDir,
     additionalProperties: true,
     format: true,

@@ -1,6 +1,53 @@
 {
   "components": {
     "schemas": {
+      "CapabilitiesResult": {
+        "properties": {
+          "cancellation": {
+            "title": "Cancellation",
+            "type": "string"
+          },
+          "commands": {
+            "items": {
+              "$ref": "#/components/schemas/CommandMetadata"
+            },
+            "title": "Commands",
+            "type": "array"
+          },
+          "globalOptions": {
+            "items": {
+              "$ref": "#/components/schemas/OptionMetadata"
+            },
+            "title": "Globaloptions",
+            "type": "array"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/TerminalLimits"
+          },
+          "staticOperations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Staticoperations",
+            "type": "array"
+          },
+          "version": {
+            "const": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "commands",
+          "globalOptions",
+          "staticOperations",
+          "limits",
+          "cancellation"
+        ],
+        "title": "CapabilitiesResult",
+        "type": "object"
+      },
       "Change": {
         "additionalProperties": false,
         "description": "What to change; at least one of the two.",
@@ -33,6 +80,55 @@
           }
         },
         "title": "Change",
+        "type": "object"
+      },
+      "CommandMetadata": {
+        "properties": {
+          "choices": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Choices",
+            "type": "array"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/OptionMetadata"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "supported",
+              "restricted",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "status",
+          "reason",
+          "choices",
+          "options"
+        ],
+        "title": "CommandMetadata",
         "type": "object"
       },
       "DraftBody": {
@@ -178,6 +274,54 @@
           "revision"
         ],
         "title": "EditedNote",
+        "type": "object"
+      },
+      "ExecuteResult": {
+        "additionalProperties": false,
+        "properties": {
+          "correlationId": {
+            "title": "Correlationid",
+            "type": "string"
+          },
+          "operation": {
+            "title": "Operation",
+            "type": "string"
+          },
+          "output": {
+            "title": "Output",
+            "type": "string"
+          },
+          "requestId": {
+            "title": "Requestid",
+            "type": "string"
+          },
+          "status": {
+            "const": "completed",
+            "title": "Status",
+            "type": "string"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "correlationId",
+          "requestId",
+          "operation",
+          "status",
+          "output",
+          "warnings",
+          "truncated"
+        ],
+        "title": "ExecuteResult",
         "type": "object"
       },
       "ExportBody": {
@@ -404,6 +548,55 @@
         "title": "NewUser",
         "type": "object"
       },
+      "OptionMetadata": {
+        "properties": {
+          "choices": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Choices",
+            "type": "array"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "flags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Flags",
+            "type": "array"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "supported",
+              "restricted",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "takesValue": {
+            "title": "Takesvalue",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "flags",
+          "description",
+          "takesValue",
+          "status",
+          "reason",
+          "choices"
+        ],
+        "title": "OptionMetadata",
+        "type": "object"
+      },
       "PasswordChange": {
         "additionalProperties": false,
         "properties": {
@@ -575,6 +768,64 @@
           "version"
         ],
         "title": "SettingsBody",
+        "type": "object"
+      },
+      "TerminalLimits": {
+        "properties": {
+          "bodyBytes": {
+            "title": "Bodybytes",
+            "type": "integer"
+          },
+          "eventRows": {
+            "title": "Eventrows",
+            "type": "integer"
+          },
+          "eventWindowSeconds": {
+            "title": "Eventwindowseconds",
+            "type": "integer"
+          },
+          "globalConcurrency": {
+            "title": "Globalconcurrency",
+            "type": "integer"
+          },
+          "outputBytes": {
+            "title": "Outputbytes",
+            "type": "integer"
+          },
+          "perUserConcurrency": {
+            "title": "Peruserconcurrency",
+            "type": "integer"
+          },
+          "perUserPerMinute": {
+            "title": "Peruserperminute",
+            "type": "integer"
+          },
+          "tokenChars": {
+            "title": "Tokenchars",
+            "type": "integer"
+          },
+          "tokenCount": {
+            "title": "Tokencount",
+            "type": "integer"
+          },
+          "wanDays": {
+            "title": "Wandays",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "bodyBytes",
+          "tokenCount",
+          "tokenChars",
+          "outputBytes",
+          "perUserConcurrency",
+          "perUserPerMinute",
+          "globalConcurrency",
+          "eventRows",
+          "eventWindowSeconds",
+          "wanDays"
+        ],
+        "title": "TerminalLimits",
         "type": "object"
       },
       "TriageBody": {
@@ -1971,6 +2222,1044 @@
           }
         },
         "summary": "What this server has seen of the controller, its jobs and its storage"
+      }
+    },
+    "/api/v1/terminal/capabilities": {
+      "get": {
+        "operationId": "terminal_capabilities_api_v1_terminal_capabilities_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilitiesResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "candidates": {
+                      "anyOf": [
+                        {
+                          "items": {
+                            "additionalProperties": {
+                              "type": "string"
+                            },
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Candidates"
+                    },
+                    "correlationId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Correlationid"
+                    },
+                    "error": {
+                      "title": "Error",
+                      "type": "string"
+                    },
+                    "executionStatus": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "did_not_run",
+                            "failed",
+                            "outcome_unknown"
+                          ],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Executionstatus"
+                    },
+                    "message": {
+                      "title": "Message",
+                      "type": "string"
+                    },
+                    "retry_after": {
+                      "anyOf": [
+                        {
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Retry After"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "title": "TerminalError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The CLI grammar needs policy review before terminal use"
+          }
+        },
+        "summary": "Reviewed browser terminal capabilities",
+        "tags": [
+          "terminal"
+        ]
+      }
+    },
+    "/api/v1/terminal/execute": {
+      "post": {
+        "operationId": "terminal_execute_api_v1_terminal_execute_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "argv": {
+                    "items": {
+                      "maxLength": 256,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "maxItems": 64,
+                    "minItems": 1,
+                    "title": "Argv",
+                    "type": "array"
+                  },
+                  "requestId": {
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+                    "title": "Requestid",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "argv",
+                  "requestId"
+                ],
+                "title": "ExecuteBody",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecuteResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "candidates": {
+                      "anyOf": [
+                        {
+                          "items": {
+                            "additionalProperties": {
+                              "type": "string"
+                            },
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Candidates"
+                    },
+                    "correlationId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Correlationid"
+                    },
+                    "error": {
+                      "title": "Error",
+                      "type": "string"
+                    },
+                    "executionStatus": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "did_not_run",
+                            "failed",
+                            "outcome_unknown"
+                          ],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Executionstatus"
+                    },
+                    "message": {
+                      "title": "Message",
+                      "type": "string"
+                    },
+                    "retry_after": {
+                      "anyOf": [
+                        {
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Retry After"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "title": "TerminalError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "candidates": {
+                      "anyOf": [
+                        {
+                          "items": {
+                            "additionalProperties": {
+                              "type": "string"
+                            },
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Candidates"
+                    },
+                    "correlationId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Correlationid"
+                    },
+                    "error": {
+                      "title": "Error",
+                      "type": "string"
+                    },
+                    "executionStatus": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "did_not_run",
+                            "failed",
+                            "outcome_unknown"
+                          ],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Executionstatus"
+                    },
+                    "message": {
+                      "title": "Message",
+                      "type": "string"
+                    },
+                    "retry_after": {
+                      "anyOf": [
+                        {
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Retry After"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "title": "TerminalError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "candidates": {
+                      "anyOf": [
+                        {
+                          "items": {
+                            "additionalProperties": {
+                              "type": "string"
+                            },
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Candidates"
+                    },
+                    "correlationId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Correlationid"
+                    },
+                    "error": {
+                      "title": "Error",
+                      "type": "string"
+                    },
+                    "executionStatus": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "did_not_run",
+                            "failed",
+                            "outcome_unknown"
+                          ],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Executionstatus"
+                    },
+                    "message": {
+                      "title": "Message",
+                      "type": "string"
+                    },
+                    "retry_after": {
+                      "anyOf": [
+                        {
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Retry After"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "title": "TerminalError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "candidates": {
+                      "anyOf": [
+                        {
+                          "items": {
+                            "additionalProperties": {
+                              "type": "string"
+                            },
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Candidates"
+                    },
+                    "correlationId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Correlationid"
+                    },
+                    "error": {
+                      "title": "Error",
+                      "type": "string"
+                    },
+                    "executionStatus": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "did_not_run",
+                            "failed",
+                            "outcome_unknown"
+                          ],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Executionstatus"
+                    },
+                    "message": {
+                      "title": "Message",
+                      "type": "string"
+                    },
+                    "retry_after": {
+                      "anyOf": [
+                        {
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Retry After"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "title": "TerminalError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The request conflicts with the current state"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "candidates": {
+                      "anyOf": [
+                        {
+                          "items": {
+                            "additionalProperties": {
+                              "type": "string"
+                            },
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Candidates"
+                    },
+                    "correlationId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Correlationid"
+                    },
+                    "error": {
+                      "title": "Error",
+                      "type": "string"
+                    },
+                    "executionStatus": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "did_not_run",
+                            "failed",
+                            "outcome_unknown"
+                          ],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Executionstatus"
+                    },
+                    "message": {
+                      "title": "Message",
+                      "type": "string"
+                    },
+                    "retry_after": {
+                      "anyOf": [
+                        {
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Retry After"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "title": "TerminalError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The request body is too large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "candidates": {
+                      "anyOf": [
+                        {
+                          "items": {
+                            "additionalProperties": {
+                              "type": "string"
+                            },
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Candidates"
+                    },
+                    "correlationId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Correlationid"
+                    },
+                    "error": {
+                      "title": "Error",
+                      "type": "string"
+                    },
+                    "executionStatus": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "did_not_run",
+                            "failed",
+                            "outcome_unknown"
+                          ],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Executionstatus"
+                    },
+                    "message": {
+                      "title": "Message",
+                      "type": "string"
+                    },
+                    "retry_after": {
+                      "anyOf": [
+                        {
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Retry After"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "title": "TerminalError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The body must be JSON"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "candidates": {
+                      "anyOf": [
+                        {
+                          "items": {
+                            "additionalProperties": {
+                              "type": "string"
+                            },
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Candidates"
+                    },
+                    "correlationId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Correlationid"
+                    },
+                    "error": {
+                      "title": "Error",
+                      "type": "string"
+                    },
+                    "executionStatus": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "did_not_run",
+                            "failed",
+                            "outcome_unknown"
+                          ],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Executionstatus"
+                    },
+                    "message": {
+                      "title": "Message",
+                      "type": "string"
+                    },
+                    "retry_after": {
+                      "anyOf": [
+                        {
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Retry After"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "title": "TerminalError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A parameter is not valid"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "candidates": {
+                      "anyOf": [
+                        {
+                          "items": {
+                            "additionalProperties": {
+                              "type": "string"
+                            },
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Candidates"
+                    },
+                    "correlationId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Correlationid"
+                    },
+                    "error": {
+                      "title": "Error",
+                      "type": "string"
+                    },
+                    "executionStatus": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "did_not_run",
+                            "failed",
+                            "outcome_unknown"
+                          ],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Executionstatus"
+                    },
+                    "message": {
+                      "title": "Message",
+                      "type": "string"
+                    },
+                    "retry_after": {
+                      "anyOf": [
+                        {
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Retry After"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "title": "TerminalError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Too many requests: try again after the time in Retry-After"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "candidates": {
+                      "anyOf": [
+                        {
+                          "items": {
+                            "additionalProperties": {
+                              "type": "string"
+                            },
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Candidates"
+                    },
+                    "correlationId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Correlationid"
+                    },
+                    "error": {
+                      "title": "Error",
+                      "type": "string"
+                    },
+                    "executionStatus": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "did_not_run",
+                            "failed",
+                            "outcome_unknown"
+                          ],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Executionstatus"
+                    },
+                    "message": {
+                      "title": "Message",
+                      "type": "string"
+                    },
+                    "retry_after": {
+                      "anyOf": [
+                        {
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Retry After"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "title": "TerminalError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A local file cannot be used"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "candidates": {
+                      "anyOf": [
+                        {
+                          "items": {
+                            "additionalProperties": {
+                              "type": "string"
+                            },
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Candidates"
+                    },
+                    "correlationId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Correlationid"
+                    },
+                    "error": {
+                      "title": "Error",
+                      "type": "string"
+                    },
+                    "executionStatus": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "did_not_run",
+                            "failed",
+                            "outcome_unknown"
+                          ],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Executionstatus"
+                    },
+                    "message": {
+                      "title": "Message",
+                      "type": "string"
+                    },
+                    "retry_after": {
+                      "anyOf": [
+                        {
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Retry After"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "title": "TerminalError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The controller could not be read"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "candidates": {
+                      "anyOf": [
+                        {
+                          "items": {
+                            "additionalProperties": {
+                              "type": "string"
+                            },
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Candidates"
+                    },
+                    "correlationId": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Correlationid"
+                    },
+                    "error": {
+                      "title": "Error",
+                      "type": "string"
+                    },
+                    "executionStatus": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "did_not_run",
+                            "failed",
+                            "outcome_unknown"
+                          ],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Executionstatus"
+                    },
+                    "message": {
+                      "title": "Message",
+                      "type": "string"
+                    },
+                    "retry_after": {
+                      "anyOf": [
+                        {
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Retry After"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "message"
+                  ],
+                  "title": "TerminalError",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The controller timed out"
+          }
+        },
+        "summary": "Execute one reviewed read-only report",
+        "tags": [
+          "terminal"
+        ]
       }
     },
     "/api/v1/unifi/sites": {

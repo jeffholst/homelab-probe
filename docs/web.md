@@ -483,7 +483,53 @@ Both live in the data directory, readable by the owner only (`0600`, and `0700` 
 
 ## The terminal API
 
-The secure terminal API is being delivered in three parts under #270. The registry and strict parser (#272) are implemented; execution and capabilities (#273), then static completion and the integration handoff (#274), are still pending. There are no terminal endpoints yet. Real execution in the browser terminal (#269) stays disabled until the handoff is complete.
+The secure terminal API is being delivered in three parts under #270. The registry and strict parser (#272), authenticated capabilities and read-only execution (#273) are implemented. Static completion and the integration handoff (#274) are next. Real execution in the browser terminal (#269) stays disabled until that handoff is complete; the API can be tested directly now.
+
+### Capabilities and execution
+
+`GET /api/v1/terminal/capabilities` returns version `1`, command and option descriptions, positional and option choices, explicit supported/restricted/unavailable classifications, static help/version operations, and server-owned limits. It is authenticated, filtered by the current account role, and makes no controller request. Unavailable entries explain why they cannot run; their presence grants no permission.
+
+`POST /api/v1/terminal/execute` accepts exactly `{"argv": ["query", "clients", "--json"], "requestId": "smoke-1"}`. Tokens must be strings, with no controls or hidden direction overrides; unknown fields and coerced types are refused. `requestId` is 1 to 64 ASCII letters, digits, dots, underscores or hyphens, starting with a letter or digit. It is echoed only for matching a response, never used for authorization, audit identity, deduplication or retries. The current session, same-origin JSON and `X-CSRF-Token` are required. Both endpoints, including their refusal responses, send `Cache-Control: no-store`.
+
+A successful envelope has `correlationId` (the server-generated `X-Request-ID`), `requestId`, resolved `operation`, `status: "completed"`, bounded plain-text `output`, up to 32 safe warnings of 500 characters each, and `truncated`. Findings are successful reports, not transport errors. `--json` puts the cleaned document's JSON text in `output`, not a separate unbounded data field. A truncated JSON report is not necessarily parseable JSON; always check `truncated` first. Ordinary CLI rendering is unchanged.
+
+Execution errors have fixed `error`/`message`, `correlationId` and `executionStatus`: `did_not_run` for rejected input/admission, `failed` for a report failure, or `outcome_unknown` after an HTTP deadline or unexpected execution failure. Authentication/origin refusals retain the existing auth error shape and the `X-Request-ID` header. There is no automatic dispatch retry.
+
+Shared report validation also uses fixed error messages for rejected durations and diagnose area selections, never the rejected values. The capabilities endpoint's 503 grammar-review refusal is included in OpenAPI using the terminal-error schema.
+
+| HTTP | Stable code or condition |
+| --- | --- |
+| 401 / 403 | Existing session, origin, CSRF or role refusal; no dispatch |
+| 413 | `terminal_body_too_large`, counted while streaming before JSON parsing |
+| 415 | `unsupported_media_type`, JSON required |
+| 422 | `invalid_parameter` or `terminal_unsupported`, no dispatch |
+| 404 | `site_not_found`, a valid site selector did not resolve |
+| 409 | `client_ambiguous`, no single match (including no matches); at most 20 scoped candidates, labels at most 256 characters |
+| 429 | `terminal_busy`, with `Retry-After` seconds and `retry_after` |
+| 502 / 504 | Existing safe controller error codes |
+| 504 | `terminal_timeout`, stopped waiting while the worker may still run |
+| 500 | `terminal_internal`, a generic failure with correlation id |
+| 503 | `terminal_unreviewed` on capabilities when the CLI grammar needs policy review |
+
+The wire schemas are generated into `docs/terminal/` by `python -m tools.generate_terminal_contracts` (with the web extra installed), and `npm run generate:types` in `web/` produces their committed TypeScript types alongside the report types. OpenAPI at `/api/v1/openapi.json` includes both endpoints. The API tests check the schema files against the Python models.
+
+### Testing Before the Terminal UI
+
+Start the synthetic server with `uv run --extra web hlp.py --demo serve`, open its printed local URL, and sign in with the printed demo credentials using the existing login screen. No controller is contacted. In that page's browser developer console, run:
+
+```javascript
+const me = await (await fetch('/api/v1/auth/me')).json();
+const capabilities = await (await fetch('/api/v1/terminal/capabilities')).json();
+console.log(capabilities);
+const reply = await fetch('/api/v1/terminal/execute', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': me.csrf_token },
+  body: JSON.stringify({ argv: ['query', 'clients', '--json'], requestId: 'smoke-1' }),
+});
+console.log(reply.status, await reply.json());
+```
+
+The browser sends its session cookie and origin automatically. Repeat with `argv: ['info']`, `['help', 'query']` and `['events', '--limit', '2']`. Try `['query', '--jso']` and `['--env-file', '/etc/passwd', 'info']` to verify a 422 refusal. Remove `X-CSRF-Token` to verify a 403. Do not paste passwords, cookies or tokens into issue comments. Direct automated coverage is `uv run --extra web pytest tests/test_terminal_api.py`; it does not depend on a browser or a running server.
 
 ### Trust boundary and compatibility
 
@@ -570,9 +616,9 @@ The matrix below is tested against the registry. Every CLI command and every opt
 
 <!-- terminal-matrix:end -->
 
-### Planned execution limits
+### Execution limits
 
-These are server-owned defaults declared by the registry for #273 to enforce, not limits on the ordinary CLI.
+These are enforced server-owned limits, not limits on the ordinary CLI.
 
 | Limit | Default |
 | --- | --- |
@@ -581,14 +627,18 @@ These are server-owned defaults declared by the registry for #273 to enforce, no
 | Executions per authenticated user | 1 at a time, 30 per minute |
 | Executions across the application | 4 at a time |
 | Output | 256 KiB, truncated on a character boundary with an explicit flag |
+| Event rows | 2,000; `--limit 0` and larger limits are capped |
+| Event window | At most 14 days for events, client and diagnose |
+| WAN window | 1 to 3,650 days |
+| Free-text report filters | 120 characters, like the report routes |
 
-An overall HTTP execution deadline must be defined separately from the existing controller timeout: the latter is per controller request, and reports may make multiple requests with retries. The execute endpoint must return a safe 504 when its deadline expires. A worker retains its concurrency slot until it finishes, including after a timeout or client disconnect. Aborting a request means "stopped waiting", not "terminated" or "cancelled".
+The overall HTTP execution deadline is the server-configured controller timeout in seconds, measured once for the whole worker, not renewed for each controller request. Controller requests keep their existing individual timeouts and bounded retries. The execute endpoint returns 504 when the overall waiting deadline expires. A worker retains its concurrency slot until it finishes, including after a timeout or client disconnect. Aborting a request means "stopped waiting", not "terminated" or "cancelled". Python threads cannot forcibly interrupt an in-progress controller call; admission remains bounded until it returns. Limits apply to each server process; multiple independent processes do not share these counters.
 
-Output, warnings, candidate labels, errors and completion descriptions are untrusted. The endpoint must return plain text without active escape or bidirectional controls and redact secrets and sensitive server paths. JSON serialization is not redaction; it must receive the same explicit output-boundary review. Optional structured data must not bypass the output budget or redaction. Audit entries contain the user, resolved operation, approved resource identifiers, outcome, duration and correlation ID, never the raw command or report. Read-only audit failures warn; denial logging is rate-limited.
+Output, warnings, candidate labels and errors are untrusted. The endpoint returns plain text without active escape or bidirectional controls, scrubs registered and request-local secrets and configured sensitive server paths, and masks sensitive JSON field values before serialization or text rendering. JSON encoding is incremental and stops at the output budget. Existing document builders and text renderers still materialize their reports in memory; the wire output cap is not a whole-process memory limit. Completion descriptions will receive the same checks in #274. Audit actions `terminal.executed` (one eventual worker outcome) and `terminal.denied` (refusals, globally limited to one per second) contain the authenticated actor or a fixed anonymous marker, resolved operation, validated site identifier where applicable, outcome, duration and correlation ID, never the raw command, client search text or report. Read-only audit failures warn and do not block a report. A worker that finishes after a 504 records its eventual outcome, not a false cancellation. Read-only server mode permits these reports; only the existing audit trail is written, never controller state or report files.
 
 ### Supported report examples
 
-These examples are parsed and validated by the registry tests without contacting a controller. They describe the planned terminal subset and also remain valid ordinary CLI commands.
+These examples are parsed and validated by the registry tests without contacting a controller. They describe the supported terminal subset and also remain valid ordinary CLI commands.
 
 ```bash
 hlp info
