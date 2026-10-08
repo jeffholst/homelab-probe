@@ -31,6 +31,8 @@ always listed here.
 
 ### Fixed
 
+- Terminal completion preserves valid contexts after parser-normalized uppercase or mixed-case severity values, including attached and repeated options; case-sensitive and invalid choices remain rejected.
+
 - Corrected documentation for web API authorization, security scope, full development dependencies, CI triggers and current packaging limits; added installation choices, production UI build steps and Playwright troubleshooting.
 
 ### Added

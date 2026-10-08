@@ -73,6 +73,25 @@ def test_static_contexts(client, argv, expected):
     assert labels(client, argv) == expected
 
 
+@pytest.mark.parametrize("tokens", [
+    ["--severity", "HIGH"], ["--severity=HIGH"],
+    ["--severity", "HiGh", "--severity=LoW"],
+])
+def test_completed_values_honor_parser_lowercase_normalization(client, tokens):
+    argv = ["events", *tokens]
+    parsed = policy.parse_command([*argv, "--json"])
+    assert parsed.args.severity == (["high", "low"] if len(tokens) == 3 else ["high"])
+    assert labels(client, [*argv, "--j"]) == {"--json"}
+
+
+@pytest.mark.parametrize("argv", [
+    ["events", "--severity", "HIGHLY", "--j"], ["events", "--severity=HIGHLY", "--j"],
+    ["topology", "--format", "TEXT", "--j"], ["query", "CLIENTS", "--j"],
+])
+def test_normalization_does_not_accept_invalid_or_case_sensitive_choices(client, argv):
+    assert labels(client, argv) == set()
+
+
 def test_mid_token_cursor_replaces_whole_token_and_ignores_later_tokens(client):
     response = complete(client, ["query", "clJUNK", "--csv"], token_index=1, cursor=2)
     assert response.status_code == 200

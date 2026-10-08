@@ -32,6 +32,7 @@ class Option:
     path: bool = False
     metavar: str = ""
     repeatable: bool = False
+    lowercase: bool = False
 
     @property
     def long(self) -> str:
@@ -71,7 +72,7 @@ def _options(parser: argparse.ArgumentParser) -> Tuple[Option, ...]:
             next((f for f in action.option_strings if f.startswith("--")), ""), ())
         found.append(Option(tuple(action.option_strings), _help(action.help), action.nargs != 0, choices,
                             action.type is Path, str(action.metavar or ""),
-                            isinstance(action, argparse._AppendAction)))
+                            isinstance(action, argparse._AppendAction), action.type is str.lower))
     return tuple(found)
 
 

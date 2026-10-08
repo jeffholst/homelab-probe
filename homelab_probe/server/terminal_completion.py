@@ -43,6 +43,8 @@ def complete(argv: Sequence[str], token_index: int, cursor: int, role: str) -> t
 
     def valid_value(option: Option, value: str) -> bool:
         values = choices(option)
+        if option.lowercase:
+            value = value.lower()
         return not values or all(v in values for v in (value.split(",") if option.comma_list else [value]))
 
     for index, token in enumerate(argv[:token_index]):
