@@ -1,7 +1,7 @@
 # Weekly dependency updates, one pull request per ecosystem (not one per package).
 #
 # Dependabot pull requests follow the same rules as any other: CI must pass (tests on Python 3.10 to 3.13, ruff,
-# mypy, `uv lock --check`) and nothing is merged until the owner asks. See "Git and GitHub" in CLAUDE.md.
+# mypy, `uv lock --check`) and nothing is merged until the owner asks. See "Git and GitHub" in AGENTS.md.
 version: 2
 
 updates:

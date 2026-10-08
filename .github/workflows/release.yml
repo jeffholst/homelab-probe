@@ -4,7 +4,7 @@
 # (`contents: write`, on its one job), and it uses no third-party publishing action: the release is made with the `gh`
 # CLI that the runner already has. Before anything is published it checks that the tag is `v` plus the package version and
 # that CHANGELOG.md has a dated entry for it (tools/release_notes.py), and it runs the lockfile check and the tests.
-# See "Releases" in CLAUDE.md.
+# See "Releases" in AGENTS.md.
 name: Release
 
 on:

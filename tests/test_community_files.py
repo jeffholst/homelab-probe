@@ -53,7 +53,7 @@ def test_the_readme_points_to_both_documents():
 def test_each_document_links_to_the_other_two_places_a_reader_needs():
     security, contributing = read(SECURITY), read(CONTRIBUTING)
     assert "(SECURITY.md)" in contributing and "(CHANGELOG.md)" in security and "(README.md#requirements)" in security
-    for needle in ("(CLAUDE.md)", "(docs/development.md#development)", "(.github/pull_request_template.md)",
+    for needle in ("(AGENTS.md)", "(docs/development.md#development)", "(.github/pull_request_template.md)",
                    "(LICENSE)"):
         assert needle in contributing, needle
 
@@ -262,9 +262,9 @@ def test_the_numbers_and_rules_it_states_match_the_project():
 
 
 def test_the_rules_it_repeats_are_the_rules_of_claude_md():
-    claude, contributing = read(ROOT / "CLAUDE.md"), read(CONTRIBUTING)
+    agents, contributing = read(ROOT / "AGENTS.md"), read(CONTRIBUTING)
     for rule in ("normalize_mac", "never rename or reuse", "homelab_probe/demo/controller.json"):
-        assert rule in claude, f"CLAUDE.md no longer says {rule!r}"
+        assert rule in agents, f"AGENTS.md no longer says {rule!r}"
     assert "normalize_mac" in contributing and "never renamed or reused" in contributing
     assert "homelab_probe/demo/controller.json" in contributing
 
@@ -289,3 +289,15 @@ def test_examples_use_only_made_up_addresses(path):
 def test_the_address_check_can_fail():
     text = "aa:bb:cc:dd:ee:ff 192.0.2.10 203.0.113.7 192.168.1.1 10.0.0.5 00:11:22:33:44:55"
     assert real_looking(text) == (["00:11:22:33:44:55"], ["192.168.1.1", "10.0.0.5"])
+
+
+def test_agents_md_is_the_one_briefing_and_fits_what_codex_reads():
+    agents = ROOT / "AGENTS.md"
+    # Codex reads at most 32 KiB of project instructions and cuts the rest without a word.
+    assert agents.stat().st_size < 32 * 1024
+    claude = read(ROOT / "CLAUDE.md")
+    assert claude.startswith("@AGENTS.md"), "CLAUDE.md must import AGENTS.md, not repeat it"
+    assert len(claude) < 1000
+    for page in ("architecture.md", "unifi-api-notes.md", "agent-reference.md"):
+        assert (ROOT / "docs" / page).is_file()
+        assert f"docs/{page}" in read(agents)

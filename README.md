@@ -177,7 +177,7 @@ See [docs/configuration.md](docs/configuration.md#troubleshooting) for common me
 
 ## Development
 
-Use the [routine checks](MAINTAINING.md#routine-checks) to install the locked development dependencies with both `web` and `pretty` extras and reproduce the full local checks. Project layout and documentation checks are in [docs/development.md](docs/development.md#development); contributor and AI-assistant guidelines are in [CLAUDE.md](CLAUDE.md).
+Use the [routine checks](MAINTAINING.md#routine-checks) to install the locked development dependencies with both `web` and `pretty` extras and reproduce the full local checks. Project layout and documentation checks are in [docs/development.md](docs/development.md#development); contributor and AI-assistant guidelines are in [AGENTS.md](AGENTS.md), with the [module map](docs/architecture.md), [UniFi API notes](docs/unifi-api-notes.md) and [subsystem rules](docs/agent-reference.md) behind it.
 
 ## License
 
