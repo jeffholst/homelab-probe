@@ -109,6 +109,12 @@ describe("renderLive", () => {
     expect(renderLive(empty, PALETTE)).toContain("Type a command first.");
   });
 
+  it("reports when suggestions are incomplete", () => {
+    const state = typed("query ");
+    expect(renderLive({ ...state, suggestions: { ...state.suggestions, truncated: true } }, PALETTE))
+      .toContain("Some suggestions omitted.");
+  });
+
   it("bounds the suggestions line", () => {
     const items = Array.from({ length: 30 }, (_, i) => ({ label: `c${i}`, description: "", kind: "command" as const }));
     expect(suggestionLine(items, null, PALETTE)).toContain("+22 more");

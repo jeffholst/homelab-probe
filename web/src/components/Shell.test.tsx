@@ -1,10 +1,12 @@
-import { screen, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createMockBackend } from "../terminal/mock";
 import { miniEngine } from "../terminal/testing/miniEngine";
 import { renderApp } from "../test/render";
+import { SESSION_KEY } from "../app/services";
+import type { Session } from "../api/types";
 import { FOOTER_LINKS } from "./SiteFooter";
 
 /** A browser at least 56rem wide: `matchMedia` answers yes to the desktop query. */
@@ -18,7 +20,11 @@ function desktop() {
 }
 
 // The terminal library needs a real browser; the shell only has to mount the panel around it.
-vi.mock("../terminal/XtermSurface", () => ({ default: () => <div data-testid="surface" /> }));
+vi.mock("../terminal/XtermSurface", () => ({ default: ({ onInput }: { onInput: (data: string) => void }) => (
+  <div data-testid="surface">
+    <button type="button" onClick={() => { onInput("info"); onInput("\r"); }}>run info</button>
+  </div>
+) }));
 
 async function logIn(terminal = false) {
   const user = userEvent.setup();
@@ -122,5 +128,35 @@ describe("the terminal in the shell", () => {
     expect(screen.getByRole("region", { name: "Terminal" })).toBeInTheDocument();
     await user.click(button);
     expect(screen.queryByRole("region", { name: "Terminal" })).toBeNull();
+  });
+
+  it("clears the terminal when the user changes without unmounting the shell", async () => {
+    const { user, services } = await logIn(true);
+    await user.click(screen.getByRole("button", { name: "Terminal" }));
+    await screen.findByText("Ready");
+    await user.click(await screen.findByRole("button", { name: "run info" }));
+    await waitFor(() => { expect(screen.getByRole("log", { name: "Terminal transcript" })).toHaveTextContent("Application:"); });
+    const previous = services.queryClient.getQueryData<Session>(SESSION_KEY);
+    act(() => { services.queryClient.setQueryData(SESSION_KEY, { ...previous, username: "viewer", role: "viewer" }); });
+    await waitFor(() => { expect(screen.getByRole("log", { name: "Terminal transcript" })).toBeEmptyDOMElement(); });
+    await screen.findByText("Ready");
+    expect(screen.getByRole("log", { name: "Terminal transcript" })).toBeEmptyDOMElement();
+  });
+
+  it.each(["logout", "expiry"])("removes the terminal on %s", async (reason) => {
+    const { user, services, fake } = await logIn(true);
+    await user.click(screen.getByRole("button", { name: "Terminal" }));
+    await screen.findByText("Ready");
+    await user.click(await screen.findByRole("button", { name: "run info" }));
+    if (reason === "logout") {
+      await user.click(screen.getByRole("button", { name: /Account:\s*demo/ }));
+      await user.click(screen.getByRole("button", { name: "Log out" }));
+    } else {
+      fake.restartServer();
+      await act(async () => { await services.client.get("/platforms").catch(() => undefined); });
+    }
+    await screen.findByRole("heading", { name: "Log in" });
+    expect(screen.queryByRole("region", { name: "Terminal" })).toBeNull();
+    expect(screen.queryByRole("log", { name: "Terminal transcript" })).toBeNull();
   });
 });

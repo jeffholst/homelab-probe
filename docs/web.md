@@ -698,6 +698,14 @@ Run the pure engine regressions from `web/`:
 npm test -- src/terminal/engine/engine.test.ts
 ```
 
+### Browser Terminal API Integration
+
+The #277 core adapter in `web/src/terminal/api.ts` connects the engine and panel to the existing capabilities, completion and execution endpoints. It uses the application's same-origin API client and in-memory CSRF token, never a query/mutation cache or execution retry. Success envelopes are runtime-validated and matched to the submitted `requestId`; malformed or mismatched replies become safe errors instead of report output. Server warnings and execution truncation are displayed explicitly; truncated completion suggestions display “Some suggestions omitted.” A dispatched failure is distinct from a validation/permission refusal and from an unknown outcome after timeout, abort or network loss.
+
+Completion requests occur only when the engine emits an explicit-Tab effect, coalesced over 150 milliseconds; editing or submitting aborts pending completion waiting. Engine sequence/revision checks reject stale candidates. All requests have a 35-second waiting deadline; aborting does not cancel server work. Disposal aborts pending requests and resets engine/decoder state; the shell remounts the dock when the account identity or role changes. Logout and session expiry remove the shell. A late 401 from an aborted request cannot invalidate a newer session.
+
+An explicit development build flag, `VITE_TERMINAL_API_PREVIEW=1`, selects this adapter. `VITE_TERMINAL_MOCK=1` still takes precedence for the ordinary browser tests. **Normal builds remain disabled.** The Playwright harness builds a separate preview-gated bundle against the real server with synthetic demo data. `web/e2e/terminal-api.spec.ts` exercises supported and unsupported execution, anonymous and permission denials, timeout and output truncation responses, hostile output, completion truncation, session cleanup, and the light/phone layout as well as desktop/dark. Some denial, timeout and truncation responses are controlled at the browser HTTP boundary because the demo server does not naturally produce those outcomes; ordinary report execution and unsupported-command refusal use the real server. The server CSP is unchanged, and preview rendering still has the known xterm inline-style limitation described in [development](development.md). The final #269 acceptance walkthrough and the owner's CSP decision remain outstanding.
+
 ### Frontend Handoff
 
 The #269 integration package consists of the contracts above, the tested compatibility matrix, the execution limits and timeout/cancellation semantics, the six JSON Schemas in `docs/terminal/`, and their committed exports from [web/src/generated/index.ts](../web/src/generated/index.ts): `TerminalCapabilitiesV1`, `TerminalCompleteRequestV1`, `TerminalCompleteResultV1`, `TerminalExecuteRequestV1`, `TerminalExecuteResultV1` and `TerminalErrorV1`.

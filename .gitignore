@@ -34,5 +34,6 @@ homelab_probe/web/
 # Web interface (web/): installed packages, the production build and Playwright output
 web/node_modules/
 web/dist/
+web/dist-terminal-api/
 web/test-results/
 web/playwright-report/

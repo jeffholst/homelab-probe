@@ -64,6 +64,17 @@ const entry = (id: number, lines: string[], kind: Entry["kind"] = "output"): Ent
 const props = (extra = {}) => ({ entries: [] as Entry[], state: idle, onInput: vi.fn(), onLeave: vi.fn(), label: "Terminal input", ...extra });
 
 describe("XtermSurface", () => {
+  it("exposes focus restoration to shortcuts and removes it on disposal", () => {
+    const focusRef: { current: (() => void) | null } = { current: null };
+    const view = render(<XtermSurface {...props()} focusRef={focusRef} />);
+    const terminal = terminals[0];
+    if (!terminal) throw new Error("missing terminal");
+    terminal.focused = false;
+    focusRef.current?.();
+    expect(terminal.focused).toBe(true);
+    view.unmount();
+    expect(focusRef.current).toBeNull();
+  });
   it("creates one terminal and releases everything on unmount", () => {
     const view = render(<XtermSurface {...props()} />);
     expect(terminals).toHaveLength(1);

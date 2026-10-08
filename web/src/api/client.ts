@@ -103,6 +103,8 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     }
 
     const body = await readBody(response);
+    // A disposed session's late response must not clear a newer session's CSRF token or cache.
+    if (settings.signal?.aborted) throw new DOMException("Aborted", "AbortError");
     if (!response.ok) {
       const failure = errorFromResponse(response.status, response.headers.get("Retry-After"), body);
       if (response.status === 401 && path !== LOGIN_PATH && failure.code !== SETUP_TOKEN_REFUSED) {

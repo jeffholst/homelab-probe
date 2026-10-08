@@ -27,6 +27,8 @@ for (const name of ["E2E_PORT", ...SIZES.flatMap((size) => KINDS.map((kind) => `
   process.env[name] ??= String(await freePort());
 }
 const port = process.env["E2E_PORT"] ?? "";
+process.env["E2E_TERMINAL_API_PORT"] ??= String(await freePort());
+const terminalApiPort = process.env["E2E_TERMINAL_API_PORT"];
 const at = (kind: (typeof KINDS)[number], size: (typeof SIZES)[number]) => `http://127.0.0.1:${process.env[`E2E_${kind}_${size}`] ?? ""}`;
 const servers = [
   `demo:${port}`,
@@ -54,21 +56,21 @@ export default defineConfig({
   },
   projects: [
     // Against `hlp --demo serve`.
-    { name: "phone", testIgnore: "**/setup*.spec.ts", use: phone },
-    { name: "desktop", testIgnore: "**/setup*.spec.ts", use: desktop },
+    { name: "phone", testIgnore: ["**/setup*.spec.ts", "**/terminal-api.spec.ts"], use: phone },
+    { name: "desktop", testIgnore: ["**/setup*.spec.ts", "**/terminal-api.spec.ts"], use: desktop },
+    // The real terminal adapter, separately built and served against the same synthetic demo API.
+    { name: "terminal-api", testMatch: "**/terminal-api.spec.ts", use: { ...desktop, baseURL: `http://127.0.0.1:${terminalApiPort}` } },
     // Against servers in their setup, admin and stub modes (the specs read the other servers from `metadata`).
     { name: "setup-phone", testMatch: "**/setup*.spec.ts", metadata: metadata("PHONE"), use: { ...phone, baseURL: at("SETUP", "PHONE") } },
     { name: "setup-desktop", testMatch: "**/setup*.spec.ts", metadata: metadata("DESKTOP"), use: { ...desktop, baseURL: at("SETUP", "DESKTOP") } },
   ],
   webServer: {
-    // The production build, served in front of the real servers (e2e/serve.mjs, which starts the demo preview last: its
-    // port answering means every server is ready).
-    // VITE_TERMINAL_MOCK=1 includes the terminal panel with its mock backend (e2e/terminal.spec.ts); a normal build has none.
-    command: "VITE_TERMINAL_MOCK=1 npm run build && node e2e/serve.mjs",
+    // The mock build for the ordinary browser suite and the preview-gated real API build for terminal-api.spec.ts.
+    command: "VITE_TERMINAL_MOCK=1 npm run build && VITE_TERMINAL_API_PREVIEW=1 npm run build -- --outDir dist-terminal-api && node e2e/serve.mjs",
     url: `http://127.0.0.1:${port}/`,
     reuseExistingServer: false,
     timeout: 180_000,
-    env: { E2E_PORT: port, E2E_SERVERS: servers },
+    env: { E2E_PORT: port, E2E_SERVERS: servers, E2E_TERMINAL_API_PORT: terminalApiPort },
     stderr: "pipe",
   },
 });

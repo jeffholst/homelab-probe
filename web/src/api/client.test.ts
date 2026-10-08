@@ -101,6 +101,21 @@ describe("the API client", () => {
     await expect(client.get("/meta")).rejects.toBe(abort);
   });
 
+  it("ignores a late 401 from an aborted request without ending a newer session", async () => {
+    let respond!: (response: Response) => void;
+    const onUnauthorized = vi.fn();
+    const client = createApiClient({ fetch: () => new Promise((resolve) => { respond = resolve; }), onUnauthorized });
+    client.setCsrfToken("old-token");
+    const controller = new AbortController();
+    const pending = client.post("/terminal/execute", { body: { argv: ["info"], requestId: "old" }, signal: controller.signal });
+    controller.abort();
+    client.setCsrfToken("new-token");
+    respond(new Response('{"error":"not_logged_in","message":"Log in first."}', { status: 401 }));
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    expect(onUnauthorized).not.toHaveBeenCalled();
+    expect(client.hasCsrfToken()).toBe(true);
+  });
+
   it("uses a fixed sentence when the error body is not the API's {error, message} (a proxy's page, an empty body)", async () => {
     const answers = [new Response("<html>Bad gateway</html>", { status: 502 }), new Response("", { status: 503 })];
     const client = createApiClient({ fetch: () => Promise.resolve(answers.shift() as Response) });
