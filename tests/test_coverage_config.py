@@ -1,4 +1,4 @@
-"""Line and branch coverage of 100% is a rule of this project (CLAUDE.md), so CI enforces it (issue #151).
+"""Line and branch coverage of 100% is a rule of this project (AGENTS.md), so CI enforces it (issue #151).
 
 These pin the pieces: the settings in pyproject.toml, the CI job that runs them, and the places that tell people how.
 Coverage itself is measured by that job; a test cannot measure its own suite.
@@ -69,7 +69,7 @@ def test_the_tests_that_skip_without_a_shell_say_so_and_the_job_is_where_they_ru
 
 
 def test_the_docs_give_the_commands_ci_runs():
-    claude = (ROOT / "CLAUDE.md").read_text(encoding="utf-8")
+    claude = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
     assert "uv run coverage run -m pytest" in claude and "uv run coverage report" in claude
     contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
     assert "MAINTAINING.md#routine-checks" in contributing

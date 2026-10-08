@@ -2,7 +2,7 @@ Fixes #
 
 ## What and why
 
-## Self-review (see "Before opening a PR" in CLAUDE.md)
+## Self-review (see "Before opening a PR" in AGENTS.md)
 
 - [ ] Every acceptance criterion of the issue is listed here with the test that proves it:
 - [ ] Each "never / only / every / reads less" claim was attacked by a test (poisoned value, request count, all output paths)
@@ -11,7 +11,7 @@ Fixes #
 - [ ] Partial failure: what each degraded read still shows is correct and the warning says so
 - [ ] Conventions: `CONFIG_VARIABLES`, `test_output_safety`, `_redact`, `normalize_mac`, no stale comments or docs
 - [ ] New tests were seen to fail with the feature broken
-- [ ] README (row, example, stub) and the `docs/` page updated, and CLAUDE.md; shell snippets and examples run as written
+- [ ] README (row, example, stub) and the `docs/` page updated, and AGENTS.md; shell snippets and examples run as written
 - [ ] CHANGELOG.md has a line for every user-visible change (and calls out any change to an exit code, finding code or JSON `version`)
 - [ ] `uv run pytest`, `uv run ruff check .`, and `uv run mypy` pass; coverage still 100%; no real data in code, tests, docs or this text
 

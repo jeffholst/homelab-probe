@@ -1,7 +1,7 @@
 # Maintainer Guide
 
 This is the reference for running and releasing Homelab Probe. Run commands from the project folder.
-For submitting changes, see [CONTRIBUTING.md](CONTRIBUTING.md); code conventions are in [CLAUDE.md](CLAUDE.md).
+For submitting changes, see [CONTRIBUTING.md](CONTRIBUTING.md); code conventions are in [AGENTS.md](AGENTS.md).
 Update this guide in the same PR whenever a maintenance or release procedure changes.
 
 ## Project Basics
