@@ -2,6 +2,8 @@ import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { createMockBackend } from "../terminal/mock";
+import { miniEngine } from "../terminal/testing/miniEngine";
 import { renderApp } from "../test/render";
 import { FOOTER_LINKS } from "./SiteFooter";
 
@@ -15,9 +17,12 @@ function desktop() {
   }));
 }
 
-async function logIn() {
+// The terminal library needs a real browser; the shell only has to mount the panel around it.
+vi.mock("../terminal/XtermSurface", () => ({ default: () => <div data-testid="surface" /> }));
+
+async function logIn(terminal = false) {
   const user = userEvent.setup();
-  const rendered = renderApp("/");
+  const rendered = renderApp("/", terminal ? { terminal: { engine: miniEngine, backend: createMockBackend({ delay: 0 }) } } : {});
   await user.type(await screen.findByLabelText("User name"), "demo");
   await user.type(screen.getByLabelText("Password"), "correct horse");
   await user.click(screen.getByRole("button", { name: "Log in" }));
@@ -90,5 +95,32 @@ describe("the footer", () => {
     }
     expect(footer).toHaveTextContent("Homelab Probe 0.0.0-test. Read-only: nothing here changes your controller.");
     expect(footer).toHaveTextContent("Forked from ericfitz/unifi-clients-export (opens in a new tab).");
+  });
+});
+
+describe("the terminal in the shell", () => {
+  beforeEach(desktop);
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("does not exist without a provider: no button, no panel", async () => {
+    await logIn();
+    expect(screen.queryByRole("button", { name: "Terminal" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Terminal" })).toBeNull();
+  });
+
+  it("opens and closes from the header button, and keeps its state when the page changes", async () => {
+    const { user } = await logIn(true);
+    const button = screen.getByRole("button", { name: "Terminal" });
+    expect(button).toHaveAttribute("aria-expanded", "false");
+    await user.click(button);
+    expect(await screen.findByRole("region", { name: "Terminal" })).toBeInTheDocument();
+    expect(button).toHaveAttribute("aria-expanded", "true");
+    await user.click(screen.getByRole("link", { name: "Profile" }));
+    await screen.findByRole("heading", { name: "Profile" });
+    expect(screen.getByRole("region", { name: "Terminal" })).toBeInTheDocument();
+    await user.click(button);
+    expect(screen.queryByRole("region", { name: "Terminal" })).toBeNull();
   });
 });

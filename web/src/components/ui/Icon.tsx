@@ -41,6 +41,11 @@ const PATHS = {
   eye: "M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Zm10 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z",
   eyeOff: "M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.1M6.6 6.6C3.8 8.4 2 12 2 12s3.5 7 10 7a9.6 9.6 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2",
   history: "M3 12a9 9 0 1 0 3-6.7M3 4v5h5m4-1v5l3 2",
+  terminal: "M3 5h18v14H3zm4 4 3 3-3 3m5 0h5",
+  expand: "M4 14v6h6M20 10V4h-6M4 20l7-7M20 4l-7 7",
+  shrink: "M10 4v6H4m10 10v-6h6M10 10 3 3m18 18-7-7",
+  clear: "M5 7h14M10 7V4h4v3m-6 0 1 13h6l1-13",
+  chevronUp: "m6 15 6-6 6 6",
 } as const;
 
 export type IconName = keyof typeof PATHS;
