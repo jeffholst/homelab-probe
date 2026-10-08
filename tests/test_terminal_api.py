@@ -349,9 +349,8 @@ def test_capabilities_503_contract_matches_runtime_failure(app, client, monkeypa
 
 
 def test_terminal_contracts_match_models_and_validate_responses(client):
+    from generate_terminal_contracts import ROOT, schemas
     from jsonschema import Draft202012Validator
-
-    from tools.generate_terminal_contracts import ROOT, schemas
 
     for name, text in schemas().items():
         assert (ROOT / "docs" / "terminal" / name).read_text() == text
