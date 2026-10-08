@@ -99,6 +99,12 @@ uv run --extra web --extra pretty coverage run -m pytest
 uv run --extra web --extra pretty coverage report
 ```
 
+A `Makefile` wraps these commands; `make` lists the tasks. `make check` runs the lockfile, lint, type and test
+checks of the Python CI jobs, `make coverage` adds the 100% gate, `make web-check` the web checks, `make ci` all of
+those, `make golden` rewrites the golden files and README samples (review the diff), and `make demo` serves the
+synthetic network. `make clean` removes only caches and build output; `make clean-all` also removes `.venv` and
+`web/node_modules`. Neither touches `.env`, `hlp.toml`, `users.json`, `audit.log` or `snapshots/`.
+
 Tests should pass, Ruff should report no findings, mypy should report no issues, and the lockfile check should
 succeed. The default tests use synthetic data; live tests need the controller owner's approval.
 CI also checks 100% line and branch coverage; some shell tests skip on a Mac when tools are unavailable.
