@@ -98,6 +98,10 @@ A server whose package holds a built web app (`homelab_probe/web/`, the output o
 
 ### Building and serving the browser UI
 
+To rebuild the browser files and repeat first-run setup without deleting existing application data, follow
+[Refresh the Web UI and Start Fresh](../MAINTAINING.md#refresh-the-web-ui-and-start-fresh). It includes an isolated
+data folder, a clean environment, the setup token and how to restart the same new installation.
+
 From the repository root, with Python, uv, Node 22+ and npm installed, build and copy the production files:
 
 ```bash
