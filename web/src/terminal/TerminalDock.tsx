@@ -41,6 +41,7 @@ export function TerminalDock({ services, mode, onMode, returnFocus }: Props) {
   const titleId = useId();
   const dock = useRef<HTMLElement>(null);
   const dragging = useRef(false);
+  const focusInput = useRef<(() => void) | null>(null);
   const visible = mode !== "closed";
   if (visible && !opened) setOpened(true);
 
@@ -171,7 +172,7 @@ export function TerminalDock({ services, mode, onMode, returnFocus }: Props) {
           <div className="terminal-dock__body" hidden={mode === "collapsed"}>
             {opened && (
               <Suspense fallback={<p className="terminal-dock__loading muted">Loading the terminal…</p>}>
-                <XtermSurface entries={session.entries} state={session.state} onInput={session.input} onLeave={leave} label="Terminal input" />
+                <XtermSurface entries={session.entries} state={session.state} onInput={session.input} onLeave={leave} label="Terminal input" focusRef={focusInput} />
               </Suspense>
             )}
             <div className="terminal-dock__toolbar" role="toolbar" aria-label="Shortcuts" aria-describedby={`${titleId}-hint`}>
@@ -182,7 +183,7 @@ export function TerminalDock({ services, mode, onMode, returnFocus }: Props) {
                   className="terminal-chip"
                   data-kind={item.kind}
                   title={item.description}
-                  onClick={() => { session.dispatch({ type: "selectSuggestion", index }); }}
+                  onClick={() => { session.dispatch({ type: "selectSuggestion", index }); focusInput.current?.(); }}
                 >
                   {item.label}
                 </button>

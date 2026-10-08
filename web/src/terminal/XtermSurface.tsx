@@ -1,7 +1,7 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal, type IDisposable, type IMarker } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 
 import type { EngineState } from "./engine/types";
 import { renderEntry, renderErase, renderLive, type Entry, type Palette } from "./render";
@@ -18,6 +18,7 @@ interface Props {
   /** Escape was pressed: the way out of the terminal for keyboard users. */
   onLeave: () => void;
   label: string;
+  focusRef?: RefObject<(() => void) | null>;
 }
 
 function token(name: string, fallback: string): string {
@@ -40,7 +41,7 @@ function readPalette(): Palette {
  * strict-mode double mount leaves exactly one live terminal. No addon but "fit" is loaded: no links, no clipboard
  * writing, no title handling, no answers to terminal queries.
  */
-export default function XtermSurface({ entries, state, onInput, onLeave, label }: Props) {
+export default function XtermSurface({ entries, state, onInput, onLeave, label, focusRef }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const latest = useRef({ entries, state, onInput, onLeave });
   // The long-lived handlers read the newest props through this ref, which is updated after every render.
@@ -68,6 +69,7 @@ export default function XtermSurface({ entries, state, onInput, onLeave, label }
     const fit = new FitAddon();
     terminal.loadAddon(fit);
     terminal.open(element);
+    if (focusRef) focusRef.current = () => { terminal.focus(); };
     terminal.textarea?.setAttribute("aria-label", label);
 
     const applyTheme = () => {
@@ -195,10 +197,11 @@ export default function XtermSurface({ entries, state, onInput, onLeave, label }
       for (const subscription of subscriptions) subscription.dispose();
       marker?.dispose();
       drawer.current = null;
+      if (focusRef) focusRef.current = null;
       fit.dispose();
       terminal.dispose();
     };
-  }, [label]);
+  }, [label, focusRef]);
 
   useEffect(() => {
     drawer.current?.sync();

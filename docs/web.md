@@ -698,6 +698,14 @@ Run the pure engine regressions from `web/`:
 npm test -- src/terminal/engine/engine.test.ts
 ```
 
+### Browser Terminal API Integration
+
+The #277 core adapter in `web/src/terminal/api.ts` connects the engine and panel to the existing capabilities, completion and execution endpoints. It uses the application's same-origin API client and in-memory CSRF token, never a query/mutation cache or execution retry. Success envelopes are runtime-validated and matched to the submitted `requestId`; malformed or mismatched replies become safe errors instead of report output. Server warnings and truncation are displayed explicitly. A dispatched failure is distinct from a validation/permission refusal and from an unknown outcome after timeout, abort or network loss.
+
+Completion requests occur only when the engine emits an explicit-Tab effect, coalesced over 150 milliseconds; editing or submitting aborts pending completion waiting. Engine sequence/revision checks reject stale candidates. All requests have a 35-second waiting deadline; aborting does not cancel server work. Disposal aborts pending requests and resets engine/decoder state; the shell remounts the dock when the account identity or role changes. Logout and session expiry remove the shell. A late 401 from an aborted request cannot invalidate a newer session.
+
+An explicit development build flag, `VITE_TERMINAL_API_PREVIEW=1`, selects this adapter. `VITE_TERMINAL_MOCK=1` still takes precedence for the existing browser tests. **Normal builds remain disabled.** The server CSP is unchanged, and preview rendering under that CSP still has the known xterm inline-style limitation described in [development](development.md). This is the core integration part of #277, not completed production enablement: the owner must settle CSP, and real-API Playwright coverage (supported/unsupported commands, permission denial, timeout, truncation, hostile names, session cleanup, both themes and sizes) and the final #269 acceptance walkthrough remain outstanding. The existing mock browser suite does not prove those real-API cases.
+
 ### Frontend Handoff
 
 The #269 integration package consists of the contracts above, the tested compatibility matrix, the execution limits and timeout/cancellation semantics, the six JSON Schemas in `docs/terminal/`, and their committed exports from [web/src/generated/index.ts](../web/src/generated/index.ts): `TerminalCapabilitiesV1`, `TerminalCompleteRequestV1`, `TerminalCompleteResultV1`, `TerminalExecuteRequestV1`, `TerminalExecuteResultV1` and `TerminalErrorV1`.

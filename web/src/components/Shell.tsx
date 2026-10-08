@@ -248,7 +248,7 @@ export function Shell() {
       <SiteFooter inert={drawerOpen} />
       {terminal && (
         <div inert={drawerOpen}>
-          <TerminalDock services={terminal} mode={dockMode} onMode={setDockMode} />
+          <TerminalDock key={JSON.stringify([user?.username, user?.role])} services={terminal} mode={dockMode} onMode={setDockMode} />
         </div>
       )}
     </div>
