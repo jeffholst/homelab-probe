@@ -84,7 +84,7 @@ def test_the_attention_list_is_the_open_findings_in_the_order_of_the_findings_pa
 def test_devices_clients_wan_wifi_and_events_have_the_fixtures_numbers(fake_client):
     data = build(fake_client).data
     assert data["devices"] == {"available": True, "total": 4, "online": 3, "offline": 1, "other": 0}
-    assert data["clients"] == {"available": True, "connected": 2, "wired": 1, "wireless": 1, "offline": 2}
+    assert data["clients"] == {"available": True, "connected": 2, "wired": 1, "wireless": 1, "offline": 3}
     assert data["wan"]["status"] == "ok" and data["wan"]["internet_status"] == "ok" and data["wan"]["nat"] == "public"
     assert data["wan"]["availability_pct"] == 100.0 and data["wan"]["latency_ms"] == 20.0
     assert data["wan"]["last_speedtest"]["download_mbps"] == 880.0
@@ -120,7 +120,7 @@ def test_a_complete_fresh_read_with_nothing_found_is_ok(fake_client):
     assert data["status"] == "ok" and data["complete"] is True and data["stale"] is False
     findings = data["findings"]
     assert findings["total"] == 0 and findings["by_severity"] == {"critical": 0, "warning": 0, "info": 0}
-    assert findings["attention"] == [] and findings["ignored"] == 16            # what the ignore list hid is counted
+    assert findings["attention"] == [] and findings["ignored"] == 17            # what the ignore list hid is counted
 
 
 def test_a_warning_without_a_critical_is_a_warning(fake_client):
@@ -308,9 +308,9 @@ def test_counts_by_triage_state_and_acknowledged_findings_leave_the_attention_li
                ids["device.cpu_high"]: entry("snoozed", "device.cpu_high", until=NOW + 86400)}
     data = build(fake_client, triage=lambda site: entries, now=NOW).data
     findings = data["findings"]
-    assert findings["triage_available"] is True and sum(findings["by_state"].values()) == findings["total"] == 16
+    assert findings["triage_available"] is True and sum(findings["by_state"].values()) == findings["total"] == 17
     assert (findings["by_state"]["acknowledged"], findings["by_state"]["snoozed"]) == (1, 1)
-    assert findings["by_state"]["open"] == 14
+    assert findings["by_state"]["open"] == 15
     assert ids["device.overheating"] not in {i["id"] for i in findings["attention"]}
     assert ids["device.cpu_high"] not in {i["id"] for i in findings["attention"]}
 
@@ -326,12 +326,12 @@ def test_a_snooze_that_has_ended_is_open_again(fake_client):
     ids = finding_ids(fake_client)
     entries = {ids["device.cpu_high"]: entry("snoozed", "device.cpu_high", until=NOW - 1)}
     states = build(fake_client, triage=lambda site: entries, now=NOW).data["findings"]["by_state"]
-    assert states["snoozed"] == 0 and states["open"] == 16
+    assert states["snoozed"] == 0 and states["open"] == 17
 
 
 def test_no_triage_file_means_all_open_and_no_triage_means_unknown(fake_client):
     empty = build(fake_client, triage=lambda site: {}, now=NOW).data["findings"]
-    assert empty["triage_available"] is True and empty["by_state"] == {"open": 16, "acknowledged": 0, "snoozed": 0}
+    assert empty["triage_available"] is True and empty["by_state"] == {"open": 17, "acknowledged": 0, "snoozed": 0}
     none = build(fake_client).data["findings"]
     assert none["triage_available"] is False and none["by_state"] is None
 
@@ -341,7 +341,7 @@ def test_a_triage_file_that_cannot_be_used_gives_null_counts_not_zero_and_the_re
         raise StoreError("unreadable", "The triage file cannot be read.")
 
     findings = build(fake_client, triage=unusable).data["findings"]
-    assert findings["triage_available"] is False and findings["by_state"] is None and findings["total"] == 16
+    assert findings["triage_available"] is False and findings["by_state"] is None and findings["total"] == 17
     assert len(findings["attention"]) == 5
 
 

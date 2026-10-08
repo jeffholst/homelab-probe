@@ -53,7 +53,7 @@ def test_capture_has_the_documented_shape(record):
     assert record["captured_at"] == "2026-09-30T20:15:30-05:00" and record["tool_version"]
     assert record["site"] == {"name": "Default", "id": "site-1"}
     assert record["controller"] == {"application_version": "10.0.0"}
-    assert [len(record[k]) for k in ("devices", "clients", "reservations")] == [4, 4, 2]
+    assert [len(record[k]) for k in ("devices", "clients", "reservations")] == [4, 5, 2]
     for section in ("devices", "clients", "reservations"):
         macs = [r["mac"] for r in record[section]]
         assert macs == sorted(macs)                                              # stable order
@@ -501,7 +501,7 @@ def _run(fake_client, monkeypatch, argv):
 def test_cli_snapshot_then_diff_against_the_live_network(fake_client, monkeypatch, capsys, tmp_path):
     assert _run(fake_client, monkeypatch, ["snapshot", "--dir", str(tmp_path)]) == 0
     out = capsys.readouterr().out
-    assert "Saved 4 devices, 4 clients and 2 reservations to" in out
+    assert "Saved 4 devices, 5 clients and 2 reservations to" in out
     (saved,) = list_snapshots(tmp_path)
     assert load_snapshot(saved)["controller"]["application_version"] == "10.0.0"
 

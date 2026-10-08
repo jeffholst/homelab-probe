@@ -11,8 +11,9 @@
 [WARNING ] Office Switch port 2: dropping 0.75% of rx packets (75 of 10000)
 [WARNING ] Office Switch port 2: STP state is blocking, not forwarding
 [WARNING ] old-printer: reserved IP 10.0.0.50 is outside network IoT (10.0.20.1/24)
+[INFO  ] BE:00:00:00:00:06: new device 'guest-phone' first seen <age> ago (wireless, private MAC, 10.0.0.52)
 [INFO  ] Office AP: restarted <age> ago
 [INFO  ] Office Switch port 2: negotiated at 100 Mbps
 [INFO  ] wlan: wlan subsystem reports warning: 1 device(s) disconnected (see the device findings)
 
-1 critical, 12 warnings, 3 info
+1 critical, 12 warnings, 4 info

@@ -212,6 +212,9 @@ reason = "synthetic nearly-full storage entry"
 [[ignore]]
 code = "device.recent_reboot"
 reason = "the access point restarted a few minutes ago"
+[[ignore]]
+code = "client.new_device"
+reason = "the guest phone is expected"
 ''')
     code = _run(fake_client, monkeypatch, ["diagnose", "--no-emoji", "--config", str(cfg)])
     out = capsys.readouterr().out

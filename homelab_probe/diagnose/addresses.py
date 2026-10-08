@@ -1,12 +1,15 @@
-"""Checks on client addresses: no IP, duplicate IPs, and randomized MAC addresses."""
+"""Checks on client addresses: no IP, duplicate IPs, randomized MAC addresses, and new devices."""
 
 import ipaddress
-from typing import Any, Dict, List
+import time
+from typing import Any, Dict, List, Optional
 
 from ..export import LocationIndex
+from ..new_clients import select_new
 from ..reservations import reservation_records
+from ..settings import DiagnoseSettings
 from ..snapshot import Snapshot
-from ..util import is_randomized_mac, normalize_mac
+from ..util import describe_age, is_randomized_mac, normalize_mac
 from .model import (
     INFO,
     LINK_LOCAL_PREFIX,
@@ -83,6 +86,33 @@ def _duplicate_ip_findings(snap: Snapshot) -> List[Finding]:
                 WARNING, name,
                 f"reserved IP {reserved} is in use by {', '.join(sorted(who.values()))}",
                 code="reservation.ip_in_use"))
+    return findings
+
+
+def _new_client_findings(snap: Snapshot, settings: DiagnoseSettings, now: Optional[float]) -> List[Finding]:
+    """A client the controller first saw within ``new_client_window_hours``, as information: a new device.
+
+    This is the controller's own ``first_seen``, so nobody has to tag anything; a client without a usable
+    first-seen time is unknown, never new, and the history that was not read (``stat/alluser`` failed, already
+    warned about) yields nothing rather than a claim. The subject is the MAC address so that renaming the device
+    (what an admin does next) does not make it a different finding for ``--notify``.
+    """
+    if settings.new_client_window_hours <= 0:
+        return []
+    moment = time.time() if now is None else now
+    connected = {normalize_mac(c.get("macAddress")): c for c in snap.clients}
+    found, _unknown = select_new(snap, int(settings.new_client_window_hours * 3600), False, moment)
+    findings: List[Finding] = []
+    for seen, user, mac in found:
+        live = connected.get(mac) or {}
+        how = "wired" if user.get("is_wired") else "wireless"
+        extras = [how] + (["private MAC"] if is_randomized_mac(mac) else [])
+        ip = live.get("ipAddress") or user.get("last_ip")
+        findings.append(Finding(
+            INFO, mac,
+            f"new device {user.get('name') or user.get('hostname') or 'Unknown'!r} first seen "
+            f"{describe_age(max(0, int(moment - seen)))} ago ({', '.join(extras)}{', ' + ip if ip else ''})",
+            target_mac=mac, code="client.new_device"))
     return findings
 
 

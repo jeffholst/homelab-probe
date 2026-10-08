@@ -65,8 +65,8 @@ commands:
     info                Show controller version and available sites
     init                Guided first-time setup: write .env, hlp.toml and
                         snapshots/ for you
-    new-clients         List clients that are in no client group (all known
-                        clients)
+    new-clients         List new clients: first seen in the last 7 days, or in
+                        no group
     query               List and filter devices, clients, reservations, switch
                         ports, networks and Wi-Fi networks
     serve               Serve the read-only web API on this machine (needs the

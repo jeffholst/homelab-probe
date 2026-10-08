@@ -125,7 +125,7 @@ COMMANDS = [
     ["query", "networks", "--csv"], ["query", "wlans", "--csv"],
     ["query", "clients", "--include-offline", "--csv"], ["query", "devices", "--csv"], ["query", "ports", "--csv"],
     ["query", "reservations", "--csv"],
-    ["new-clients"],
+    ["new-clients"], ["new-clients", "--ungrouped"],
     ["events"], ["events", "--summary"],
     ["wifi", "--all"],
     ["wan"],
@@ -163,14 +163,14 @@ def test_text_output_is_clean_with_hostile_names(fake_client, monkeypatch, capsy
     assert_clean(captured.out + captured.err, argv)
     assert captured.out.strip(), f"{argv} printed nothing"
     shown = {"query devices": "Office Switch", "query clients": "desktop", "query ports": "Office", "query networks": "Main", "query wlans": "HomeNet",
-             "new-clients": "old-printer", "topology": "Office Switch", "client": "desktop",
+             "new-clients": "guest-phone", "topology": "Office Switch", "client": "desktop",
              "wifi": "Office AP", "events": "phone", "firewall": "Open Inbound", "audit": "Lobby"}.get(" ".join(argv[:2]) if argv[0] == "query" else argv[0])
     if shown:
         assert shown in captured.out, f"{shown!r} missing from {argv}"
 
 
 @pytest.mark.parametrize("argv", [["diagnose"], ["diagnose", "--show-ignored"], ["audit"], ["query", "devices"],
-                                  ["query", "clients", "--include-offline"], ["new-clients"]],
+                                  ["query", "clients", "--include-offline"], ["new-clients"], ["new-clients", "--ungrouped"]],
                          ids=lambda a: "enhanced " + " ".join(a))
 def test_the_enhanced_terminal_output_is_clean_with_hostile_names(fake_client, monkeypatch, capsys, argv):
     from homelab_probe.present import Presentation

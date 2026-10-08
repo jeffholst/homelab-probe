@@ -34,8 +34,8 @@ def validate(command: ParsedCommand, request: Request) -> None:
     for field in ("search", "ap", "network", "ssid", "switch", "query", "event", "client", "device"):
         if len(getattr(args, field, None) or "") > 120:
             raise ApiError(422, "invalid_parameter", "A report filter exceeds 120 characters.")
-    if hasattr(args, "since") and not 1 <= args.since <= MAX_SINCE:
-        raise ApiError(422, "invalid_parameter", "The event window must be between one second and 14 days.")
+    if getattr(args, "since", None) is not None and not 1 <= args.since <= MAX_SINCE:
+        raise ApiError(422, "invalid_parameter", "The time window must be between one second and 14 days.")
     if command.operation == "events":
         args.wanted = event_query(f"{args.since // 60}m", args.category, args.severity, args.search)
         args.limit = MAX_EVENTS if args.limit == 0 else min(args.limit, MAX_EVENTS)
@@ -65,7 +65,8 @@ def adapter(operation: str, args: argparse.Namespace, request: Request) -> Calla
         "query": lambda c: documents.query_document(
             c, site, args.kind, args.search, args.include_offline, args.switch or "", args.down, args.errors,
             args.offline, settings, args.network, args.ssid, args.ap, echo=False),
-        "new-clients": lambda c: documents.new_clients_document(c, site, args.search, echo=False),
+        "new-clients": lambda c: documents.new_clients_document(
+            c, site, args.search, args.since, args.ungrouped, echo=False),
         "client": lambda c: documents.client_document(c, site, args.query, settings, args.since,
                                                      not args.no_events, echo=False),
     }
@@ -86,7 +87,8 @@ def render(operation: str, args: argparse.Namespace, document: documents.Documen
                                             zone_names=cast(documents.FirewallDocument, document).zone_names),
         "events": lambda: render_events_text(data, args.summary, document.meta["more"], document.meta["cap_truncated"]),
         "query": lambda: render_table(data, args.kind, args.offline),
-        "new-clients": lambda: render_new_clients(data),
+        "new-clients": lambda: render_new_clients(
+            data, document.meta["since"], document.meta["ungrouped"], document.meta["unknown"]),
         "client": lambda: render_detail(data, False),
     }
     return renderers[operation]()

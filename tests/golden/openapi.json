@@ -9137,6 +9137,35 @@
             }
           },
           {
+            "description": "How far back: 90m, 24h, 7d, 2w",
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 12,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "How far back: 90m, 24h, 7d, 2w",
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ungrouped",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Ungrouped",
+              "type": "boolean"
+            }
+          },
+          {
             "description": "Read the controller again instead of using the cache (at most every 5 s)",
             "in": "query",
             "name": "refresh",
@@ -9323,7 +9352,7 @@
             "description": "The controller timed out"
           }
         },
-        "summary": "Clients in no client group"
+        "summary": "New clients: first seen recently, or in no client group"
       }
     },
     "/api/v1/unifi/sites/{site}/notes": {

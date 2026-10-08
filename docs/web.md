@@ -157,7 +157,7 @@ Every report is a `GET` that returns the same document as the command's `--json`
 | `.../networks`, `.../wlans` | `query networks`, `query wlans` | `search` |
 | `.../ports` | `query ports` | `search`, `switch`, `down`, `errors` |
 | `.../reservations` | `query reservations` | `search`, `offline` |
-| `.../new-clients` | `new-clients` | `search` |
+| `.../new-clients` | `new-clients` | `search`, `since` (default 7 days; with `ungrouped` alone, no limit), `ungrouped` |
 | `.../clients/{mac}` | `client` | `events`, `since` (the MAC in any spelling) |
 | `.../dashboard` | none: the [dashboard summary](#dashboard-summary-apiv1unifisitessitedashboard) | |
 | `/api/v1/schemas`, `/api/v1/schemas/{name}` | | the [JSON Schemas](schemas.md) |
@@ -635,7 +635,8 @@ The matrix below is tested against the registry. Every CLI command and every opt
 | `info` | `-h`, `--help` | restricted | Static help only; never runs a command. |
 | `init` | `-h`, `--help`, `--dir`, `--url`, `--site`, `--verify`, `--api-key-stdin`, `--no-input`, `--force`, `--check` | unavailable | Installation and configuration changes are not terminal operations. |
 | `new-clients` | `-h`, `--help` | restricted | Static help only; never runs a command. |
-| `new-clients` | `-s`, `--search`, `--json` | supported | Reviewed read-only report argument. |
+| `new-clients` | `-s`, `--search`, `--ungrouped`, `--json` | supported | Reviewed read-only report argument. |
+| `new-clients` | `--since` | restricted | Server-owned web caps apply; CLI all-results values are not unlimited. |
 | `query` | `-h`, `--help` | restricted | Static help only; never runs a command. |
 | `query` | `-s`, `--search`, `--include-offline`, `--json`, `--switch`, `--down`, `--errors`, `--network`, `--ssid`, `--ap`, `--offline` | supported | Reviewed read-only report argument. |
 | `query` | `--config` | unavailable | Client-selected server files are not permitted. |

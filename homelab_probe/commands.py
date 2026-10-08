@@ -322,16 +322,25 @@ def _run_query(ctx: Context) -> int:
 def _add_new_clients(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("-s", "--search", default="",
                         help="Case-insensitive substring match on any field")
+    parser.add_argument("--since", type=_duration, default=None, metavar="DURATION",
+                        help="Only clients the controller first saw within this long, e.g. 24h, 7d, 2w "
+                             "(default 7d; with --ungrouped alone, no limit)")
+    parser.add_argument("--ungrouped", action="store_true",
+                        help="Only clients that are in no client group (combine with --since for both)")
     parser.add_argument("--json", action="store_true", help="Output JSON instead of a table")
 
 
 def _run_new_clients(ctx: Context) -> int:
-    document = new_clients_document(ctx.client, ctx.config.site, ctx.args.search)
-    if not ctx.args.json and ctx.present.decorations(sys.stdout):
-        pretty.print_heading(ctx.present, "New Clients", document.meta["site"])
-        pretty.print_table(ctx.present, document.data, NEW_CLIENT_COLUMNS, new_clients_footer(document.data))
+    args = ctx.args
+    document = new_clients_document(ctx.client, ctx.config.site, args.search, args.since, args.ungrouped)
+    meta = document.meta
+    footer = new_clients_footer(document.data, meta["since"], meta["ungrouped"], meta["unknown"])
+    if not args.json and ctx.present.decorations(sys.stdout):
+        pretty.print_heading(ctx.present, "New Clients", meta["site"])
+        pretty.print_table(ctx.present, document.data, NEW_CLIENT_COLUMNS, footer)
     else:
-        say(document.to_json() if ctx.args.json else render_new_clients(document.data))
+        say(document.to_json() if args.json else
+            render_new_clients(document.data, meta["since"], meta["ungrouped"], meta["unknown"]))
     return 0
 
 
@@ -1262,7 +1271,7 @@ COMMANDS: List[Command] = [
     Command("query", "List and filter devices, clients, reservations, switch ports, networks and Wi-Fi networks",
             _add_query, _run_query,
             validate=_check_query, wants_settings=lambda args: bool(args.offline)),
-    Command("new-clients", "List clients that are in no client group (all known clients)", _add_new_clients,
+    Command("new-clients", "List new clients: first seen in the last 7 days, or in no group", _add_new_clients,
             _run_new_clients),
     Command("events", "Event history from the controller log: disconnects, roams, IP conflicts...", _add_events,
             _run_events),

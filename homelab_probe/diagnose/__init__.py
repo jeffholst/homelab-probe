@@ -14,7 +14,7 @@ from typing import List, Optional
 
 from ..settings import DiagnoseSettings
 from ..snapshot import Snapshot
-from .addresses import _private_mac_findings
+from .addresses import _new_client_findings, _private_mac_findings
 from .areas import AREA_NAMES, AREAS, CHECKS, area_of, codes_of, needs_for, parse_areas
 from .event_checks import _event_findings
 from .model import (
@@ -55,7 +55,8 @@ __all__ = [
     "apply_ignores", "diagnose", "exit_code", "findings_document", "findings_from_document", "findings_json",
     "format_findings", "format_ignored", "render_findings", "stream_supports_emoji", "uplink_speeds",
     # the individual checks, importable for focused tests
-    "_event_findings", "_offline_reservation_findings", "_pool_findings", "_private_mac_findings",
+    "_event_findings", "_new_client_findings", "_offline_reservation_findings", "_pool_findings",
+    "_private_mac_findings",
 ]
 
 

@@ -94,7 +94,7 @@ def test_new_clients_shows_the_flag(fake_client):
     add_client(fake_client, name="stray-pixel", mac="06:00:00:00:00:30", connected=False)
     add_client(fake_client, name="stray-laptop", mac="dc:00:00:00:00:31", connected=False)
     snap = collect_snapshot(fake_client, "default", Needs(groups=True))
-    rows = {r["Name"]: r["Private MAC"] for r in report(snap)}
+    rows = {r["Name"]: r["Private MAC"] for r in report(snap, "", None, True)[0]}
     assert rows["stray-pixel"] == "yes" and rows["stray-laptop"] == ""
 
 

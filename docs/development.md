@@ -13,7 +13,7 @@ homelab_probe/
   export.py              inventory rows and CSV export
   query.py               filtering and table/JSON rendering
   reservations.py        DHCP fixed IP reservations
-  new_clients.py         clients in no client group
+  new_clients.py         new clients: first seen within a window, or in no client group
   client_view.py         single-client troubleshooting view
   events.py              event history from the controller's system log
   wan.py                 internet health: state, 24h monitoring, speedtests

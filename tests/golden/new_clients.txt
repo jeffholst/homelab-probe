@@ -1,6 +1,5 @@
 Name  MAC Address  IP Address  Vendor  Connection Type  Where  First Seen  Last Seen  Status  Private MAC
 ---  ---  ---  ---  ---  ---  ---  ---  ---  ---
-old-tablet  BB:00:00:00:00:04  10.0.0.51  Wireless  <time>  <time>  Offline
-old-printer  BB:00:00:00:00:03  10.0.0.50  Example Printers Inc  Wired  Wired, Office Switch port 6  <time>  <time>  Offline
+guest-phone  BE:00:00:00:00:06  10.0.0.52  Wireless  <time>  <time>  Offline  yes
 
-2 client(s) in no group
+1 client(s) first seen in the last 7d (1 with a private MAC)

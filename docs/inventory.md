@@ -48,9 +48,24 @@ Clients
 
 ## New clients
 
-`new-clients` lists every known client, connected or not, that has not been added to at least one client group (Network > Client Groups), so newly seen devices stand out. Add a client to a group in the controller and it drops off the report. Columns: Name, MAC Address, IP Address, Vendor, Connection Type, Where (switch and port, or AP), First Seen, Last Seen, Status, Private MAC (`yes` for a randomized address, see below). Newest first-seen comes first, with no age cutoff. `-s TEXT` (or `--search TEXT`) filters and `--json` prints JSON.
+`new-clients` lists the clients the controller **first saw recently**, connected or not, so a device that joined the network stands out without anyone having to tag it. The controller records a `first_seen` time for every client in its client history (`stat/alluser`); a client is new when that time is within `--since` (default `7d`; units `m`, `h`, `d`, `w`, for example `--since 24h`). Columns: Name, MAC Address, IP Address, Vendor, Connection Type, Where (switch and port, or AP), First Seen, Last Seen, Status, Private MAC (`yes` for a randomized address, see below). The newest first-seen comes first. `-s TEXT` (or `--search TEXT`) filters and `--json` prints JSON.
 
-Group membership comes from the legacy `stat/alluser` client records and the legacy v2 `network-members-groups` definitions; the Integration API has no client groups. A group that has been deleted does not count as membership. If the group definitions cannot be read, the tool warns and trusts each client's own group list.
+```bash
+uv run hlp.py new-clients                  # first seen in the last 7 days
+uv run hlp.py new-clients --since 24h      # in the last day
+uv run hlp.py new-clients --ungrouped      # in no client group, whenever first seen
+uv run hlp.py new-clients --ungrouped --since 30d   # both: new and still in no group
+```
+
+The line under the table says what was counted: `1 client(s) first seen in the last 7d (1 with a private MAC)`. Things to know:
+
+- **A client the controller gives no first-seen time for is unknown, never new.** The footer counts them (`; 2 known client(s) have no first-seen time and are not counted`) so the list is not mistaken for complete. A time in the future (clock skew) counts as now.
+- **Randomized (private) MAC addresses.** A phone that rotates its Wi-Fi address can show up as a new client each time; the Private MAC column and the footer count mark them so you can tell a new phone from a known phone with a new address.
+- **A client removed from the controller's history** is expected to get a new first-seen time when it reconnects and so to look new again (expected from how the history works; not checked on a live controller).
+- **`--ungrouped`** is the earlier behavior: every known client, connected or not, that has not been added to at least one client group (Network > Client Groups), with no age limit unless you also give `--since`. Group membership comes from the legacy `stat/alluser` client records and the legacy v2 `network-members-groups` definitions; the Integration API has no client groups. A group that has been deleted does not count as membership. If the group definitions cannot be read, the tool warns and trusts each client's own group list. It is the way to use groups as an approval list: add a client to a group and it drops off.
+- **Reading `stat/alluser` is required** (as for `snapshot` and `diff`): if it cannot be read the command stops with exit code 3 instead of printing an empty list.
+
+**Being told.** `diagnose` reports each client first seen within `new_client_window_hours` (default 24, `0` turns it off, see [thresholds](diagnose.md#configuration-thresholds-and-ignore-list)) as an information finding, code `client.new_device`, with the MAC address as its subject (so renaming the device does not make it a new finding) and a message such as `new device 'guest-phone' first seen 2h ago (wireless, private MAC, 10.0.0.52)`. Information findings never change the exit code and `diagnose --notify` sends only findings at or above `--notify-min` (default `warning`), so to be notified of new devices run it with `--notify-min info` (which also sends the other information findings; see [notifications](notifications.md)).
 
 ## Randomized MAC addresses
 

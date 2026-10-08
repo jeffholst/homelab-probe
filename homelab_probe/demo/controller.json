@@ -431,6 +431,16 @@
         "fixed_ip": "10.0.0.99",
         "last_connection_network_name": "Main",
         "first_seen": 1750000000
+      },
+      {
+        "mac": "be:00:00:00:00:06",
+        "hostname": "guest-phone",
+        "is_wired": false,
+        "last_seen_age_s": 900,
+        "last_ip": "10.0.0.52",
+        "use_fixedip": false,
+        "last_connection_network_name": "Main",
+        "first_seen_age_s": 7200
       }
     ],
     "health": [

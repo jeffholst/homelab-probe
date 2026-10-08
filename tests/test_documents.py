@@ -336,6 +336,7 @@ def test_the_text_of_the_second_batch_is_rendered_from_the_documents(fake_client
         since = EventQuery(24 * 3600)
         listing = events_document(fake_client, "default", since, limit=3, echo=False)
         summary = events_document(fake_client, "default", since, summary=True, echo=False)
+        new_clients = new_clients_document(fake_client, "default", echo=False)
         cases = [
             (["events", "--limit", "3"], render_events_text(listing.data, False, **{
                 "more": listing.meta["more"], "cap_truncated": listing.meta["cap_truncated"]})),
@@ -345,7 +346,7 @@ def test_the_text_of_the_second_batch_is_rendered_from_the_documents(fake_client
             (["query", "ports"], render_table(query_document(fake_client, "default", "ports", echo=False).data, "ports")),
             (["query", "clients", "--csv"],
              render_csv(query_document(fake_client, "default", "clients", echo=False).data, "clients")),
-            (["new-clients"], render_new(new_clients_document(fake_client, "default", echo=False).data)),
+            (["new-clients"], render_new(new_clients.data, *[new_clients.meta[k] for k in ("since", "ungrouped", "unknown")])),
         ]
         for argv, expected in cases:
             _, out, _ = run_command(fake_client, argv)

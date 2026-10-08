@@ -18,7 +18,7 @@ def test_snapshot_collects_everything(fake_client):
     assert len(snap.devices) == 4 and len(snap.clients) == 2
     assert set(snap.device_details) == {"gw1", "sw1", "ap1", "ap2"}
     assert set(snap.device_stats) == {"gw1", "sw1", "ap1"}  # offline AP has none
-    assert len(snap.legacy_devices) == 4 and len(snap.all_users) == 3
+    assert len(snap.legacy_devices) == 4 and len(snap.all_users) == 4
 
 
 def test_export_writes_inventory_and_switch_csvs(fake_client, tmp_path):
@@ -49,7 +49,7 @@ def test_query_filters_and_json(fake_client):
         "Gateway", "Office Switch", "Office AP", "Garage AP"}
     assert [r["Name"] for r in query_rows(snap, "clients", search="PHONE")] == ["phone"]
     full = collect_snapshot(fake_client, "default", Needs(offline=True))
-    assert len(query_rows(full, "clients", include_offline=True)) == 4
+    assert len(query_rows(full, "clients", include_offline=True)) == 5
 
 
 def test_diagnose_reports_fixture_problems(fake_client):
