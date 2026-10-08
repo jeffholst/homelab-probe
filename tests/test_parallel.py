@@ -22,13 +22,13 @@ FULL = Needs(reservations=True, groups=True, health=True, speedtests=True, neigh
 def same(a, b):
     """Two snapshots hold the same data. The fake stamps the times of events, speedtests and clients when it is
     created, so two fakes made a second apart differ in them: events and speedtests are compared by id, and the
-    client history without its ``last_seen``."""
+    client history without its ``last_seen`` and ``first_seen``."""
     for field in dataclasses.fields(a):
         x, y = getattr(a, field.name), getattr(b, field.name)
         if field.name in ("events", "speedtests"):          # their times are made when each fake is created
             x, y = [e["id"] for e in x], [e["id"] for e in y]
         elif field.name == "all_users":
-            x, y = ([{k: v for k, v in u.items() if k != "last_seen"} for u in users] for users in (x, y))
+            x, y = ([{k: v for k, v in u.items() if k not in ("last_seen", "first_seen")} for u in users] for users in (x, y))
         assert x == y, field.name
 
 
