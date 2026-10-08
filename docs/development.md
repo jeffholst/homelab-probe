@@ -49,6 +49,7 @@ homelab_probe/
   settings.py            diagnose thresholds and ignore list (TOML)
   util.py                shared helpers: output safety (printable names, CSV formulas), numbers, MACs, times, plurals
   cli.py                 argument parser and main: loads the configuration, builds the client, runs a command
+  server/terminal_policy.py  explicit terminal capability registry, pure parsing, limits and tested compatibility matrix; no endpoints yet
   commands.py            the commands: each one's arguments, checks and handler, and the registry
 tests/
   fixtures/web/         a placeholder bundle (not a built interface) that the static-file tests serve
@@ -145,6 +146,7 @@ uv lock --check           # uv.lock must match pyproject.toml; run `uv lock` aft
 
 **Tests that keep the documentation and the output honest:**
 
+- `tests/test_terminal_policy.py` checks strict parsing without exits or file access, rejects unavailable capabilities, forces CLI-to-web parity failures for added or stale commands/options/aliases, and compares the compatibility matrix in [the terminal API](web.md#the-terminal-api) with the registry. `build_parser(strict=True)` reuses the grammar and cross-option validators; the normal CLI parser and goldens stay unchanged.
 - `tests/test_golden.py` compares the text output of the main commands (`diagnose`, `topology` and its Mermaid and DOT graphs, `wan`, `wifi`, `client`, `events`, `new-clients` and the `query` kinds) with stored files in `tests/golden/`, produced from the synthetic fixture. Times, ages and table padding are normalised, so the files do not change from day to day. When a change to the output is intended, refresh them with `UPDATE_GOLDEN=1 uv run pytest tests/test_golden.py` and review the diff like code.
 - `tests/test_docs_drift.py` checks the README and these pages against the program: every example command parses with the real argument parser, every command has a row in the README's Commands table, every long option is mentioned (and every option the README shows exists), and the sample output blocks (topology, its Mermaid and DOT graphs, wifi, wan, client, diagnose, new-clients, events and the exported CSVs) equal what the commands print. After an intended output change, `UPDATE_README_SAMPLES=1 uv run pytest tests/test_docs_drift.py` rewrites those blocks and their golden CSVs. The `diff` sample is illustrative on purpose and is not checked.
 - `tests/test_entry_points.py` runs the launcher, the installed `hlp` script and `python -m homelab_probe.cli` in subprocesses, and `tests/test_exit_codes.py` produces every documented exit code (0, 1, 2, 3, 4 and 64) from a real scenario and checks the [README exit-code table](../README.md#exit-codes).

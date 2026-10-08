@@ -36,6 +36,7 @@ Homelab Probe is a read-only UniFi Network probe for inventory, troubleshooting,
 - Stable JSON output and schemas for automation, plus exit codes, finding codes and shell completion
 - Optional ntfy, webhook or email notifications when findings are new, worse or fixed
 - Login-protected local web API with roles, CSRF protection, settings editing, snapshots and scheduler support
+- Secure terminal API foundation: reviewed command policy and strict parsing; endpoints are pending ([compatibility and limits](docs/web.md#the-terminal-api))
 - A Docker image (and compose file) for the web server and the command line, with a read-only root file system ([docs/docker.md](docs/docker.md))
 
 Full feature notes are in [docs/features.md](docs/features.md).

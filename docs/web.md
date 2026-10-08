@@ -477,6 +477,125 @@ Both live in the data directory, readable by the owner only (`0600`, and `0700` 
 
   The log **rotates by size, never by age**: `AUDIT_LOG_MAX_MB` (default 5, 1 to 1024) is the size of one file and `AUDIT_LOG_FILES` (default 10, 2 to 1000) how many are kept in all, the current `audit.log` and `audit.log.1`, `audit.log.2`... `web-user` reads both from the environment (not from `.env`, which it does not read); they are also settings of `.env` for the server to come.
 
+## The terminal API
+
+The secure terminal API is being delivered in three parts under #270. The registry and strict parser (#272) are implemented; execution and capabilities (#273), then static completion and the integration handoff (#274), are still pending. There are no terminal endpoints yet. Real execution in the browser terminal (#269) stays disabled until the handoff is complete.
+
+### Trust boundary and compatibility
+
+The terminal is a command-shaped interface to approved application reports, never a shell or a CLI process. Every request is untrusted, including tokens produced by completion or shortcut buttons. Authentication, role checks, origin and CSRF checks, request limits, resource validation and fixed in-process adapters belong to the server. The registry is the allowlist; successful CLI parsing alone grants nothing. All first-release capabilities require at least the viewer role, including static help and version. Existing viewers can read all configured sites; validating a site is not a site-level ACL.
+
+The opt-in `build_parser(strict=True)` reuses the CLI grammar and each command's pure cross-option validator. It disables abbreviations on every parser, rejects duplicate non-repeatable options (including aliases), never expands response files, and raises a fixed-message `StrictParseError` instead of printing or exiting. Repeated list options remain valid. Ordinary CLI parsing, help and shell completion are unchanged. Parsing performs no execution, file access or configuration loading.
+
+Only the optional first token `hlp` is normalized. Static `help`, `help info`, `version`, `-h`, `--help` and `--version` are resolved from trusted metadata; help cannot bypass unavailable options or commands. Command-specific help flags are inert parser flags. The first release offers plain text and the document's JSON text via `--json`; CSV and topology graph formats are unavailable. Server-selected settings replace every command's `--config` option.
+
+The matrix below is tested against the registry. Every CLI command and every option spelling, including aliases and options of unavailable commands, must be classified. Adding or removing a command, option or alias without updating the registry fails the parity test. Unknown capabilities remain denied even if the grammar accepts them. Restricted values still need the execution endpoint's shared validation and web caps.
+
+<!-- terminal-matrix:start -->
+| Scope | Argument | Status | Reason |
+| --- | --- | --- | --- |
+| `audit` | command | supported | Reviewed read-only report. |
+| `client` | command | supported | Reviewed read-only report. |
+| `completion` | command | unavailable | Shell completion scripts are not browser completion. |
+| `diagnose` | command | supported | Reviewed read-only report. |
+| `diff` | command | unavailable | Saved comparisons need reviewed server-managed resource IDs. |
+| `doctor` | command | unavailable | Installation diagnostics are not exposed to terminal viewers. |
+| `events` | command | supported | Reviewed read-only report. |
+| `export` | command | unavailable | Exports write files and need reviewed authenticated downloads. |
+| `firewall` | command | supported | Reviewed read-only report. |
+| `info` | command | supported | Reviewed read-only report. |
+| `init` | command | unavailable | Installation and configuration changes are not terminal operations. |
+| `new-clients` | command | supported | Reviewed read-only report. |
+| `query` | command | supported | Reviewed read-only report. |
+| `serve` | command | unavailable | Server process lifecycle is not a terminal operation. |
+| `snapshot` | command | unavailable | Snapshots write server files and need a separate capability review. |
+| `topology` | command | supported | Reviewed read-only report. |
+| `wan` | command | supported | Reviewed read-only report. |
+| `web-user` | command | unavailable | Account and security changes are not terminal operations. |
+| `wifi` | command | supported | Reviewed read-only report. |
+| `global` | `-h`, `--help` | restricted | Static help only; never runs a command. |
+| `global` | `--version` | supported | Reviewed read-only report argument. |
+| `global` | `--site` | restricted | Validated site; no site-level ACL is implied. |
+| `global` | `--verbose`, `--debug`, `--demo`, `--timeout`, `--parallel`, `--env-file`, `--color`, `--plain`, `--no-progress` | unavailable | Connection, configuration and presentation are server-owned. |
+| `audit` | `-h`, `--help` | restricted | Static help only; never runs a command. |
+| `audit` | `--fail-on`, `--show-ignored`, `--no-emoji`, `--json` | supported | Reviewed read-only report argument. |
+| `audit` | `--config` | unavailable | Client-selected server files are not permitted. |
+| `client` | `-h`, `--help` | restricted | Static help only; never runs a command. |
+| `client` | `--json`, `--no-events`, `--no-emoji` | supported | Reviewed read-only report argument. |
+| `client` | `--since` | restricted | Server-owned web caps apply; CLI all-results values are not unlimited. |
+| `client` | `--config` | unavailable | Client-selected server files are not permitted. |
+| `completion` | `-h`, `--help` | unavailable | Shell completion scripts are not browser completion. |
+| `diagnose` | `-h`, `--help` | restricted | Static help only; never runs a command. |
+| `diagnose` | `--fail-on`, `--only`, `--skip`, `--no-events`, `--show-ignored`, `--no-emoji`, `--json` | supported | Reviewed read-only report argument. |
+| `diagnose` | `--since` | restricted | Server-owned web caps apply; CLI all-results values are not unlimited. |
+| `diagnose` | `--config` | unavailable | Client-selected server files are not permitted. |
+| `diagnose` | `--watch`, `--notify`, `--notify-min`, `--notify-redact`, `--notify-dry-run`, `--notify-baseline`, `--notify-state` | unavailable | Notifications and persistent watch are not permitted. |
+| `diff` | `-h`, `--help`, `--dir`, `--last-two`, `--all`, `--json` | unavailable | Saved comparisons need reviewed server-managed resource IDs. |
+| `doctor` | `-h`, `--help`, `--offline`, `--no-events`, `--config`, `--json` | unavailable | Installation diagnostics are not exposed to terminal viewers. |
+| `events` | `-h`, `--help` | restricted | Static help only; never runs a command. |
+| `events` | `--category`, `--severity`, `--event`, `--client`, `--device`, `-s`, `--search`, `--summary`, `--json` | supported | Reviewed read-only report argument. |
+| `events` | `--since`, `--limit` | restricted | Server-owned web caps apply; CLI all-results values are not unlimited. |
+| `export` | `-h`, `--help`, `-o`, `--output-dir`, `--format`, `--include-offline` | unavailable | Exports write files and need reviewed authenticated downloads. |
+| `firewall` | `-h`, `--help` | restricted | Static help only; never runs a command. |
+| `firewall` | `--all`, `--zones`, `--search`, `--no-emoji`, `--json` | supported | Reviewed read-only report argument. |
+| `info` | `-h`, `--help` | restricted | Static help only; never runs a command. |
+| `init` | `-h`, `--help`, `--dir`, `--url`, `--site`, `--verify`, `--api-key-stdin`, `--no-input`, `--force`, `--check` | unavailable | Installation and configuration changes are not terminal operations. |
+| `new-clients` | `-h`, `--help` | restricted | Static help only; never runs a command. |
+| `new-clients` | `-s`, `--search`, `--json` | supported | Reviewed read-only report argument. |
+| `query` | `-h`, `--help` | restricted | Static help only; never runs a command. |
+| `query` | `-s`, `--search`, `--include-offline`, `--json`, `--switch`, `--down`, `--errors`, `--network`, `--ssid`, `--ap`, `--offline` | supported | Reviewed read-only report argument. |
+| `query` | `--config` | unavailable | Client-selected server files are not permitted. |
+| `query` | `--csv` | unavailable | The first release offers text and JSON, not CSV. |
+| `serve` | `-h`, `--help`, `--host`, `--allowed-host`, `--forwarded-allow-ips`, `--allow-public-controller`, `--read-only`, `--scheduler`, `--port`, `--data-dir`, `--config` | unavailable | Server process lifecycle is not a terminal operation. |
+| `snapshot` | `-h`, `--help`, `-o`, `--output`, `--dir`, `--keep`, `--force` | unavailable | Snapshots write server files and need a separate capability review. |
+| `topology` | `-h`, `--help` | restricted | Static help only; never runs a command. |
+| `topology` | `--clients`, `--json`, `--no-emoji` | supported | Reviewed read-only report argument. |
+| `topology` | `--format` | restricted | Only the plain-text tree is offered. |
+| `topology` | `--config` | unavailable | Client-selected server files are not permitted. |
+| `wan` | `-h`, `--help` | restricted | Static help only; never runs a command. |
+| `wan` | `--json` | supported | Reviewed read-only report argument. |
+| `wan` | `--days` | restricted | Server-owned web caps apply; CLI all-results values are not unlimited. |
+| `wan` | `--config` | unavailable | Client-selected server files are not permitted. |
+| `web-user` | `-h`, `--help`, `--role`, `--password-stdin`, `--data-dir` | unavailable | Account and security changes are not terminal operations. |
+| `wifi` | `-h`, `--help` | restricted | Static help only; never runs a command. |
+| `wifi` | `--band`, `--ap`, `--min-signal`, `--all`, `--json` | supported | Reviewed read-only report argument. |
+
+<!-- terminal-matrix:end -->
+
+### Planned execution limits
+
+These are server-owned defaults declared by the registry for #273 to enforce, not limits on the ordinary CLI.
+
+| Limit | Default |
+| --- | --- |
+| Request body, including chunked bodies | 16 KiB, counted before unrestricted JSON parsing |
+| Command tokens | 64, at most 256 characters each |
+| Executions per authenticated user | 1 at a time, 30 per minute |
+| Executions across the application | 4 at a time |
+| Output | 256 KiB, truncated on a character boundary with an explicit flag |
+
+An overall HTTP execution deadline must be defined separately from the existing controller timeout: the latter is per controller request, and reports may make multiple requests with retries. The execute endpoint must return a safe 504 when its deadline expires. A worker retains its concurrency slot until it finishes, including after a timeout or client disconnect. Aborting a request means "stopped waiting", not "terminated" or "cancelled".
+
+Output, warnings, candidate labels, errors and completion descriptions are untrusted. The endpoint must return plain text without active escape or bidirectional controls and redact secrets and sensitive server paths. JSON serialization is not redaction; it must receive the same explicit output-boundary review. Optional structured data must not bypass the output budget or redaction. Audit entries contain the user, resolved operation, approved resource identifiers, outcome, duration and correlation ID, never the raw command or report. Read-only audit failures warn; denial logging is rate-limited.
+
+### Supported report examples
+
+These examples are parsed and validated by the registry tests without contacting a controller. They describe the planned terminal subset and also remain valid ordinary CLI commands.
+
+```bash
+hlp info
+hlp diagnose --only wifi
+hlp audit --show-ignored
+hlp wan --days 7
+hlp wifi --band 5
+hlp topology --clients
+hlp firewall --zones
+hlp events --category one --category two --severity high
+hlp query clients --ssid 'Guest Wi-Fi'
+hlp new-clients --json
+hlp client 'Example Laptop'
+```
+
 ## What is not here yet
 
 The findings, inventory and settings screens come in later roadmap stages; the server serves the built app when one is installed (see [The web app files](#the-web-app-files)). The login uses the interface the accounts module was built for: an `Authenticator` that turns a username and password into a `Principal(username, role, source)`, with `LocalAccounts` (this page's accounts) as the first implementation. A wrong password, an unknown user and a disabled one all take the same work and give the same answer, so the answer does not reveal which usernames exist. Authentication checks the current account record and records the login under the same file lock, so a concurrent disable, role change or deletion cannot return a stale principal.

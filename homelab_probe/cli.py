@@ -8,7 +8,7 @@ import argparse
 import sys
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, List, NoReturn, Optional
 
 from . import __version__, logs
 from .client import UniFiAPIError, UniFiClient
@@ -38,6 +38,53 @@ class _Parser(argparse.ArgumentParser):
         # argparse defaults to exit code 2, which would look like a critical finding.
         self.print_usage(sys.stderr)
         self.exit(EXIT_USAGE, f"{self.prog}: error: {message}\n")
+
+
+class StrictParseError(ValueError):
+    """Invalid untrusted arguments; the message never contains submitted input."""
+
+
+class _StrictParser(argparse.ArgumentParser):
+    def __init__(self, *args: Any, terminal_scope: str = "", **kwargs: Any) -> None:
+        add_help = kwargs.pop("add_help", True)
+        kwargs.update(allow_abbrev=False, fromfile_prefix_chars=None, add_help=False)
+        super().__init__(*args, **kwargs)
+        self.terminal_scope = terminal_scope
+        self._provided: set[argparse.Action] = set()
+        if add_help:
+            self.add_argument("-h", "--help", action="store_true", help="show this help message and exit")
+
+    def error(self, message: str) -> NoReturn:
+        raise StrictParseError("The command arguments are not valid.") from None
+
+    def exit(self, status: int = 0, message: Optional[str] = None) -> NoReturn:
+        raise StrictParseError("The command arguments are not valid.") from None
+
+    def _get_values(self, action, arg_strings):
+        if any(value.startswith("@") for value in arg_strings):
+            self.error("response files are unavailable")
+        # argparse otherwise silently overwrites repeated scalar options, including aliases and --flag=value.
+        if action.option_strings:
+            if action in self._provided and not isinstance(action, argparse._AppendAction):
+                self.error("duplicate option")
+            self._provided.add(action)
+        return super()._get_values(action, arg_strings)
+
+    def parse_known_args(self, args=None, namespace=None):
+        if args is None or any(not isinstance(token, str) or token.startswith("@") for token in args):
+            self.error("explicit tokens required; response files are unavailable")
+        self._provided = set()
+        parsed, extras = super().parse_known_args(args, namespace)
+        provided = dict(getattr(parsed, "_terminal_options", {}))
+        provided[self.terminal_scope] = tuple(
+            flag for action in self._provided for flag in action.option_strings)
+        parsed._terminal_options = provided
+        return parsed, extras
+
+    def parse_args(self, args=None, namespace=None):
+        parsed = super().parse_args(args, namespace)
+        COMMANDS_BY_NAME[parsed.command].validate(self, parsed)
+        return parsed
 
 
 def _describe_connection(config: Any) -> str:
@@ -71,8 +118,9 @@ def _site(text: str) -> str:
         raise argparse.ArgumentTypeError(str(e)) from e
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = _Parser(
+def build_parser(*, strict: bool = False) -> argparse.ArgumentParser:
+    """The CLI grammar; strict mode raises safe errors and runs pure cross-option validation."""
+    parser = (_StrictParser if strict else _Parser)(
         prog="hlp",
         description="Query, troubleshoot and inventory a UniFi Network controller.",
         add_help=False,
@@ -80,8 +128,12 @@ def build_parser() -> argparse.ArgumentParser:
     general = parser.add_argument_group("general")
     connection = parser.add_argument_group("connection")
     presentation = parser.add_argument_group("presentation")
-    general.add_argument("-h", "--help", action="help", help="show this help message and exit")
-    general.add_argument("--version", action="version", version=__version__)
+    general.add_argument("-h", "--help", action="store_true" if strict else "help",
+                         help="show this help message and exit")
+    if strict:
+        general.add_argument("--version", action="store_true", help="show program's version number and exit")
+    else:
+        general.add_argument("--version", action="version", version=__version__)
     general.add_argument("--verbose", "--debug", action="store_true", dest="verbose",
                         help="Log each request to stderr (method, path, status, milliseconds, retries) and what "
                              "was read, never the API key (before the command)")
@@ -113,7 +165,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "says (before the command)")
     sub = parser.add_subparsers(dest="command", required=True, title="commands", metavar="COMMAND")
     for command in sorted(COMMANDS, key=lambda command: command.name):
-        command.add_arguments(sub.add_parser(command.name, help=command.help))
+        options: dict[str, Any] = {"terminal_scope": command.name} if strict else {}
+        command.add_arguments(sub.add_parser(command.name, help=command.help, **options))
     return parser
 
 
