@@ -98,7 +98,7 @@ Controller
 
 What the controller offers
   [OK  ] Devices (Integration API): 4 records
-  [WARN] Client history (stat/alluser): unavailable (HTTP 404): without it, offline clients, reservations, `new-clients`, `snapshot` and `diff`
+  [WARN] Client history (stat/alluser): unavailable (HTTP 404): without it, offline clients, reservations, new-device findings, `new-clients`, `snapshot` and `diff`
   [OK  ] Event log (the one read-only POST): answered (4 events in the last hour)
 
 1 warning ... 

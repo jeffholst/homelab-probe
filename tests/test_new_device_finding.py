@@ -108,6 +108,7 @@ def test_an_unreadable_client_history_reports_nothing_and_warns(fake_client, mon
     cli.main(["diagnose", "--only", "clients", "--json"])
     captured = capsys.readouterr()
     assert "client.new_device" not in captured.out and "stat/alluser unavailable" in captured.err
+    assert "new-device check (client.new_device) were skipped" in captured.err      # the warning says what was lost
 
 
 def test_the_threshold_loads_validates_and_is_in_the_example_file():
