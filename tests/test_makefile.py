@@ -77,7 +77,11 @@ def git(cwd, *args):
 
 
 @pytest.fixture
-def release_repo(tmp_path):
+def release_repo(tmp_path, monkeypatch):
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    for name in ("GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL", "EMAIL"):
+        monkeypatch.delenv(name, raising=False)
     origin, work, bin_dir = tmp_path / "origin.git", tmp_path / "work", tmp_path / "bin"
     subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(origin)], check=True)
     (work / "tools").mkdir(parents=True)
@@ -86,6 +90,8 @@ def release_repo(tmp_path):
     (work / "tools" / "release_notes.py").write_text(
         "import sys\nsys.exit(1 if sys.argv[1] == 'v9.9.9' else print('- the notes of ' + sys.argv[1]))\n")
     git(work, "init", "-q", "-b", "main")
+    git(work, "config", "--local", "user.name", "Release test")
+    git(work, "config", "--local", "user.email", "release-test@example.invalid")
     git(work, "add", "-A")
     git(work, "commit", "-q", "-m", "release commit")
     git(work, "remote", "add", "origin", str(origin))
@@ -137,6 +143,9 @@ def test_tag_creates_the_local_annotated_tag_and_does_not_push_it(release_repo):
     assert result.returncode == 0, result.stderr
     kind = subprocess.run(["git", "cat-file", "-t", "v1.2.3"], cwd=work, capture_output=True, text=True).stdout.strip()
     assert kind == "tag"                                    # annotated, not lightweight
+    tagger = subprocess.run(["git", "for-each-ref", "--format=%(taggername)|%(taggeremail)", "refs/tags/v1.2.3"],
+                            cwd=work, capture_output=True, text=True, check=True).stdout.strip()
+    assert tagger == "Release test|<release-test@example.invalid>"
     assert subprocess.run(["git", "tag", "--list"], cwd=origin, capture_output=True, text=True).stdout == ""
     assert "git push origin v1.2.3" in result.stdout
     again = run_check(release_repo, "1.2.3", "--tag")       # a second run refuses: the tag exists
