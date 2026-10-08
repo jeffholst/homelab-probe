@@ -63,7 +63,8 @@ export default defineConfig({
   webServer: {
     // The production build, served in front of the real servers (e2e/serve.mjs, which starts the demo preview last: its
     // port answering means every server is ready).
-    command: "npm run build && node e2e/serve.mjs",
+    // VITE_TERMINAL_MOCK=1 includes the terminal panel with its mock backend (e2e/terminal.spec.ts); a normal build has none.
+    command: "VITE_TERMINAL_MOCK=1 npm run build && node e2e/serve.mjs",
     url: `http://127.0.0.1:${port}/`,
     reuseExistingServer: false,
     timeout: 180_000,
