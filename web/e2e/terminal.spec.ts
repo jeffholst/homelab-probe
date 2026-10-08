@@ -127,14 +127,16 @@ test.describe("terminal panel", () => {
     await openTerminal(page, testInfo);
     await page.locator(".xterm-helper-textarea").focus();
     await page.keyboard.press("Escape");
-    await expect(page.getByRole("region", { name: "Terminal" })).toBeFocused();
+    const dock = page.getByRole("region", { name: "Terminal" });
+    await expect(dock).toBeFocused();
+    // Focus is visible where it landed (a style sheet that hides it would leave the keyboard user lost).
+    expect(await dock.evaluate((element) => getComputedStyle(element).outlineStyle)).not.toBe("none");
     await page.keyboard.press("Tab");
     const inTerminal = await page.evaluate(() => document.activeElement?.classList.contains("xterm-helper-textarea") ?? false);
     expect(inTerminal).toBe(false);
   });
 
   test("resizes with the keyboard, collapses, expands and closes", async ({ page }, testInfo) => {
-    test.skip(isPhone(testInfo), "the handle is for pointers and keyboards; the phone layout has a fixed height");
     await logIn(page);
     await openTerminal(page, testInfo);
     const handle = page.getByRole("slider", { name: "Resize the terminal" });
@@ -142,6 +144,8 @@ test.describe("terminal panel", () => {
     await handle.focus();
     await page.keyboard.press("ArrowUp");
     expect(Number(await handle.getAttribute("aria-valuenow"))).toBe(before + 24);
+    // The rendered panel follows (on a phone too: nothing in the style sheet overrides the chosen height).
+    await expect.poll(async () => Math.round((await page.getByRole("region", { name: "Terminal" }).boundingBox())?.height ?? 0)).toBe(before + 24);
     await page.getByRole("button", { name: "Collapse the terminal panel" }).click();
     await expect(page.getByRole("region", { name: "Terminal" })).toHaveAttribute("data-mode", "collapsed");
     await page.getByRole("button", { name: "Expand the terminal panel" }).click();

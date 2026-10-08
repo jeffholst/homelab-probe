@@ -1689,8 +1689,10 @@ legend {
   pointer-events: none;
 }
 
+/* Escape in the terminal hands focus to the dock itself, so it needs a visible focus mark like any other target. */
 .terminal-dock:focus {
-  outline: none;
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
 }
 
 .terminal-dock[data-mode="collapsed"] {
@@ -1859,10 +1861,6 @@ legend {
 }
 
 @media (max-width: 55.99rem) {
-  .terminal-dock[data-mode="open"] {
-    height: min(var(--terminal-phone-height, 22rem), calc(100dvh - var(--header-height))) !important;
-  }
-
   .terminal-dock__bar {
     gap: var(--space-1);
     padding-inline: var(--space-3) var(--space-2);

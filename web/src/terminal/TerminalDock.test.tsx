@@ -101,6 +101,20 @@ describe("the panel", () => {
     expect(Object.keys(window.localStorage)).toEqual([PANEL_HEIGHT_KEY]);
   });
 
+  it("brings a height saved on a bigger screen inside this window, and again when the window shrinks", async () => {
+    window.localStorage.setItem(PANEL_HEIGHT_KEY, "3000");
+    render(<Host controls={backend()} />);
+    const handle = screen.getByRole("slider", { name: "Resize the terminal" });
+    const max = Number(handle.getAttribute("aria-valuemax"));
+    expect(Number(handle.getAttribute("aria-valuenow"))).toBe(max);
+    const original = window.innerHeight;
+    window.innerHeight = 400;
+    await act(() => { window.dispatchEvent(new Event("resize")); return Promise.resolve(); });
+    expect(Number(handle.getAttribute("aria-valuenow"))).toBe(304);
+    expect(screen.getByRole("region", { name: "Terminal" })).toHaveStyle({ height: "304px" });
+    window.innerHeight = original;
+  });
+
   it("keeps room for itself on the page and gives it back when closed", async () => {
     render(<Host controls={backend()} />);
     expect(document.documentElement.style.getPropertyValue("--dock-space")).not.toBe("0px");

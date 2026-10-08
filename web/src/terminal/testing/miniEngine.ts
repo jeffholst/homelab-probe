@@ -117,6 +117,8 @@ function step(state: EngineState, action: EngineAction): StepResult {
   const before = Array.from(text.slice(0, cursor));
   const insert = (s: string) => withLine(state, text.slice(0, cursor) + s + text.slice(cursor), cursor + s.length);
   const none = (s: EngineState): StepResult => ({ state: s, effects: [] });
+  // While a command runs the prompt is locked: only Ctrl+C, a finished execution, a new command list and a reset get through.
+  if (state.running && !["interrupt", "executionFinished", "setCapabilities", "reset", "submit"].includes(action.type)) return none(state);
   switch (action.type) {
     case "insert": return /[\u0000-\u001f\u007f]/.test(action.text) ? none(state) : none(insert(action.text));
     case "paste": return /[\u0000-\u0008\u000b-\u001f\u007f]/.test(action.text.replace(/\r?\n/g, " "))

@@ -15,6 +15,11 @@ const STATUS_WORDS: Record<SessionStatus, string> = {
 };
 const KEY_STEP = 24;
 
+/** The tallest the open panel may be in this window: what is left under the header, with room to see the page. */
+function viewportMax(): number {
+  return Math.max(200, window.innerHeight - 96);
+}
+
 interface Props {
   services: TerminalServices;
   mode: DockMode;
@@ -30,7 +35,8 @@ interface Props {
  */
 export function TerminalDock({ services, mode, onMode, returnFocus }: Props) {
   const session = useTerminalSession(services, mode !== "closed");
-  const [height, setHeight] = useState(readPanelHeight);
+  // A height saved on a bigger screen is brought inside this window, and again whenever the window changes size.
+  const [height, setHeight] = useState(() => clampPanelHeight(readPanelHeight(), viewportMax()));
   const [opened, setOpened] = useState(false);
   const titleId = useId();
   const dock = useRef<HTMLElement>(null);
@@ -38,9 +44,8 @@ export function TerminalDock({ services, mode, onMode, returnFocus }: Props) {
   const visible = mode !== "closed";
   if (visible && !opened) setOpened(true);
 
-  const maxHeight = () => Math.max(200, window.innerHeight - 96);
   const resizeTo = useCallback((value: number, persist: boolean) => {
-    const next = clampPanelHeight(value, maxHeight());
+    const next = clampPanelHeight(value, viewportMax());
     setHeight(next);
     if (persist) writePanelHeight(next);
   }, []);
@@ -57,11 +62,21 @@ export function TerminalDock({ services, mode, onMode, returnFocus }: Props) {
   const onHandleKey = (event: KeyboardEvent<HTMLDivElement>) => {
     const delta = event.key === "ArrowUp" ? KEY_STEP : event.key === "ArrowDown" ? -KEY_STEP : 0;
     if (event.key === "Home") resizeTo(0, true);
-    else if (event.key === "End") resizeTo(maxHeight(), true);
+    else if (event.key === "End") resizeTo(viewportMax(), true);
     else if (delta !== 0) resizeTo(height + delta, true);
     else return;
     event.preventDefault();
   };
+
+  useEffect(() => {
+    const onResize = () => {
+      setHeight((current) => Math.min(current, viewportMax()));
+    };
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+    };
+  }, []);
 
   // The page keeps room for the open dock so it never covers the end of a page.
   useEffect(() => {
@@ -102,7 +117,7 @@ export function TerminalDock({ services, mode, onMode, returnFocus }: Props) {
               aria-orientation="vertical"
               aria-label="Resize the terminal"
               aria-valuemin={160}
-              aria-valuemax={maxHeight()}
+              aria-valuemax={viewportMax()}
               aria-valuenow={height}
               aria-valuetext={`${height} pixels high`}
               tabIndex={0}
