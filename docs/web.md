@@ -489,7 +489,7 @@ The opt-in `build_parser(strict=True)` reuses the CLI grammar and each command's
 
 Only the optional first token `hlp` is normalized. Static `help`, `help info`, `version`, `-h`, `--help` and `--version` are resolved from trusted metadata; help cannot bypass unavailable options or commands. Command-specific help flags are inert parser flags. The first release offers plain text and the document's JSON text via `--json`; CSV and topology graph formats are unavailable. Server-selected settings replace every command's `--config` option.
 
-The matrix below is tested against the registry. Every CLI command and every option spelling, including aliases and options of unavailable commands, must be classified. Adding or removing a command, option or alias without updating the registry fails the parity test. Unknown capabilities remain denied even if the grammar accepts them. Restricted values still need the execution endpoint's shared validation and web caps.
+The matrix below is tested against the registry. Every CLI command and every option spelling, including aliases and options of unavailable commands, must be classified. Positional choices and file-reference metadata are pinned explicitly too, including for unavailable commands. Adding or removing a command, option, alias or positional choice, or changing file-reference metadata, without updating the registry fails the parity test. Execution parsing also refuses grammar drift at runtime, even when the CLI parser would accept the new input; static help and version remain available. File metadata covers path-typed positionals as well as the snapshot references of diff. Restricted values still need the execution endpoint's shared validation and web caps.
 
 <!-- terminal-matrix:start -->
 | Scope | Argument | Status | Reason |
@@ -497,8 +497,10 @@ The matrix below is tested against the registry. Every CLI command and every opt
 | `audit` | command | supported | Reviewed read-only report. |
 | `client` | command | supported | Reviewed read-only report. |
 | `completion` | command | unavailable | Shell completion scripts are not browser completion. |
+| `completion` | positional choices: `bash`, `zsh`, `fish` | unavailable | Explicitly classified CLI positional choices. |
 | `diagnose` | command | supported | Reviewed read-only report. |
 | `diff` | command | unavailable | Saved comparisons need reviewed server-managed resource IDs. |
+| `diff` | file references | unavailable | Saved comparisons need reviewed server-managed resource IDs. |
 | `doctor` | command | unavailable | Installation diagnostics are not exposed to terminal viewers. |
 | `events` | command | supported | Reviewed read-only report. |
 | `export` | command | unavailable | Exports write files and need reviewed authenticated downloads. |
@@ -507,11 +509,13 @@ The matrix below is tested against the registry. Every CLI command and every opt
 | `init` | command | unavailable | Installation and configuration changes are not terminal operations. |
 | `new-clients` | command | supported | Reviewed read-only report. |
 | `query` | command | supported | Reviewed read-only report. |
+| `query` | positional choices: `all`, `devices`, `clients`, `reservations`, `ports`, `networks`, `wlans` | supported | Explicitly classified CLI positional choices. |
 | `serve` | command | unavailable | Server process lifecycle is not a terminal operation. |
 | `snapshot` | command | unavailable | Snapshots write server files and need a separate capability review. |
 | `topology` | command | supported | Reviewed read-only report. |
 | `wan` | command | supported | Reviewed read-only report. |
 | `web-user` | command | unavailable | Account and security changes are not terminal operations. |
+| `web-user` | positional choices: `add`, `list`, `set-role`, `disable`, `enable`, `delete`, `reset-password` | unavailable | Explicitly classified CLI positional choices. |
 | `wifi` | command | supported | Reviewed read-only report. |
 | `global` | `-h`, `--help` | restricted | Static help only; never runs a command. |
 | `global` | `--version` | supported | Reviewed read-only report argument. |

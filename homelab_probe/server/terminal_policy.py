@@ -10,7 +10,7 @@ from types import MappingProxyType
 from typing import Mapping, Optional, Sequence, Tuple
 
 from ..cli import StrictParseError, build_parser
-from ..completion import Spec
+from ..completion import Spec, spec
 
 BODY_BYTES = 16 * 1024
 TOKEN_COUNT = 64
@@ -54,28 +54,32 @@ class Capability:
     options: Mapping[str, Policy]
     operation: Optional[str]
     minimum_role: str = "viewer"
+    choices: Tuple[str, ...] = ()
+    files: bool = False
 
 
-def _report(name: str, flags: str = "", *groups: Tuple[str, Policy]) -> Capability:
+def _report(name: str, flags: str = "", *groups: Tuple[str, Policy],
+            choices: Tuple[str, ...] = ()) -> Capability:
     return Capability(Policy("supported", "Reviewed read-only report."),
-                      _options(("-h --help", HELP), (flags, READ), *groups), name)
+                      _options(("-h --help", HELP), (flags, READ), *groups), name, choices=choices)
 
 
-def _unavailable(reason: str, flags: str) -> Capability:
+def _unavailable(reason: str, flags: str, *, choices: Tuple[str, ...] = (), files: bool = False) -> Capability:
     policy = Policy("unavailable", reason)
-    return Capability(policy, _options(("-h --help " + flags, policy)), None)
+    return Capability(policy, _options(("-h --help " + flags, policy)), None, choices=choices, files=files)
 
 
 CAPABILITIES: Mapping[str, Capability] = MappingProxyType({
     "audit": _report("audit", "--fail-on --show-ignored --no-emoji --json", ("--config", FILE)),
     "client": _report("client", "--json --no-events --no-emoji", ("--since", BOUNDED), ("--config", FILE)),
-    "completion": _unavailable("Shell completion scripts are not browser completion.", ""),
+    "completion": _unavailable("Shell completion scripts are not browser completion.", "",
+                               choices=("bash", "zsh", "fish")),
     "diagnose": _report("diagnose", "--fail-on --only --skip --no-events --show-ignored --no-emoji --json",
                         ("--since", BOUNDED), ("--config", FILE),
                         ("--watch --notify --notify-min --notify-redact --notify-dry-run --notify-baseline "
                          "--notify-state", NOTIFY)),
     "diff": _unavailable("Saved comparisons need reviewed server-managed resource IDs.",
-                         "--dir --last-two --all --json"),
+                         "--dir --last-two --all --json", files=True),
     "doctor": _unavailable("Installation diagnostics are not exposed to terminal viewers.",
                            "--offline --no-events --config --json"),
     "events": _report("events", "--category --severity --event --client --device -s --search --summary --json",
@@ -88,7 +92,8 @@ CAPABILITIES: Mapping[str, Capability] = MappingProxyType({
                          "--dir --url --site --verify --api-key-stdin --no-input --force --check"),
     "new-clients": _report("new-clients", "-s --search --json"),
     "query": _report("query", "-s --search --include-offline --json --switch --down --errors --network --ssid "
-                     "--ap --offline", ("--config", FILE), ("--csv", TEXT_JSON)),
+                     "--ap --offline", ("--config", FILE), ("--csv", TEXT_JSON),
+                     choices=("all", "devices", "clients", "reservations", "ports", "networks", "wlans")),
     "serve": _unavailable("Server process lifecycle is not a terminal operation.",
                           "--host --allowed-host --forwarded-allow-ips --allow-public-controller --read-only "
                           "--scheduler --port --data-dir --config"),
@@ -97,14 +102,15 @@ CAPABILITIES: Mapping[str, Capability] = MappingProxyType({
     "topology": _report("topology", "--clients --json --no-emoji", ("--format", FORMAT), ("--config", FILE)),
     "wan": _report("wan", "--json", ("--days", BOUNDED), ("--config", FILE)),
     "web-user": _unavailable("Account and security changes are not terminal operations.",
-                             "--role --password-stdin --data-dir"),
+                             "--role --password-stdin --data-dir",
+                             choices=("add", "list", "set-role", "disable", "enable", "delete", "reset-password")),
     "wifi": _report("wifi", "--band --ap --min-signal --all --json"),
 })
 
 
 def compatibility_errors(grammar: Spec, capabilities: Mapping[str, Capability] = CAPABILITIES,
                          global_options: Mapping[str, Policy] = GLOBAL_OPTIONS) -> Tuple[str, ...]:
-    """Exact bidirectional parity, including aliases. Diagnostic names come from trusted grammar metadata."""
+    """Pin names, aliases and exported positional metadata. Diagnostics contain only trusted grammar names."""
     errors = []
     commands = {command.name: command for command in grammar.commands}
     if commands.keys() != capabilities.keys():
@@ -112,6 +118,11 @@ def compatibility_errors(grammar: Spec, capabilities: Mapping[str, Capability] =
     scopes = [("global", grammar.options, global_options)]
     scopes += [(name, command.options, capabilities[name].options)
                for name, command in commands.items() if name in capabilities]
+    for name, command in commands.items():
+        if name in capabilities:
+            capability = capabilities[name]
+            if command.choices != capability.choices or command.files != capability.files:
+                errors.append(f"Positional classifications do not match: {name}.")
     for scope, options, policies in scopes:
         flags = {flag for option in options for flag in option.flags}
         if flags != policies.keys():
@@ -147,7 +158,10 @@ def parse_command(argv: Sequence[str]) -> ParsedCommand:
         if capability is None or capability.operation is None:
             raise UnsupportedCapability("This operation is unavailable in the browser.")
         return ParsedCommand("help", argparse.Namespace(topic=topic))
-    args = build_parser(strict=True).parse_args(tokens)
+    parser = build_parser(strict=True)
+    if compatibility_errors(spec(parser)):
+        raise UnsupportedCapability("The CLI grammar has unreviewed changes; execution is unavailable in the browser.")
+    args = parser.parse_args(tokens)
     capability = CAPABILITIES.get(args.command)
     if capability is None or capability.operation is None:
         raise UnsupportedCapability("This operation is unavailable in the browser.")
@@ -168,6 +182,12 @@ def compatibility_markdown() -> str:
     scopes = [("global", GLOBAL_OPTIONS)]
     for name, capability in CAPABILITIES.items():
         rows.append(f"| `{name}` | command | {capability.policy.status} | {capability.policy.reason} |")
+        if capability.choices:
+            choices = ", ".join(f"`{choice}`" for choice in capability.choices)
+            rows.append(f"| `{name}` | positional choices: {choices} | {capability.policy.status} | "
+                        "Explicitly classified CLI positional choices. |")
+        if capability.files:
+            rows.append(f"| `{name}` | file references | {capability.policy.status} | {capability.policy.reason} |")
         scopes.append((name, capability.options))
     for scope, options in scopes:
         grouped: dict[Policy, list[str]] = {}

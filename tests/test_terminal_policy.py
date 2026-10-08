@@ -167,6 +167,46 @@ def test_parity_detects_new_and_stale_commands_options_and_aliases():
     assert policy.compatibility_errors(grammar, capabilities=stale_commands)
 
 
+@pytest.mark.parametrize("name", ["query", "completion", "web-user"])
+@pytest.mark.parametrize("change", ["added", "removed"])
+def test_parity_detects_new_and_stale_positional_choices(name, change):
+    grammar = spec(build_parser())
+    command = next(command for command in grammar.commands if command.name == name)
+    choices = (*command.choices, "unreviewed") if change == "added" else command.choices[:-1]
+    changed = replace(grammar, commands=tuple(
+        replace(item, choices=choices) if item.name == name else item for item in grammar.commands))
+    assert policy.compatibility_errors(changed) == (f"Positional classifications do not match: {name}.",)
+
+
+@pytest.mark.parametrize("name", ["info", "diff"])
+def test_parity_detects_added_and_removed_file_positional_metadata(name):
+    grammar = spec(build_parser())
+    changed = replace(grammar, commands=tuple(
+        replace(command, files=not command.files) if command.name == name else command
+        for command in grammar.commands))
+    assert policy.compatibility_errors(changed) == (f"Positional classifications do not match: {name}.",)
+
+
+@pytest.mark.parametrize("file_argument", [False, True])
+def test_runtime_refuses_unreviewed_positional_grammar_even_if_the_parser_accepts_it(monkeypatch, file_argument):
+    parser = build_parser(strict=True)
+    sub = next(action for action in parser._actions if isinstance(action, argparse._SubParsersAction))
+    if file_argument:
+        sub.choices["info"].add_argument("source", nargs="?", type=Path)
+        argv = ["info", "secret.json"]
+    else:
+        kind = next(action for action in sub.choices["query"]._actions if action.dest == "kind")
+        kind.choices = (*kind.choices, "unreviewed")
+        argv = ["query", "unreviewed"]
+    assert parser.parse_args(argv).command == argv[0]
+    assert policy.compatibility_errors(spec(parser))
+    monkeypatch.setattr(policy, "build_parser", lambda **kwargs: parser)
+    monkeypatch.setattr("builtins.open", fail)
+    monkeypatch.setattr(Path, "open", fail)
+    with pytest.raises(policy.UnsupportedCapability, match="unreviewed changes"):
+        policy.parse_command(argv)
+
+
 def test_registry_is_the_allowlist_even_when_grammar_changes(monkeypatch):
     parser = build_parser(strict=True)
     parser.add_argument("--unreviewed", action="store_true")
@@ -176,6 +216,11 @@ def test_registry_is_the_allowlist_even_when_grammar_changes(monkeypatch):
     monkeypatch.setitem(cli.COMMANDS_BY_NAME, "unreviewed", replace(COMMANDS[0], name="unreviewed"))
     assert new_command is not None
     monkeypatch.setattr(policy, "build_parser", lambda **kwargs: parser)
+    for argv in (["--unreviewed", "info"], ["info", "--unreviewed"], ["unreviewed"]):
+        with pytest.raises(policy.UnsupportedCapability):
+            policy.parse_command(argv)
+    # The registry must still deny unknown capabilities independently of the grammar-drift guard.
+    monkeypatch.setattr(policy, "compatibility_errors", lambda grammar: ())
     for argv in (["--unreviewed", "info"], ["info", "--unreviewed"], ["unreviewed"]):
         with pytest.raises(policy.UnsupportedCapability):
             policy.parse_command(argv)

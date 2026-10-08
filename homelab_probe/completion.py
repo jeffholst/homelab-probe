@@ -83,7 +83,7 @@ def spec(parser: argparse.ArgumentParser) -> Spec:
         commands.append(Command(
             name, helps.get(name, ""), _options(sub),
             choices=next((tuple(str(c) for c in a.choices) for a in positionals if a.choices), ()),
-            files=any(a.dest == "refs" for a in positionals)))
+            files=any(a.dest == "refs" or a.type is Path for a in positionals)))
     return Spec(_options(parser), tuple(commands))
 
 
