@@ -26,6 +26,8 @@ export type OptionMeta = TerminalCapabilitiesV1.OptionMetadata;
 export type Candidate = TerminalCompleteResultV1.CompletionCandidate;
 /** `[command, ...arguments]` with the optional leading `hlp` removed: exactly the `argv` of the execute request. */
 export type Argv = [string, ...string[]];
+/** Unquoted completion tokens, optionally including `hlp`; an empty line is [''], never []. */
+export type CompletionArgv = [string, ...string[]];
 
 // -- options ---------------------------------------------------------------------------------------------
 
@@ -122,8 +124,12 @@ export interface EngineState {
   readonly suggestions: SuggestionState;
   /** Metadata from `GET /api/v1/terminal/capabilities`; null until loaded or when it cannot be loaded. */
   readonly capabilities: Capabilities | null;
-  /** True between an `execute` effect and `executionFinished`. */
+  /** True exactly while activeExecution is non-null. Only its matching completion can clear it. */
   readonly running: boolean;
+  /** Incremented for each execute and reset; reset must never rewind it. */
+  readonly executionSeq: number;
+  /** The execute effect's seq, or null when idle; stale executionFinished actions are ignored. */
+  readonly activeExecution: number | null;
   /** Last problem worth telling the user (a refused paste, a malformed line), cleared by the next edit. */
   readonly notice: Notice | null;
 }
@@ -166,17 +172,20 @@ export type EngineAction =
   | { readonly type: 'submit' }
   | { readonly type: 'interrupt' } // Ctrl+C
   | { readonly type: 'clearOutput' } // Ctrl+L: clear/redraw the transcript, preserving the editable line
-  | { readonly type: 'executionFinished' }
+  /** Echo the execute effect's seq; ignore it unless it equals state.activeExecution. The caller must
+   * separately drop old-session output/errors and must not reconstruct state with initialState on logout. */
+  | { readonly type: 'executionFinished'; readonly seq: number }
   | { readonly type: 'reset' }; // session ended: forget the line, history, drafts, suggestions and capabilities
 
 /** What the caller must do. The engine never does I/O itself. */
 export type Effect =
   /** Start exactly ONE request with this argv. The caller adds the `requestId` and records the submitted
-   * command from `argv`, never from the terminal's display. Emitted at most once until `executionFinished`. */
-  | { readonly type: 'execute'; readonly argv: Argv; readonly line: string }
+   * command from `argv`, never from the terminal's display. Echo seq on executionFinished; it is an engine
+   * generation, not an API requestId or authorization token. Emitted at most once until its matching completion. */
+  | { readonly type: 'execute'; readonly seq: number; readonly argv: Argv; readonly line: string }
   /** Ask `POST /api/v1/terminal/complete` (the caller debounces and sends only on explicit Tab). `seq` and
    * `revision` come back in `suggestionsArrived`. */
-  | { readonly type: 'complete'; readonly seq: number; readonly revision: number; readonly argv: string[];
+  | { readonly type: 'complete'; readonly seq: number; readonly revision: number; readonly argv: CompletionArgv;
       readonly tokenIndex: number; readonly cursor: number }
   /** Ctrl+C. `running` tells the UI which message to show; while running the UI may only say that WAITING
    * stopped, never that the backend was cancelled. The line is cleared only when idle. */
