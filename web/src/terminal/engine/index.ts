@@ -1,6 +1,6 @@
 /** Pure terminal model. The caller renders state and performs effects; no I/O occurs here. */
 export type * from './types';
-import type { EngineAction, EngineApi, EngineOptions, EngineState, LineState, Notice, StepResult, SubmitGate } from './types';
+import type { CompletionArgv, EngineAction, EngineApi, EngineOptions, EngineState, LineState, Notice, StepResult, SubmitGate } from './types';
 import { forbidden, quoteToken, tokenize } from './lexical';
 import { boundaries, wordBoundary, wrapLine } from './line';
 import { decodeInput, initialInputState } from './input';
@@ -15,7 +15,7 @@ function initialState(options: EngineOptions = {}): EngineState {
     options: resolved, line: { text: '', cursor: 0 }, revision: 0, completionSeq: 0, completionPending: null,
     tokenized: tokenize('', 0), history: { entries: [], position: null, draft: null }, pendingPaste: null,
     suggestions: { items: [], truncated: false, seq: 0, revision: 0, selected: null },
-    capabilities: null, running: false, notice: null,
+    capabilities: null, running: false, executionSeq: 0, activeExecution: null, notice: null,
   };
 }
 
@@ -78,11 +78,12 @@ function step(state: EngineState, action: EngineAction): StepResult {
     case 'clearOutput': return { state, effects: [{ type: 'clearOutput' }] };
     case 'reset': {
       const fresh = initialState(state.options), revision = state.revision + 1;
-      return done({ ...fresh, revision, completionSeq: state.completionSeq + 1,
+      return done({ ...fresh, revision, completionSeq: state.completionSeq + 1, executionSeq: state.executionSeq + 1,
         suggestions: { ...fresh.suggestions, revision } });
     }
     case 'setCapabilities': return done(context({ ...state, capabilities: action.capabilities ? structuredClone(action.capabilities) : null }));
-    case 'executionFinished': return done(state.running ? { ...state, running: false } : state);
+    case 'executionFinished': return done(state.activeExecution !== null && action.seq === state.activeExecution
+      ? { ...state, running: false, activeExecution: null } : state);
     case 'interrupt': return { state: state.running ? state : context({ ...state, pendingPaste: null }, { text: '', cursor: 0 }),
       effects: [{ type: 'interrupted', running: state.running }] };
     case 'inputRejected': return notice(state, { kind: 'paste_refused', reason: action.reason });
@@ -105,10 +106,11 @@ function step(state: EngineState, action: EngineAction): StepResult {
       }
       const entries = [...state.history.entries];
       if (entries.at(-1) !== state.line.text) entries.push(state.line.text);
-      const next = context({ ...state, running: true, history: {
+      const seq = state.executionSeq + 1;
+      const next = context({ ...state, running: true, executionSeq: seq, activeExecution: seq, history: {
         entries: state.options.historyLimit ? entries.slice(-state.options.historyLimit) : [], position: null, draft: null },
       }, { text: '', cursor: 0 });
-      return { state: next, effects: [{ type: 'execute', argv: gate.argv, line: state.line.text }] };
+      return { state: next, effects: [{ type: 'execute', seq, argv: gate.argv, line: state.line.text }] };
     }
   }
   if (state.running) return done();
@@ -142,7 +144,9 @@ function step(state: EngineState, action: EngineAction): StepResult {
       const next = { ...state, suggestions: { ...state.suggestions, ...local, selected: null } };
       if (local.items.length === 1 && !local.truncated) return done(select(next, 0));
       const seq = state.completionSeq + 1;
-      const argv = state.tokenized.tokens.map(t => t.value);
+      const [first, ...rest] = state.tokenized.tokens.map(t => t.value);
+      if (first === undefined) return done(next);
+      const argv: CompletionArgv = [first, ...rest];
       if (argv.some(forbidden) || limitExceeded(state, state.line.text)) return done(next);
       return { state: { ...next, completionSeq: seq, completionPending: { seq, revision: state.revision } },
         effects: [{ type: 'complete', seq, revision: state.revision, argv,

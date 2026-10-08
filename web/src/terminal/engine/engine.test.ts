@@ -6,6 +6,7 @@ import type { Candidate, Capabilities, EngineAction, EngineState, OptionMeta } f
 
 const capabilities = fixture.capabilities as Capabilities;
 const apply = (state: EngineState, action: EngineAction) => engine.step(state, action).state;
+const finish = (state: EngineState) => apply(state, { type: 'executionFinished', seq: state.executionSeq });
 function ready(text = '') {
   let state = apply(engine.initialState(), { type: 'setCapabilities', capabilities });
   state = apply(state, { type: 'insert', text });
@@ -43,17 +44,17 @@ describe('terminal engine contract', () => {
 
   it('emits one execute effect, strips only the optional hlp prefix and keeps running on interrupt', () => {
     const result = engine.step(ready('hlp query clients'), { type: 'submit' });
-    expect(result.effects).toEqual([{ type: 'execute', argv: ['query', 'clients'], line: 'hlp query clients' }]);
+    expect(result.effects).toEqual([{ type: 'execute', seq: 1, argv: ['query', 'clients'], line: 'hlp query clients' }]);
     expect(engine.step(result.state, { type: 'submit' }).effects).toEqual([]);
     const stopped = engine.step(result.state, { type: 'interrupt' });
     expect(stopped.effects).toEqual([{ type: 'interrupted', running: true }]);
     expect(stopped.state.running).toBe(true);
-    expect(engine.canSubmit(apply(result.state, { type: 'executionFinished' })).allowed).toBe(false);
+    expect(engine.canSubmit(finish(result.state)).allowed).toBe(false);
   });
 
   it('restores history and the unfinished draft without executing', () => {
     let state = engine.step(ready('query clients'), { type: 'submit' }).state;
-    state = apply(state, { type: 'executionFinished' });
+    state = finish(state);
     state = apply(state, { type: 'insert', text: 'unfinished' });
     const result = engine.step(state, { type: 'historyPrevious' });
     expect(result.effects).toEqual([]);
@@ -172,7 +173,7 @@ describe('terminal engine contract', () => {
     for (const text of ['query clients', 'query clients', 'query devices', 'query ports']) {
       state = apply(state, { type: 'insert', text });
       state = apply(state, { type: 'submit' });
-      state = apply(state, { type: 'executionFinished' });
+      state = finish(state);
     }
     expect(state.history.entries).toEqual(['query devices', 'query ports']);
     expect(apply(state, { type: 'historyNext' })).toBe(state);
@@ -215,8 +216,8 @@ describe('terminal engine contract', () => {
       { type: 'historyPrevious' }, { type: 'left' }, { type: 'tab' }] satisfies EngineAction[]) {
       expect(apply(running, action)).toBe(running);
     }
-    const idle = apply(running, { type: 'executionFinished' });
-    expect(apply(idle, { type: 'executionFinished' })).toBe(idle);
+    const idle = finish(running);
+    expect(finish(idle)).toBe(idle);
     const state = apply(idle, { type: 'insert', text: 'draft' });
     const result = engine.step(state, { type: 'interrupt' });
     expect(result.effects).toEqual([{ type: 'interrupted', running: false }]);
@@ -360,5 +361,39 @@ describe('terminal engine contract', () => {
     const running = apply(ready('query clients'), { type: 'submit' });
     expect(engine.step(running, { type: 'clearOutput' }).state).toBe(running);
     expect(running.running).toBe(true);
+  });
+
+  it('ignores old-session and duplicate execution completions while a newer request is running', () => {
+    const previous = apply(ready('query clients'), { type: 'submit' });
+    const oldSeq = previous.activeExecution!;
+    let state = apply(previous, { type: 'reset' });
+    state = apply(state, { type: 'setCapabilities', capabilities });
+    state = apply(state, { type: 'insert', text: 'query devices' });
+    state = apply(state, { type: 'submit' });
+    const currentSeq = state.activeExecution!;
+    expect(apply(state, { type: 'executionFinished', seq: oldSeq })).toBe(state);
+    expect(state.running).toBe(true);
+    expect(currentSeq).toBeGreaterThan(oldSeq);
+    expect(engine.step(state, { type: 'submit' }).effects).toEqual([]);
+    state = apply(state, { type: 'executionFinished', seq: currentSeq });
+    expect(state.running).toBe(false);
+    expect(state.activeExecution).toBeNull();
+    expect(apply(state, { type: 'executionFinished', seq: currentSeq })).toBe(state);
+    state = apply(state, { type: 'insert', text: 'query ports' });
+    state = apply(state, { type: 'submit' });
+    expect(apply(state, { type: 'executionFinished', seq: currentSeq })).toBe(state);
+    expect(state.running).toBe(true);
+  });
+
+  it('emits a non-empty completion argv for an empty line and after trailing whitespace', () => {
+    for (const text of ['', 'query ']) {
+      const result = engine.step(ready(text), { type: 'tab' });
+      const effect = result.effects[0];
+      if (effect?.type !== 'complete') throw new Error('Expected completion effect');
+      expect(effect.argv.length).toBeGreaterThan(0);
+      expect(effect.argv.at(-1)).toBe('');
+      expect(effect.tokenIndex).toBe(effect.argv.length - 1);
+      expect(effect.cursor).toBe(0);
+    }
   });
 });
