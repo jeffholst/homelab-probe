@@ -214,11 +214,12 @@ async function startServer(mode) {
 }
 
 /** Serves the build on `port` in front of the server at `target` (vite.config.ts reads HLP_API_TARGET when loaded). */
-async function servePreview(port, server) {
+async function servePreview(port, server, outDir = "dist") {
   process.env.HLP_API_TARGET = server.target;
   const app = await preview({
     root: web,
     configFile: path.join(web, "vite.config.ts"),
+    build: { outDir: path.join(web, outDir) },
     preview: {
       host: "127.0.0.1",
       port,
@@ -249,3 +250,9 @@ const wanted = (process.env.E2E_SERVERS ?? `demo:${portOf("E2E_PORT")}`).split("
 wanted.sort((a, b) => Number(a.mode === "demo") - Number(b.mode === "demo"));
 const servers = await Promise.all(wanted.map(({ mode }) => startServer(mode)));
 for (const [index, { port }] of wanted.entries()) await servePreview(port, servers[index]);
+const terminalApiPort = process.env.E2E_TERMINAL_API_PORT;
+if (terminalApiPort) {
+  const demoIndex = wanted.findIndex(({ mode }) => mode === "demo");
+  if (demoIndex < 0) throw new Error("the terminal API preview needs a demo server");
+  await servePreview(portOf("E2E_TERMINAL_API_PORT"), servers[demoIndex], "dist-terminal-api");
+}

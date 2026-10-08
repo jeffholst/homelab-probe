@@ -64,7 +64,7 @@ const storageGlobals = ["localStorage", "sessionStorage", "indexedDB"].map((name
 }));
 
 export default tseslint.config(
-  { ignores: ["dist", "node_modules", "test-results", "playwright-report", "src/generated"] },
+  { ignores: ["dist", "dist-terminal-api", "node_modules", "test-results", "playwright-report", "src/generated"] },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
   jsxA11y.flatConfigs.recommended,
