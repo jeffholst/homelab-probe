@@ -1,4 +1,5 @@
 """The maintainer's shortcuts (Makefile) run what CI runs and never touch the data kept next to the code."""
+import os
 import re
 import shutil
 import subprocess
@@ -37,15 +38,22 @@ def test_ci_runs_the_commands_the_ci_workflow_runs():
                              ("npm run check:types", "npm --prefix web run check")):
         assert command in ci and in_make in plan, command
     assert "pytest" in dry_run("test") and "coverage run -m pytest" in plan
+    # the CI base-install job: the core alone, without the web and pretty extras
+    assert "uv sync --locked\n" in ci and "--extra" not in dry_run("test-core") and "--isolated" in plan
+
+
+def without_prune_group(plan: str) -> str:
+    """The protected names may appear only as paths the `find` is told to skip."""
+    return re.sub(r"\\\( .*? \\\) -prune", "", plan)
 
 
 def test_clean_names_only_disposable_paths():
     for target in ("clean", "clean-all"):
-        plan = dry_run(target)
+        plan = without_prune_group(dry_run(target))
         for name in PROTECTED:
             assert name not in plan, f"make {target} mentions {name}"
         assert "git" not in plan and " * " not in plan
-    assert ".venv" in dry_run("clean-all") and ".venv" not in dry_run("clean").replace("./.venv/", "")
+    assert ".venv" in dry_run("clean-all") and ".venv" not in without_prune_group(dry_run("clean"))
 
 
 def test_nothing_in_the_release_shortcuts_pushes():
@@ -89,9 +97,27 @@ def release_repo(tmp_path):
     return work, origin, bin_dir
 
 
+@needs_git
+def test_release_check_rejects_extra_arguments_before_doing_anything(release_repo):
+    result = run_check(release_repo, "1.2.3", "--tag", "typo")
+    assert result.returncode == 1 and "too many arguments" in result.stderr and "PASS" not in result.stdout
+    assert subprocess.run(["git", "tag", "--list"], cwd=release_repo[0], capture_output=True, text=True).stdout == ""
+
+
+@needs_git
+def test_a_failed_remote_tag_query_is_not_taken_for_an_absent_tag(release_repo, tmp_path):
+    fake = tmp_path / "fakebin"
+    fake.mkdir()
+    real = shutil.which("git")
+    (fake / "git").write_text(f'#!/bin/sh\nif [ "$1" = ls-remote ]; then echo "fatal: unable to access" >&2; exit 128; fi\nexec {real} "$@"\n')
+    (fake / "git").chmod(0o755)
+    result = run_check(release_repo, "1.2.3", "--tag", env={"PATH": f"{fake}:{release_repo[2]}:{os.environ['PATH']}"})
+    assert result.returncode == 1 and "could not check the tags" in result.stderr and "128" in result.stderr
+    assert subprocess.run([real, "tag", "--list"], cwd=release_repo[0], capture_output=True, text=True).stdout == ""
+
+
 def run_check(repo, *args, env=None):
     work, _origin, bin_dir = repo
-    import os
     environment = {**os.environ, "PYTHON": "python3", "PATH": f"{bin_dir}:{os.environ['PATH']}", **(env or {})}
     return subprocess.run(["bash", "tools/release_check.sh", *args], cwd=work, env=environment, capture_output=True, text=True)
 
@@ -167,3 +193,18 @@ def test_release_check_wants_a_green_ci_run_for_this_commit(release_repo, ci):
     result = run_check(release_repo, "1.2.3", "--tag", env={"FAKE_CI": ci.format(sha=sha)})
     assert result.returncode == 1 and "CI run on main" in result.stderr
     assert subprocess.run(["git", "tag", "--list"], cwd=work, capture_output=True, text=True).stdout == ""
+
+
+def test_clean_really_leaves_the_data_directories_alone(tmp_path):
+    keep = ["snapshots/__pycache__/a.pyc", "snapshots/s/__pycache__/b.pyc", "certs/__pycache__/c.pyc",
+            ".venv/lib/__pycache__/d.pyc", "web/node_modules/p/__pycache__/e.pyc", ".env", "hlp.toml", "users.json",
+            "snapshots/snapshot-1.json"]
+    gone = ["tests/__pycache__/f.pyc", "homelab_probe/__pycache__/g.pyc", ".pytest_cache/h", "web/dist/i.js", "build/j"]
+    for name in keep + gone:
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("x")
+    subprocess.run(["make", "-C", str(tmp_path), "-f", str(ROOT / "Makefile"), "clean"], check=True, capture_output=True)
+    assert [name for name in keep if not (tmp_path / name).exists()] == []
+    assert [name for name in gone if (tmp_path / name).exists()] == []
+    assert not (tmp_path / "tests" / "__pycache__").exists()

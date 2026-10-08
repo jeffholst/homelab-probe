@@ -3,7 +3,7 @@
 UV_RUN := uv run --extra web --extra pretty
 
 .DEFAULT_GOAL := help
-.PHONY: help install test lint fix types lock coverage check web-install web-check web-e2e ci golden demo release-check tag clean clean-all
+.PHONY: help install test lint fix types lock coverage check web-install web-check web-e2e ci test-core golden demo release-check tag clean clean-all
 
 help: ## List the tasks
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -13,6 +13,9 @@ install: ## Install the locked Python dependencies (dev tools, web and pretty ex
 
 test: ## Run the whole test suite
 	$(UV_RUN) python -m pytest -q
+
+test-core: ## Tests in a throwaway environment without the web and pretty extras (the CI base-install job)
+	uv run --isolated --locked python -m pytest -q
 
 lint: ## Ruff: style problems, unused imports, import order
 	$(UV_RUN) ruff check .
@@ -41,7 +44,7 @@ web-check: ## Web: generated types, lint, strict TypeScript, unit tests, build
 web-e2e: ## Web: Playwright browser tests (first time: npx playwright install chromium)
 	npm --prefix web run e2e
 
-ci: check coverage web-check ## Everything CI runs except the browser tests and the Docker job
+ci: check test-core coverage web-check ## Everything CI runs except the browser tests and the Docker job
 
 golden: ## Rewrite the golden files and README samples, then review the git diff
 	UPDATE_GOLDEN=1 $(UV_RUN) python -m pytest -q tests/test_golden.py
@@ -61,7 +64,7 @@ tag: ## Preflight, then create only the LOCAL annotated tag vX.Y.Z (you push it)
 # never use `git clean` or a wildcard that could match it.
 clean: ## Remove caches and build output (keeps .venv, node_modules and all your data)
 	rm -rf .pytest_cache .ruff_cache .mypy_cache .coverage build homelab_probe.egg-info web/dist web/test-results web/playwright-report
-	find . -name __pycache__ -type d -not -path ./.venv/\* -not -path ./web/node_modules/\* -prune -exec rm -rf {} +
+	find . \( -path ./.git -o -path ./.venv -o -path ./web/node_modules -o -path ./snapshots -o -path ./certs -o -path ./recovery \) -prune -o -name __pycache__ -type d -prune -exec rm -rf {} +
 
 clean-all: clean ## Also remove .venv and web/node_modules (run install and web-install again)
 	rm -rf .venv web/node_modules

@@ -100,7 +100,8 @@ uv run --extra web --extra pretty coverage report
 ```
 
 A `Makefile` wraps these commands; `make` lists the tasks. `make check` runs the lockfile, lint, type and test
-checks of the Python CI jobs, `make coverage` adds the 100% gate, `make web-check` the web checks, `make ci` all of
+checks of the Python CI jobs, `make test-core` runs the tests in a throwaway environment without the web and pretty extras (the CI
+`base-install` job), `make coverage` adds the 100% gate, `make web-check` the web checks, `make ci` all of
 those, `make golden` rewrites the golden files and README samples (review the diff), and `make demo` serves the
 synthetic network, and `make release-check` and `make tag` help with a release
 (see [Shortcuts for the checks and the tag](#shortcuts-for-the-checks-and-the-tag)). `make clean` removes only caches and build output; `make clean-all` also removes `.venv` and
@@ -247,12 +248,13 @@ make tag VERSION=0.5.0
 git push origin v0.5.0
 ```
 
-Both stop at the first check that fails and say why. The checks, in order:
+Both stop at the first check that fails and say why, and reject any argument other than the version and `--tag`. The checks, in order:
 
 1. `VERSION` is `X.Y.Z` (no leading `v`).
 2. The working tree is clean (`git status --porcelain` prints nothing).
 3. You are on `main` and it equals `origin/main` (the script runs `git fetch origin main` first).
-4. The tag `vX.Y.Z` does not exist locally or on `origin`.
+4. The tag `vX.Y.Z` does not exist locally or on `origin` (a failed query of `origin` is an error, never taken for
+   "no such tag").
 5. `homelab_probe.__version__` is `X.Y.Z` and `CHANGELOG.md` has a dated, non-empty entry for it
    (`tools/release_notes.py`, the same check the release workflow makes).
 6. The latest `ci.yml` run on `main`, read with `gh`, is a completed success **for this exact commit**.

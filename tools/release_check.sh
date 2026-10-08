@@ -10,6 +10,7 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+[ "$#" -le 2 ] || { echo "FAIL: too many arguments (usage: release_check.sh X.Y.Z [--tag])" >&2; exit 1; }
 VERSION="${1:-}"
 MODE="${2:-}"
 REMOTE=origin
@@ -32,9 +33,14 @@ HEAD_SHA="$(git rev-parse HEAD)"
 pass "on main, equal to $REMOTE/main"
 
 [ -z "$(git tag --list "$TAG")" ] || fail "the tag $TAG already exists locally"
-if git ls-remote --exit-code --tags "$REMOTE" "refs/tags/$TAG" >/dev/null 2>&1; then
-    fail "the tag $TAG already exists on $REMOTE"
-fi
+# --exit-code: 0 = the tag is there, 2 = no such ref; anything else is a failed query, never "absent"
+status=0
+git ls-remote --exit-code --tags "$REMOTE" "refs/tags/$TAG" >/dev/null 2>&1 || status=$?
+case "$status" in
+    0) fail "the tag $TAG already exists on $REMOTE" ;;
+    2) ;;
+    *) fail "could not check the tags on $REMOTE (git ls-remote exited with $status)" ;;
+esac
 pass "the tag $TAG does not exist yet"
 
 NOTES="$($PYTHON tools/release_notes.py "$TAG")" || fail "the version or the CHANGELOG.md entry does not match $TAG (see the message above)"
