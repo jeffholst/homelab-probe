@@ -4,11 +4,19 @@ import argparse
 import json
 from pathlib import Path
 
-from homelab_probe.server.terminal_api import CapabilitiesResult, ExecuteBody, ExecuteResult, TerminalError
+from homelab_probe.server.terminal_api import (
+    CapabilitiesResult,
+    CompleteBody,
+    CompleteResult,
+    ExecuteBody,
+    ExecuteResult,
+    TerminalError,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 MODELS = {"terminal-capabilities.v1": CapabilitiesResult,
           "terminal-execute-request.v1": ExecuteBody, "terminal-execute-result.v1": ExecuteResult,
+          "terminal-complete-request.v1": CompleteBody, "terminal-complete-result.v1": CompleteResult,
           "terminal-error.v1": TerminalError}
 
 

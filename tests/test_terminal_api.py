@@ -368,7 +368,7 @@ def test_contract_generator_runs_as_a_command(tmp_path):
     result = subprocess.run([sys.executable, "-m", "tools.generate_terminal_contracts", "--output", str(output)],
                             cwd=root, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
-    assert len(list(output.glob("*.json"))) == 4
+    assert len(list(output.glob("*.json"))) == 6
 
 
 def test_shell_characters_remain_literal_search(client):

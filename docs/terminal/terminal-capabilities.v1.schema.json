@@ -58,6 +58,10 @@
           "title": "Choices",
           "type": "array"
         },
+        "commaList": {
+          "title": "Commalist",
+          "type": "boolean"
+        },
         "description": {
           "title": "Description",
           "type": "string"
@@ -72,6 +76,10 @@
         "reason": {
           "title": "Reason",
           "type": "string"
+        },
+        "repeatable": {
+          "title": "Repeatable",
+          "type": "boolean"
         },
         "status": {
           "enum": [
@@ -91,6 +99,8 @@
         "flags",
         "description",
         "takesValue",
+        "repeatable",
+        "commaList",
         "status",
         "reason",
         "choices"
@@ -102,6 +112,14 @@
       "properties": {
         "bodyBytes": {
           "title": "Bodybytes",
+          "type": "integer"
+        },
+        "completionCandidates": {
+          "title": "Completioncandidates",
+          "type": "integer"
+        },
+        "completionDescriptionChars": {
+          "title": "Completiondescriptionchars",
           "type": "integer"
         },
         "eventRows": {
@@ -151,7 +169,9 @@
         "globalConcurrency",
         "eventRows",
         "eventWindowSeconds",
-        "wanDays"
+        "wanDays",
+        "completionCandidates",
+        "completionDescriptionChars"
       ],
       "title": "TerminalLimits",
       "type": "object"

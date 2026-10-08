@@ -1,0 +1,44 @@
+{
+  "$id": "urn:homelab-probe:terminal-complete-request.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "argv": {
+      "items": {
+        "maxLength": 256,
+        "type": "string"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "title": "Argv",
+      "type": "array"
+    },
+    "cursor": {
+      "maximum": 256,
+      "minimum": 0,
+      "title": "Cursor",
+      "type": "integer"
+    },
+    "requestId": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+      "title": "Requestid",
+      "type": "string"
+    },
+    "tokenIndex": {
+      "exclusiveMaximum": 64,
+      "minimum": 0,
+      "title": "Tokenindex",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "argv",
+    "tokenIndex",
+    "cursor",
+    "requestId"
+  ],
+  "title": "CompleteBody",
+  "type": "object"
+}

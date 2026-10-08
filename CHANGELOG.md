@@ -31,11 +31,13 @@ always listed here.
 
 ### Fixed
 
+- Terminal completion preserves valid contexts after parser-normalized uppercase or mixed-case severity values, including attached and repeated options; case-sensitive and invalid choices remain rejected.
+
 - Corrected documentation for web API authorization, security scope, full development dependencies, CI triggers and current packaging limits; added installation choices, production UI build steps and Playwright troubleshooting.
 
 ### Added
 
-- **Secure terminal API (#272 and #273, part of #270):** an opt-in strict CLI parser and explicit web capability registry classify every command and option, pin positional choices and file-reference metadata, and reject unreviewed browser capabilities and grammar drift. Authenticated capabilities and execute endpoints now dispatch reviewed read-only reports in-process, with strict bounded requests, safe text/JSON output, audit events, rate/concurrency limits and worker-owned slots after timeout or disconnect. Normal CLI behavior is unchanged. Static completion and the browser-terminal handoff remain pending (#274). See [docs/web.md](docs/web.md#the-terminal-api).
+- **Secure terminal API (#272, #273 and #274, tracker #270):** an opt-in strict CLI parser and explicit web capability registry classify every command and option, pin positional choices and file-reference metadata, and reject unreviewed browser capabilities and grammar drift. Authenticated capabilities, static completion and execute endpoints expose reviewed read-only reports in-process, with strict bounded requests, safe text/JSON output, audit events, shared rate/concurrency limits and worker-owned execution slots after timeout or disconnect. Completion suggests only role-filtered grammar metadata, never files or dynamic controller values. Generated schemas/types, option repeatability and comma-list metadata, mock responses and the integration handoff support the browser terminal (#269). Normal CLI behavior is unchanged. See [docs/web.md](docs/web.md#the-terminal-api).
 
 - **The dashboard in the web app (#187):** the first page after the login now shows how the network is: a status headline (healthy only for a complete, fresh read of a controller that answered; a partial, old or unreachable read says so instead), the open findings to look at first, devices, clients, the internet connection, Wi-Fi and the notable events of the last 24 hours, from the existing `GET /api/v1/unifi/sites/{site}/dashboard`. A section that was not read says so rather than showing zero, an unknown number reads "Unknown", and a site picker appears when the controller has several sites. This replaces the placeholder home page. See [docs/web.md](docs/web.md#the-dashboard-page).
 

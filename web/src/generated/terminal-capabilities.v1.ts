@@ -9,9 +9,11 @@ export type Choices = string[];
 export type Description = string;
 export type Name = string;
 export type Choices1 = string[];
+export type Commalist = boolean;
 export type Description1 = string;
 export type Flags = string[];
 export type Reason = string;
+export type Repeatable = boolean;
 export type Status = "supported" | "restricted" | "unavailable";
 export type Takesvalue = boolean;
 export type Options = OptionMetadata[];
@@ -20,6 +22,8 @@ export type Status1 = "supported" | "restricted" | "unavailable";
 export type Commands = CommandMetadata[];
 export type Globaloptions = OptionMetadata[];
 export type Bodybytes = number;
+export type Completioncandidates = number;
+export type Completiondescriptionchars = number;
 export type Eventrows = number;
 export type Eventwindowseconds = number;
 export type Globalconcurrency = number;
@@ -52,15 +56,19 @@ export interface CommandMetadata {
 }
 export interface OptionMetadata {
   choices: Choices1;
+  commaList: Commalist;
   description: Description1;
   flags: Flags;
   reason: Reason;
+  repeatable: Repeatable;
   status: Status;
   takesValue: Takesvalue;
   [k: string]: unknown;
 }
 export interface TerminalLimits {
   bodyBytes: Bodybytes;
+  completionCandidates: Completioncandidates;
+  completionDescriptionChars: Completiondescriptionchars;
   eventRows: Eventrows;
   eventWindowSeconds: Eventwindowseconds;
   globalConcurrency: Globalconcurrency;
