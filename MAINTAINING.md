@@ -102,7 +102,8 @@ uv run --extra web --extra pretty coverage report
 A `Makefile` wraps these commands; `make` lists the tasks. `make check` runs the lockfile, lint, type and test
 checks of the Python CI jobs, `make coverage` adds the 100% gate, `make web-check` the web checks, `make ci` all of
 those, `make golden` rewrites the golden files and README samples (review the diff), and `make demo` serves the
-synthetic network. `make clean` removes only caches and build output; `make clean-all` also removes `.venv` and
+synthetic network, and `make release-check` and `make tag` help with a release
+(see [Shortcuts for the checks and the tag](#shortcuts-for-the-checks-and-the-tag)). `make clean` removes only caches and build output; `make clean-all` also removes `.venv` and
 `web/node_modules`. Neither touches `.env`, `hlp.toml`, `users.json`, `audit.log` or `snapshots/`.
 
 Tests should pass, Ruff should report no findings, mypy should report no issues, and the lockfile check should
@@ -230,6 +231,39 @@ git tag -a v0.3.0 -m "Release v0.3.0"
 git show --no-patch v0.3.0
 git push origin v0.3.0
 ```
+
+### Shortcuts for the checks and the tag
+
+Two `make` targets do the preflight above for you (the script is `tools/release_check.sh`; it needs `git`, `bash`
+and `gh`). **Neither pushes anything.** Pushing the tag is what publishes the release, so it stays a command you
+type yourself. Substitute your version; 0.5.0 is only an example, and `VERSION` is required (there is no default).
+
+```bash
+# Read-only: run every check and print the release notes
+make release-check VERSION=0.5.0
+# The same checks, then create only the LOCAL annotated tag v0.5.0 (publishes nothing)
+make tag VERSION=0.5.0
+# Then, after reading the output, publish by pushing that one tag
+git push origin v0.5.0
+```
+
+Both stop at the first check that fails and say why. The checks, in order:
+
+1. `VERSION` is `X.Y.Z` (no leading `v`).
+2. The working tree is clean (`git status --porcelain` prints nothing).
+3. You are on `main` and it equals `origin/main` (the script runs `git fetch origin main` first).
+4. The tag `vX.Y.Z` does not exist locally or on `origin`.
+5. `homelab_probe.__version__` is `X.Y.Z` and `CHANGELOG.md` has a dated, non-empty entry for it
+   (`tools/release_notes.py`, the same check the release workflow makes).
+6. The latest `ci.yml` run on `main`, read with `gh`, is a completed success **for this exact commit**.
+
+When they pass, `make release-check` prints the last commit and the release notes and tells you to run
+`make tag`. `make tag` then runs `git tag -a vX.Y.Z -m "Release vX.Y.Z"`, shows the tag and prints the
+`git push origin vX.Y.Z` command. To undo a tag you have not pushed, run `git tag -d vX.Y.Z`; once it is pushed, see
+[Inspect Release History](#inspect-release-history) and handle it as a release problem, not with the shortcut.
+
+AI assistants may run `make release-check` (it changes nothing) but must never run `make tag`, push a tag or create a
+release; see [AGENTS.md](AGENTS.md).
 
 The [release workflow](.github/workflows/release.yml) checks the lockfile, validates the tag against the version
 and dated changelog, runs tests, builds a wheel and source archive, and creates a GitHub release with the files

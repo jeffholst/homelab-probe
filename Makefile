@@ -3,10 +3,10 @@
 UV_RUN := uv run --extra web --extra pretty
 
 .DEFAULT_GOAL := help
-.PHONY: help install test lint fix types lock coverage check web-install web-check web-e2e ci golden demo clean clean-all
+.PHONY: help install test lint fix types lock coverage check web-install web-check web-e2e ci golden demo release-check tag clean clean-all
 
 help: ## List the tasks
-	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
+	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
 
 install: ## Install the locked Python dependencies (dev tools, web and pretty extras)
 	uv sync --locked --group dev --extra web --extra pretty
@@ -50,6 +50,12 @@ golden: ## Rewrite the golden files and README samples, then review the git diff
 
 demo: ## Serve the synthetic network (no controller, no .env); prints the demo login
 	uv run --extra web hlp.py --demo serve
+
+release-check: ## Read-only preflight for a release tag: make release-check VERSION=X.Y.Z
+	tools/release_check.sh "$(VERSION)"
+
+tag: ## Preflight, then create only the LOCAL annotated tag vX.Y.Z (you push it): make tag VERSION=X.Y.Z
+	tools/release_check.sh "$(VERSION)" --tag
 
 # Only disposable output. The git-ignored data here (.env, hlp.toml, users.json*, audit.log*, snapshots/) is real:
 # never use `git clean` or a wildcard that could match it.
