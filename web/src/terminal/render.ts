@@ -101,6 +101,7 @@ export function renderLive(state: EngineState, palette: Palette): string {
   // The list under the prompt is the one Tab opened (a highlighted item); the toolbar shows the same list all the time.
   const suggestions = state.suggestions.selected === null ? "" : suggestionLine(state.suggestions.items, state.suggestions.selected, palette);
   if (suggestions) below.push(suggestions);
+  if (state.suggestions.truncated) below.push(`${c.warning}Some suggestions omitted.${RESET}`);
   const tail = below.length ? `\r\n${below.join("\r\n")}${MOVE_UP(below.length)}` : "";
   // Save the cursor after the text before it, draw the rest and the lines below, then come back.
   return `${hide}${c.brand}${PROMPT}${c.text}${before}${ESC}7${after}${RESET}${tail}${ESC}8${ESC}[?25h`;

@@ -122,7 +122,8 @@ export default function XtermSurface({ entries, state, onInput, onLeave, label, 
         shown = "";
       }
       const fresh = all.filter((entry) => entry.id > written);
-      const signature = JSON.stringify([current.line, current.notice, current.running, current.suggestions.items.map((i) => i.label), current.suggestions.selected]);
+      const signature = JSON.stringify([current.line, current.notice, current.running, current.suggestions.items.map((i) => i.label),
+        current.suggestions.truncated, current.suggestions.selected]);
       if (fresh.length === 0 && signature === shown) return;
       shown = signature;
       prefix = renderErase(rowsFromMarker()) + fresh.map((entry) => renderEntry(entry, palette.current)).join("");

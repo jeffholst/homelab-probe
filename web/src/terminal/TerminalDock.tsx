@@ -188,6 +188,7 @@ export function TerminalDock({ services, mode, onMode, returnFocus }: Props) {
                   {item.label}
                 </button>
               ))}
+              {session.state.suggestions.truncated && <span className="terminal-dock__hint muted">Some suggestions omitted.</span>}
               {suggestions.length === 0 && <span className="terminal-dock__hint muted">{session.status === "unavailable" ? "Unavailable." : "Type a command."}</span>}
             </div>
             <p id={`${titleId}-hint`} className="visually-hidden">
