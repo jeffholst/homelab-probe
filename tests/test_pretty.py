@@ -303,7 +303,7 @@ def test_audit_query_and_new_clients_use_the_enhanced_views_on_a_terminal(termin
     out = capsys.readouterr().out
     assert out.splitlines()[2].startswith("Name") and "----" not in out and out.rstrip().endswith("row(s)")
     assert cli.main(["--demo", "new-clients"]) == 0
-    assert capsys.readouterr().out.rstrip().endswith("in no group")
+    assert capsys.readouterr().out.rstrip().endswith("first seen in the last 7d (1 with a private MAC)")
     assert cli.main(["--demo", "query", "devices", "--csv"]) == 0
     assert capsys.readouterr().out.startswith("Type,Name,")
     assert cli.main(["--demo", "new-clients", "--json"]) == 0

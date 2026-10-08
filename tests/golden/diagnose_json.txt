@@ -12,7 +12,7 @@
   "summary": {
     "critical": 1,
     "warning": 11,
-    "info": 3,
+    "info": 4,
     "ignored": 0
   },
   "findings": [
@@ -99,6 +99,13 @@
       "subject": "old-printer",
       "message": "reserved IP 10.0.0.50 is outside network IoT (10.0.20.1/24)",
       "mac": ""
+    },
+    {
+      "severity": "info",
+      "code": "client.new_device",
+      "subject": "BE:00:00:00:00:06",
+      "message": "new device 'guest-phone' first seen <age> ago (wireless, private MAC, 10.0.0.52)",
+      "mac": "BE:00:00:00:00:06"
     },
     {
       "severity": "info",

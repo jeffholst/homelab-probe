@@ -76,7 +76,7 @@ def test_codes_have_the_documented_shape_and_a_description():
 def test_the_published_codes_are_pinned():
     """A code is an interface for scripts: changing or removing one must be a deliberate edit here."""
     assert sorted(CODES) == [
-        "client.link_local_ip", "client.no_ip", "client.private_mac_summary", "controller.legacy_unavailable", "controller.pending_adoption",
+        "client.link_local_ip", "client.new_device", "client.no_ip", "client.private_mac_summary", "controller.legacy_unavailable", "controller.pending_adoption",
         "device.cpu_high", "device.memory_high", "device.offline", "device.overheating", "device.recent_reboot", "device.storage",
         "event.client_disconnects",
         "event.client_roams", "event.device_unreachable", "event.internet_latency", "event.ip_conflict",

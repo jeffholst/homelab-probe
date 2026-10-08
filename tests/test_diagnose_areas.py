@@ -75,7 +75,7 @@ def test_the_registry_runs_the_checks_in_the_documented_order():
     assert list(_registered()) == [
         "_offline_device_findings", "_resource_findings", "_overheating_findings", "_storage_findings", "_recent_reboot_findings", "_health_findings", "_wan_findings", "_client_ip_findings",
         "_reservation_findings", "_pool_findings", "_offline_reservation_findings", "_private_mac_findings",
-        "_duplicate_ip_findings", "_legacy_unavailable_findings", "_port_basic_findings", "_port_health_findings",
+        "_new_client_findings", "_duplicate_ip_findings", "_legacy_unavailable_findings", "_port_basic_findings", "_port_health_findings",
         "_uplink_speed_findings", "_wifi_findings", "_event_findings"]
 
 
@@ -153,7 +153,7 @@ def test_findings_of_another_area_that_a_check_also_emits_are_dropped(fake_clien
                       legacy_clients=False)),
     (["wifi"], Needs(devices=True, clients=False, device_extras=False, device_stats=False, legacy_devices=True,
                      legacy_clients=True)),
-    (["clients"], Needs(devices=True, clients=True, device_extras=False, device_stats=False, legacy_devices=False,
+    (["clients"], Needs(devices=True, clients=True, offline=True, device_extras=False, device_stats=False, legacy_devices=False,
                         legacy_clients=True)),
     (["health"], Needs(health=True, devices=False, clients=False, device_extras=False, device_stats=False,
                        legacy_devices=False, legacy_clients=False)),
@@ -255,8 +255,12 @@ def test_json_says_which_areas_ran_and_only_their_findings_are_there(fake_client
 
 
 def test_exit_codes_and_fail_on_follow_the_findings_that_ran(fake_client, monkeypatch, capsys):
-    assert run(fake_client, monkeypatch, ["diagnose", "--only", "clients", "--no-emoji"]) == 0   # nothing in that area
+    assert run(fake_client, monkeypatch, ["diagnose", "--only", "clients", "--no-emoji"]) == 0   # information only
+    assert "new device" in capsys.readouterr().out
+    Path("hlp.toml").write_text("[thresholds]\nnew_client_window_hours = 0\n")        # the new-device check off
+    assert run(fake_client, monkeypatch, ["diagnose", "--only", "clients", "--no-emoji"]) == 0
     assert "No issues found." in capsys.readouterr().out
+    Path("hlp.toml").unlink()
     assert run(fake_client, monkeypatch, ["diagnose", "--only", "ports"]) == 1                    # warnings
     make_every_area_report(fake_client)
     assert run(fake_client, monkeypatch, ["diagnose", "--only", "wifi"]) == 1
@@ -286,7 +290,7 @@ def test_no_events_is_the_same_as_skip_events(fake_client, monkeypatch, capsys):
 @pytest.mark.parametrize("argv, kinds, posts", [
     (["--only", "ports"], {"devices", "legacy-devices"}, False),
     (["--only", "wifi"], {"devices", "legacy-devices", "legacy-clients"}, False),
-    (["--only", "clients"], {"devices", "clients", "legacy-clients"}, False),
+    (["--only", "clients"], {"devices", "clients", "legacy-clients", "alluser"}, False),
     (["--only", "health"], {"health"}, False),
     (["--only", "devices"], {"devices", "health", "legacy-devices"}, False),
     (["--only", "wan"], {"health", "speedtests"}, False),

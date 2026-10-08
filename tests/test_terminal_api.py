@@ -72,7 +72,7 @@ def test_capabilities_are_authenticated_static_and_explicit(app, client):
     ["query", "--jso"], ["query", "@file"], ["info", ";", "id"], ["snapshot"],
     ["diagnose", "--notify"], ["diagnose", "--watch", "60"], ["wan", "--config", "../../x"],
     ["query", "clients", "--csv"], ["topology", "--format", "dot"],
-    ["events", "--since", "3w"], ["client", "x", "--since", "3w"], ["wan", "--days", "3651"],
+    ["events", "--since", "3w"], ["client", "x", "--since", "3w"], ["new-clients", "--since", "3w"], ["wan", "--days", "3651"],
     ["events", "--category", "c" * 65], ["wifi", "--min-signal", "nan"],
     ["diagnose", "--only", "bogus"], ["query", "clients", "--ssid", " "],
     ["wifi", "--band", "7"], ["info", "--json"],
@@ -136,6 +136,8 @@ def test_anonymous_expired_and_missing_csrf_never_dispatch(app, client):
     (["query", "networks", "--json"], "networks"), (["query", "wlans", "--json"], "wlans"),
     (["query", "ports", "--down", "--json"], "ports?down=true"),
     (["new-clients", "--json"], "new-clients"),
+    (["new-clients", "--since", "30h", "--ungrouped", "--json"], "new-clients?since=30h&ungrouped=true"),
+    (["new-clients", "--ungrouped", "--json"], "new-clients?ungrouped=true"),
     (["client", "BB:00:00:00:00:01", "--no-events", "--json"], "clients/BB:00:00:00:00:01?events=false"),
 ])
 def test_json_reports_match_existing_routes(client, argv, path):

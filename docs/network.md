@@ -166,13 +166,13 @@ example.com  icmp  100.0%        20 ms
 example.org  icmp  100.0%        24 ms
 
 Speedtests, last 30 days (11 runs), 12 stored
-  Last: 2026-10-01 16:11 (6h ago): download 880 Mbps, upload 40 Mbps, latency 25 ms
+  Last: 2026-10-08 11:32 (6h ago): download 880 Mbps, upload 40 Mbps, latency 25 ms
   Download: min 500 Mbps, median 925 Mbps, max 940 Mbps
   Upload: min 31 Mbps, median 40 Mbps, max 41 Mbps
   Latency: min 23 ms, median 24 ms, max 41 ms
 
   Download below 70% of the median (1):
-    2026-09-23 22:11  download 500 Mbps, upload 31 Mbps, latency 41 ms
+    2026-09-30 17:32  download 500 Mbps, upload 31 Mbps, latency 41 ms
 ```
 
 - **Now:** the WAN and internet subsystems of the controller's health (status, ISP, WAN IP, latency, drops) and the gateway's WAN link: its negotiated speed against what the port supports (a 1 Gbps plan on a 2.5 Gbps port is normal, so that is only shown, never flagged) and the live traffic rate.
@@ -247,11 +247,11 @@ Findings
 uv run hlp.py events --client phone --since 6h
 Time                 Severity  Category        Event                         Message
 -------------------  --------  --------------  ----------------------------  --------------------------------------------------
-2026-10-02 03:32:28  Low       CLIENT_DEVICES  CLIENT_DISCONNECTED_WIRELESS  phone disconnected from Home. Time Connected: 25s.
-2026-10-02 03:17:28  Low       CLIENT_DEVICES  CLIENT_CONNECTED_WIRELESS     phone connected to Home on Office AP.
-2026-10-02 03:02:28  Low       CLIENT_DEVICES  CLIENT_DISCONNECTED_WIRELESS  phone disconnected from Home. Time Connected: 2m.
-2026-10-02 02:52:28  Low       CLIENT_DEVICES  CLIENT_ROAMED                 phone roamed from Garage AP to Office AP.
-2026-10-02 02:42:28  Low       CLIENT_DEVICES  CLIENT_DISCONNECTED_WIRELESS  phone disconnected from Home. Time Connected: 1h.
+2026-10-08 17:22:13  Low       CLIENT_DEVICES  CLIENT_DISCONNECTED_WIRELESS  phone disconnected from Home. Time Connected: 25s.
+2026-10-08 17:07:13  Low       CLIENT_DEVICES  CLIENT_CONNECTED_WIRELESS     phone connected to Home on Office AP.
+2026-10-08 16:52:13  Low       CLIENT_DEVICES  CLIENT_DISCONNECTED_WIRELESS  phone disconnected from Home. Time Connected: 2m.
+2026-10-08 16:42:13  Low       CLIENT_DEVICES  CLIENT_ROAMED                 phone roamed from Garage AP to Office AP.
+2026-10-08 16:32:13  Low       CLIENT_DEVICES  CLIENT_DISCONNECTED_WIRELESS  phone disconnected from Home. Time Connected: 1h.
 
 5 event(s)
 ```
@@ -294,7 +294,7 @@ Attached: desktop -> Office Switch port 3 (1000 Mbps) -> Gateway port 2 (100 Mbp
 Link:     1000 Mbps, full duplex, 0 errors, 60 dropped packets on its port
 
 Recent events (last 24h, newest first):
-  2026-10-02 02:12:28  CLIENT_CONNECTED_WIRED: desktop connected to Main on Office Switch Port 3.
+  2026-10-08 16:02:13  CLIENT_CONNECTED_WIRED: desktop connected to Main on Office Switch Port 3.
 
 Related findings:
 [CRITICAL] Gateway: reports that it is overheating

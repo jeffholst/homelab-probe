@@ -98,7 +98,7 @@ def test_the_statuses_of_a_healthy_setup_on_the_fake_controller(configured):
     assert found["controller.version"].status == INFO and "10.0.0" in found["controller.version"].message
     assert found["controller.site"].status == OK and "1 site" in found["controller.site"].message
     assert all(found[f"endpoint.{r.id}"].status == OK for r in READERS) and found["endpoint.events"].status == OK
-    assert found["endpoint.stat_alluser"].message == "3 records" and found["endpoint.integration_device_detail"].message == "answered"
+    assert found["endpoint.stat_alluser"].message == "4 records" and found["endpoint.integration_device_detail"].message == "answered"
 
 
 def test_the_tested_version_is_ok_and_another_one_is_information(configured):

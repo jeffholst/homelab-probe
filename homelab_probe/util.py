@@ -168,8 +168,9 @@ def hex_digits(text: Any) -> str:
 
 
 def epoch_text(value: Any) -> str:
-    """A Unix timestamp in seconds as local 'YYYY-MM-DD HH:MM:SS', or '' when it is missing or zero."""
-    return datetime.fromtimestamp(value).strftime("%Y-%m-%d %H:%M:%S") if value else ""
+    """A Unix timestamp in seconds as local 'YYYY-MM-DD HH:MM:SS', or '' when it is missing, zero or not a number."""
+    seen = number(value)
+    return datetime.fromtimestamp(seen).strftime("%Y-%m-%d %H:%M:%S") if seen else ""
 
 
 def format_time(value: Optional[str]) -> str:

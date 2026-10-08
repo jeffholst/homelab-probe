@@ -53,6 +53,8 @@ class DemoSession:
         for user in self.fx.get("legacy", {}).get("alluser", []):
             if "last_seen_age_s" in user:                          # relative, like the speedtests
                 user["last_seen"] = int(now / 1000 - user.pop("last_seen_age_s"))
+            if "first_seen_age_s" in user:
+                user["first_seen"] = int(now / 1000 - user.pop("first_seen_age_s"))
         self.events = [
             {**{k: v for k, v in e.items() if k != "age_s"}, "timestamp": int(now - e["age_s"] * 1000)}
             for e in self.fx.get("system_log", [])]

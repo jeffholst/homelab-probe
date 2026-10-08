@@ -35,7 +35,7 @@ from .events import DEFAULT_LIMIT, DEFAULT_SINCE, events_data, fetch_events, mak
 from .export import export_data, inventory_rows, switch_ports
 from .firewall import build_firewall
 from .history import SnapshotRecord, capture, diff_data, diff_snapshots
-from .new_clients import new_clients_data
+from .new_clients import new_clients_data, resolve_since
 from .new_clients import report as new_clients_report
 from .query import query_data, query_rows
 from .settings import DiagnoseSettings
@@ -219,16 +219,21 @@ def query_document(client: UniFiClient, site: str, kind: str = "all", search: st
                     {"kind": kind, "offline": offline, "site": site_identity(snap.site)})
 
 
-NEW_CLIENTS_NEEDS = Needs(groups=True, users_required=True)
+NEW_CLIENTS_NEEDS = Needs(offline=True, users_required=True)           # offline: the client history, stat/alluser
+NEW_CLIENTS_UNGROUPED_NEEDS = Needs(groups=True, users_required=True)   # the group filter also needs the definitions
 
 
-def new_clients_document(client: UniFiClient, site: str, search: str = "", echo: bool = True) -> Document:
-    """Known clients that are in no client group."""
+def new_clients_document(client: UniFiClient, site: str, search: str = "", since: Optional[int] = None,
+                         ungrouped: bool = False, echo: bool = True) -> Document:
+    """Known clients the controller first saw within ``since`` seconds (default 7 days) and, with ``ungrouped``,
+    that are in no client group. ``ungrouped`` alone sets no age limit."""
+    window = resolve_since(since, ungrouped)
     with logs.collect_warnings(quiet=not echo) as warnings:
-        snap = collect_snapshot(client, site, NEW_CLIENTS_NEEDS)
-        rows = new_clients_report(snap, search)
+        snap = collect_snapshot(client, site, NEW_CLIENTS_UNGROUPED_NEEDS if ungrouped else NEW_CLIENTS_NEEDS)
+        rows, unknown = new_clients_report(snap, search, window, ungrouped)
     return Document("new-clients", new_clients_data(rows), [logs.scrub(w) for w in warnings],
-                    {"site": site_identity(snap.site)})
+                    {"site": site_identity(snap.site), "since": window, "ungrouped": ungrouped,
+                     "unknown": unknown})
 
 
 # -- diagnose ---------------------------------------------------------------------------------------

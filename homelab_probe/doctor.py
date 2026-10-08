@@ -83,7 +83,7 @@ READERS: List[Reader] = [
     Reader("stat_sta", "Legacy connected clients (stat/sta)", lambda t: t.client.legacy_stat(t.ref, "sta"), False,
            "where a client is plugged in, Wi-Fi quality, `query networks`/`wlans` counts and the client filters"),
     Reader("stat_alluser", "Client history (stat/alluser)", lambda t: t.client.legacy_stat(t.ref, "alluser"), False,
-           "offline clients, reservations, `new-clients`, `snapshot` and `diff`"),
+           "offline clients, reservations, new-device findings, `new-clients`, `snapshot` and `diff`"),
     Reader("stat_health", "Controller health (stat/health)", lambda t: t.client.legacy_stat(t.ref, "health"), False,
            "the health and internet checks and `wan`"),
     Reader("rest_networkconf", "Network settings (rest/networkconf)",

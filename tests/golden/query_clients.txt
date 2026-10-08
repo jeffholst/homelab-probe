@@ -4,5 +4,6 @@ desktop  BB:00:00:00:00:01  10.0.0.10  Wired  Office Switch  3  Online
 phone  BB:00:00:00:00:02  10.0.0.11  Wireless  Online
 old-printer  BB:00:00:00:00:03  10.0.0.50  Wired  Office Switch  6  Offline
 old-tablet  BB:00:00:00:00:04  10.0.0.51  Wireless  Offline
+guest-phone  BE:00:00:00:00:06  10.0.0.52  Wireless  Offline  yes
 
-4 row(s)
+5 row(s)

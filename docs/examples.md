@@ -42,7 +42,8 @@ uv run hlp.py events --client phone --event disconnected   # one client's drops
 uv run hlp.py events --summary --since 7d   # counts and the noisiest clients
 uv run hlp.py client desktop              # one client: attachment, link, findings
 uv run hlp.py client aa:bb:cc:dd:ee:ff --json   # by MAC (any format) or IP, as JSON
-uv run hlp.py new-clients                 # clients in no client group
+uv run hlp.py new-clients --since 24h      # clients first seen in the last day
+uv run hlp.py new-clients --ungrouped       # clients in no client group
 uv run hlp.py audit                       # settings that are probably not what you want
 uv run hlp.py audit --json --fail-on info # as JSON; any finding gives exit code 1
 uv run hlp.py diagnose                    # health checks
@@ -72,8 +73,9 @@ Device - Dream Machine,Gateway,AA:00:00:00:00:01,10.0.0.1,UCG Max,Wired,,,2026-0
 Device - Switch,Office Switch,AA:00:00:00:00:02,10.0.0.2,USW-Lite-8-PoE,Wired,Gateway,2,2026-01-01 10:00:00,Online
 Device - Access Point,Office AP,AA:00:00:00:00:03,10.0.0.3,U7 Pro,Wired,Office Switch,2,2026-01-01 10:00:00,Online
 Device - Access Point,Garage AP,AA:00:00:00:00:04,10.0.0.4,U6 Pro,Wired,Office Switch,5,,Offline
-Client,old-printer,BB:00:00:00:00:03,10.0.0.50,,Wired,Office Switch,6,2026-10-02 17:28:19,Offline
+Client,old-printer,BB:00:00:00:00:03,10.0.0.50,,Wired,Office Switch,6,2026-10-08 14:32:13,Offline
 Client,old-tablet,BB:00:00:00:00:04,10.0.0.51,,Wireless,,,2025-12-06 05:46:40,Offline
+Client,guest-phone,BE:00:00:00:00:06,10.0.0.52,,Wireless,,,2026-10-08 17:17:13,Offline
 ```
 
 ### diagnose
@@ -93,22 +95,22 @@ Sample from synthetic data with `diagnose --no-events` (text labels are used whe
 [WARNING ] Office Switch port 2: dropping 0.75% of rx packets (75 of 10000)
 [WARNING ] Office Switch port 2: STP state is blocking, not forwarding
 [WARNING ] old-printer: reserved IP 10.0.0.50 is outside network IoT (10.0.20.1/24)
+[INFO    ] BE:00:00:00:00:06: new device 'guest-phone' first seen 2h ago (wireless, private MAC, 10.0.0.52)
 [INFO    ] Office AP: restarted 5m ago
 [INFO    ] Office Switch port 2: negotiated at 100 Mbps
 [INFO    ] wlan: wlan subsystem reports warning: 1 device(s) disconnected (see the device findings)
 
-1 critical, 11 warnings, 3 info
+1 critical, 11 warnings, 4 info
 ```
 
 ### new-clients
 
 ```text
-Name         MAC Address        IP Address  Vendor                Connection Type  Where                        First Seen           Last Seen            Status   Private MAC
------------  -----------------  ----------  --------------------  ---------------  ---------------------------  -------------------  -------------------  -------  -----------
-old-tablet   BB:00:00:00:00:04  10.0.0.51                         Wireless                                      2025-06-15 15:06:40  2025-12-06 05:46:40  Offline
-old-printer  BB:00:00:00:00:03  10.0.0.50   Example Printers Inc  Wired            Wired, Office Switch port 6  2023-11-14 22:13:20  2026-10-02 17:27:59  Offline
+Name         MAC Address        IP Address  Vendor  Connection Type  Where  First Seen           Last Seen            Status   Private MAC
+-----------  -----------------  ----------  ------  ---------------  -----  -------------------  -------------------  -------  -----------
+guest-phone  BE:00:00:00:00:06  10.0.0.52           Wireless                2026-10-08 15:32:13  2026-10-08 17:17:13  Offline  yes
 
-2 client(s) in no group
+1 client(s) first seen in the last 7d (1 with a private MAC)
 ```
 
 ### switch_Office Switch.csv

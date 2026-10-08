@@ -123,6 +123,9 @@ CASES = {
                                                                 settings=documents.DiagnoseSettings(), echo=False)),
     "new-clients": (f"{SITE}/new-clients", "new-clients", None,
                     lambda c: documents.new_clients_document(c, "default", echo=False)),
+    "new-clients-ungrouped": (f"{SITE}/new-clients?since=30d&ungrouped=true&search=old", "new-clients", None,
+                              lambda c: documents.new_clients_document(c, "default", "old", 30 * 86400, True,
+                                                                       echo=False)),
     "dashboard": (f"{SITE}/dashboard", "dashboard", None,
                   lambda c: documents.dashboard_document(c, "default", triage=lambda site: {}, echo=False)),
     "client": (f"{SITE}/clients/{DESKTOP}", "client", None,
@@ -262,6 +265,7 @@ def test_a_settings_file_that_cannot_be_used_is_a_500_that_does_not_quote_it(tmp
     "/events?limit=20001", "/events?since=0h", "/events?severity=extreme", "/events?event=" + "x" * 121,
     "/clients?network=", "/clients?ssid=%20", "/clients?ap=", "/firewall?search=" + "y" * 121,
     "/clients/not-a-mac", "/clients/BB:00:00:00:00", "/diagnose?no_events=maybe",
+    "/new-clients?since=soon", "/new-clients?since=0h", "/new-clients?ungrouped=maybe",
 ])
 def test_bad_parameters_are_422_and_read_nothing(client, session, query):
     response = client.get(SITE + query)

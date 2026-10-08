@@ -73,7 +73,8 @@ def _legacy_or_empty(client: UniFiClient, site_ref: str, resource: str, notes: L
         return client.legacy_stat(site_ref, resource)
     except UniFiAPIError as e:
         impact = (
-            "offline clients, reservations, and client-group history were skipped"
+            "offline clients, reservations, client-group history and the new-device check (client.new_device) "
+            "were skipped"
             if resource == "alluser"
             else "port mapping will be incomplete"
         )

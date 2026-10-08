@@ -20,7 +20,7 @@ Homelab Probe is a read-only UniFi Network probe for inventory, troubleshooting,
 | `firewall` | Show firewall policies, port forwards, zones and suspicious rules | [details](docs/network.md#firewall) |
 | `info` | Show controller application info and sites | [details](docs/configuration.md#finding-your-site-info) |
 | `init` | Guided first-time setup for `.env`, `hlp.toml` and snapshots | [details](docs/configuration.md#guided-setup-init) |
-| `new-clients` | List clients that are in no client group | [details](docs/inventory.md#new-clients) |
+| `new-clients` | List new clients: first seen recently (7 days), or in no client group | [details](docs/inventory.md#new-clients) |
 | `query` | List and filter devices, clients, reservations, ports, networks and Wi-Fi networks | [details](docs/inventory.md#devices) |
 | `serve` | Run the login-protected web API, and the built web app when the install has one (needs the `web` extra) | [details](docs/web.md#running-the-server-serve) |
 | `snapshot` | Save the current inventory to compare later | [details](docs/inventory.md#snapshots-and-diff) |
@@ -139,7 +139,8 @@ uv run hlp.py export -o ./out --include-offline    # CSV files; --output-dir is 
 uv run hlp.py firewall --all --zones               # policies, forwards and zones
 uv run hlp.py info                                 # controller version and sites
 uv run hlp.py init                                 # guided local setup
-uv run hlp.py new-clients                          # clients in no client group
+uv run hlp.py new-clients --since 24h               # clients first seen in the last day
+uv run hlp.py new-clients --ungrouped                # clients in no client group
 uv run hlp.py query clients -s printer --json      # filter clients; --search is the long form
 uv run --extra web hlp.py serve                    # local web API (and web app, if built in) on 127.0.0.1:8787
 uv run hlp.py snapshot                             # save inventory to ./snapshots/

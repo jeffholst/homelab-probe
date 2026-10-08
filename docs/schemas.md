@@ -24,7 +24,7 @@ The web server (see [the web interface](web.md#the-api-apiv1unifi)) returns the 
 | `query ports --json` | switch ports (a bare array) | [`query-ports.v1.schema.json`](schemas/query-ports.v1.schema.json) |
 | `query networks --json` | networks (a bare array) | [`query-networks.v1.schema.json`](schemas/query-networks.v1.schema.json) |
 | `query wlans --json` | Wi-Fi networks (a bare array) | [`query-wlans.v1.schema.json`](schemas/query-wlans.v1.schema.json) |
-| `new-clients --json` | clients in no group (a bare array) | [`new-clients.v1.schema.json`](schemas/new-clients.v1.schema.json) |
+| `new-clients --json` | new clients (a bare array) | [`new-clients.v1.schema.json`](schemas/new-clients.v1.schema.json) |
 | `diff --json` | what changed between two inventories | [`diff.v1.schema.json`](schemas/diff.v1.schema.json) |
 | `snapshot` | the saved file (`schema_version`) | [`snapshot.v1.schema.json`](schemas/snapshot.v1.schema.json) |
 | `diagnose --notify` | the webhook payload | [`webhook-payload.v1.schema.json`](schemas/webhook-payload.v1.schema.json) |

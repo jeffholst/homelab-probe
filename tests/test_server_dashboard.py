@@ -86,7 +86,7 @@ def test_both_roles_read_it_and_it_validates_against_its_schema(admin, viewer):
     valid(body)
     assert body["generated_at"].endswith("Z") and isinstance(body["warnings"], list)
     assert body["status"] == "critical" and body["findings"]["triage_available"] is True
-    assert body["findings"]["by_state"] == {"open": 16, "acknowledged": 0, "snoozed": 0}
+    assert body["findings"]["by_state"] == {"open": 17, "acknowledged": 0, "snoozed": 0}
 
 
 def test_it_needs_a_login_a_known_site_and_a_valid_site_name(app, viewer):
@@ -238,7 +238,7 @@ def test_acknowledged_and_snoozed_findings_are_counted_by_state_but_not_hidden(a
     body = viewer.get(URL).json()
     valid(body)
     findings = body["findings"]
-    assert findings["by_state"] == {"open": 15, "acknowledged": 1, "snoozed": 0} and findings["total"] == 16
+    assert findings["by_state"] == {"open": 16, "acknowledged": 1, "snoozed": 0} and findings["total"] == 17
     assert ident not in {i["id"] for i in findings["attention"]}
     assert findings["by_severity"]["critical"] == 1 and body["status"] == "critical"     # acknowledged is not resolved
 
@@ -250,7 +250,7 @@ def test_a_triage_file_that_cannot_be_used_leaves_the_counts_null_and_the_rest_i
     body = viewer.get(URL).json()
     valid(body)
     assert body["findings"]["by_state"] is None and body["findings"]["triage_available"] is False
-    assert body["findings"]["total"] == 16 and body["status"] == "critical"
+    assert body["findings"]["total"] == 17 and body["status"] == "critical"
 
 
 def test_a_triage_file_that_names_another_site_is_not_used(viewer, tmp_path):

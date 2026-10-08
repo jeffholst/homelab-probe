@@ -16,7 +16,7 @@ from typing import List, Optional, Tuple
 
 from ..settings import DiagnoseSettings
 from ..snapshot import EventQuery, Needs, Snapshot
-from .addresses import _client_ip_findings, _duplicate_ip_findings, _private_mac_findings
+from .addresses import _client_ip_findings, _duplicate_ip_findings, _new_client_findings, _private_mac_findings
 from .devices import (
     _offline_device_findings,
     _overheating_findings,
@@ -76,6 +76,7 @@ CHECKS: List[Tuple[Check, Tuple[str, ...]]] = [
     (lambda snap, settings, now: _pool_findings(snap), ("reservations",)),
     (lambda snap, settings, now: _offline_reservation_findings(snap, settings, now), ("reservations",)),
     (lambda snap, settings, now: _private_mac_findings(snap), ("reservations", "clients")),
+    (lambda snap, settings, now: _new_client_findings(snap, settings, now), ("clients",)),
     (lambda snap, settings, now: _duplicate_ip_findings(snap), ("clients", "reservations")),
     (lambda snap, settings, now: _legacy_unavailable_findings(snap), ("devices",)),
     (lambda snap, settings, now: _port_basic_findings(snap, settings), ("ports",)),
@@ -110,6 +111,7 @@ def needs_for(areas: Optional[Iterable[str]], since_seconds: int) -> Needs:
         devices=bool(chosen & {"devices", "clients", "reservations", "ports", "wifi", "events"}),
         clients=bool(chosen & {"clients", "reservations"}),
         reservations=bool(chosen & {"reservations", "events"}),      # an IP conflict names who holds the reservation
+        offline="clients" in chosen,                                  # the client history: new devices
         health=bool(chosen & {"health", "wan", "devices"}),
         speedtests="wan" in chosen,
         events=EventQuery(since_seconds) if "events" in chosen else None,

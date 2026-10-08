@@ -50,6 +50,7 @@ CODES = {
     "reservation.in_dhcp_pool": "a reserved IP lies inside its network's dynamic DHCP range",
     "reservation.pool_unknown": "a network's DHCP range is missing or invalid, so its reservations cannot be checked",
     "reservation.private_mac": "a reservation is tied to a randomized (private) MAC address",
+    "client.new_device": "a client the controller first saw within new_client_window_hours (a new device)",
     "client.private_mac_summary": "how many connected clients use randomized (private) MAC addresses",
     "reservation.never_seen": "a reservation whose client has no last-seen time",
     "port.link_flaps": "a switch port's link has gone down repeatedly since boot",

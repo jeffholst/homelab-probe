@@ -72,6 +72,7 @@ SiteP = Annotated[str, Path(max_length=MAX_TEXT, description="A site name, inter
 TextQ = Annotated[str, Query(max_length=MAX_TEXT)]
 OptTextQ = Annotated[Optional[str], Query(max_length=MAX_TEXT)]
 SinceQ = Annotated[str, Query(max_length=12, description="How far back: 90m, 24h, 7d, 2w")]
+OptSinceQ = Annotated[Optional[str], Query(max_length=12, description="How far back: 90m, 24h, 7d, 2w")]
 ListQ = Annotated[Optional[List[str]], Query()]
 RefreshQ = Annotated[bool, Query(description="Read the controller again instead of using the cache (at most every "
                                              "5 s)")]
@@ -268,10 +269,14 @@ def build_router() -> APIRouter:
         return respond(request, lambda api: query_document(api, name, "reservations", search, offline=offline,
                                                              settings=settings, echo=False), refresh=refresh)
 
-    @router.get(f"{at}/new-clients", responses=schema("new-clients"), summary="Clients in no client group")
-    def new_clients(request: Request, site: SiteP, search: TextQ = "", refresh: RefreshQ = False) -> JSONResponse:
+    @router.get(f"{at}/new-clients", responses=schema("new-clients"),
+                summary="New clients: first seen recently, or in no client group")
+    def new_clients(request: Request, site: SiteP, search: TextQ = "", since: OptSinceQ = None,
+                    ungrouped: bool = False, refresh: RefreshQ = False) -> JSONResponse:
+        seconds = None if since is None else _duration(since)
         name = checked_site(site)
-        return respond(request, lambda api: new_clients_document(api, name, search, echo=False), refresh=refresh)
+        return respond(request, lambda api: new_clients_document(api, name, search, seconds, ungrouped, echo=False),
+                       refresh=refresh)
 
     @router.get(f"{at}/clients/{{mac}}", responses=schema("client", settings=True, ambiguous_client=True),
                 summary="One client by MAC address")

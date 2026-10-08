@@ -92,7 +92,7 @@ CAPABILITIES: Mapping[str, Capability] = MappingProxyType({
     "info": _report("info"),
     "init": _unavailable("Installation and configuration changes are not terminal operations.",
                          "--dir --url --site --verify --api-key-stdin --no-input --force --check"),
-    "new-clients": _report("new-clients", "-s --search --json"),
+    "new-clients": _report("new-clients", "-s --search --ungrouped --json", ("--since", BOUNDED)),
     "query": _report("query", "-s --search --include-offline --json --switch --down --errors --network --ssid "
                      "--ap --offline", ("--config", FILE), ("--csv", TEXT_JSON),
                      choices=("all", "devices", "clients", "reservations", "ports", "networks", "wlans")),
