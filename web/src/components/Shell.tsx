@@ -5,6 +5,8 @@ import { useMeta } from "../app/meta";
 import { useLogout, useSession } from "../auth/session";
 import { safeText } from "../lib/safeText";
 import { DESKTOP_QUERY, useMediaQuery } from "../lib/useMediaQuery";
+import { useTerminalServices } from "../terminal/context";
+import { TerminalDock, type DockMode } from "../terminal/TerminalDock";
 import { BrandMark } from "./brand/Brand";
 import { SiteFooter } from "./SiteFooter";
 import { Text } from "./Text";
@@ -53,6 +55,8 @@ export function Shell() {
   const session = useSession();
   const logout = useLogout();
   const meta = useMeta();
+  const terminal = useTerminalServices();
+  const [dockMode, setDockMode] = useState<DockMode>("closed");
 
   useEffect(() => {
     if (firstRender.current) {
@@ -113,6 +117,20 @@ export function Shell() {
       Log out
     </button>
   );
+  const terminalToggle = terminal && (
+    <button
+      type="button"
+      className="button button--secondary terminal-toggle"
+      aria-expanded={dockMode !== "closed" && dockMode !== "collapsed"}
+      onClick={() => {
+        setDockMode(dockMode === "open" || dockMode === "expanded" ? "closed" : "open");
+        closeDrawer(false);
+      }}
+    >
+      <Icon name="terminal" />
+      Terminal
+    </button>
+  );
   const who = user && (
     <p className="who">
       <span className="avatar" aria-hidden="true">
@@ -169,6 +187,7 @@ export function Shell() {
           )}
           <div className="site-header__end">
             {demo}
+            {desktop && terminalToggle}
             {desktop && user && <AccountMenu who={who} initialLetter={initial(user.username)} username={user.username} logOut={logOut} />}
           </div>
         </div>
@@ -207,6 +226,7 @@ export function Shell() {
             ))}
           </ul>
           <div className="drawer__account">
+            {terminalToggle}
             {who}
             <ThemeSwitch compact />
             {logOut}
@@ -226,6 +246,11 @@ export function Shell() {
         <Outlet />
       </main>
       <SiteFooter inert={drawerOpen} />
+      {terminal && (
+        <div inert={drawerOpen}>
+          <TerminalDock services={terminal} mode={dockMode} onMode={setDockMode} />
+        </div>
+      )}
     </div>
   );
 }
