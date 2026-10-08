@@ -1,0 +1,61 @@
+{
+  "capabilities": {
+    "version": 1,
+    "commands": [{
+      "name": "query",
+      "description": "List and filter devices, clients, reservations, switch ports, networks and Wi-Fi networks",
+      "status": "supported",
+      "reason": "Reviewed read-only report.",
+      "choices": ["all", "devices", "clients", "reservations", "ports", "networks", "wlans"],
+      "options": [{
+        "flags": ["--json"], "description": "Output JSON instead of a table", "takesValue": false,
+        "repeatable": false, "commaList": false, "status": "supported",
+        "reason": "Reviewed read-only report argument.", "choices": []
+      }]
+    }],
+    "globalOptions": [{
+      "flags": ["--site"],
+      "description": "Which site to read: its name, internal reference (such as default) or UUID (before the command; default: UNIFI_SITE_ID from .env, else default)",
+      "takesValue": true, "repeatable": false, "commaList": false, "status": "restricted",
+      "reason": "Validated site; no site-level ACL is implied.", "choices": []
+    }],
+    "staticOperations": ["help", "version"],
+    "limits": {
+      "bodyBytes": 16384, "tokenCount": 64, "tokenChars": 256, "outputBytes": 262144,
+      "perUserConcurrency": 1, "perUserPerMinute": 30, "globalConcurrency": 4,
+      "eventRows": 2000, "eventWindowSeconds": 1209600, "wanDays": 3650,
+      "completionCandidates": 64, "completionDescriptionChars": 500
+    },
+    "cancellation": "Stopping waiting does not cancel controller work."
+  },
+  "completionRequest": {"argv": ["query", "cl"], "tokenIndex": 1, "cursor": 2, "requestId": "mock-1"},
+  "completionResponse": {
+    "correlationId": "mock-correlation-1", "requestId": "mock-1", "tokenIndex": 1,
+    "candidates": [{
+      "label": "clients",
+      "description": "List and filter devices, clients, reservations, switch ports, networks and Wi-Fi networks",
+      "kind": "choice"
+    }],
+    "truncated": false
+  },
+  "executeRequest": {"argv": ["query", "clients", "--json"], "requestId": "mock-2"},
+  "executeResponse": {
+    "correlationId": "mock-correlation-2", "requestId": "mock-2", "operation": "query", "status": "completed",
+    "output": "[]", "warnings": [], "truncated": false
+  },
+  "errors": [
+    {"status": 401, "body": {"error": "not_logged_in", "message": "Log in first."}},
+    {"status": 403, "body": {"error": "csrf_token", "message": "The CSRF token is missing or wrong."}},
+    {"status": 422, "body": {
+      "error": "terminal_unsupported", "message": "This capability is unavailable in the browser.",
+      "correlationId": "mock-correlation-3", "executionStatus": "did_not_run"
+    }},
+    {"status": 429, "headers": {"Retry-After": "1"}, "body": {
+      "error": "terminal_busy", "message": "The terminal is busy; try again later.", "retry_after": 1
+    }},
+    {"status": 504, "body": {
+      "error": "terminal_timeout", "message": "Stopped waiting; controller work may still be running.",
+      "correlationId": "mock-correlation-4", "executionStatus": "outcome_unknown"
+    }}
+  ]
+}

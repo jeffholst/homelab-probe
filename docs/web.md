@@ -483,13 +483,13 @@ Both live in the data directory, readable by the owner only (`0600`, and `0700` 
 
 ## The terminal API
 
-The secure terminal API is being delivered in three parts under #270. The registry and strict parser (#272), authenticated capabilities and read-only execution (#273) are implemented. Static completion and the integration handoff (#274) are next. Real execution in the browser terminal (#269) stays disabled until that handoff is complete; the API can be tested directly now.
+The secure terminal API comprises the registry and strict parser (#272), authenticated capabilities and read-only execution (#273), and static completion with the integration handoff (#274), tracked by #270. The API can be tested directly without the browser terminal. Real execution in #269 stays disabled until all three backend PRs are merged and the handoff below is verified; mocks can be used meanwhile.
 
 ### Capabilities and execution
 
-`GET /api/v1/terminal/capabilities` returns version `1`, command and option descriptions, positional and option choices, explicit supported/restricted/unavailable classifications, static help/version operations, and server-owned limits. It is authenticated, filtered by the current account role, and makes no controller request. Unavailable entries explain why they cannot run; their presence grants no permission.
+`GET /api/v1/terminal/capabilities` returns version `1`, command and option descriptions, positional and option choices, explicit supported/restricted/unavailable classifications, static help/version operations, and server-owned limits. Option metadata includes `takesValue`, `repeatable` and `commaList`, derived from the real parser. It is authenticated, filtered by the current account role, and makes no controller request. Unavailable entries explain why they cannot run; their presence grants no permission.
 
-`POST /api/v1/terminal/execute` accepts exactly `{"argv": ["query", "clients", "--json"], "requestId": "smoke-1"}`. Tokens must be strings, with no controls or hidden direction overrides; unknown fields and coerced types are refused. `requestId` is 1 to 64 ASCII letters, digits, dots, underscores or hyphens, starting with a letter or digit. It is echoed only for matching a response, never used for authorization, audit identity, deduplication or retries. The current session, same-origin JSON and `X-CSRF-Token` are required. Both endpoints, including their refusal responses, send `Cache-Control: no-store`.
+`POST /api/v1/terminal/execute` accepts exactly `{"argv": ["query", "clients", "--json"], "requestId": "smoke-1"}`. Tokens must be strings, with no controls or hidden direction overrides; unknown fields and coerced types are refused. `requestId` is 1 to 64 ASCII letters, digits, dots, underscores or hyphens, starting with a letter or digit. It is echoed only for matching a response, never used for authorization, audit identity, deduplication or retries. The current session, same-origin JSON and `X-CSRF-Token` are required. All three endpoints, including their refusal responses, send `Cache-Control: no-store`.
 
 A successful envelope has `correlationId` (the server-generated `X-Request-ID`), `requestId`, resolved `operation`, `status: "completed"`, bounded plain-text `output`, up to 32 safe warnings of 500 characters each, and `truncated`. Findings are successful reports, not transport errors. `--json` puts the cleaned document's JSON text in `output`, not a separate unbounded data field. A truncated JSON report is not necessarily parseable JSON; always check `truncated` first. Ordinary CLI rendering is unchanged.
 
@@ -509,9 +509,43 @@ Shared report validation also uses fixed error messages for rejected durations a
 | 502 / 504 | Existing safe controller error codes |
 | 504 | `terminal_timeout`, stopped waiting while the worker may still run |
 | 500 | `terminal_internal`, a generic failure with correlation id |
-| 503 | `terminal_unreviewed` on capabilities when the CLI grammar needs policy review |
+| 503 | `terminal_unreviewed` on capabilities and completion when the CLI grammar needs policy review |
 
-The wire schemas are generated into `docs/terminal/` by `python -m tools.generate_terminal_contracts` (with the web extra installed), and `npm run generate:types` in `web/` produces their committed TypeScript types alongside the report types. OpenAPI at `/api/v1/openapi.json` includes both endpoints. The API tests check the schema files against the Python models.
+The six wire schemas are generated into `docs/terminal/` by `python -m tools.generate_terminal_contracts` (with the web extra installed), and `npm run generate:types` in `web/` produces their committed TypeScript types alongside the report types. OpenAPI at `/api/v1/openapi.json` includes all three endpoints. The API tests check the schema files against the Python models. Auth codes are `not_logged_in`, `csrf_origin`, `csrf_token` and `forbidden`. Pre-dispatch completion errors use the existing `{error, message}` envelope; correlation is always available in `X-Request-ID`. Completion's unexpected 500 adds `correlationId`; it never reports an execution outcome because it cannot execute.
+
+### Static completion
+
+`POST /api/v1/terminal/complete` accepts exactly this tokenized partial input:
+
+```json
+{"argv": ["query", "cl"], "tokenIndex": 1, "cursor": 2, "requestId": "complete-1"}
+```
+
+`tokenIndex` is a zero-based index into `argv`; `cursor` is a zero-based **Unicode codepoint** offset within that token, including its end. The browser owns tokenization and quoting: send unquoted literal tokens, not a command-line string. Count the unquoted active prefix with `Array.from(tokenPrefix).length` in JavaScript, not UTF-16 code units. An empty token is allowed (send `[""]` for an empty line or append `""` after trailing whitespace). The index and offset must address an existing token. Both integers are strict, not strings, floats or booleans. All tokens, even those after the cursor, have the execution length and control-character limits.
+
+The response is:
+
+```json
+{
+  "correlationId": "server-generated-id",
+  "requestId": "complete-1",
+  "tokenIndex": 1,
+  "candidates": [{
+    "label": "clients",
+    "description": "List and filter devices, clients, reservations, switch ports, networks and Wi-Fi networks",
+    "kind": "choice"
+  }],
+  "truncated": false
+}
+```
+
+Each `label` replaces the **whole active token**, not merely the prefix; the UI then quotes it as needed. Context uses the tokens before `tokenIndex` and the active token's prefix before `cursor`; its suffix and subsequent tokens do not influence suggestions. For example, `clJUNK` with cursor `2` still suggests `clients`. `kind` is `command`, `option` or `choice`. Results are sorted by label. The response echoes no input other than the validated request identifier and token index. Match the response to the current edit/session; discard stale results.
+
+Suggestions include approved commands, static help/version, approved flag aliases, positional choices, separate option choices and attached choices such as `--band=5`. Restricted registry choices win over CLI choices (only `text` for `topology --format`). Comma-list choices preserve only already-selected valid static items and avoid suggesting them again. Used scalar flags are suppressed across aliases; repeatable flags remain available. Unavailable commands/options and role-restricted commands produce no suggestions. Unknown or unsupported context returns an empty list, not a promise that the line is valid. Cross-option rules and all permissions are checked again by execute, even for a command assembled entirely from suggestions.
+
+No values are looked up for free-text arguments: sites, clients, device names, MACs, SSIDs, paths, environment and configuration are not completion sources. Immutable parser metadata is built at startup (argparse's locale initialization may consult environment/files); suggestion requests do not rebuild it. The suggestion path calls no handler, worker, service or controller and reads no files. Existing authentication still checks the account store, and existing denial auditing may write its audit trail. Candidates and descriptions are scrubbed to safe plain text from trusted metadata; no shell completion script is generated or evaluated. Results are request-local, with no cache that could mix users or roles. Dynamic completion requires a separate security-reviewed issue.
+
+Completion shares the execute admission counters: **30 admitted completion/execute requests combined per user per minute**, one per user and four globally at a time, across sessions. It releases its slot synchronously after static work, including on error; it has no underlying worker to cancel. Prefer local capabilities for immediate editing and static shortcut construction; request remote completion on explicit Tab with debounce/coalescing. Do not poll on every keystroke or queue automatic retries. Respect `Retry-After` on a 429.
 
 ### Testing Before the Terminal UI
 
@@ -527,9 +561,15 @@ const reply = await fetch('/api/v1/terminal/execute', {
   body: JSON.stringify({ argv: ['query', 'clients', '--json'], requestId: 'smoke-1' }),
 });
 console.log(reply.status, await reply.json());
+const suggestions = await fetch('/api/v1/terminal/complete', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': me.csrf_token },
+  body: JSON.stringify({ argv: ['query', 'cl'], tokenIndex: 1, cursor: 2, requestId: 'complete-1' }),
+});
+console.log(suggestions.status, await suggestions.json());
 ```
 
-The browser sends its session cookie and origin automatically. Repeat with `argv: ['info']`, `['help', 'query']` and `['events', '--limit', '2']`. Try `['query', '--jso']` and `['--env-file', '/etc/passwd', 'info']` to verify a 422 refusal. Remove `X-CSRF-Token` to verify a 403. Do not paste passwords, cookies or tokens into issue comments. Direct automated coverage is `uv run --extra web pytest tests/test_terminal_api.py`; it does not depend on a browser or a running server.
+The browser sends its session cookie and origin automatically. Repeat execute with `argv: ['info']`, `['help', 'query']` and `['events', '--limit', '2']`. Try `['query', '--jso']` and `['--env-file', '/etc/passwd', 'info']` to verify a 422 refusal. Complete `['wifi', '--band', '']` with token index `2` and cursor `0` to see static choices. Remove `X-CSRF-Token` to verify a 403. Do not paste passwords, cookies or tokens into issue comments. Direct automated coverage is `uv run --extra web pytest tests/test_terminal_api.py tests/test_terminal_completion.py`; it does not depend on a browser or a running server.
 
 ### Trust boundary and compatibility
 
@@ -624,8 +664,9 @@ These are enforced server-owned limits, not limits on the ordinary CLI.
 | --- | --- |
 | Request body, including chunked bodies | 16 KiB, counted before unrestricted JSON parsing |
 | Command tokens | 64, at most 256 characters each |
-| Executions per authenticated user | 1 at a time, 30 per minute |
-| Executions across the application | 4 at a time |
+| Completion and execution combined per authenticated user | 1 at a time, 30 per minute |
+| Completion and execution combined across the application | 4 at a time |
+| Completion candidates | 64, labels at most 256 characters and descriptions at most 500; explicit truncation flag |
 | Output | 256 KiB, truncated on a character boundary with an explicit flag |
 | Event rows | 2,000; `--limit 0` and larger limits are capped |
 | Event window | At most 14 days for events, client and diagnose |
@@ -634,7 +675,38 @@ These are enforced server-owned limits, not limits on the ordinary CLI.
 
 The overall HTTP execution deadline is the server-configured controller timeout in seconds, measured once for the whole worker, not renewed for each controller request. Controller requests keep their existing individual timeouts and bounded retries. The execute endpoint returns 504 when the overall waiting deadline expires. A worker retains its concurrency slot until it finishes, including after a timeout or client disconnect. Aborting a request means "stopped waiting", not "terminated" or "cancelled". Python threads cannot forcibly interrupt an in-progress controller call; admission remains bounded until it returns. Limits apply to each server process; multiple independent processes do not share these counters.
 
-Output, warnings, candidate labels and errors are untrusted. The endpoint returns plain text without active escape or bidirectional controls, scrubs registered and request-local secrets and configured sensitive server paths, and masks sensitive JSON field values before serialization or text rendering. JSON encoding is incremental and stops at the output budget. Existing document builders and text renderers still materialize their reports in memory; the wire output cap is not a whole-process memory limit. Completion descriptions will receive the same checks in #274. Audit actions `terminal.executed` (one eventual worker outcome) and `terminal.denied` (refusals, globally limited to one per second) contain the authenticated actor or a fixed anonymous marker, resolved operation, validated site identifier where applicable, outcome, duration and correlation ID, never the raw command, client search text or report. Read-only audit failures warn and do not block a report. A worker that finishes after a 504 records its eventual outcome, not a false cancellation. Read-only server mode permits these reports; only the existing audit trail is written, never controller state or report files.
+Output, warnings, candidate labels and errors are untrusted. Execution returns plain text without active escape or bidirectional controls, scrubs registered and request-local secrets and configured sensitive server paths, and masks sensitive JSON field values before serialization or text rendering. Completion scrubs static labels/descriptions without consulting request configuration. JSON encoding is incremental and stops at the output budget. Existing document builders and text renderers still materialize their reports in memory; the wire output cap is not a whole-process memory limit. Audit actions `terminal.executed` (one eventual execution worker outcome) and `terminal.denied` (refusals, globally limited to one per second) contain the authenticated actor or a fixed anonymous marker, resolved operation, validated site identifier where applicable, outcome, duration and correlation ID, never the raw command, client search text or report. Successful static completion is not an execution audit event. Read-only audit failures warn and do not block a report. A worker that finishes after a 504 records its eventual outcome, not a false cancellation. Read-only server mode permits these reports and static completion; only the existing audit trail is written, never controller state or report files.
+
+### Frontend Handoff
+
+The #269 integration package consists of the contracts above, the tested compatibility matrix, the execution limits and timeout/cancellation semantics, the six JSON Schemas in `docs/terminal/`, and their committed exports from [web/src/generated/index.ts](../web/src/generated/index.ts): `TerminalCapabilitiesV1`, `TerminalCompleteRequestV1`, `TerminalCompleteResultV1`, `TerminalExecuteRequestV1`, `TerminalExecuteResultV1` and `TerminalErrorV1`.
+
+[web/src/test/fixtures/terminal.v1.json](../web/src/test/fixtures/terminal.v1.json) is a short mock package: a **subset** of capabilities (query, its JSON flag and the site global), a completion request/response, a synthetic empty query report, and representative 401/403/422/429/504 errors. It is not the full compatibility list. Tests validate every envelope against its schema and compare its capability subset and completion response to the real static implementation. Extend it for #275/#276 mocks rather than contacting a controller. All examples use synthetic data. Use the existing same-origin API client and in-memory CSRF/session handling; never persist a terminal transcript or treat a completion request ID as authorization. Clear suggestions/history/transcripts on session change and discard stale async results. Render output and descriptions literally, never as HTML or trusted terminal control sequences.
+
+The direct-request security tests from #273 pass alongside completion tests: they bypass frontend validation entirely. The final #270 acceptance walk is below; test names are in the indicated files. Integration remains gated on #274 merging with green CI, then the tracker can close and #277 can enable real execution. #275/#276 may use these mocks before that point.
+
+| #270 Acceptance | Evidence |
+| --- | --- |
+| Dependency links, integration contracts and handoff before closing | #269 remains the dependent tracker; this section, generated schemas/types and schema-checked mock fixture; `test_frontend_handoff_fixture_matches_contracts_and_static_metadata` |
+| Direct requests receive all checks without UI validation | `tests/test_terminal_api.py` and `tests/test_terminal_completion.py` use handcrafted HTTP bodies |
+| Equivalent reports and explicit unsupported capabilities | `test_json_reports_match_existing_routes`, `test_each_text_renderer_is_used`, `test_hostile_or_unsupported_arguments_never_dispatch` |
+| Help/completion never execute or read arbitrary files | `test_static_help_survives_grammar_drift`, strict parser tests, `test_completion_cannot_execute_or_consult_configuration`, `test_endpoint_itself_reads_no_files_after_auth` |
+| Strict schemas, unknown fields/types and bounded role-filtered results | `test_strict_schema_does_not_echo_input`, `test_strict_completion_body`, `test_candidate_bounds_and_plain_text`, `test_roles_and_users_are_request_local_and_execute_revalidates` |
+| Documented error/response contracts | Six model-derived schemas, OpenAPI golden, `test_response_contracts_and_metadata`, mock error envelopes |
+| Anonymous/expired/wrong-role/no-CSRF/cross-origin cannot dispatch | `test_anonymous_expired_and_missing_csrf_never_dispatch`, `test_auth_guards_precede_dispatch`, `test_role_filter_and_enforcement`, `test_security_guards` |
+| Every endpoint guarded, in OpenAPI and permitted in read-only mode | OpenAPI-driven `tests/test_server_auth.py`, `tests/test_server_routes.py`, unsafe-route inventory in `tests/test_server_read_only.py` |
+| New CLI commands/options/aliases require classification | `test_parity_detects_new_and_stale_commands_options_and_aliases`, positional/file metadata parity tests, runtime grammar drift tests |
+| Traversal, env/config/credential overrides, SSRF, arbitrary destinations refused before service | Hostile/unsupported argument tests use a fail-on-call service; explicit registry blocks server-owned options; fixed adapters in `terminal_reports.py` |
+| No shell, CLI process, PTY, dynamic import or unrestricted lookup | Literal shell-character tests, fail-on-call handler/pool tests, reviewed fixed adapters, core/server network boundary tests; completion uses only `completion.spec` metadata |
+| Viewer cannot access admin-only capability/data; no resource-name leakage | Role-filtered fixture and role-change/session invalidation tests; unsupported/free-text contexts return no dynamic values; tests raise query/info minimum role to admin |
+| No active escapes or secrets in reports/errors/help/descriptions | `test_output_text_json_warnings_and_candidates_redact`, `test_errors_are_fixed_and_release_slots`, `test_candidate_bounds_and_plain_text`, `test_unexpected_completion_failure_is_fixed_and_releases_slot` |
+| Large/chunked bodies, output and concurrent request limits | Streamed body tests, UTF-8 output boundary tests, global/per-user admission tests, `test_completion_shares_execute_rate_and_concurrency_limits` |
+| Timeout/disconnect retains worker admission, honest cancellation message | `test_timeout_retains_slot_until_worker_finishes`, `test_http_task_cancellation_does_not_release_worker_slot`; timeout fixture says stopped waiting with `outcome_unknown` |
+| Malformed input cannot exit; abbreviation/response files/help/version safe | `tests/test_terminal_policy.py` strict parser cases forbid exit/print/file reads and test every subparser, static operations and literal input |
+| Fixed unexpected failure and redacted diagnostics; exception cleanup | Execution/submission/completion failure tests, shared report validation regression tests; only exception type is logged |
+| Existing auth, controller service, reports and normal CLI remain green | Full hermetic Python suite, CLI goldens/parity, web checks, Ruff/mypy and 100% line/branch coverage required before merge |
+
+The compatibility matrix and limits above cover the additional #270 checks. Completion grants no execution permission: suggestions are revalidated against the current registry, role, strict grammar and resource limits on every execute request. The backend uses existing viewer access to configured sites; it does not invent finer-grained site ACLs.
 
 ### Supported report examples
 

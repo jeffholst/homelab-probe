@@ -1,0 +1,73 @@
+{
+  "$defs": {
+    "CompletionCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "maxLength": 500,
+          "title": "Description",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "command",
+            "option",
+            "choice"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 256,
+          "title": "Label",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label",
+        "description",
+        "kind"
+      ],
+      "title": "CompletionCandidate",
+      "type": "object"
+    }
+  },
+  "$id": "urn:homelab-probe:terminal-complete-result.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "candidates": {
+      "items": {
+        "$ref": "#/$defs/CompletionCandidate"
+      },
+      "maxItems": 64,
+      "title": "Candidates",
+      "type": "array"
+    },
+    "correlationId": {
+      "title": "Correlationid",
+      "type": "string"
+    },
+    "requestId": {
+      "title": "Requestid",
+      "type": "string"
+    },
+    "tokenIndex": {
+      "title": "Tokenindex",
+      "type": "integer"
+    },
+    "truncated": {
+      "title": "Truncated",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "correlationId",
+    "requestId",
+    "tokenIndex",
+    "candidates",
+    "truncated"
+  ],
+  "title": "CompleteResult",
+  "type": "object"
+}

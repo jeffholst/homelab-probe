@@ -11,11 +11,11 @@ from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
-from typing import Annotated, Any, Callable, Dict, Iterable, Literal
+from typing import Annotated, Any, Callable, Dict, Iterable, Literal, TypeVar
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from .. import __version__, logs
@@ -24,6 +24,7 @@ from ..client import UniFiAPIError
 from ..client_view import candidate_rows
 from ..completion import spec
 from ..util import printable
+from . import terminal_completion
 from . import terminal_policy as policy
 from . import terminal_reports as reports
 from .auth import ROLE_RANK
@@ -51,6 +52,37 @@ class ExecuteResult(BaseModel):
     truncated: bool
 
 
+class CompleteBody(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    argv: Annotated[list[Annotated[str, Field(max_length=policy.TOKEN_CHARS)]],
+                    Field(min_length=1, max_length=policy.TOKEN_COUNT)]
+    tokenIndex: Annotated[int, Field(ge=0, lt=policy.TOKEN_COUNT)]
+    cursor: Annotated[int, Field(ge=0, le=policy.TOKEN_CHARS)]
+    requestId: Annotated[str, Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$")]
+
+    @model_validator(mode="after")
+    def check_cursor(self) -> "CompleteBody":
+        if self.tokenIndex >= len(self.argv) or self.cursor > len(self.argv[self.tokenIndex]):
+            raise ValueError("Invalid cursor.")
+        return self
+
+
+class CompletionCandidate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    label: Annotated[str, Field(max_length=policy.TOKEN_CHARS)]
+    description: Annotated[str, Field(max_length=policy.COMPLETION_DESCRIPTION_CHARS)]
+    kind: Literal["command", "option", "choice"]
+
+
+class CompleteResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    correlationId: str
+    requestId: str
+    tokenIndex: int
+    candidates: Annotated[list[CompletionCandidate], Field(max_length=policy.COMPLETION_COUNT)]
+    truncated: bool
+
+
 class TerminalError(BaseModel):
     error: str
     message: str
@@ -64,6 +96,8 @@ class OptionMetadata(BaseModel):
     flags: list[str]
     description: str
     takesValue: bool
+    repeatable: bool
+    commaList: bool
     status: Literal["supported", "restricted", "unavailable"]
     reason: str
     choices: list[str]
@@ -89,6 +123,8 @@ class TerminalLimits(BaseModel):
     eventRows: int
     eventWindowSeconds: int
     wanDays: int
+    completionCandidates: int
+    completionDescriptionChars: int
 
 
 class CapabilitiesResult(BaseModel):
@@ -224,7 +260,8 @@ def capabilities(role: str) -> Dict[str, Any]:
         for option in command.options:
             classification = capability.options[option.flags[0]]
             options.append({"flags": list(option.flags), "description": option.help,
-                            "takesValue": option.takes_value, "status": classification.status,
+                            "takesValue": option.takes_value, "repeatable": option.repeatable,
+                            "commaList": option.comma_list, "status": classification.status,
                             "reason": classification.reason,
                             "choices": list(classification.choices or option.choices)})
         commands.append({"name": command.name, "description": command.help, "status": capability.policy.status,
@@ -233,7 +270,8 @@ def capabilities(role: str) -> Dict[str, Any]:
     for option in grammar.options:
         classification = policy.GLOBAL_OPTIONS[option.flags[0]]
         global_options.append({"flags": list(option.flags), "description": option.help,
-                               "takesValue": option.takes_value, "status": classification.status,
+                               "takesValue": option.takes_value, "repeatable": option.repeatable,
+                               "commaList": option.comma_list, "status": classification.status,
                                "reason": classification.reason, "choices": list(option.choices)})
     return {"version": 1, "commands": commands, "globalOptions": global_options,
         "staticOperations": ["help", "version"],
@@ -241,7 +279,8 @@ def capabilities(role: str) -> Dict[str, Any]:
                    "outputBytes": policy.OUTPUT_BYTES, "perUserConcurrency": policy.USER_CONCURRENCY,
                    "perUserPerMinute": policy.USER_RATE, "globalConcurrency": policy.GLOBAL_CONCURRENCY,
                    "eventRows": reports.MAX_EVENTS, "eventWindowSeconds": reports.MAX_SINCE,
-                   "wanDays": reports.MAX_DAYS},
+                   "wanDays": reports.MAX_DAYS, "completionCandidates": policy.COMPLETION_COUNT,
+                   "completionDescriptionChars": policy.COMPLETION_DESCRIPTION_CHARS},
         "cancellation": "Stopping waiting does not cancel controller work."}
 
 
@@ -300,7 +339,10 @@ def work(request: Request, command: policy.ParsedCommand, body: ExecuteBody) -> 
             state.release(user)
 
 
-async def read_body(request: Request) -> ExecuteBody:
+Body = TypeVar("Body", ExecuteBody, CompleteBody)
+
+
+async def read_model(request: Request, model: type[Body]) -> Body:
     if request.headers.get("content-type", "").split(";")[0].strip().lower() != "application/json":
         raise ApiError(415, "unsupported_media_type", "The body must be JSON.")
     raw = bytearray()
@@ -309,12 +351,16 @@ async def read_body(request: Request) -> ExecuteBody:
             raise ApiError(413, "terminal_body_too_large", "The terminal request is too large.")
         raw.extend(chunk)
     try:
-        body = ExecuteBody.model_validate_json(raw)
+        body = model.model_validate_json(raw)
     except ValidationError:
         raise ApiError(422, "invalid_parameter", "The terminal request is not valid.") from None
     if any(printable(token) != token or any(ord(c) < 32 for c in token) for token in body.argv):
         raise ApiError(422, "invalid_parameter", "The command arguments are not valid.")
     return body
+
+
+async def read_body(request: Request) -> ExecuteBody:
+    return await read_model(request, ExecuteBody)
 
 
 def router() -> APIRouter:
@@ -325,6 +371,32 @@ def router() -> APIRouter:
                               "content": {"application/json": {"schema": TerminalError.model_json_schema()}}}})
     def terminal_capabilities(request: Request) -> Dict[str, Any]:
         return capabilities(request.state.session.role)
+
+    @api.post("/complete", response_model=CompleteResult, summary="Complete reviewed static terminal arguments",
+              responses={code: {**detail, "content": {"application/json": {
+                  "schema": TerminalError.model_json_schema()}}}
+                  for code, detail in error_responses(401, 403, 413, 415, 422, 429, 500, 503,
+                      text={413: "The request body is too large", 415: "The body must be JSON"}).items()},
+              openapi_extra={"requestBody": {"required": True, "content": {"application/json": {
+                  "schema": CompleteBody.model_json_schema()}}}})
+    async def terminal_complete(request: Request) -> Dict[str, Any]:
+        body = await read_model(request, CompleteBody)
+        state: TerminalState = request.app.state.terminal
+        user = request.state.session.username
+        state.acquire(user)
+        try:
+            candidates, truncated = terminal_completion.complete(body.argv, body.tokenIndex, body.cursor,
+                                                                request.state.session.role)
+            return {"correlationId": logs.current_request_id(), "requestId": body.requestId,
+                    "tokenIndex": body.tokenIndex, "candidates": candidates, "truncated": truncated}
+        except ApiError:
+            raise
+        except Exception as error:
+            logs.warn(f"terminal completion failed ({type(error).__name__}); see correlation id")
+            raise ApiError(500, "terminal_internal", "The terminal request could not be completed.",
+                           correlationId=logs.current_request_id()) from None
+        finally:
+            state.release(user)
 
     @api.post("/execute", response_model=ExecuteResult, summary="Execute one reviewed read-only report",
               responses={code: {**detail, "content": {"application/json": {

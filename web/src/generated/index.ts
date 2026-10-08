@@ -24,6 +24,8 @@ export type * as QueryReservationsV1 from "./query-reservations.v1";
 export type * as QueryWlansV1 from "./query-wlans.v1";
 export type * as SnapshotV1 from "./snapshot.v1";
 export type * as TerminalCapabilitiesV1 from "./terminal-capabilities.v1";
+export type * as TerminalCompleteRequestV1 from "./terminal-complete-request.v1";
+export type * as TerminalCompleteResultV1 from "./terminal-complete-result.v1";
 export type * as TerminalErrorV1 from "./terminal-error.v1";
 export type * as TerminalExecuteRequestV1 from "./terminal-execute-request.v1";
 export type * as TerminalExecuteResultV1 from "./terminal-execute-result.v1";

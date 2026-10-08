@@ -31,6 +31,7 @@ class Option:
     choices: Tuple[str, ...] = ()
     path: bool = False
     metavar: str = ""
+    repeatable: bool = False
 
     @property
     def long(self) -> str:
@@ -69,7 +70,8 @@ def _options(parser: argparse.ArgumentParser) -> Tuple[Option, ...]:
         choices = tuple(str(c) for c in (action.choices or ())) or VALUE_HINTS.get(
             next((f for f in action.option_strings if f.startswith("--")), ""), ())
         found.append(Option(tuple(action.option_strings), _help(action.help), action.nargs != 0, choices,
-                            action.type is Path, str(action.metavar or "")))
+                            action.type is Path, str(action.metavar or ""),
+                            isinstance(action, argparse._AppendAction)))
     return tuple(found)
 
 
