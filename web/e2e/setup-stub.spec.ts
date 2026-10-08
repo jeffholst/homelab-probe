@@ -51,6 +51,7 @@ function expectNothingSaved(dataDir: string): void {
 /** Opens the setup on `base`, enters the token and starts a new installation. */
 async function start(page: Page, base: string): Promise<Controller> {
   const { setupToken, controller } = await credentials(page, base);
+  expect(controller.key.startsWith("-"), "exercise leading-hyphen stub keys on every setup run").toBe(true);
   await page.goto(`${base}/setup`);
   await page.getByLabel("Setup token").fill(setupToken);
   await page.getByRole("button", { name: "Start the setup" }).click();

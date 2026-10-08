@@ -71,7 +71,7 @@ process.on("exit", stopAll);
 
 /** Starts a stub controller (see stub_controller.py) and resolves with its address, fingerprint and key. */
 function startStub(cert, key) {
-  const child = spawn("uv", ["run", "--project", repo, "python", path.join(web, "e2e", "stub_controller.py"), "--key", key, "--cert", cert], {
+  const child = spawn("uv", ["run", "--project", repo, "python", path.join(web, "e2e", "stub_controller.py"), `--key=${key}`, "--cert", cert], {
     cwd: repo,
     env: { ...process.env, VIRTUAL_ENV: undefined },
     stdio: ["ignore", "pipe", "inherit"],
@@ -103,7 +103,8 @@ let stubs = null;
 /** The two stub controllers, started on first use: what a test types into the setup to reach them. */
 function controllers() {
   stubs ??= (async () => {
-    const key = randomBytes(18).toString("base64url");
+    // Always exercise option-looking keys so argument parsing cannot regress intermittently.
+    const key = `-${randomBytes(18).toString("base64url")}`;
     const [good, other] = await Promise.all([startStub("good", key), startStub("other", key)]);
     return { url: good.url, key, fingerprint: good.fingerprint, otherUrl: other.url, otherFingerprint: other.fingerprint };
   })();
