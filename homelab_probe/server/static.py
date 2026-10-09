@@ -23,6 +23,7 @@ With no bundle (an API-only checkout) none of this is mounted and ``/`` shows th
 
 import hashlib
 import os
+import secrets
 import stat
 from email.utils import formatdate
 from pathlib import Path, PurePosixPath
@@ -35,10 +36,11 @@ from starlette.routing import Match
 from starlette.types import Scope
 
 from .auth import public
-from .security import WEB_FLAG
+from .security import WEB_FLAG, WEB_STYLE_NONCE
 
 DEFAULT_ROOT = Path(__file__).resolve().parent.parent / "web"     # in the wheel: package data of ``homelab_probe``
 INDEX = "index.html"
+STYLE_NONCE_MARKER = b'nonce="__HLP_TERMINAL_STYLE_NONCE__"'
 ASSETS = "assets"
 
 IMMUTABLE = "public, max-age=31536000, immutable"
@@ -115,23 +117,29 @@ def open_file(root: Path, relative: str) -> Optional[Tuple[int, os.stat_result]]
     return descriptor, status
 
 
-def file_answer(root: Path, relative: str, head: bool = False) -> Optional[Response]:
+def file_answer(root: Path, relative: str, head: bool = False, scope: Optional[Scope] = None) -> Optional[Response]:
     """The answer for one file of the bundle, read from the descriptor that was opened and checked (type from its
     suffix, cache header by where it is, length, ETag and Last-Modified from the same ``fstat``), or None. With
-    ``head`` the file is not read."""
+    ``head`` assets are not read. Index documents are read to replace the preview build's reserved nonce marker;
+    these transformed documents have no reusable cache validators."""
     opened = open_file(root, relative)
     if opened is None:
         return None
     descriptor, status = opened
     with os.fdopen(descriptor, "rb") as handle:
-        body = b"" if head else handle.read()
+        body = b"" if head and relative != INDEX else handle.read()
     digest = hashlib.sha256(f"{status.st_mtime_ns}-{status.st_size}".encode()).hexdigest()[:32]
     headers = {"cache-control": IMMUTABLE if relative.startswith(ASSETS + "/") else REVALIDATE,
                "last-modified": formatdate(status.st_mtime, usegmt=True), "etag": f'"{digest}"'}
     if head:
         headers["content-length"] = str(status.st_size)         # a GET's length is that of what was read
+    if relative == INDEX and scope is not None and body.count(STYLE_NONCE_MARKER) == 1:
+        nonce = secrets.token_urlsafe(24)
+        body = body.replace(STYLE_NONCE_MARKER, f'nonce="{nonce}"'.encode("ascii"))
+        scope[WEB_STYLE_NONCE] = nonce
+        headers = {"cache-control": "no-store", "content-length": str(len(body))}
     media_type = CONTENT_TYPES.get(PurePosixPath(relative).suffix.lower(), DEFAULT_TYPE)
-    return Response(body, media_type=media_type, headers=headers)
+    return Response(b"" if head else body, media_type=media_type, headers=headers)
 
 
 def serve(request: Request, relative: str) -> Response:
@@ -139,9 +147,9 @@ def serve(request: Request, relative: str) -> Response:
     ``well_formed``, ``index.html`` for the rest (a deep link of the app)."""
     root: Path = request.app.state.web
     head = request.method == "HEAD"
-    answer = file_answer(root, relative or INDEX, head)
+    answer = file_answer(root, relative or INDEX, head, request.scope)
     if answer is None and well_formed(relative) and not _in_assets(relative):
-        answer = file_answer(root, INDEX, head)
+        answer = file_answer(root, INDEX, head, request.scope)
     if answer is None:
         raise HTTPException(status_code=404)       # the same body as a path that no route has
     request.scope[WEB_FLAG] = True

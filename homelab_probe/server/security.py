@@ -29,6 +29,7 @@ WEB_CSP = ("default-src 'none'; base-uri 'none'; form-action 'self'; frame-ances
            "script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; "
            "manifest-src 'self'")
 WEB_FLAG = "homelab_probe.web"      # set on the request scope by an answer of the web interface (``static.serve``)
+WEB_STYLE_NONCE = "homelab_probe.web_style_nonce"  # generated only for an opt-in HTML document
 SECURITY_HEADERS: List[Tuple[bytes, bytes]] = [
     (b"content-security-policy", CSP.encode("ascii")),
     (b"x-content-type-options", b"nosniff"),
@@ -76,7 +77,11 @@ class SecurityHeaders:
             if message["type"] == "http.response.start":
                 response_started = True
                 web = bool(scope.get(WEB_FLAG))       # the page of the web interface: its own policy and cache header
-                defaults = [(name, WEB_CSP.encode("ascii") if web and name == b"content-security-policy" else value)
+                policy = WEB_CSP
+                nonce = scope.get(WEB_STYLE_NONCE)
+                if web and nonce:
+                    policy += f"; style-src-elem 'self' 'nonce-{nonce}'; style-src-attr 'none'"
+                defaults = [(name, policy.encode("ascii") if web and name == b"content-security-policy" else value)
                             for name, value in SECURITY_HEADERS if not (web and name == b"cache-control")]
                 names = {name for name, _ in defaults} | {b"server"}
                 kept = [(k, v) for k, v in message.get("headers", []) if k.lower() not in names]
