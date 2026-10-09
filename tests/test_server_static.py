@@ -8,6 +8,7 @@ import asyncio
 import io
 import json
 import os
+import re
 import shutil
 from pathlib import Path
 
@@ -23,7 +24,7 @@ from homelab_probe import logs  # noqa: E402
 from homelab_probe.demo.session import DemoSession  # noqa: E402
 from homelab_probe.server import static  # noqa: E402
 from homelab_probe.server.app import create_app  # noqa: E402
-from homelab_probe.server.security import CSP, WEB_CSP  # noqa: E402
+from homelab_probe.server.security import CSP, WEB_CSP, WEB_STYLE_NONCE  # noqa: E402
 from homelab_probe.server.service import ControllerService  # noqa: E402
 from homelab_probe.server.wizard import MODE_SETUP, SetupState  # noqa: E402
 
@@ -122,6 +123,57 @@ def test_the_root_is_the_index_page_and_is_never_cached(client):
     assert response.status_code == 200 and response.headers["content-type"] == "text/html; charset=utf-8"
     assert response.text == (PLACEHOLDER / "index.html").read_text(encoding="utf-8")
     assert response.headers["cache-control"] == "no-cache"
+
+
+@pytest.mark.parametrize("path", ["/", "/index.html", "/findings/abc", "/login"])
+def test_preview_documents_get_fresh_style_only_nonces_without_cache_validators(client, bundle, path):
+    original = b'<script src="/theme-init.js" data-terminal-style-nonce ' + static.STYLE_NONCE_MARKER + b'></script>'
+    (bundle / "index.html").write_bytes(original)
+    first = client.get(path)
+    policy = first.headers["content-security-policy"]
+    nonce = re.search(r"style-src-elem 'self' 'nonce-([A-Za-z0-9_-]{32})'", policy).group(1)
+    assert first.content == original.replace(static.STYLE_NONCE_MARKER, f'nonce="{nonce}"'.encode())
+    assert first.headers["content-length"] == str(len(first.content))
+    assert "style-src-attr 'none'" in policy and "unsafe-inline" not in policy
+    assert "script-src 'self';" in policy and policy.count("nonce-") == 1
+    assert first.headers["cache-control"] == "no-store"
+    assert "etag" not in first.headers and "last-modified" not in first.headers
+    second = client.get(path, headers={"If-None-Match": "*", "If-Modified-Since": "Fri, 01 Jan 2100 00:00:00 GMT"})
+    assert second.status_code == 200 and second.content != first.content
+    assert second.headers["content-security-policy"] != policy
+    status, headers, body = asgi_get(client.app, path, "HEAD")
+    assert status == 200 and body == b"" and headers["content-length"] == str(len(first.content))
+    assert headers["cache-control"] == "no-store" and "etag" not in headers and "last-modified" not in headers
+    assert headers["content-security-policy"] not in (policy, second.headers["content-security-policy"])
+    assert client.get(ASSET).headers["content-security-policy"] == WEB_CSP
+    assert client.get(ASSET).headers["cache-control"] == IMMUTABLE
+    assert client.get("/healthz").headers["content-security-policy"] == CSP
+    assert client.get("/api/v1/meta").headers["content-security-policy"] == CSP
+
+
+def test_nonce_marker_is_a_single_index_template_slot_not_an_arbitrary_file_rewrite(client, bundle):
+    marker = static.STYLE_NONCE_MARKER
+    for content in (b"ordinary index", marker * 2):
+        (bundle / "index.html").write_bytes(content)
+        response = client.get("/")
+        assert response.content == content and response.headers["content-security-policy"] == WEB_CSP
+    (bundle / "index.html").write_bytes(marker)
+    answer = static.file_answer(bundle, "index.html")
+    assert answer.body == marker  # no request scope: no document nonce can be granted
+    (bundle / "robots.txt").write_bytes(marker)
+    response = client.get("/robots.txt")
+    assert response.content == marker and response.headers["content-security-policy"] == WEB_CSP
+
+
+def test_a_nonce_scope_value_alone_does_not_change_api_policy(app):
+    from fastapi import Request
+
+    @app.get("/api/v1/nonce-probe")
+    def probe(request: Request):
+        request.scope[WEB_STYLE_NONCE] = "a" * 32
+        return {"ok": True}
+
+    assert logged_in(app).get("/api/v1/nonce-probe").headers["content-security-policy"] == CSP
 
 
 def test_head_of_the_root_and_of_a_file_has_headers_and_no_body(client):

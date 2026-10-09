@@ -114,11 +114,12 @@ function controllers() {
 const SETUP_LIKE = new Set(["setup", "admin", "stub", "fallback", "readonly"]);
 
 /** Starts the real server (demo or setup) and resolves with its address and what the tests need to log in. */
-async function startServer(mode) {
+async function startServer(mode, bundle) {
   const apiPort = await freePort();
   const env = { ...process.env };
   delete env.VIRTUAL_ENV; // a developer's own environment must not leak into uv's
-  const hlp = ["run", "--project", repo, "--extra", "web", path.join(repo, "hlp.py")];
+  const entry = bundle ? ["python", path.join(web, "e2e", "terminal_server.py"), bundle] : [path.join(repo, "hlp.py")];
+  const hlp = ["run", "--project", repo, "--extra", "web", ...entry];
   let args = [...hlp, "--demo", "serve", "--port", String(apiPort)];
   let cwd = repo;
   let dataDir = null;
@@ -215,6 +216,8 @@ async function startServer(mode) {
 
 /** Serves the build on `port` in front of the server at `target` (vite.config.ts reads HLP_API_TARGET when loaded). */
 async function servePreview(port, server, outDir = "dist") {
+  const realBundle = outDir === "dist-terminal-api";
+  if (realBundle) server = await startServer("demo", path.join(web, outDir));
   process.env.HLP_API_TARGET = server.target;
   const app = await preview({
     root: web,
@@ -224,7 +227,16 @@ async function servePreview(port, server, outDir = "dist") {
       host: "127.0.0.1",
       port,
       strictPort: true,
-      headers: { "Content-Security-Policy": server.policy, "X-Content-Type-Options": "nosniff" },
+      headers: realBundle ? {} : { "Content-Security-Policy": server.policy, "X-Content-Type-Options": "nosniff" },
+      ...(realBundle ? { proxy: { "/": {
+        target: server.target,
+        changeOrigin: true,
+        configure(proxy) {
+          proxy.on("proxyReq", (request) => {
+            if (request.getHeader("origin") !== undefined) request.setHeader("origin", server.target);
+          });
+        },
+      } } } : {}),
     },
     plugins: [
       {

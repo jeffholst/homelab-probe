@@ -5,6 +5,7 @@ import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 
 import type { EngineState } from "./engine/types";
 import { renderEntry, renderErase, renderLive, type Entry, type Palette } from "./render";
+import { terminalDocument } from "./styleNonce";
 
 /** The scrollback kept by the terminal itself; the transcript behind it is bounded separately. */
 export const SCROLLBACK = 5000;
@@ -54,6 +55,7 @@ export default function XtermSurface({ entries, state, onInput, onLeave, label, 
     const element = host.current;
     if (!element) return;
     const terminal = new Terminal({
+      documentOverride: terminalDocument(element.ownerDocument),
       scrollback: SCROLLBACK,
       cursorBlink: false, // a blinking cursor never stops (WCAG 2.2.2) and is the animation reduced-motion users turn off
       cursorStyle: "bar",

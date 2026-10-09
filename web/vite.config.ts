@@ -1,4 +1,5 @@
 import react from "@vitejs/plugin-react";
+import { loadEnv } from "vite";
 import { defineConfig } from "vitest/config";
 
 // `npm run dev` and `vite preview` (the Playwright smoke) forward the server's own paths to a running
@@ -19,9 +20,15 @@ const forward = {
 
 const proxy = { "/api": forward, "/healthz": forward, "/readyz": forward };
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   base: "/",
-  plugins: [react()],
+  plugins: [react(), {
+    name: "terminal-style-nonce-gate",
+    transformIndexHtml(html) {
+      return loadEnv(mode, process.cwd(), "VITE_")["VITE_TERMINAL_API_PREVIEW"] === "1" ? html
+        : html.replace(' data-terminal-style-nonce nonce="__HLP_TERMINAL_STYLE_NONCE__"', "");
+    },
+  }],
   // The bundle is written to web/dist. Copying it into the Python package is the release step, not this one.
   build: { outDir: "dist", sourcemap: false, target: "es2022" },
   server: { proxy },
@@ -32,4 +39,4 @@ export default defineConfig({
     include: ["src/**/*.test.{ts,tsx}"],
     restoreMocks: true,
   },
-});
+}));
