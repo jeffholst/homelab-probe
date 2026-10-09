@@ -1,4 +1,4 @@
-import { render, cleanup } from "@testing-library/react";
+import { render, cleanup, act } from "@testing-library/react";
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -145,5 +145,32 @@ describe("XtermSurface", () => {
     const before = terminals[0]?.writes.length ?? 0;
     terminals[0]?.handlers.resize?.();
     expect(terminals[0]?.writes.length).toBeGreaterThan(before);
+  });
+
+  it("updates semantic theme slots without replaying output or rewriting the active line", async () => {
+    render(<XtermSurface {...props({ entries: [entry(1, ["first", "second"])] })} />);
+    const terminal = terminals[0]!;
+    const before = [...terminal.writes];
+    const root = document.documentElement;
+    const colors = {
+      "--color-text": "#111111", "--color-danger-text": "#aa0000", "--color-success-text": "#00aa00",
+      "--color-warning-text": "#aaaa00", "--color-accent": "#0000aa", "--color-brand": "#aa00aa", "--color-text-muted": "#00aaaa",
+    };
+    try {
+      await act(async () => {
+        for (const [name, value] of Object.entries(colors)) root.style.setProperty(name, value);
+        root.setAttribute("data-theme", "light");
+        await Promise.resolve();
+      });
+      expect(terminal.options["theme"]).toMatchObject({
+        foreground: "#111111", red: "#aa0000", green: "#00aa00", yellow: "#aaaa00",
+        blue: "#0000aa", magenta: "#aa00aa", cyan: "#00aaaa",
+      });
+      expect(terminal.writes).toEqual(before);
+      expect(terminals).toHaveLength(1);
+    } finally {
+      for (const name of Object.keys(colors)) root.style.removeProperty(name);
+      root.removeAttribute("data-theme");
+    }
   });
 });

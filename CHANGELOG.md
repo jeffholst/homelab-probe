@@ -31,6 +31,8 @@ always listed here.
 
 ### Fixed
 
+- Web terminal text and scrollback recolor immediately when switching light, dark or system themes without clearing output, moving the draft cursor or interrupting running commands (#308).
+
 - Web terminal output and the active prompt stay inside the viewport with additional bottom spacing when output fills the panel or the panel is resized (#306).
 
 - Terminal completion preserves valid contexts after parser-normalized uppercase or mixed-case severity values, including attached and repeated options; case-sensitive and invalid choices remain rejected.

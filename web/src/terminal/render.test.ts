@@ -3,9 +3,7 @@ import { describe, expect, it } from "vitest";
 import { cleanLine, cleanLines } from "./clean";
 import { miniEngine } from "./testing/miniEngine";
 import { MOCK_CAPABILITIES } from "./mock";
-import { PROMPT, renderEntry, renderErase, renderLive, suggestionLine, type Entry, type Palette } from "./render";
-
-const PALETTE: Palette = { text: "#e8eefb", muted: "#9fb0cf", accent: "#3b9bff", brand: "#ff7a1a", warning: "#ffd27a", danger: "#ff9b8f", success: "#7be3a8" };
+import { PROMPT, renderEntry, renderErase, renderLive, suggestionLine, type Entry } from "./render";
 
 // The only escape sequences this module may write: colours/styles, cursor save and restore, cursor show and hide,
 // moving up, and erasing downwards. Anything else left after removing them is a leak.
@@ -33,21 +31,30 @@ describe("cleanLine and cleanLines", () => {
 });
 
 describe("renderEntry", () => {
+  it("uses theme-managed semantic slots, including the first line of output", () => {
+    const slots = { command: "34", output: "39", notice: "36", warning: "33", error: "31" } as const;
+    for (const kind of ["command", "output", "notice", "warning", "error"] as const) {
+      const rendered = renderEntry({ id: 1, kind, lines: ["first", "second"] });
+      expect(rendered).not.toContain("38;2;");
+      expect(rendered.split("\r\n").slice(0, 2).every((line) => line.includes(`\u001b[${slots[kind]}m`))).toBe(true);
+    }
+  });
+
   it("never lets report text carry an escape sequence of its own", () => {
     for (const kind of ["command", "output", "notice", "warning", "error"] as const) {
       const entry: Entry = { id: 1, kind, lines: HOSTILE.flatMap(cleanLines) };
-      expect(hasStrayEscape(renderEntry(entry, PALETTE))).toBe(false);
+      expect(hasStrayEscape(renderEntry(entry))).toBe(false);
     }
   });
 
   it("also cleans lines that were not cleaned by the caller (defence in depth)", () => {
-    const rendered = renderEntry({ id: 1, kind: "output", lines: ["\u001b]0;pwned\u0007text"] }, PALETTE);
+    const rendered = renderEntry({ id: 1, kind: "output", lines: ["\u001b]0;pwned\u0007text"] });
     expect(rendered).toContain("]0;pwned");
     expect(hasStrayEscape(rendered)).toBe(false);
   });
 
   it("makes each kind visibly different and every line ends with CRLF and a reset", () => {
-    const shown = (kind: Entry["kind"]) => renderEntry({ id: 1, kind, lines: ["x"] }, PALETTE);
+    const shown = (kind: Entry["kind"]) => renderEntry({ id: 1, kind, lines: ["x"] });
     const kinds = ["command", "output", "notice", "warning", "error"] as const;
     expect(new Set(kinds.map(shown)).size).toBe(5);
     expect(shown("command")).toContain(PROMPT);
@@ -57,7 +64,7 @@ describe("renderEntry", () => {
   });
 
   it("cannot forge a status line: a fake prompt or CRITICAL tag in output stays an output line", () => {
-    const forged = renderEntry({ id: 1, kind: "output", lines: ["\r\u001b[K[CRITICAL] all clear"] }, PALETTE);
+    const forged = renderEntry({ id: 1, kind: "output", lines: ["\r\u001b[K[CRITICAL] all clear"] });
     expect(forged).not.toContain("\r\u001b[K");
     expect(forged.split("\r\n").filter(Boolean)).toHaveLength(1);
   });
@@ -71,7 +78,7 @@ describe("renderLive", () => {
   };
 
   it("draws the prompt, the line and puts the cursor back where the engine says it is", () => {
-    const drawn = renderLive(typed("query cl"), PALETTE);
+    const drawn = renderLive(typed("query cl"));
     expect(drawn).toContain(`${PROMPT}`);
     expect(drawn).toContain("query cl");
     expect(drawn.indexOf("\u001b7")).toBeLessThan(drawn.indexOf("\u001b8"));
@@ -82,20 +89,20 @@ describe("renderLive", () => {
   it("splits the line at the cursor so a mid-line edit shows the rest after the saved position", () => {
     let state = typed("query clients");
     state = miniEngine.step(state, { type: "left" }).state;
-    const drawn = renderLive(state, PALETTE);
+    const drawn = renderLive(state);
     expect(drawn.indexOf("query client")).toBeLessThan(drawn.indexOf("\u001b7"));
     expect(drawn.indexOf("\u001b7")).toBeLessThan(drawn.lastIndexOf("s"));
   });
 
   it("is clean for a hostile line, notice and suggestion", () => {
     const state = { ...typed("x"), line: { text: HOSTILE.join(" "), cursor: 3 } };
-    expect(hasStrayEscape(renderLive(state, PALETTE))).toBe(false);
-    expect(hasStrayEscape(suggestionLine([{ label: HOSTILE.join(""), description: "", kind: "choice" }], 0, PALETTE))).toBe(false);
+    expect(hasStrayEscape(renderLive(state))).toBe(false);
+    expect(hasStrayEscape(suggestionLine([{ label: HOSTILE.join(""), description: "", kind: "choice" }], 0))).toBe(false);
   });
 
   it("says that waiting can be stopped while a command runs, and draws no prompt", () => {
     const running = { ...typed("info"), running: true };
-    const drawn = renderLive(running, PALETTE);
+    const drawn = renderLive(running);
     expect(drawn).toContain("waiting for the result");
     expect(drawn).not.toContain(PROMPT);
   });
@@ -104,20 +111,20 @@ describe("renderLive", () => {
     let state = typed("");
     state = miniEngine.step(state, { type: "tab" }).state;
     expect(state.suggestions.selected).toBe(0);
-    expect(renderLive(state, PALETTE)).toContain("\u001b[7mdiagnose");
+    expect(renderLive(state)).toContain("\u001b[7mdiagnose");
     const empty = miniEngine.step(typed(""), { type: "submit" }).state;
-    expect(renderLive(empty, PALETTE)).toContain("Type a command first.");
+    expect(renderLive(empty)).toContain("Type a command first.");
   });
 
   it("reports when suggestions are incomplete", () => {
     const state = typed("query ");
-    expect(renderLive({ ...state, suggestions: { ...state.suggestions, truncated: true } }, PALETTE))
+    expect(renderLive({ ...state, suggestions: { ...state.suggestions, truncated: true } }))
       .toContain("Some suggestions omitted.");
   });
 
   it("bounds the suggestions line", () => {
     const items = Array.from({ length: 30 }, (_, i) => ({ label: `c${i}`, description: "", kind: "command" as const }));
-    expect(suggestionLine(items, null, PALETTE)).toContain("+22 more");
+    expect(suggestionLine(items, null)).toContain("+22 more");
   });
 });
 
