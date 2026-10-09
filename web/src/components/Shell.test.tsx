@@ -49,7 +49,10 @@ describe("the shell on a wide screen", () => {
     expect(within(nav).getByRole("link", { name: "Dashboard" })).toHaveAttribute("aria-current", "page");
     expect(screen.queryByRole("button", { name: "Menu" })).toBeNull();
     expect(screen.getAllByRole("navigation", { name: "Main" })).toHaveLength(1);
-    expect(within(header).getByRole("link", { name: "Homelab Probe, home" })).toHaveAttribute("href", "/");
+    const brand = within(header).getByRole("link", { name: "Homelab Probe, home" });
+    expect(brand).toHaveAttribute("href", "/");
+    expect(brand.textContent).toBe("HOMELAB PROBE");
+    expect(brand.querySelector("img, svg")).toBeNull();
   });
 
   it("opens the account menu with who is signed in, the profile, the theme and logging out; Escape closes it", async () => {
@@ -91,6 +94,9 @@ describe("the footer", () => {
   it("links the project's pages in a new tab without giving them this page, and states the version and the promise", async () => {
     await logIn();
     const footer = screen.getByRole("contentinfo");
+    const brand = footer.querySelector(".brand");
+    expect(brand?.textContent).toBe("HOMELAB PROBE");
+    expect(brand?.querySelector("img, svg")).toBeNull();
     const project = within(footer).getByRole("navigation", { name: "Project" });
     const links = within(project).getAllByRole("link");
     expect(links.map((link) => link.getAttribute("href"))).toEqual(FOOTER_LINKS.map((link) => link.href));

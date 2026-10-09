@@ -29,6 +29,10 @@ always listed here.
 
 ## [Unreleased]
 
+### Changed
+
+- Header and bottom-left footer branding now display text-only "HOMELAB PROBE" in uppercase; other brand marks and login/setup artwork are unchanged (#313).
+
 ### Fixed
 
 - Web terminal text and scrollback recolor immediately when switching light, dark or system themes without clearing output, moving the draft cursor or interrupting running commands (#308).

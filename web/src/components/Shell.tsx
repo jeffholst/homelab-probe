@@ -170,7 +170,7 @@ export function Shell() {
               <Icon name="menu" />
             </button>
           )}
-          <BrandMark to="/" />
+          <BrandMark to="/" textOnly />
           {desktop && (
             <nav className="topnav" aria-label="Main">
               <ul className="topnav__list">
