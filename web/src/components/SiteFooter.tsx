@@ -18,7 +18,7 @@ export function SiteFooter({ inert = false }: { inert?: boolean }) {
     <footer className="site-footer" inert={inert}>
       <div className="site-footer__inner">
         <div className="site-footer__about">
-          <BrandMark />
+          <BrandMark textOnly />
           <p>Read-only insight into your UniFi network: health checks, inventory and history, from your own machine.</p>
         </div>
         <nav aria-label="Project">

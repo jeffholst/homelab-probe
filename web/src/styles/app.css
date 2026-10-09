@@ -873,6 +873,10 @@ legend {
   text-decoration: none;
 }
 
+.brand--text {
+  letter-spacing: 0;
+}
+
 .brand__ant {
   width: 2.6rem;
   height: auto;

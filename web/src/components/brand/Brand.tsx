@@ -5,9 +5,12 @@ import logoUrl from "../../assets/brand/logo.webp";
 
 export const APP_TITLE = "Homelab Probe";
 
-/** The ant mascot and the name, as a home link in the header (or plain, where there is nowhere to go). */
-export function BrandMark({ to }: { to?: string }) {
-  const content = (
+/** The name, optionally with its mascot, as a home link or a plain mark. */
+export function BrandMark({ to, textOnly = false }: { to?: string; textOnly?: boolean }) {
+  const className = textOnly ? "brand brand--text" : "brand";
+  const content = textOnly ? (
+    <span className="brand__word">HOMELAB <span className="brand__accent">PROBE</span></span>
+  ) : (
     <>
       <img className="brand__ant" src={antUrl} alt="" width={48} height={32} />
       <span className="brand__word">
@@ -16,9 +19,9 @@ export function BrandMark({ to }: { to?: string }) {
     </>
   );
   return to === undefined ? (
-    <span className="brand">{content}</span>
+    <span className={className}>{content}</span>
   ) : (
-    <Link className="brand" to={to} aria-label={`${APP_TITLE}, home`}>
+    <Link className={className} to={to} aria-label={`${APP_TITLE}, home`}>
       {content}
     </Link>
   );
