@@ -208,5 +208,7 @@ export default function XtermSurface({ entries, state, onInput, onLeave, label, 
     drawer.current?.sync();
   });
 
-  return <div className="terminal-surface" ref={host} data-testid="terminal-surface" />;
+  return <div className="terminal-surface" data-testid="terminal-surface">
+    <div className="terminal-surface__viewport" ref={host} />
+  </div>;
 }

@@ -169,6 +169,52 @@ test.describe("terminal panel", () => {
     await expectNoHorizontalOverflow(page);
   });
 
+  test("keeps filled terminal rows above the bottom inset after scrolling and resizing", async ({ page }, testInfo) => {
+    await logIn(page);
+    await openTerminal(page, testInfo);
+    const assertInset = async () => {
+      await expect(page.getByText("Ready", { exact: true })).toBeVisible();
+      await expect.poll(async () => page.locator(".terminal-surface").evaluate((surface) => {
+        const screen = surface.querySelector(".xterm-screen")!;
+        const rows = surface.querySelector(".xterm-rows")!;
+        const bounds = surface.getBoundingClientRect();
+        const style = getComputedStyle(surface);
+        const bottom = bounds.bottom - parseFloat(style.borderBottomWidth);
+        return bottom - Math.max(screen.getBoundingClientRect().bottom, rows.getBoundingClientRect().bottom);
+      })).toBeGreaterThanOrEqual(12);
+      // A stale, undersized grid would also satisfy the minimum inset after expanding.
+      await expect.poll(async () => page.locator(".terminal-surface").evaluate((surface) => {
+        const screen = surface.querySelector(".xterm-screen")!;
+        const style = getComputedStyle(surface);
+        return surface.getBoundingClientRect().bottom - parseFloat(style.borderBottomWidth)
+          - parseFloat(style.paddingBottom) - screen.getBoundingClientRect().bottom;
+      })).toBeLessThan(20);
+      await expect(page.locator(".xterm-rows")).toContainText("❯");
+      await expectNoHorizontalOverflow(page);
+    };
+    await run(page, "events");
+    await expect(transcript(page)).toContainText("Garage AP changed state");
+    await assertInset();
+    await screenshot(page, testInfo, "terminal-bottom-inset-docked");
+    const bottomText = await screenText(page);
+    await page.locator(".xterm-screen").hover();
+    await page.mouse.wheel(0, -500);
+    await expect.poll(() => screenText(page)).not.toBe(bottomText);
+    await page.mouse.wheel(0, 10000);
+    await expect.poll(() => screenText(page)).toBe(bottomText);
+    await assertInset();
+    const handle = page.getByRole("slider", { name: "Resize the terminal" });
+    await handle.focus();
+    await page.keyboard.press("ArrowDown");
+    await assertInset();
+    await page.keyboard.press("ArrowUp");
+    await assertInset();
+    await page.getByRole("button", { name: "Fill the page with the terminal" }).click();
+    await run(page, "events");
+    await assertInset();
+    await screenshot(page, testInfo, "terminal-bottom-inset");
+  });
+
   for (const theme of ["dark", "light"] as const) {
     test(`has no accessibility violations and looks right in the ${theme} theme`, async ({ page }, testInfo) => {
       await logIn(page);
