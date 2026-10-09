@@ -51,6 +51,26 @@ test.describe("login", () => {
 });
 
 test.describe("the shell", () => {
+  test("preserves the footer without upstream attribution in both themes", async ({ page }, testInfo) => {
+    await logIn(page);
+    const footer = page.getByRole("contentinfo");
+    for (const theme of ["dark", "light"]) {
+      await page.evaluate((theme) => { document.documentElement.setAttribute("data-theme", theme); }, theme);
+      await footer.scrollIntoViewIfNeeded();
+      await expect(footer).toBeVisible();
+      await expect(footer).not.toContainText("Forked from");
+      await expect(footer.locator('a[href="https://github.com/ericfitz/unifi-clients-export"]')).toHaveCount(0);
+      await expect(footer.locator(".brand")).toContainText("Homelab Probe");
+      await expect(footer).toContainText("Read-only: nothing here changes your controller.");
+      await expect(footer.getByRole("link", { name: "Documentation" })).toBeVisible();
+      await expect(footer.getByRole("link", { name: "Source code" })).toBeVisible();
+      await expect(footer.getByRole("link", { name: "Apache-2.0 license" })).toBeVisible();
+      await expectNoHorizontalOverflow(page);
+      await expectNoAxeViolations(page);
+      await screenshot(page, testInfo, `footer-${theme}`);
+    }
+  });
+
   test("has the landmarks and the navigation of its size, and passes the accessibility check", async ({ page }, testInfo) => {
     const problems = collectProblems(page);
     await logIn(page);

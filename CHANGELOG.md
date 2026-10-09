@@ -29,6 +29,10 @@ always listed here.
 
 ## [Unreleased]
 
+### Changed
+
+- Removed the "Forked from" attribution and upstream repository link from the web footer; repository license and original-author credits remain unchanged (#312).
+
 ### Fixed
 
 - Web terminal text and scrollback recolor immediately when switching light, dark or system themes without clearing output, moving the draft cursor or interrupting running commands (#308).
