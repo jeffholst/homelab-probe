@@ -32,6 +32,7 @@ always listed here.
 ### Changed
 
 - Header and bottom-left footer branding now display text-only "HOMELAB PROBE" in uppercase; other brand marks and login/setup artwork are unchanged (#313).
+- Removed the "Forked from" attribution and upstream repository link from the web footer; repository license and original-author credits remain unchanged (#312).
 
 ### Fixed
 

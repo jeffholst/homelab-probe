@@ -51,7 +51,7 @@ test.describe("login", () => {
 });
 
 test.describe("the shell", () => {
-  test("uses uppercase text-only header and footer brands in both themes", async ({ page }, testInfo) => {
+  test("uses uppercase text-only header and footer brands without upstream attribution in both themes", async ({ page }, testInfo) => {
     await page.goto("/login");
     await expect(page.getByRole("img", { name: "Homelab Probe", exact: true })).toBeVisible();
     await logIn(page, "/profile");
@@ -71,7 +71,12 @@ test.describe("the shell", () => {
       await footer.scrollIntoViewIfNeeded();
       await expect(footer.locator(".brand")).toHaveText("HOMELAB PROBE");
       await expect(footer.locator(".brand img, .brand svg")).toHaveCount(0);
+      await expect(footer).not.toContainText("Forked from");
+      await expect(footer.locator('a[href="https://github.com/ericfitz/unifi-clients-export"]')).toHaveCount(0);
       await expect(footer).toContainText("Read-only: nothing here changes your controller.");
+      await expect(footer.getByRole("link", { name: "Documentation" })).toBeVisible();
+      await expect(footer.getByRole("link", { name: "Source code" })).toBeVisible();
+      await expect(footer.getByRole("link", { name: "Apache-2.0 license" })).toBeVisible();
       await expectNoHorizontalOverflow(page);
       await expectNoAxeViolations(page);
       await screenshot(page, testInfo, `brand-footer-${theme}`);

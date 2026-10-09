@@ -106,7 +106,8 @@ describe("the footer", () => {
       expect(link).toHaveTextContent("(opens in a new tab)");
     }
     expect(footer).toHaveTextContent("Homelab Probe 0.0.0-test. Read-only: nothing here changes your controller.");
-    expect(footer).toHaveTextContent("Forked from ericfitz/unifi-clients-export (opens in a new tab).");
+    expect(footer).not.toHaveTextContent("Forked from");
+    expect(footer.querySelector('a[href="https://github.com/ericfitz/unifi-clients-export"]')).toBeNull();
   });
 });
 
