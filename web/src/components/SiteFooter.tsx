@@ -38,13 +38,6 @@ export function SiteFooter({ inert = false }: { inert?: boolean }) {
           <p>
             Homelab Probe{meta.data ? ` ${meta.data.version}` : ""}. Read-only: nothing here changes your controller.
           </p>
-          <p>
-            Forked from{" "}
-            <a href="https://github.com/ericfitz/unifi-clients-export" target="_blank" rel="noopener noreferrer">
-              ericfitz/unifi-clients-export<span className="visually-hidden"> (opens in a new tab)</span>
-            </a>
-            .
-          </p>
         </div>
       </div>
     </footer>
