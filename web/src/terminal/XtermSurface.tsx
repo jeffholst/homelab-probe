@@ -53,7 +53,6 @@ export default function XtermSurface({ entries, state, onInput, onLeave, label, 
   useEffect(() => {
     const element = host.current;
     if (!element) return;
-    const palette = { current: readPalette() };
     const terminal = new Terminal({
       scrollback: SCROLLBACK,
       cursorBlink: false, // a blinking cursor never stops (WCAG 2.2.2) and is the animation reduced-motion users turn off
@@ -73,11 +72,11 @@ export default function XtermSurface({ entries, state, onInput, onLeave, label, 
     terminal.textarea?.setAttribute("aria-label", label);
 
     const applyTheme = () => {
-      palette.current = readPalette();
-      const p = palette.current;
+      const p = readPalette();
       terminal.options.theme = {
         background: token("--color-surface-sunken", "#0a1020"), foreground: p.text, cursor: p.accent, cursorAccent: token("--color-surface-sunken", "#0a1020"),
         selectionBackground: `${p.accent}55`,
+        red: p.danger, green: p.success, yellow: p.warning, blue: p.accent, magenta: p.brand, cyan: p.muted,
       };
     };
     applyTheme();
@@ -99,7 +98,7 @@ export default function XtermSurface({ entries, state, onInput, onLeave, label, 
       terminal.write(prefix, () => {
         marker?.dispose();
         marker = terminal.registerMarker(0) ?? null;
-        terminal.write(renderLive(latest.current.state, palette.current), () => {
+        terminal.write(renderLive(latest.current.state), () => {
           painting = false;
           if (again) {
             again = false;
@@ -126,7 +125,7 @@ export default function XtermSurface({ entries, state, onInput, onLeave, label, 
         current.suggestions.truncated, current.suggestions.selected]);
       if (fresh.length === 0 && signature === shown) return;
       shown = signature;
-      prefix = renderErase(rowsFromMarker()) + fresh.map((entry) => renderEntry(entry, palette.current)).join("");
+      prefix = renderErase(rowsFromMarker()) + fresh.map((entry) => renderEntry(entry)).join("");
       for (const entry of fresh) written = Math.max(written, entry.id);
       paint(prefix);
     }
@@ -169,13 +168,11 @@ export default function XtermSurface({ entries, state, onInput, onLeave, label, 
     observer.observe(element);
     const themeWatcher = new MutationObserver(() => {
       applyTheme();
-      redraw();
     });
     themeWatcher.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
     const systemTheme = typeof window.matchMedia === "function" ? window.matchMedia("(prefers-color-scheme: light)") : null;
     const onSystemTheme = () => {
       applyTheme();
-      redraw();
     };
     systemTheme?.addEventListener("change", onSystemTheme);
 
@@ -187,7 +184,7 @@ export default function XtermSurface({ entries, state, onInput, onLeave, label, 
     // Replay the whole transcript into the fresh terminal (the effect after this one draws the line).
     const replay = latest.current.entries;
     written = replay.reduce((max, entry) => Math.max(max, entry.id), 0);
-    paint(replay.map((entry) => renderEntry(entry, palette.current)).join(""));
+    paint(replay.map((entry) => renderEntry(entry)).join(""));
     terminal.focus();
 
     return () => {

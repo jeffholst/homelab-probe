@@ -40,6 +40,18 @@ async function openTerminal(page: Page, testInfo: TestInfo): Promise<void> {
 const transcript = (page: Page) => page.getByRole("log", { name: "Terminal transcript" });
 const screenText = (page: Page) => page.locator(".xterm-rows").innerText();
 
+async function expectTextColor(page: Page, text: string, token: string): Promise<void> {
+  await expect.poll(() => page.locator(".xterm-rows").evaluate((rows, args) => {
+    const spans = Array.from(rows.querySelectorAll("span")).filter((span) => span.textContent?.includes(args.text));
+    const expected = document.createElement("span");
+    expected.style.color = getComputedStyle(document.documentElement).getPropertyValue(args.token).trim();
+    document.body.append(expected);
+    const color = getComputedStyle(expected).color;
+    expected.remove();
+    return spans.length > 0 && spans.every((span) => getComputedStyle(span).color === color);
+  }, { text, token })).toBe(true);
+}
+
 async function run(page: Page, command: string): Promise<void> {
   await page.locator(".xterm-helper-textarea").focus();
   await page.keyboard.type(command);
@@ -47,6 +59,70 @@ async function run(page: Page, command: string): Promise<void> {
 }
 
 test.describe("terminal panel", () => {
+  test("recolors existing multiline output and preserves a mid-line draft across theme changes", async ({ page }, testInfo) => {
+    await logIn(page);
+    await openTerminal(page, testInfo);
+    await page.getByRole("button", { name: "Fill the page with the terminal" }).click();
+    await run(page, "query clients");
+    await expect(transcript(page)).toContainText("guest-phone");
+    const before = await transcript(page).innerText();
+    await page.keyboard.type("query cl");
+    await page.keyboard.press("ArrowLeft");
+    for (const theme of ["light", "dark", "light"] as const) {
+      await page.evaluate((theme) => { document.documentElement.setAttribute("data-theme", theme); }, theme);
+      await expectTextColor(page, "guest-phone", "--color-text");
+      await expectTextColor(page, "query clients", "--color-accent");
+      expect(await transcript(page).innerText()).toBe(before);
+      await expect(page.locator(".xterm-rows")).toContainText("query cl");
+      await screenshot(page, testInfo, `terminal-theme-switch-${theme}`);
+    }
+    await page.evaluate(() => { document.documentElement.setAttribute("data-theme", "system"); });
+    for (const colorScheme of ["dark", "light"] as const) {
+      await page.emulateMedia({ colorScheme });
+      await expectTextColor(page, "guest-phone", "--color-text");
+    }
+    await page.keyboard.type("X");
+    await expect(page.locator(".xterm-rows")).toContainText("query cXl");
+    await page.keyboard.press("ArrowUp");
+    await expect(page.locator(".xterm-rows")).toContainText("query clients");
+    expect(await transcript(page).innerText()).toBe(before);
+  });
+
+  test("recolors scrollback, warnings and errors without interrupting a running command", async ({ page }, testInfo) => {
+    await logIn(page);
+    await openTerminal(page, testInfo);
+    await run(page, "events");
+    await expect(transcript(page)).toContainText("The server cut the output");
+    await expect(page.getByText("Ready", { exact: true })).toBeVisible();
+    const before = await transcript(page).innerText();
+    const bottom = await screenText(page);
+    await page.locator(".xterm-screen").hover();
+    await page.mouse.wheel(0, -300);
+    await expect.poll(() => screenText(page)).not.toBe(bottom);
+    const scrolled = await screenText(page);
+    await page.evaluate(() => { document.documentElement.setAttribute("data-theme", "light"); });
+    await expectTextColor(page, "Garage", "--color-text");
+    expect(await screenText(page)).toBe(scrolled);
+    expect(await transcript(page).innerText()).toBe(before);
+    await page.mouse.wheel(0, 10000);
+    await expect.poll(() => screenText(page)).toBe(bottom);
+    await expectTextColor(page, "server cut", "--color-warning-text");
+    await run(page, "wan");
+    await expectTextColor(page, "Did not run", "--color-danger-text");
+    await page.evaluate(() => { document.documentElement.setAttribute("data-theme", "dark"); });
+    await expectTextColor(page, "Did not run", "--color-danger-text");
+    await run(page, "slow");
+    await expect(page.getByText("Running", { exact: true })).toBeVisible();
+    for (const theme of ["light", "dark"] as const) {
+      await page.evaluate((theme) => { document.documentElement.setAttribute("data-theme", theme); }, theme);
+      await expectTextColor(page, "waiting", "--color-text-muted");
+      await expect(page.getByText("Running", { exact: true })).toBeVisible();
+    }
+    await expect(page.getByText("Ready", { exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(transcript(page)).toContainText("done");
+    expect((await transcript(page).innerText()).match(/done/g)).toHaveLength(1);
+  });
+
   test("loads the terminal library only when the panel is opened", async ({ page }, testInfo) => {
     const chunks: string[] = [];
     page.on("request", (request) => {

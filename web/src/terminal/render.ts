@@ -31,26 +31,17 @@ export const PROMPT = "❯ ";
 const ESC = "\x1b";
 const RESET = `${ESC}[0m`;
 
-function rgb(hex: string, fallback: string): string {
-  const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(hex.trim()) ?? /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(fallback);
-  const [r, g, b] = [match?.[1], match?.[2], match?.[3]].map((part) => parseInt(part ?? "ff", 16));
-  return `${ESC}[38;2;${r ?? 255};${g ?? 255};${b ?? 255}m`;
-}
-
-/** Foreground colour sequences for the theme's colours (hex values read from the CSS tokens). */
-export function colours(palette: Palette): Record<keyof Palette, string> {
-  return {
-    text: rgb(palette.text, "#e8eefb"), muted: rgb(palette.muted, "#9fb0cf"), accent: rgb(palette.accent, "#3b9bff"),
-    brand: rgb(palette.brand, "#ff7a1a"), warning: rgb(palette.warning, "#ffd27a"), danger: rgb(palette.danger, "#ff9b8f"),
-    success: rgb(palette.success, "#7be3a8"),
-  };
-}
+/** Semantic slots mapped by XtermSurface's theme; indexed cells recolor without replaying scrollback. */
+const COLOURS: Record<keyof Palette, string> = {
+  text: `${ESC}[39m`, danger: `${ESC}[31m`, success: `${ESC}[32m`, warning: `${ESC}[33m`,
+  accent: `${ESC}[34m`, brand: `${ESC}[35m`, muted: `${ESC}[36m`,
+};
 
 /** One transcript entry as terminal text, each line ending in CRLF. */
-export function renderEntry(entry: Entry, palette: Palette): string {
-  const c = colours(palette);
+export function renderEntry(entry: Entry): string {
+  const c = COLOURS;
   const style: Record<EntryKind, string> = { command: c.accent, output: c.text, notice: c.muted, warning: c.warning, error: c.danger };
-  const prefix = entry.kind === "command" ? `${c.brand}${PROMPT}${style.command}` : entry.kind === "output" ? "" : `${style[entry.kind]}`;
+  const prefix = entry.kind === "command" ? `${c.brand}${PROMPT}${style.command}` : style[entry.kind];
   const mark = entry.kind === "warning" ? "! " : entry.kind === "error" ? "✕ " : entry.kind === "notice" ? "· " : "";
   return entry.lines.map((line, index) => `${index === 0 ? prefix + mark : style[entry.kind] + (mark ? "  " : "")}${cleanLine(line)}${RESET}\r\n`).join("");
 }
@@ -69,9 +60,9 @@ export function noticeText(notice: Notice): string {
 const MOVE_UP = (rows: number) => (rows > 0 ? `${ESC}[${rows}A` : "");
 
 /** The list of candidates for the active token as one dim line; the selected one is highlighted. Bounded. */
-export function suggestionLine(items: readonly Candidate[], selected: number | null, palette: Palette, limit = 8): string {
+export function suggestionLine(items: readonly Candidate[], selected: number | null, limit = 8): string {
   if (items.length === 0) return "";
-  const c = colours(palette);
+  const c = COLOURS;
   const shown = items.slice(0, limit).map((item, index) => (index === selected ? `${ESC}[7m${cleanLine(item.label)}${ESC}[27m` : cleanLine(item.label)));
   const more = items.length > limit ? `  +${items.length - limit} more` : "";
   return `${c.muted}  ${shown.join("  ")}${more}${RESET}`;
@@ -87,8 +78,8 @@ export function renderErase(rowsUp: number): string {
  * waiting message while a command runs), the notice and the suggestions below it. It ends with the cursor on the
  * character the engine says the cursor is on.
  */
-export function renderLive(state: EngineState, palette: Palette): string {
-  const c = colours(palette);
+export function renderLive(state: EngineState): string {
+  const c = COLOURS;
   const hide = `${ESC}[?25l`;
   if (state.running) {
     return `${hide}${c.muted}… waiting for the result (Ctrl+C stops waiting)${RESET}${ESC}[?25h`;
@@ -99,7 +90,7 @@ export function renderLive(state: EngineState, palette: Palette): string {
   const below: string[] = [];
   if (state.notice) below.push(`${c.warning}${noticeText(state.notice)}${RESET}`);
   // The list under the prompt is the one Tab opened (a highlighted item); the toolbar shows the same list all the time.
-  const suggestions = state.suggestions.selected === null ? "" : suggestionLine(state.suggestions.items, state.suggestions.selected, palette);
+  const suggestions = state.suggestions.selected === null ? "" : suggestionLine(state.suggestions.items, state.suggestions.selected);
   if (suggestions) below.push(suggestions);
   if (state.suggestions.truncated) below.push(`${c.warning}Some suggestions omitted.${RESET}`);
   const tail = below.length ? `\r\n${below.join("\r\n")}${MOVE_UP(below.length)}` : "";
