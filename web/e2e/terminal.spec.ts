@@ -300,8 +300,16 @@ test.describe("terminal panel", () => {
       await openTerminal(page, testInfo);
       await run(page, "query clients");
       await expect(transcript(page)).toContainText("guest-phone", { timeout: 10_000 });
+      const clear = page.getByRole("button", { name: "Clear terminal output", exact: true });
+      await expect(clear).toHaveAttribute("title", "Clear terminal output");
+      await expect(clear.locator("svg.lucide-eraser")).toBeVisible();
       await expectNoAxeViolations(page);
       await screenshot(page, testInfo, `terminal-${theme}`);
+      const before = await clear.boundingBox();
+      await clear.focus();
+      await page.keyboard.press("Enter");
+      await expect(transcript(page)).not.toContainText("guest-phone");
+      expect(await clear.boundingBox()).toEqual(before);
     });
   }
 });
