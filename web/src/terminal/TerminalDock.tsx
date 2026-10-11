@@ -144,8 +144,8 @@ export function TerminalDock({ services, mode, onMode, returnFocus }: Props) {
             </span>
             {mode === "collapsed" && running && <span className="terminal-dock__note">A command is still running.</span>}
             <span className="terminal-dock__spacer" />
-            <button type="button" className="icon-button" aria-label="Clear the terminal output" onClick={session.clear}>
-              <Icon name="clear" />
+            <button type="button" className="icon-button" aria-label="Clear terminal output" title="Clear terminal output" onClick={session.clear}>
+              <Icon name="eraser" />
             </button>
             {mode === "collapsed" ? (
               <button type="button" className="icon-button" aria-label="Expand the terminal panel" onClick={() => { onMode("open"); }}>

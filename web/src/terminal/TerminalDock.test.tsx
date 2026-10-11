@@ -93,7 +93,9 @@ describe("the panel", () => {
     expect(screen.getByRole("region", { name: "Terminal" })).toHaveAttribute("data-mode", "expanded");
     expect(screen.getByRole("button", { name: "Restore the terminal panel size" })).toHaveAttribute("aria-pressed", "true");
     await click("Restore the terminal panel size");
-    expect(screen.getByRole("button", { name: "Clear the terminal output" })).toBeInTheDocument();
+    const clear = screen.getByRole("button", { name: "Clear terminal output" });
+    expect(clear).toHaveAttribute("title", "Clear terminal output");
+    expect(clear.querySelector("svg.lucide-eraser")).toHaveAttribute("aria-hidden", "true");
     await click("Close the terminal panel");
     expect(screen.queryByRole("region", { name: "Terminal" })).toBeNull();
   });
@@ -150,6 +152,19 @@ describe("running commands", () => {
     expect(screen.getByTestId("written")).toHaveTextContent("Application: 10.6");
     expect(screen.getByText("Ready")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("The command finished.");
+  });
+
+  it("clears output without submitting another request or discarding the draft", async () => {
+    const controls = await ready();
+    await click("type info");
+    await click("enter");
+    await act(() => { controls.resolve({ kind: "output", text: "Application: 10.6", truncated: false }); return Promise.resolve(); });
+    await click("type info");
+    await click("Clear terminal output");
+    expect(screen.getByTestId("written")).not.toHaveTextContent("Application: 10.6");
+    expect(controls.executed).toEqual([["info"]]);
+    await click("enter");
+    expect(controls.executed).toEqual([["info"], ["info"]]);
   });
 
   it("never issues a second request: rapid Enter, or Enter while running", async () => {

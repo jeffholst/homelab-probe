@@ -1,3 +1,5 @@
+import { Eraser } from "lucide-react";
+
 /**
  * The app's icons: small inline SVGs drawn with the current text colour (no icon font, no file to fetch, nothing the
  * content-security policy has to allow). They are decoration: `aria-hidden`, so every button or link that shows one
@@ -48,9 +50,12 @@ const PATHS = {
   chevronUp: "m6 15 6-6 6 6",
 } as const;
 
-export type IconName = keyof typeof PATHS;
+export type IconName = keyof typeof PATHS | "eraser";
 
 export function Icon({ name, className }: { name: IconName; className?: string }) {
+  if (name === "eraser") {
+    return <Eraser className={className === undefined ? "icon" : `icon ${className}`} strokeWidth={1.8} aria-hidden="true" focusable="false" />;
+  }
   return (
     <svg
       className={className === undefined ? "icon" : `icon ${className}`}
